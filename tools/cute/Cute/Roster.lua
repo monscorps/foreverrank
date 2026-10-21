@@ -166,14 +166,18 @@ function R:Refresh(event)
       self.leftAt = now()
       self:Changed()
       if C.UI and C.UI.Refresh then C.UI:Refresh() end
-    elseif self.leftAt and now() - self.leftAt >= LEFT_SURE then
-      -- (out of the guild at two reads half a minute apart: left or kicked, not a blip)
-      self.leftAt = nil
+    elseif not self.leftAt then
+      -- (a login out of any guild is judged the same way: an officer kicked while offline. 0.7.1's first build judged
+      -- only one who stayed online half a minute after leaving)
+      if not self.leftDone then self.leftAt = now() end
+    elseif now() - self.leftAt >= LEFT_SURE then
+      -- (out of the guild at two reads half a minute apart: left or kicked, not a blip; once)
+      self.leftAt, self.leftDone = nil, true
       step("roster: left", function() self:LeftGuild() end)
     end
     return
   end
-  self.leftAt = nil
+  self.leftAt, self.leftDone = nil, nil
   -- in a guild: this guild's policy (the saved variables are the account's, its characters perhaps in other guilds),
   -- then a hello not said yet (you joined one since login) goes now, before any change of yours does
   if C.Policy and C.Policy.ForClub then C.Policy:ForClub(self:ClubId()) end
@@ -297,12 +301,16 @@ function R:Refresh(event)
   end
 end
 
--- out of the guild for sure (left or kicked): its records stay (parked with it when another guild comes, Policy.lua
--- P:ForClub), but the values its officers keep to themselves go, unless another character of this account is one of
--- its officers (0.7.0 kept them: an officer who left held every member's Only-you values for good). The number gone
+-- out of the guild for sure (left or kicked, at a login out of any guild too), or gone into another one (Policy.lua
+-- P:ForClub, before its records are parked): its records stay, but the values its officers keep to themselves go, where
+-- this character was one of its officers at its last word (CuteDB.chars[me].officerOf: an alt of another guild, or one
+-- never an officer, held none of them) and no other character of this account is one (0.7.0 kept them: an officer who
+-- left held every member's Only-you values for good). The number gone
 function R:LeftGuild()
   local club, me = CuteDB.policyClub, C.Me()
   if club == nil then return 0 end
+  local mine = type(CuteDB.chars) == "table" and CuteDB.chars[me] or nil
+  if not (type(mine) == "table" and mine.officerOf ~= nil and mine.officerOf ~= false and tostring(mine.officerOf) == tostring(club)) then return 0 end
   for key, rec in pairs(type(CuteDB.chars) == "table" and CuteDB.chars or {}) do
     if key ~= me and type(rec) == "table" and rec.officerOf ~= nil and rec.officerOf ~= false and tostring(rec.officerOf) == tostring(club) then return 0 end
   end

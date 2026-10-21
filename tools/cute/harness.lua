@@ -10969,6 +10969,59 @@ do
   end)
   said[#said + 1] = "a record asked for whole by GUID comes with its statistics pass"
 
+  -- (w) an officer out of the guild by any road keeps none of its members' Only-you values: kicked while offline (a
+  -- login out of any guild, half a minute on), or gone into another guild before half a minute was out (the records
+  -- parked for the guild left, those values taken out first). An alt of another guild that was never one of its
+  -- officers parks an officer's file whole. 0.7.1's first build took them out only from an officer who stayed online
+  -- half a minute after leaving
+  do
+    local function club8(c)
+      local cc = c.env.C_Club
+      local gm, gi, gs = cc.GetClubMembers, cc.GetMemberInfo, cc.GetMemberInfoForSelf
+      cc.GetGuildClubId = function() return c.inGuild and 8 or nil end
+      cc.GetClubMembers = function(id) return gm(id == 8 and 7 or id) end
+      cc.GetMemberInfo = function(id, i) return gi(id == 8 and 7 or id, i) end
+      cc.GetMemberInfoForSelf = function(id) return gs(id == 8 and 7 or id) end
+    end
+    for _, how in ipairs({ "offline", "another", "alt" }) do
+      isolated({ member("Coraline", 1), member("Cobb", 3), member("Cyra", 3) }, function()
+        local off, a = char("Coraline", 1), char("Cobb", 3, { money = 777777 })
+        local db = {}
+        login(off, db); login(a)
+        tickAll(60)
+        local rec = db.roster[a.sender]
+        assert(rec and rec.stats.gold == 777777, "the officer holds the member's gold")
+        local roster = db.roster
+        if how == "offline" then
+          fire(off, "PLAYER_LOGOUT"); leave(off)
+          tickAll(10)
+          local off2 = char("Coraline", 1, { inGuild = false })
+          login(off2, db)
+          tickAll(100)
+          assert(rec.stats.gold == nil and rec.stats.level ~= nil, "kicked while offline: the gold gone at the guildless login, the rest kept: " .. tostring(rec.stats.gold))
+        elseif how == "another" then
+          off.inGuild = false
+          fire(off, "PLAYER_GUILD_UPDATE", "player")
+          tickAll(5)
+          club8(off)
+          off.inGuild = true
+          fire(off, "PLAYER_GUILD_UPDATE", "player")
+          tickAll(5)
+          assert(db.policies and db.policies["7"] and db.policies["7"].roster == roster, "guild 7's records parked")
+          assert(rec.stats.gold == nil and rec.stats.level ~= nil, "gone into another guild within seconds: the gold gone: " .. tostring(rec.stats.gold))
+        else
+          fire(off, "PLAYER_LOGOUT"); leave(off)
+          local alt = char("Cyra", 3)
+          club8(alt)
+          login(alt, db)
+          tickAll(100)
+          assert(db.policies and db.policies["7"] and db.policies["7"].roster == roster and rec.stats.gold == 777777, "an alt of guild 8 parks the officer's file whole")
+        end
+      end)
+    end
+  end
+  said[#said + 1] = "an officer out of the guild by any road keeps no Only-you values; another guild's alt parks them whole"
+
   print("core: " .. table.concat(said, "; "))
 end
 

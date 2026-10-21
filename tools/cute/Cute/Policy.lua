@@ -1350,6 +1350,12 @@ function P:ForClub(club)
     if CuteDB.knownClub == nil then CuteDB.knownClub = key end
     return
   end
+  -- (an officer of the guild left, gone into this one before the roster judged it left: its members' Only-you values
+  -- go before its records are parked, by its policy, Roster.lua R:LeftGuild)
+  if C.Roster and C.Roster.LeftGuild then
+    local ok, err = pcall(C.Roster.LeftGuild, C.Roster)
+    if not ok then if CUTE_DEV then error(err, 0) end C.Err.Record(tostring(err), "", "policy: the guild left") end
+  end
   CuteDB.policyClub = key
   self:Left()
   CuteDB.policies = type(CuteDB.policies) == "table" and CuteDB.policies or {}
