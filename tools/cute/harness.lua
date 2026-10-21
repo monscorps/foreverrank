@@ -964,6 +964,8 @@ local function newClient(o)
       if c.lock11 and c.lock11 > 0 then c.lock11 = c.lock11 - 1; return 11 end
       if c.throttle and c.throttle > 0 then c.throttle = c.throttle - 1; return 3 end
       if c.fail and c.fail > 0 then c.fail = c.fail - 1; return 9 end
+      -- (c.refuse: a result chosen per message, nil to send it: one kind refused while the rest go)
+      if c.refuse then local r = c.refuse(msg, channel, target); if r then return r end end
       c.sent[#c.sent + 1] = { msg = msg, at = c.clock, channel = channel, target = target }
       BUS[#BUS + 1] = { from = c, prefix = prefix, msg = msg, channel = channel, to = to }
       return 0
@@ -10316,7 +10318,8 @@ do
     a.chatLocked = false -- (no event: the queue asks again on its own)
     a.throttle = 12
     tickAll(60)
-    assert(count(a, "1K") == before + 1 and not errorWith(a, "addon message not sent"), "the claim went, late: " .. kinds(a))
+    -- (a message behind it may run out its own tries in so long a run: the claim no longer takes them all at the head, (t))
+    assert(count(a, "1K") == before + 1, "the claim went, late: " .. kinds(a))
   end)
   said[#said + 1] = "the chat lockdown waits without counting tries: the login ask goes as it ends, result 11 alone waited out, an answer owed and paid, a claim kept through five minutes and a run of throttles"
 
@@ -10891,6 +10894,27 @@ do
     for _, x in ipairs({ off, r, a }) do leave(x) end
   end) end
   said[#said + 1] = "an answer owed through a lockdown with no end event is paid as it ends"
+
+  -- (t) a kill claim the client keeps answering "later" (9, GeneralError, every time) goes to the back of the queue
+  -- after RETRIES tries, and what waits behind it goes; it goes itself once the client takes it. 0.7.1's first build
+  -- retried it at the head of the queue for good, and nothing else of the member's ever left
+  isolated({ member("Coraline", 1), member("Cobb", 3) }, function()
+    local off, a = char("Coraline", 1), char("Cobb", 3)
+    login(off); login(a)
+    tickAll(60)
+    a.refuse = function(msg) if msg:sub(1, 3) == "1K|" then return 9 end end
+    a.C.Comm:Claim(4242, EPOCH + a.clock, {})
+    tickAll(2)
+    a.o.zone = "Tanaris"
+    a.C.Sample:Set("zone", "Tanaris")
+    tickAll(90)
+    assert(off.env.CuteDB.roster[a.sender].stats.zone == "Tanaris", "the queue went past the refused claim: " .. tostring(off.env.CuteDB.roster[a.sender].stats.zone))
+    a.refuse = nil
+    tickAll(120)
+    assert(count(a, "1K") == 1, "and the claim went once the client took it: " .. kinds(a))
+    for _, x in ipairs({ off, a }) do leave(x) end
+  end)
+  said[#said + 1] = "a claim refused again and again goes to the back of the queue, the rest going past it"
 
   print("core: " .. table.concat(said, "; "))
 end

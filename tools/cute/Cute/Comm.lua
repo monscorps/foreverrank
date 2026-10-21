@@ -91,6 +91,7 @@ local PREFIX = "Cute"
 local LIMIT = 255       -- the client's cap on one addon message, header included
 local SLOW_FLUSH = 120  -- seconds between sends of the slow stats
 local RETRIES = 5       -- "try later" answers before a message is given up
+local CLAIM_AGAIN = 10  -- (a kill claim: to the back of the queue that many times first)
 local GAME_AFTER = 90   -- seconds after the hello before the statistics pass: a login's first minute stays small
 local FAIR = 10         -- seconds a whisper waits behind guild messages at most
 
@@ -546,12 +547,13 @@ pump = C.Safe(function()
   if r == "locked" then M.lockSeen = C.Now(); M.paused = C.Now(); book(LOCK_POLL) return end
   if r == "later" then
     e.tries = (e.tries or 0) + 1
-    -- (a kill claim is never given up: a repeat kill's is kept nowhere else)
-    if e.tries <= RETRIES or e.kind == "k" then book(math.min(30, extra or 3)) return end
+    if e.tries <= RETRIES then book(math.min(30, extra or 3)) return end
     r, extra = "drop", "still throttled after " .. RETRIES .. " tries"
   end
-  -- (a kill claim the client refused goes to the back of the queue, a few times)
-  if r == "drop" and e.kind == "k" and (e.again or 0) < 5 then
+  -- (a kill claim the client refused, or kept answering "later", goes to the back of the queue, CLAIM_AGAIN times: a
+  -- repeat kill's is kept nowhere else, and one at the head holds nothing behind it. 0.7.1's first build retried it
+  -- there for good, and nothing else left)
+  if r == "drop" and e.kind == "k" and (e.again or 0) < CLAIM_AGAIN then
     e.again, e.tries = (e.again or 0) + 1, 0
     for i, x in ipairs(M.out) do if x == e then table.remove(M.out, i) break end end
     M.out[#M.out + 1] = e
