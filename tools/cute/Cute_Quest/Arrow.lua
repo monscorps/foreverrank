@@ -548,6 +548,38 @@ function A.Tint(f, c)
   f.tint:SetVertexColor(r, g, b)
 end
 
+-- where the arrow stands: where it was dragged to (arrowPos, kept by its top), else under the step frame while that
+-- stands at its own default place (StepFrame.lua, SF.Below: followed as the frame grows, shrinks or scales), else where
+-- the step frame would start (under the game's error text); moved left as far as it takes to stay 16 px clear of the
+-- quest tracker's header, as the step frame is. (6.1 put the arrow at TOP 0 -170 and the step frame at -140: the
+-- arrow sat on the frame's second and third rows and its time line)
+local GAP_Y = 6
+function A.Place()
+  local f = A.frame
+  if not f then return end
+  local pos = QB:Settings().arrowPos
+  if pos then
+    if f.qbPos ~= pos then
+      f.qbPos, f.qbX, f.qbY = pos, nil, nil
+      f:ClearAllPoints()
+      f:SetPoint(pos[1], UIParent, pos[1], pos[2], pos[3])
+    end
+    return
+  end
+  local SF = QB.StepFrame
+  local bx, by = nil, nil
+  if SF and SF.Below then bx, by = SF.Below() end
+  local x, y = bx or 0, by and (by + GAP_Y) or (SF and SF.TOP_Y or 190)
+  local W = UIParent:GetWidth() or 1920
+  local lim = (SF and SF.TrackerLeft) and (SF.TrackerLeft(W) - 16) or W
+  local over = W / 2 + x + WIDTH / 2 - lim
+  if over > 0 then x = x - over end
+  if f.qbX == x and f.qbY == y and not f.qbPos then return end
+  f.qbPos, f.qbX, f.qbY = nil, x, y
+  f:ClearAllPoints()
+  f:SetPoint("TOP", UIParent, "TOP", x, -y)
+end
+
 function A:Create()
   if self.frame then return self.frame end
   local T = QB.Data.TEX
@@ -567,7 +599,7 @@ function A:Create()
       QB:Settings().arrowPos = pos
     end
   end
-  if pos then f:SetPoint(pos[1], UIParent, pos[1], pos[2], pos[3]) else f:SetPoint("TOP", 0, -170) end
+  A.Place()
   f:SetFrameStrata("MEDIUM")
   f:SetClampedToScreen(true)
   f:SetMovable(true)
@@ -586,6 +618,7 @@ function A:Create()
       self:SetPoint(p, UIParent, p, x, y)
     end
     QB:Settings().arrowPos = { p, x, y }
+    self.qbPos = QB:Settings().arrowPos -- (placed: A.Place leaves it there)
   end)
   -- the game style's puck: the game's tutorial arrow, greyed so your heading colours it, with its glow (the old quest
   -- arrow where the client lacks it); a ping behind it

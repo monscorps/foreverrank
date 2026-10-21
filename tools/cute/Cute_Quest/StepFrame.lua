@@ -154,9 +154,14 @@ local function trackerLeft(W)
 end
 SF.TrackerLeft = trackerLeft
 
--- where the frame stands: where it was dragged to, else the top's middle, 140 px down, moved left as far as it takes to
--- stay 16 px clear of the tracker's header (6.1.1: "it won't let me minimise my quest list": on a narrow screen of UI
--- or with right action bars, the frame there, in a strata above the tracker's, reached over the minimise button)
+-- where the frame stands: where it was dragged to, else the top's middle, TOP_Y down whatever its scale, moved left as
+-- far as it takes to stay 16 px clear of the tracker's header (6.1.1: "it won't let me minimise my quest list": on a
+-- narrow screen of UI or with right action bars, the frame there, in a strata above the tracker's, reached over the
+-- minimise button). TOP_Y: the game's error text (UIErrorsFrame, Blizzard_UIErrorsFrame: TOP 0 -122, 512 x 60) ends
+-- 182 px down, so "Not enough rage" never lands on the steps; 6.1 stood at 140 (at its scale), under that text and under
+-- the arrow. The arrow stands under the frame (Arrow.lua, A.Place: SF.Below)
+local TOP_Y = 190
+SF.TOP_Y = TOP_Y
 local function place(f)
   local s = settings()
   local sc = s.scale or 1
@@ -165,8 +170,20 @@ local function place(f)
   if type(s.x) == "number" and type(s.y) == "number" then f:SetPoint("CENTER", UIParent, "CENTER", s.x, s.y) return end
   local W = UIParent:GetWidth() or 1920
   local over = W / 2 + WIDTH * sc / 2 - (trackerLeft(W) - 16)
-  f:SetPoint("TOP", UIParent, "TOP", over > 0 and -over / sc or 0, -140)
+  f.qbX = over > 0 and -over or 0 -- (its middle across from the screen's, in UIParent's units: SF.Below)
+  f:SetPoint("TOP", UIParent, "TOP", f.qbX / sc, -TOP_Y / sc)
 end
+
+-- where the frame ends at its default place, for the arrow under it: its middle across from the screen's middle and
+-- its bottom down from the screen's top, in UIParent's units; nil while it is away or stands where it was dragged
+function SF.Below()
+  local f = SF.frame
+  local s = settings()
+  if not (f and f:IsShown()) or (type(s.x) == "number" and type(s.y) == "number") then return nil end
+  return f.qbX or 0, TOP_Y + (f:GetHeight() or 0) * (f:GetScale() or 1)
+end
+-- the arrow placed again (its default place follows the frame's height, scale and showing)
+local function arrowFollows() if QB.Arrow and QB.Arrow.Place then QB.Arrow.Place() end end
 
 -- the quest-item button: the game's secure button for the first step's quest item (type item, item:<id>), as
 -- Camp.lua's icons; made, set, shown and hidden out of a fight only, else the change waits (SF.pendingItem) for the
@@ -288,7 +305,7 @@ function SF.Refresh()
     y = y + ROW
   end
   for i = #members + 1, #f.members do f.members[i]:Hide() end
-  f:SetHeight(y + PAD)
+  if f:GetHeight() ~= y + PAD then f:SetHeight(y + PAD); arrowFollows() end
   SF.RefreshItem(steps[1])
   SF.MarkReward()
 end
@@ -396,6 +413,7 @@ function SF.Ask(kind)
   end
   card:Show()
   f:Show()
+  arrowFollows()
   SF.RefreshItem(nil) -- (no item button over a card)
 end
 
@@ -466,6 +484,7 @@ function SF.Apply()
   if want then SF.Refresh() else SF.RefreshItem(nil) end
   if SF.AskPending then SF.AskPending() end
   SF.Tracker()
+  arrowFollows()
 end
 
 -- the frame's scale, and the item button's with it (a child of UIParent: the frame's scale does not reach it); the
@@ -475,9 +494,11 @@ function SF.SetScale(sc)
   local f = SF.frame
   if not f then return end
   f:SetScale(sc)
+  if f.qbX then place(f) end -- (at its default place: kept clear of the tracker at the new size)
   if f.item then
     if fighting() then SF.pendingItem = true else f.item:SetScale(sc) end
   end
+  arrowFollows()
 end
 
 function SF:Menu(s)

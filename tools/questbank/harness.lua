@@ -17612,6 +17612,119 @@ end)()
   end
 end)()
 
+-- [stage: engine] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The launch round's engine: the quest engine as a new member meets it, and the owner's screenshots of 2026-10-21.
+-- Each case is in ENGCASES, in order, and failed on 6.1.1's files
+----------------------------------------------------------------------------
+;(function()
+  local ENGCASES = {}
+  -- a character out in the world (6.1.1's char(): a fresh install, the arrow and the Guide on)
+  local function char(name, class, className, classID, known, o)
+    o = o or {}
+    local c = newClient({ name = name, level = o.level or 20, cap = 60, faction = o.faction or "Alliance", className = className, class = class,
+      classID = classID, race = o.race or "Human", log = o.log or {}, done = o.done or {}, world = o.world or { 0, -9200, -2150 }, map = o.map or 1433,
+      bagSlots = {}, bind = o.bind or "Lakeshire", trackerX = o.trackerX })
+    if o.saved then c.env.QuestBankDB = o.saved end
+    c.known, c.buffs, c.resting = known or {}, {}, false
+    login(c)
+    return c
+  end
+  -- a frame's box in UIParent's units, its own scale counted (rectOf leaves a frame's scale out)
+  local function placed(f, minH)
+    GEN = GEN + 1
+    local p = f.__points[1]
+    local sc = f:GetScale() or 1
+    local rr = rectOf(p.rel or f.__parent)
+    local ax, ay = anchorXY(rr, p.relPoint)
+    ax, ay = ax + (p.x or 0) * sc, ay + (p.y or 0) * sc
+    local w, h = (f:GetWidth() or 0) * sc, math.max(f:GetHeight() or 0, minH or 0) * sc
+    local l = p.point:find("LEFT") and ax or (p.point:find("RIGHT") and ax - w or ax - w / 2)
+    local t = p.point:find("TOP") and ay or (p.point:find("BOTTOM") and ay + h or ay + h / 2)
+    return { l = l, r = l + w, t = t, b = t - h }
+  end
+  local function apart(a, b) return a.r <= b.l or b.r <= a.l or a.b >= b.t or b.b >= a.t end
+  local function box(r) return string.format("%d..%d x %d..%d", r.l, r.r, r.b, r.t) end
+
+  -- 1. "The step frame and the arrow sit on top of each other": 6.1 put the step frame at TOP 0 -140 (at its scale) and
+  -- the arrow at TOP 0 -170, 98 px tall, so the arrow's puck covered the frame's next steps and its time line; both sat
+  -- under the game's error text (UIErrorsFrame, TOP 0 -122, 512 x 60). Now the frame starts under that text and the
+  -- arrow under the frame, following it as it grows (the party's lines) and scales; both clear of the tracker's header
+  ENGCASES[#ENGCASES + 1] = { "the step frame and the arrow never overlap, nor the game's error text or the tracker's header", function()
+    local c = char("Stacka", "WARRIOR", "Warrior", 1, {}, { level = 5 })
+    local env, QB = c.env, c.QB
+    local SF, A, G = QB.StepFrame, QB.Arrow, QB.Guide
+    QB:Settings().welcome = nil; SF.Apply()
+    A:Set(true)
+    local hp = env.ObjectiveTrackerFrame.__points[1]
+    local party = {}
+    for i, n in ipairs({ "Ada", "Bo", "Cy", "Di" }) do party[i] = { name = n, class = "MAGE", text = "Kill Kobold Vermin " .. i .. "/8" } end
+    local none, real = {}, G.MemberSteps
+    local members = none
+    G.MemberSteps = function() return members end
+    local seen = 0
+    for _, ui in ipairs({ { 1600, 1000 }, { 1024, 768 }, { 800, 600 }, { 760, 768 } }) do
+      for _, bars in ipairs({ -5, -100 }) do
+        for _, sc in ipairs({ 0.8, 1, 1.2 }) do
+          for _, grp in ipairs({ none, party }) do
+            env.UIParent:SetSize(ui[1], ui[2])
+            hp.x = bars
+            members = grp
+            G.memberVer = G.memberVer + 1 -- (the frame redraws the party's lines)
+            SF.SetScale(sc)
+            SF.Apply(); SF.Refresh()
+            A:Update()
+            local W, H = ui[1], ui[2]
+            local where = string.format("%dx%d, right bars %d, scale %.1f, %d in the party", W, H, bars, sc, #grp)
+            local sf, af = env.QuestBankStep, env.QuestBankArrow
+            assert(sf:IsShown() and af:IsShown(), where .. ": both up")
+            local sr, ar = placed(sf), placed(af, 143) -- (the arrow at its tallest: the steps' row and the hint line)
+            GEN = GEN + 1
+            local hr = rectOf(env.ObjectiveTrackerFrame.Header)
+            local err = { l = W / 2 - 256, r = W / 2 + 256, t = H - 122, b = H - 182 }
+            assert(apart(sr, ar) and ar.t <= sr.b - 4, where .. ": the arrow under the step frame: " .. box(ar) .. " against " .. box(sr))
+            assert(sr.t <= err.b - 4 and ar.t <= err.b - 4, where .. ": both under the game's error text: " .. box(sr) .. ", " .. box(ar))
+            assert(apart(sr, hr) and apart(ar, hr), where .. ": both clear of the tracker's header " .. box(hr) .. ": " .. box(sr) .. ", " .. box(ar))
+            assert(sr.l >= 0 and sr.r <= W and ar.l >= 0 and ar.r <= W and ar.b >= 0, where .. ": both on the screen: " .. box(sr) .. ", " .. box(ar))
+            seen = seen + 1
+          end
+        end
+      end
+    end
+    -- the frame grows (the party's lines come): the arrow follows at once, with no look of its own
+    env.UIParent:SetSize(1600, 1000); hp.x = -5; SF.SetScale(1)
+    members = none; G.memberVer = G.memberVer + 1; SF.Refresh()
+    local before = placed(env.QuestBankArrow).t
+    members = party; G.memberVer = G.memberVer + 1; SF.Refresh()
+    local sr, ar = placed(env.QuestBankStep), placed(env.QuestBankArrow)
+    assert(ar.t < before and ar.t <= sr.b - 4, "the party's lines came: the arrow moved down with the frame's bottom: " .. box(ar) .. " against " .. box(sr))
+    -- the step frame away: the arrow where the frame would start, under the error text
+    members = none
+    QB:Settings().guide.frame = false; SF.Apply()
+    ar = placed(env.QuestBankArrow)
+    assert(not env.QuestBankStep:IsShown() and ar.t <= 1000 - 182 - 4 and ar.t >= 1000 - 200, "the frame off: the arrow under the error text: " .. box(ar))
+    QB:Settings().guide.frame = true; SF.Apply()
+    -- a place dragged to stays: the arrow's (arrowPos) and the frame's (then the arrow keeps its own default)
+    QB:Settings().arrowPos = { "TOP", 300, -420 }
+    A.Place()
+    local p = env.QuestBankArrow.__points[1]
+    assert(p.point == "TOP" and p.x == 300 and p.y == -420, "the arrow dragged: kept where it was put")
+    QB:Settings().arrowPos = nil
+    QB:Settings().guide.x, QB:Settings().guide.y = -500, 200
+    SF.Apply()
+    p = env.QuestBankArrow.__points[1]
+    assert(p.point == "TOP" and p.x == 0 and p.y == -SF.TOP_Y, "the frame dragged away: the arrow at its own default place: " .. tostring(p.x) .. ", " .. tostring(p.y))
+    QB:Settings().guide.x, QB:Settings().guide.y = nil, nil
+    G.MemberSteps = real
+    print(string.format("engine: %d layouts checked (four screens, two tracker places, three scales, alone and in a party of five)", seen))
+  end }
+
+  for _, case in ipairs(ENGCASES) do
+    case[2]()
+    print("engine: " .. case[1] .. ": ok")
+  end
+end)()
+
 ----------------------------------------------------------------------------
 -- 6.1.1: the owner's in-game test of 6.1.0 (and Cute 0.7.0). Each case is in F61CASES, in order, after the harness's
 -- helpers, and failed on 6.1.0's files
