@@ -393,7 +393,7 @@ C.frame:SetScript("OnEvent", C.Safe(function(_, event, a1, a2)
     C.Safe(function() C.Modules.Start() end, "modules: start")()
     C.Safe(function() C.Roster:Start() end, "roster: start")()
     C.Safe(function() C.Sample:Start(initial, reloading) end, "sample: start")()
-    C.Safe(function() C.Comm:Start() end, "comm: start")()
+    C.Safe(function() C.Comm:Start(reloading) end, "comm: start")()
     -- the seed checked against this client (Rule 0, spread over frames), after the roster, before the Guide draws
     C.Safe(function() C.Rules:Start() end, "rules: start")()
     C.Safe(function() if C.UI and C.UI.OnWorld then C.UI:OnWorld() end end, "minimap button")()
@@ -408,7 +408,9 @@ C.frame:SetScript("OnEvent", C.Safe(function(_, event, a1, a2)
       end
     end, "versions")()
   elseif event == "PLAYER_LOGOUT" then
-    if C.Sample.ReadAll then C.Sample:ReadAll() end
+    -- (and at a /reload: how far this character holds the guild, Comm.lua M:Logout. 0.7.0 read every stat again here
+    -- for nothing it saved)
+    C.Comm:Logout()
   end
 end, "core: events"))
 

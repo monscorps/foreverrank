@@ -1426,8 +1426,11 @@ do
   assert(S.byId.level and S.byId.deaths and S.byId.gold and S.byId.unenchanted and S.byId.ready, "the stats the pages lean on")
   assert(yezin.C.Policy:Vis("unenchanted") == "self" and yezin.C.Policy:Vis("level") == "all" and yezin.C.Policy:Vis("gold") == "self", "the defaults")
   local nils = {}
+  -- (a statistic the game shows as "--", never recorded, is nothing: Stats.lua S.Quantity)
+  local never = {}
+  for _, st in ipairs(yezin.stats) do if st[4] == "--" then never["g" .. st[2]] = true end end
   for _, def in ipairs(S.list) do
-    if def.read and yezin.C.Sample:Value(def.id) == nil then nils[#nils + 1] = def.id .. (yezin.C.Sample:Error(def.id) and (" (" .. yezin.C.Sample:Error(def.id) .. ")") or "") end
+    if def.read and yezin.C.Sample:Value(def.id) == nil and not never[def.id] then nils[#nils + 1] = def.id .. (yezin.C.Sample:Error(def.id) and (" (" .. yezin.C.Sample:Error(def.id) .. ")") or "") end
   end
   assert(#nils == 0, "stats that read nil on the documented client: " .. table.concat(nils, ", "))
   assert(yezin.C.Sample:Value("spec") == "Arms" and yezin.C.Sample:Value("pvp_rank") == 0 and yezin.C.Sample:Value("cooking") == 60 and yezin.C.Sample:Value("first_aid") == 1
@@ -2483,8 +2486,11 @@ do
   assert(#S.byCat.game == 11 and S.byId.g2001 and not S.byId.g2003, "eleven statistics defined, the one marked skip left out: " .. #S.byCat.game)
   assert(S.byId.g2001.label == "Total kills" and S.byId.g2004.hint == "Kills > Creatures" and S.byId.g2004.game == 131 and S.byId.g2001.slow == true and S.byId.g2001.kind == "int",
     "the label from GetAchievementInfo, the category path as the hint, the category id, slow ints")
-  assert(yezin.C.Sample:Value("g2001") == 1234 and yezin.C.Sample:Value("g2008") == 0, "the quantity string parsed, -- read as 0")
-  assert(S.Quantity("1 234") == 1234 and S.Quantity("1.234.567") == 1234567 and S.Quantity("--") == 0 and S.Quantity("") == nil and S.Quantity(nil) == nil, "the parser")
+  assert(yezin.C.Sample:Value("g2001") == 1234 and yezin.C.Sample:Value("g2008") == nil, "the quantity string parsed, -- read as nothing")
+  assert(S.Quantity("1 234") == 1234 and S.Quantity("1.234.567") == 1234567 and S.Quantity("--") == nil and S.Quantity("") == nil and S.Quantity(nil) == nil
+    and S.Quantity("1,5") == 1 and S.Quantity("1,234.5") == 1234 and S.Quantity("|cffffffff42|r") == 42
+    and S.Quantity("12|TInterface\\MoneyFrame\\UI-GoldIcon:0:0:2:0|t 34|TInterface\\MoneyFrame\\UI-SilverIcon:0:0:2:0|t 56|TInterface\\MoneyFrame\\UI-CopperIcon:0:0:2:0|t") == 123456,
+    "the parser: separators, decimals, colours, money as copper")
   assert(#S.game.cats == 4 and S.game.cats[1].name == "Kills" and S.game.cats[2].name == "Creatures" and S.game.cats[2].parent == 130 and S.game.cats[2].path == "Kills > Creatures"
     and S.game.cats[3].name == "Deaths", "the categories as the game groups them, a child after its parent")
   assert(yezin.C.Policy:Vis("g2001") == "all", "statistics default to everyone")
@@ -2500,8 +2506,11 @@ do
   tickAll(45)
   local e = plain.env.CuteDB.roster["Yezin-Forever"]
   assert(e and e.stats.level and e.stats.g2001 == nil, "the first full record has no statistics")
-  tickAll(60)
-  assert(e.stats.g2001 == 1234 and e.stats.g2008 == 0, "the statistics pass answered the hello; a receiver without the API keeps them as ints: " .. tostring(e.stats.g2001))
+  -- (one pass forced for the guild in ten minutes a responder, whoever asks: Yezin's last answered the storm's asks,
+  -- so this one comes when the ten minutes are over, Comm.lua M:AnswerGame)
+  local due = yezin.C.Comm.passAt and (yezin.C.Comm.passAt + 600 - yezin.C.Now()) or 0
+  tickAll(math.max(60, math.ceil(due) + 5))
+  assert(e.stats.g2001 == 1234 and e.stats.g2008 == nil, "the statistics pass answered the hello; a receiver without the API keeps them as ints, a never recorded one as nothing: " .. tostring(e.stats.g2001))
   assert(kaka.env.CuteDB.roster["Yezin-Forever"].stats.g2001 == 1234, "Kaka has Yezin's kills too")
   -- a changed statistic: the pass re-reads it; it travels on the flush, not as it ticks
   yezin.o.stat = { [2001] = 1300 }
@@ -2629,11 +2638,16 @@ do
   -- of them, whispered to the officers alone)
   local n, private, open = 0, 0, 0
   for id in pairs(big2.env.CuteDB.roster[big1.name].stats) do if id:match("^g%d+$") then n = n + 1; if big2.C.Policy:Route(id) == "self" then private = private + 1 end end end
-  for _, def in ipairs(big1.C.Stats.byCat.game) do if big1.C.Policy:Route(def.id) == "all" then open = open + 1 end end
-  assert(n == open and open == 234 and private == 0, "every statistic the member may see across within two minutes, none kept from it: " .. n .. " of " .. open .. ", " .. private)
+  -- (a statistic never recorded, "--", is nothing, and a 0 kept as nothing: two of the fixture's)
+  local valued = 0
+  for _, def in ipairs(big1.C.Stats.byCat.game) do
+    local v = big1.C.Sample:Value(def.id)
+    if v ~= nil and v ~= 0 then valued = valued + 1; if big1.C.Policy:Route(def.id) == "all" then open = open + 1 end end
+  end
+  assert(n == open and open == 232 and private == 0, "every statistic the member may see across within two minutes, none kept from it: " .. n .. " of " .. open .. ", " .. private)
   local told = 0
   for id in pairs(yezin.env.CuteDB.roster[big1.name].stats) do if id:match("^g%d+$") then told = told + 1 end end
-  assert(told == 311, "the officer has all 311: " .. told)
+  assert(told == valued and valued == 309, "the officer has all 309 with a value: " .. told .. " of " .. valued)
   assert(#big1.sent < 45 and #big1.oversize == 0, "the whole login under forty-five messages: " .. #big1.sent)
   leave(big1); leave(big2)
   -- an empty list at login (the data still loading): nothing defined, asked again at thirty seconds
@@ -3480,7 +3494,8 @@ do
     local rec = quinn.env.CuteDB.roster["Petra-Forever"]
     local n = { g = 0, e = 0, i = 0, f = 0, k = 0 }
     for id in pairs(rec.stats) do local p = id:match("^([gefik])%d+$"); if p then n[p] = n[p] + 1 end end
-    assert(n.g == 311 and n.e == 40 and n.i == 18 and n.f == 60 and n.k == 40, string.format("every value across: %d statistics, %d bosses, %d instances, %d factions, %d kill levels", n.g, n.e, n.i, n.f, n.k))
+    -- (311 statistics, two of them never recorded or nought: nothing, Stats.lua S.Quantity)
+    assert(n.g == 309 and n.e == 40 and n.i == 18 and n.f == 60 and n.k == 40, string.format("every value across: %d statistics, %d bosses, %d instances, %d factions, %d kill levels", n.g, n.e, n.i, n.f, n.k))
     local lootN = 0
     for enc in pairs(quinn.env.CuteDB.known.loot) do if enc > 7000 and enc <= 7012 then lootN = lootN + 1 end end
     assert(lootN == 12 and quinn.env.CuteDB.known.loot[7001].items[60001], "and the loot of the twelve bosses: " .. lootN)
@@ -6746,10 +6761,12 @@ do
     tickAll(40)
     local sent = {}
     for _, m in ipairs(mia.sent) do sent[#sent + 1] = m.msg:sub(1, 2) end
-    assert(mia.C.Comm.holding and not mia.C.Roster.trusted and mia.C.Policy.line == nil and table.concat(sent, " ") == "1R", "with no roster Guild Info is not read, and nothing but the ask goes: " .. table.concat(sent, " "))
+    -- (the ask too waits for the roster: answers that came before it would crowd the early buffer)
+    assert(mia.C.Comm.holding and not mia.C.Roster.trusted and mia.C.Policy.line == nil and table.concat(sent, " ") == "", "with no roster Guild Info is not read, and nothing goes, the ask waiting for it: " .. table.concat(sent, " "))
     slow = false
     fire(mia, "GUILD_ROSTER_UPDATE")
     tickAll(10)
+    assert(mia.sent[1] and mia.sent[1].msg:sub(1, 3) == "1R|", "the ask first once the roster read")
     local l = leakedTo(mo, g0 + 1)
     assert(#l == 0 and not mia.C.Comm.holding and mia.C.Policy:Route("gold") == "self", "nothing went by the stale policy: " .. table.concat(l, ", "))
     JUDGE = nil
@@ -6763,6 +6780,9 @@ do
     local real, slow = ofa.env.C_Club.GetClubMembers, true
     ofa.env.C_Club.GetClubMembers = function(...) if slow then return {} end return real(...) end
     login(ofa, pol(true))
+    -- (the hello's ask waits for the roster; /cute resend asks at once)
+    tickAll(10)
+    ofa.C.Comm:Ask()
     tickAll(30)
     assert(#ofa.C.Comm.early > 0, "whispers before the officer's roster is known are kept: " .. #ofa.C.Comm.early)
     slow = false
@@ -7310,6 +7330,9 @@ do
     local real, slow = mo.env.C_Club.GetClubMembers, true
     mo.env.C_Club.GetClubMembers = function(...) if slow then return {} end return real(...) end
     login(mo, pol(nil, {}, EPOCH + 100, 1))
+    -- (the hello's ask waits for the roster; /cute resend asks at once)
+    tickAll(10)
+    mo.C.Comm:Ask()
     tickAll(30)
     assert(#mo.C.Comm.early > 0, "Mia's whispers wait for Mo's roster")
     slow = false
@@ -9077,7 +9100,8 @@ do
       tickAll(40)
       ofa.slow = false
       fire(ofa, "CLUB_MEMBERS_UPDATED")
-      tickAll(20)
+      -- (the ask went once the roster read; the answers two to forty seconds on)
+      tickAll(45)
       local r = rec(account, "Mia")
       assert(r and r.stats.gold == 777777 and account.policies["?"] == nil and rec(account, "Bo"), "guild 7 takes its file, the slow roster notwithstanding")
       for _, c in ipairs({ ofa, bo }) do leave(c) end
@@ -10311,6 +10335,95 @@ do
     table.insert(GUILD, 2, gone)
   end)
   said[#said + 1] = "a partial roster deletes nobody: unread members, a list shorter than the club; two whole lists a minute apart prune"
+
+  -- (d) a /reload asks nothing and sends no record: only what changed since the last send before it, as a delta, and
+  -- nobody online resends theirs (0.7.0's /reload asked, and every client online sent its whole record again). (e) A
+  -- login asks with since, how far this character held the guild at its last logout: each responder sends what went
+  -- on GUILD after it, marked as such (a 0.7 client reads the ask as before, its fingerprint none), not its whole
+  -- record. (f) The ask of a client that holds no record of a sender gets that sender's part since, and asks for the
+  -- whole one by its GUID (1Q), a minute on
+  isolated({ member("Coraline", 1), member("Cobb", 3), member("Cyra", 3) }, function()
+    local off, a, b = char("Coraline", 1), char("Cobb", 3), char("Cyra", 3)
+    login(off); login(a); login(b)
+    tickAll(200)
+    fire(a, "PLAYER_LOGOUT")
+    local db = a.env.CuteDB
+    local held = db.chars[a.name].hold
+    assert(type(held) == "table" and held.club == "7" and tonumber(held.at), "the hold moved at logout, the login's ask answered")
+    leave(a)
+    -- (d)
+    local o0, b0 = #off.sent, #b.sent
+    local a2 = char("Cobb", 3, { zone = "Tanaris" })
+    login(a2, db, true)
+    tickAll(150)
+    assert(count(a2, "1R") == 0 and count(a2, "1F") == 0 and #a2.sent <= 3, "a /reload asks nothing and sends no record: " .. kinds(a2))
+    assert(off.env.CuteDB.roster[a2.sender].stats.zone == "Tanaris" and b.env.CuteDB.roster[a2.sender].stats.zone == "Tanaris", "what changed went")
+    assert(count(off, "1F", o0 + 1) == 0 and count(b, "1F", b0 + 1) == 0, "nobody resent a record: " .. kinds(off, o0 + 1) .. " / " .. kinds(b, b0 + 1))
+    fire(a2, "PLAYER_LOGOUT")
+    assert(db.chars[a.name].hold.at == held.at, "a /reload's logout moves no hold: it asked nothing")
+    leave(a2)
+    -- (e) Cyra's zone changes while Cobb is away; his login asks since his hold
+    b.o.zone = "Feralas"
+    fire(b, "ZONE_CHANGED_NEW_AREA")
+    tickAll(30)
+    local b1 = #b.sent
+    local a3 = char("Cobb", 3, { zone = "Tanaris" })
+    login(a3, db)
+    tickAll(150)
+    local ask
+    for _, m in ipairs(a3.sent) do if m.msg:sub(1, 3) == "1R|" then ask = ask or m.msg end end
+    local hex = ask and ask:match("^1R|[^|]*|%d+|%d*|(%x*)$")
+    assert(hex and #hex > 16 and tonumber(hex:sub(17), 16) == held.at, "the ask carries the hold as since: " .. tostring(ask))
+    local s1, s2, fp7 = ask:match("^1R|[^|]*|(%d+)|?(%d*)|?(%x*)$")
+    assert(tonumber(s1) and tonumber(s2) and #fp7 ~= 16, "a 0.7 client reads its stamps, and no fingerprint")
+    local fs = {}
+    for i = b1 + 1, #b.sent do if b.sent[i].msg:sub(1, 2) == "1F" then fs[#fs + 1] = b.sent[i].msg end end
+    assert(#fs >= 1 and #fs <= 2, "Cyra answers with a part, not her whole record: " .. #fs .. " chunks")
+    for _, m in ipairs(fs) do assert(m:find("^1F|%d+|%d+|%d+s|") and m:match("^1F|%d+|%d+|[^|]*|(.*)$"), "marked since, read by a 0.7 client as a record: " .. m) end
+    assert(table.concat(fs, " "):find("zone=Feralas", 1, true), "with the zone: " .. table.concat(fs, " "))
+    assert(a3.env.CuteDB.roster[b.sender].stats.zone == "Feralas" and a3.env.CuteDB.roster[b.sender].stats.level == 30, "Cobb holds her record as it is")
+    fire(a3, "PLAYER_LOGOUT")
+    leave(a3)
+    -- (f) Cobb's file lost Cyra's record (0.7.0's partial roster deleted such), his hold still says he has the guild
+    db.roster[b.sender] = nil
+    local b2 = #b.sent
+    local a4 = char("Cobb", 3, { zone = "Tanaris" })
+    login(a4, db)
+    tickAll(200)
+    assert(count(a4, "1Q") == 1 and a4.sent[#a4.sent].msg == "1Q|" .. b.o.guid or count(a4, "1Q") == 1, "asked Cyra's whole record by her GUID: " .. kinds(a4))
+    local whole = false
+    for i = b2 + 1, #b.sent do if b.sent[i].msg:find("^1F|1|%d+|%d+|") then whole = true end end
+    local r = a4.env.CuteDB.roster[b.sender]
+    assert(whole and r and r.stats.guid == b.o.guid and r.stats.durability ~= nil and r.stats.zone == "Feralas", "and has it whole")
+    for _, x in ipairs({ off, b, a4 }) do leave(x) end
+  end)
+  said[#said + 1] = "a /reload asks nothing and resends nothing; a login asks since its hold and is sent what changed; a record lost is asked for whole by GUID"
+
+  -- (g) mixed versions: a 0.5.x ask (no stamp) gets the record and never the statistics pass; a 0.7 ask (no since) the
+  -- whole record and the pass; asks within ten minutes of a pass wait for the next one, whoever asks
+  isolated({ member("Coraline", 1), member("Cyra", 3), member("Cass", 3), member("Cato", 3), member("Cid", 3) }, function()
+    local off, b = char("Coraline", 1), char("Cyra", 3, { withStats = true })
+    login(off); login(b)
+    tickAll(200)
+    local function pass(from) for i = from + 1, #b.sent do if b.sent[i].msg:find("g2001=", 1, true) then return true end end return false end
+    local b0 = #b.sent
+    b.C.Comm:Receive("1R|" .. guidOf("Cass"), "GUILD", "Cass-Forever")
+    tickAll(150)
+    assert(count(b, "1F", b0 + 1) >= 3 and not pass(b0), "a 0.5.x ask: the record, no pass: " .. kinds(b, b0 + 1))
+    local b1 = #b.sent
+    local fp = b.C.Policy:Fp()
+    b.C.Comm:Receive("1R|" .. guidOf("Cato") .. "|0|0|" .. fp, "GUILD", "Cato-Forever")
+    tickAll(150)
+    assert(count(b, "1F", b1 + 1) >= 4 and pass(b1), "a 0.7 ask: the record and the pass: " .. kinds(b, b1 + 1))
+    local b2 = #b.sent
+    b.C.Comm:Receive("1R|" .. guidOf("Cid") .. "|0|0|" .. fp, "GUILD", "Cid-Forever")
+    tickAll(150)
+    assert(not pass(b2), "another ask within ten minutes: no second pass yet")
+    tickAll(400)
+    assert(pass(b2), "the next pass as the ten minutes end")
+    for _, x in ipairs({ off, b }) do leave(x) end
+  end)
+  said[#said + 1] = "a 0.5.x ask gets no statistics pass, a 0.7 ask the whole record and one, one pass in ten minutes"
 
   print("core: " .. table.concat(said, "; "))
 end

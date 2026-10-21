@@ -194,6 +194,7 @@ function R:Refresh(event)
     if C.Sample and C.Sample.loaded then C.Stats.LearnSaved() end
     if C.Rules and C.Rules.started then C.Rules:LearnSaved(); C.Rules:Dirty() end
     if C.SavedVersions then C.SavedVersions() end
+    if C.Comm and C.Comm.RosterTrusted then C.Comm:RosterTrusted() end
   end
   if complete then
     -- your own records go now; another's when its member is missing from two complete lists a minute apart at least
@@ -937,7 +938,10 @@ function R:Apply(name, kv, whispered)
   local ctx
   local kept = {}
   for id, v in pairs(kv) do
-    if not officer and holdable(id) and P:Route(id) == "self" then
+    if v == 0 and type(id) == "string" and id:match("^g%d+$") then
+      -- (a statistic's "--", never recorded, which a 0.7 client sends as 0: kept as nothing, Stats.lua S.Quantity)
+      if e.stats[id] ~= nil then e.stats[id] = nil; if type(e.at) == "table" then e.at[id] = nil end end
+    elseif not officer and holdable(id) and P:Route(id) == "self" then
       -- (a statistic not defined here yet: held aside until its category is known, its bounds checked now)
       local why = S.Implausible(id, v, nil, nil)
       if why then self:Suspect(e, why, id) else hold(name, id, v, t) end
