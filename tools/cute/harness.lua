@@ -5166,6 +5166,9 @@ do
     -- a step without a quest (travel, train, grind, corpse) clicked: the Quests page, never Race; Route on: Route
     QB.UI:Open(3)
     assert(c.C.UI.page == "quests", "Route off: a travel step opens Quests: " .. tostring(c.C.UI.page))
+    QB.Arrow:Set(true)
+    local arrowTip = tipOf(c.env.QuestBankArrow)
+    assert(arrowTip:find("Click: the Quests page.", 1, true) and not arrowTip:find("Route page", 1, true), "the arrow's click, as it is: " .. arrowTip)
     c.C.Modules.Set("Cute_Quest:route", true); tick(c, 1)
     QB.UI:Open(3)
     assert(c.C.UI.page == "route", "Route on: the Route page: " .. tostring(c.C.UI.page))

@@ -96,11 +96,15 @@ end
 -- as Cute's pages; a page whose module is off (Route, the Guide, Journal) is the Quests page (Cute's own way with an
 -- off page is Race: a travel, train, grind or corpse step clicked in the step frame opened the guild's table)
 local PAGE = { [1] = "quests", [2] = "quests", [3] = "route", [4] = "guide", [5] = "settings", [6] = "quests", [7] = "journal", [8] = "quests" }
-function UI:Open(tab)
+local function pageOf(tab)
   local page = PAGE[tab] or "quests"
   if page ~= "quests" and page ~= "settings" and not Cute.ModuleOn(page) then page = "quests" end
-  Cute.Open(page, tab == 5 and "quests" or nil)
+  return page
 end
+function UI:Open(tab) Cute.Open(pageOf(tab), tab == 5 and "quests" or nil) end
+-- the page a click opens, by name, for the engine's words ("Click: the Quests page.": Arrow.lua)
+local TITLE = { quests = "Quests", route = "Route", guide = "Guide", settings = "Settings", journal = "Journal" }
+function UI.PageName(tab) return TITLE[pageOf(tab)] or "Quests" end
 function UI:ShowTab(tab) self:Open(tab) end
 function UI:TogglePage(tab) self:Open(tab) end
 function UI:Toggle() Cute.Open("quests") end

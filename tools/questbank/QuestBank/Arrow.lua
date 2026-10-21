@@ -771,8 +771,10 @@ function A:Create()
     else
       GameTooltip:AddLine("Pointing at " .. MODES[m] .. ".", 0.8, 0.8, 0.8)
     end
-    GameTooltip:AddLine(t and t.temp and t.on and "Click: the Route page. Drag: move. Right-click: back to your route."
-      or "Click: the Route page. Drag: move. Right-click: choose what it points at, skip a quest, or hide it.", 0.6, 0.6, 0.6, true)
+    -- (the page a click opens: a host's own name for it, Cute's Quests while its Route module is off: UI.PageName)
+    local page = (QB.UI and QB.UI.PageName and QB.UI.PageName(3)) or "Route"
+    GameTooltip:AddLine(t and t.temp and t.on and ("Click: the " .. page .. " page. Drag: move. Right-click: back to your route.")
+      or ("Click: the " .. page .. " page. Drag: move. Right-click: choose what it points at, skip a quest, or hide it."), 0.6, 0.6, 0.6, true)
     if A.Waypoint() then
       GameTooltip:AddLine("Shift-click: the waypoint in chat, with the game's map pin.", 0.6, 0.6, 0.6, true)
     end
