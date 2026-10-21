@@ -18823,7 +18823,7 @@ end)()
     -- the row in the Guide section: off, back at once; on, out of sight
     c.QB.UI:Open(5)
     local v5 = c.QB.UI.views[5]
-    assert(v5.guideTracker and v5.guideTracker:GetChecked() and v5.guideTracker.label:GetText() == "Hide the game's quest tracker", "the Guide section's row, on")
+    assert(v5.guideTracker and v5.guideTracker:GetChecked() and v5.guideTracker.label:GetText() == "Hide the game's quest tracker while the step frame shows", "the Guide section's row, on")
     v5.guideTracker:SetChecked(false); v5.guideTracker.__scripts.OnClick(v5.guideTracker, "LeftButton")
     assert(s.guide.hideTracker == false and T:GetAlpha() == 1, "unticked: the tracker back at once")
     T:SetAlpha(1)
@@ -19922,7 +19922,9 @@ end)()
 ----------------------------------------------------------------------------
 -- The merge round: what each launch track left for the others. QuestBank's own Route page (Ready now and the plan)
 -- names a stop as the map's pins, the step frame and the arrow do (TV.StopPlace: "Goldshire", never Model.lua's
--- "Elwynn Forest (42, 65)"), and so do a stop's waypoint and the minimap button's next stop. Each case is in MERGECASES
+-- "Elwynn Forest (42, 65)"), and so do a stop's waypoint and the minimap button's next stop; the Settings' Guide section
+-- has the switches the step frame's menu has: "Say XP after each hand-in" (sayXP, off) and "Hide the game's quest
+-- tracker while the step frame shows" (guide.hideTracker, on). Each case is in MERGECASES
 ----------------------------------------------------------------------------
 ;(function()
   local MERGECASES = {}
@@ -19944,6 +19946,7 @@ end)()
     c.QB.Guide.Replan()
   end
   local function tipOf(o) lines = {}; o.__scripts.OnEnter(o); if o.__scripts.OnLeave then o.__scripts.OnLeave(o) end; return table.concat(lines, " / ") end
+  local function said(c, fn) local n = #c.chat; fn(); return table.concat(c.chat, " | ", n + 1) end
 
   -- 1. The Price of Shoes handed in to Smith Argus, a stop out of a town (Model.lua names it "Elwynn Forest (42, 65)",
   -- for matching): the Route page's first stop, its row, its waypoint and the minimap button say "Goldshire", in Ready
@@ -19989,6 +19992,47 @@ end)()
     local tip = tipOf(mb)
     assert(tip:find("Next stop: " .. place, 1, true), "the minimap button's next stop: " .. tip)
     noSpot("the minimap button", tip)
+    UI.frame:Hide()
+  end }
+
+  -- 2. The Guide section's switches for what the step frame's menu has: "Say XP after each hand-in" (off; ticked, the
+  -- hand-in's line in chat; unticked, quiet again) and "Hide the game's quest tracker while the step frame shows" (on),
+  -- under the Guide's other rows, above the Map's, the page laid out with nothing clipped
+  MERGECASES[#MERGECASES + 1] = { "Settings' Guide section: Say XP after each hand-in, off; the tracker's row, on", function()
+    local c = char("Sayer", { level = 5, log = { { 7, 1 }, { 33, 1 } } })
+    local QB, UI = c.QB, c.QB.UI
+    QB:Settings().welcome = nil
+    planned(c)
+    for _, id in ipairs({ 7, 15, 33 }) do assert(QB.Quest.Get(id), "quest " .. id .. " in the catalog") end
+    UI:Open(5); UI:Refresh()
+    local v = UI.views[5]
+    assert(v.sayXP and v.sayXP.label:GetText() == "Say XP after each hand-in" and not v.sayXP:GetChecked() and QB:Settings().sayXP ~= true, "the Say XP row, off")
+    assert(v.guideTracker:GetChecked() and v.guideTracker.label:GetText() == "Hide the game's quest tracker while the step frame shows", "the tracker's row, on: " .. v.guideTracker.label:GetText())
+    local function turnIn(id, xp) c.ev(QB.eventFrame, "QUEST_TURNED_IN", id, xp); tick(c, 1) end
+    assert(said(c, function() turnIn(7, 450) end) == "", "off: a hand-in says nothing")
+    v.sayXP:SetChecked(true); v.sayXP.__scripts.OnClick(v.sayXP)
+    assert(QB:Settings().sayXP == true, "ticked: sayXP on")
+    local line = said(c, function() turnIn(33, 450) end)
+    assert(line:find(": +450 XP", 1, true), "on: the hand-in's line: " .. line)
+    -- the step frame's menu says the same choice
+    QB.StepFrame.Apply(); QB.StepFrame:Menu(nil)
+    local item
+    for _, it in ipairs(QB.UI.lastMenu or {}) do if it[1]:find("^Say quest XP in chat") then item = it end end
+    assert(item and item[1] == "Say quest XP in chat: on", "the step frame's menu agrees: " .. tostring(item and item[1]))
+    UI:Refresh()
+    assert(v.sayXP:GetChecked(), "the row follows the setting")
+    v.sayXP:SetChecked(false); v.sayXP.__scripts.OnClick(v.sayXP)
+    assert(QB:Settings().sayXP == false and said(c, function() turnIn(15, 450) end) == "", "unticked: quiet again")
+    -- the tracker's row writes the setting
+    v.guideTracker:SetChecked(false); v.guideTracker.__scripts.OnClick(v.guideTracker)
+    assert(QB:Settings().guide.hideTracker == false, "the tracker's row unticked")
+    v.guideTracker:SetChecked(true); v.guideTracker.__scripts.OnClick(v.guideTracker)
+    assert(QB:Settings().guide.hideTracker == true, "and on again")
+    -- under the Guide's rows, above the Map's; nothing clipped
+    assert(v.sayXP.__points[1].y < v.tipProgress.__points[1].y and v.sayXP.__points[1].y > v.pins.__points[1].y, "Say XP under the Guide's other rows, above the Map's")
+    UI:Refresh()
+    local lay = checkLayout(UI.frame, "settings, the merge round")
+    assert(#lay == 0, "settings laid out: " .. table.concat(lay, "; "))
     UI.frame:Hide()
   end }
 

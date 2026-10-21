@@ -119,12 +119,18 @@ function P.Settings(_, col)
   col:Check("Step frame", s.guide.frame == true, true, function(on) s.guide.frame = on; if E.StepFrame then E.StepFrame.Apply() end end)
   col:Check("Direction arrow", s.arrow == true, true, function(on) if E.Arrow then E.Arrow:Set(on) else s.arrow = on end end)
   -- (6.1.1) the game's quest tracker out of sight while the step frame shows (the engine's StepFrame.lua SF.Tracker)
-  col:Check("Hide the game's quest tracker", s.guide.hideTracker ~= false, true, function(on) s.guide.hideTracker = on; if E.StepFrame then E.StepFrame.Apply() end end)
+  col:Check("Hide the game's quest tracker while the step frame shows", s.guide.hideTracker ~= false, true, function(on) s.guide.hideTracker = on; if E.StepFrame then E.StepFrame.Apply() end end)
   local names, current = {}, "Off"
   for _, a in ipairs(ACCEPT) do names[#names + 1] = a[1]; if s.autoAccept == a[2] then current = a[1] end end
   col:Choice("Accept for me", names, current, function(v) for _, a in ipairs(ACCEPT) do if a[1] == v then s.autoAccept = a[2] end end end)
   col:Check("Hand finished quests in for me", s.autoTurnIn == true, true, function(on) s.autoTurnIn = on end)
   col:Check("Progress in mob tooltips", s.tipProgress ~= false, true, function(on) s.tipProgress = on end)
+  -- the line in chat as a quest is handed in, complete or dropped (the engine's sayXP, read in its Core.lua; off since the
+  -- launch round, as QuestBank's Guide section and the step frame's menu have it). Eight rows: the section's most
+  col:Check("Say XP after each hand-in", s.sayXP == true, true, function(on) s.sayXP = on and true or false end, nil, function(tip)
+    tip:AddLine("Say XP after each hand-in", 1, 1, 1)
+    tip:AddLine("A line in chat as you hand a quest in, with the XP it paid, and as a quest is complete or leaves your log. Off, chat stays quiet: the step frame and the Route page show the XP.", 0.85, 0.85, 0.85, true)
+  end)
   col:Check("Share with your party", s.share.party ~= false, true, function(on) s.share.party = on end)
 end
 

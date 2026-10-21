@@ -3740,13 +3740,13 @@ function UI:CreateSettingsView(parent)
   end)
   -- (6.1.1) the game's quest tracker out of sight while the step frame shows (StepFrame.lua's SF.Tracker): "it's hidden
   -- by default there in game, Blizzard's one, if they use ours"
-  v.guideTracker = checkRow(p, LEFT + 24, y0 - 108, "Hide the game's quest tracker", 316)
+  v.guideTracker = checkRow(p, LEFT + 24, y0 - 108, "Hide the game's quest tracker while the step frame shows", 316)
   v.guideTracker:SetScript("OnClick", function(self)
     QB:Settings().guide.hideTracker = self:GetChecked() and true or false
     if QB.StepFrame then QB.StepFrame.Apply() end
   end)
   tooltip(v.guideTracker, function(tip)
-    tip:AddLine("Hide the game's quest tracker", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("Hide the game's quest tracker while the step frame shows", GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine("While the step frame shows, the game's own quest list at the right of the screen is out of sight. It comes back as soon as you untick this or the step frame goes. Never changed in a fight.", 1, 1, 1, true)
   end)
   v.guideScale = button(p, "100%", 70)
@@ -3855,7 +3855,15 @@ function UI:CreateSettingsView(parent)
     tip:AddLine("Quest progress in tooltips", GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine("A mob or object that counts for a quest in your log gets its count in its tooltip, \"Kobold Vermin: 3/8\", and your party's counts.", 1, 1, 1, true)
   end)
-  yl = y0 - 524
+  -- (the merge round) the line in chat as a quest is handed in, complete or dropped (sayXP, read in Core.lua; off since
+  -- the launch round; the step frame's menu has it too, as Cute's Quests section does)
+  v.sayXP = checkRow(p, LEFT, y0 - 504, "Say XP after each hand-in", 340)
+  v.sayXP:SetScript("OnClick", function(self) QB:Settings().sayXP = self:GetChecked() and true or false end)
+  tooltip(v.sayXP, function(tip)
+    tip:AddLine("Say XP after each hand-in", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("A line in chat as you hand a quest in, with the XP it paid, and as a quest is complete or leaves your log. Off, chat stays quiet: the step frame and the Route page show the XP.", 1, 1, 1, true)
+  end)
+  yl = y0 - 552
 
   ----------------------------------------------------------------------------------------------------------------
   -- Map and minimap: the route's pins, the minimap button, the quest icons on the world map (QuestMap.lua), the
@@ -4504,6 +4512,7 @@ function UI:RefreshSettingsView(v)
   v.mapLow:SetChecked(set.mapLowLevel == true)
   v.wholeRoute:SetChecked(set.wholeRoute == true)
   v.tipProgress:SetChecked(set.tipProgress ~= false)
+  v.sayXP:SetChecked(set.sayXP == true)
   local newest = QB.newest
   v.verText:SetText(newest and string.format("You run QuestBank %s. |cff6cdc74%s runs %s: time to update.|r", QB.version, newest.who or "Someone", newest.version)
     or string.format("You run QuestBank %s, the newest anyone on the realm has shown.", QB.version))

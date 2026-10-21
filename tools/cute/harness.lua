@@ -4839,11 +4839,11 @@ do
     assert(ts:find("Accept for me", 1, true) and ts:find("Progress in mob tooltips", 1, true), "the Quests section's rows:\n" .. ts)
     assert(ts:find("Step frame", 1, true) and ts:find("Direction arrow", 1, true), "the step frame's and the arrow's rows are the Quests section's:\n" .. ts)
     -- 6.1.1: the game's quest tracker out of sight while the step frame shows (QuestBank's Guide section has the same)
-    local trk = checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Hide the game's quest tracker" end)
+    local trk = checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Hide the game's quest tracker while the step frame shows" end)
     assert(trk and trk:GetChecked() and rone.env.CuteQuestDB.settings.guide.hideTracker == true, "the tracker's row, on:\n" .. ts)
     click(trk)
     assert(rone.env.CuteQuestDB.settings.guide.hideTracker == false, "unticked: the engine's setting off")
-    click(checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Hide the game's quest tracker" end))
+    click(checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Hide the game's quest tracker while the step frame shows" end))
     assert(rone.env.CuteQuestDB.settings.guide.hideTracker == true, "ticked again")
     rone.C.UI:Open("settings", "guide")
     assert(not texts(rone):find("Step frame", 1, true) and not texts(rone):find("Direction arrow", 1, true), "and not the Guide's")
@@ -11337,6 +11337,55 @@ do
   said[#said + 1] = "an ask whole after a since-ask is answered, record and pass"
 
   print("core: " .. table.concat(said, "; "))
+end
+
+-- [stage: merge1] that stage's tests go right below this line
+-- (the merge round) the Quests section has the engine's two switches QuestBank's Guide section has: "Say XP after each
+-- hand-in" (sayXP, off: the line in chat as a quest is handed in, complete or dropped) and "Hide the game's quest tracker
+-- while the step frame shows" (guide.hideTracker, on); each writes the engine's setting, both labels whole at either
+-- window size, and the section keeps eight rows at most
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1), member("Pim", 3) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(5)
+    c.C.Modules.Set("Cute_Quest", true); tick(c, 6)
+    local s = c.env.CuteQuestDB.settings
+    local SAY, TRACKER = "Say XP after each hand-in", "Hide the game's quest tracker while the step frame shows"
+    local function row(label) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == label end) end
+    c.C.UI:Open("settings", "quests")
+    local say, trk = row(SAY), row(TRACKER)
+    assert(say and not say:GetChecked() and s.sayXP ~= true, "the Say XP row, off by default:\n" .. texts(c))
+    assert(trk and trk:GetChecked() and s.guide.hideTracker == true, "the tracker's row, on:\n" .. texts(c))
+    -- off: a hand-in says nothing; ticked: the engine's sayXP on, and the hand-in's line said
+    local n0 = #c.chat
+    fire(c, "QUEST_TURNED_IN", next(c.o.log), 450); tick(c, 1)
+    assert(#c.chat == n0, "off: a hand-in says nothing: " .. tostring(c.chat[#c.chat]))
+    click(say)
+    assert(s.sayXP == true, "ticked: the engine's sayXP on")
+    fire(c, "QUEST_TURNED_IN", next(c.o.log), 450); tick(c, 1)
+    assert(#c.chat > n0 and c.chat[#c.chat]:find("450 XP", 1, true), "on: the hand-in's line: " .. tostring(c.chat[#c.chat]))
+    click(row(SAY))
+    assert(s.sayXP == false, "unticked: off again")
+    click(row(TRACKER))
+    assert(s.guide.hideTracker == false, "the tracker's row unticked: the engine's setting off")
+    click(row(TRACKER))
+    assert(s.guide.hideTracker == true, "and on again")
+    -- eight rows at most (a Check, a Choice, a Step or an Edit is a row)
+    local n = 0
+    local col = setmetatable({}, { __index = function(_, k) return function() if k == "Check" or k == "Choice" or k == "Step" or k == "Edit" then n = n + 1 end end end })
+    c.C.Modules.byId.quests.settings(c.C.Modules.byId.quests, col)
+    assert(n <= 8, "the Quests section keeps eight rows at most: " .. n)
+    -- both labels whole at either size (Cute's FitText would cut a label too long with "...")
+    for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+      c.C.UI.frame:SetSize(size[1], size[2])
+      c.C.UI:Open("settings", "quests")
+      assert(row(SAY) and row(TRACKER), "both labels whole at " .. size[1] .. " x " .. size[2] .. ":\n" .. texts(c))
+    end
+    assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    leave(c)
+    print(string.format("merge1: the Quests section: Say XP after each hand-in (off; ticked, the hand-in's line) and the tracker's row (on), labels whole at both sizes, %d rows", n))
+  end)
 end
 
 -- this pass's problems and layouts join the run's; the last pass prints them all
