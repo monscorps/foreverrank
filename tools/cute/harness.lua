@@ -11682,6 +11682,145 @@ do local function runsStage()
   end)
   said[#said + 1] = "an edited copy: 2Q, 2A, 2W from a non-scribe ignored, a 2A with an unknown suffix not shown, a value out of bounds dropped, the meter's word over a claim, a backdated hello ignored"
 
+  -- (4) the lockdown: a 2V answered 11 spends no try, the Chat restriction's Activating holds it and only its Inactive
+  -- lets it go, once; a lockdown for the whole stay sends nothing inside, a disband inside gives each client its own
+  -- report, and the id and the scribe settle once the group is out; the meter read only out of combat; a secret
+  -- sourceGUID leaves the own row alone; secret chat events read nowhere
+  isolated({ gmember("Qa", 1), gmember("Rb", 3), gmember("Sc", 3) }, function()
+    local cs = { gchar("Qa", 1), gchar("Rb", 3), gchar("Sc", 3) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    local G = group(cs)
+    zone(cs, "party", 36, "The Deadmines")
+    tickAll(40)
+    local c = cs[2]
+    local n0 = rcount(c, "2V")
+    G.locked = true
+    fight(G, 30, { Rb = { [0] = 500 } }, 1230)
+    tickAll(60)
+    assert(rcount(c, "2V") == n0 and (c.r11 or 0) >= 6, "answered 11 again and again, nothing given up: " .. tostring(c.r11))
+    c.chatLocked = true
+    fire(c, "ADDON_RESTRICTION_STATE_CHANGED", 5, 1)
+    local tries = c.r11
+    tickAll(30)
+    fire(c, "ADDON_RESTRICTION_STATE_CHANGED", 5, 1)
+    tickAll(10)
+    assert(rcount(c, "2V") == n0 and c.r11 == tries, "the restriction's Activating holds it, nothing tried")
+    G.locked, c.chatLocked = false, false
+    fire(c, "ADDON_RESTRICTION_STATE_CHANGED", 5, 0)
+    tickAll(2)
+    assert(rcount(c, "2V") == n0 + 1, "its Inactive lets it go")
+    tickAll(30)
+    assert(rcount(c, "2V") == n0 + 1, "once")
+    -- (a secret sourceGUID: this client's own row, nobody else's)
+    G.meterSecret = true
+    fight(G, 30, { Qa = { [0] = 700 }, Rb = { [0] = 800 }, Sc = { [0] = 900 } })
+    tickAll(5)
+    local tot = c.C.Runs.Current().meter.tot
+    assert(tot[sfx(c)] and tot[sfx(c)].dm == 1300 and (tot[sfx(cs[1])] or {}).dm == nil, "a secret sourceGUID: the own row alone")
+    -- (secret chat events and a secret GUID read nowhere)
+    fire(c, "CHAT_MSG_LOOT", secret("string"), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, secret("string"))
+    fire(c, "UNIT_DIED", secret("string"))
+    for _, x in ipairs(cs) do assert((x.meterInCombat or 0) == 0, x.o.name .. " read the meter in combat") end
+  end)
+  isolated({ gmember("Ta", 1), gmember("Ub", 3), gmember("Vc", 3) }, function()
+    local cs = { gchar("Ta", 1), gchar("Ub", 3), gchar("Vc", 3) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    local G = group(cs)
+    G.locked = true
+    zone(cs, "party", 36, "The Deadmines")
+    tickAll(60)
+    local ids = {}
+    for _, c in ipairs(cs) do assert(#c.rsent == 0, c.o.name .. " sent inside: " .. rkinds(c)); ids[c.C.Runs.Current().id] = true end
+    fight(G, 60, { Ta = { [0] = 1000 }, Ub = { [0] = 3000 }, Vc = { [2] = 3000 } }, 1230)
+    tickAll(260)
+    disband(G)
+    tickAll(5)
+    for _, c in ipairs(cs) do assert(lastReport(c) and lastReport(c).from == nil, c.o.name .. ": its own report after a disband inside") end
+  end)
+  isolated({ gmember("Wa", 1), gmember("Xb", 3), gmember("Yc", 3) }, function()
+    local cs = { gchar("Wa", 1), gchar("Xb", 3), gchar("Yc", 3) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    local G = group(cs)
+    G.locked = true
+    zone(cs, "party", 36, "The Deadmines")
+    tickAll(10)
+    zone({ cs[2] }, "none", 0); tickAll(3); zone({ cs[2] }, "party", 36, "The Deadmines")
+    tickAll(50)
+    fight(G, 60, { Wa = { [0] = 1000 } })
+    local n = 0
+    local ids = {}
+    for _, c in ipairs(cs) do local id = c.C.Runs.Current().id; if not ids[id] then ids[id] = true; n = n + 1 end end
+    assert(n == 3 and #cs[1].rsent == 0, "inside, each its own id: " .. n)
+    G.locked = false
+    zone(cs, "none", 0)
+    tickAll(20)
+    ids, n = {}, 0
+    for _, c in ipairs(cs) do local id = c.C.Runs.Current().id; if not ids[id] then ids[id] = true; n = n + 1 end end
+    assert(n == 1 and cs[3].C.Runs:Scribe() == sfx(cs[1]), "out: one id and the leader the scribe")
+  end)
+  said[#said + 1] = "the lockdown: 11 again and again spends no try, Activating holds and Inactive lets it go once; a whole stay locked sends nothing inside, a disband there gives each its own report, the id and scribe settle once out; the meter out of combat, a secret GUID the own row alone"
+
+  -- (8) a raid of 40 (nine with Cute): five cards and up to ten mentions, no member twice; each client at most three
+  -- messages at the end; a member joining late draws one hello's answer, two at most; a raidN outside your subgroup is
+  -- never on another map
+  do
+    local roster, names = {}, {}
+    local classes = { "WARRIOR", "MAGE", "PRIEST", "ROGUE", "HUNTER", "DRUID", "PALADIN", "WARLOCK", "SHAMAN" }
+    for i = 1, 40 do names[i] = "Raider" .. string.char(64 + (i - 1) % 26 + 1) .. i; roster[i] = gmember(names[i], i == 1 and 1 or 3, classes[(i - 1) % 9 + 1]) end
+    isolated(roster, function()
+      local cs = {}
+      for i = 1, 9 do cs[i] = gchar(names[i], i == 1 and 1 or 3, { class = classes[(i - 1) % 9 + 1] }); login(cs[i]) end
+      tickAll(40)
+      local list = {}
+      for i = 1, 39 do list[i] = i <= 8 and cs[i] or { name = names[i], class = classes[(i - 1) % 9 + 1] } end
+      local G = group(list, { raid = true })
+      zone({ unpack(cs, 1, 8) }, "raid", 409, "Molten Core")
+      for i = 6, 39 do G.map[guidOf(names[i])] = 2000 + i end
+      tickAll(40)
+      -- the late one: in the raid, then into the instance
+      local late = cs[9]
+      G.members[40] = entryOf(late)
+      wire(late, G)
+      for _, e in ipairs(G.members) do if e.c then e.c.everMet = e.c.everMet or {}; table.insert(e.c.everMet, G.members[40]); if e.c == late then for _, f in ipairs(G.members) do table.insert(late.everMet, f) end end end end
+      for _, c2 in ipairs(clientsOf(G)) do fire(c2, "GROUP_ROSTER_UPDATE") end
+      local marks = {}
+      for i, c2 in ipairs(clientsOf(G)) do marks[i] = #c2.rsent end
+      zone({ late }, "raid", 409, "Molten Core")
+      tickAll(20)
+      local answers = 0
+      for i, c2 in ipairs(clientsOf(G)) do for k = marks[i] + 1, #c2.rsent do if c2.rsent[k].msg:match("^2H|.*%.a$") then answers = answers + 1 end end end
+      assert(answers >= 1 and answers <= 2 and late.C.Runs.Current().id == cs[1].C.Runs.Current().id, "the late one answered once or twice and in the raid's run: " .. answers)
+      local amounts = {}
+      for i = 1, 40 do
+        local a = { [0] = 1000 + i * 37 }
+        if i % 5 == 0 then a[2] = 3000 + i * 11 end
+        if i % 7 == 0 then a[5] = 3 + i % 6 end
+        if i % 6 == 0 then a[6] = 4 + i % 9 end
+        if i % 8 == 0 then a[8] = 500 + i * 13 end
+        if i % 4 == 0 then a[7] = 2000 + i * 3 end
+        amounts[names[i]] = a
+      end
+      for _, enc in ipairs({ 6601, 6602 }) do fight(G, 90, amounts, enc); tickAll(60) end
+      for i = 10, 16 do for _ = 1, (i % 3) + 1 do die(G, names[i]); tickAll(2); rez(G, names[i]) end end
+      tickAll(200)
+      for _, m in pairs(cs[1].C.Runs.Current().members) do assert(not m.away, "nobody outside the subgroup taken for elsewhere") end
+      for i, c2 in ipairs(clientsOf(G)) do marks[i] = #c2.rsent end
+      zone(clientsOf(G), "none", 0)
+      tickAll(25)
+      for i, c2 in ipairs(clientsOf(G)) do assert(#c2.rsent - marks[i] <= 3, c2.o.name .. " sent more than three at the end: " .. rkinds(c2, marks[i] + 1)) end
+      local rep = lastReport(cs[1])
+      assert(rep and #rep.cards == 5 and #rep.mentions >= 1 and #rep.mentions <= 10, "five cards and the mentions: " .. cardsOf(rep) .. " / " .. #(rep and rep.mentions or {}))
+      local seen = {}
+      for _, x in ipairs(rep.cards) do assert(not seen[x[1]]); seen[x[1]] = true end
+      for _, x in ipairs(rep.mentions) do assert(not seen[x[1]], "no member twice"); seen[x[1]] = true end
+      assert(lastReport(cs[5]) and cardsOf(lastReport(cs[5])) == cardsOf(rep) and #lastReport(cs[5]).mentions == #rep.mentions, "the raid sees the scribe's")
+      said[#said + 1] = string.format("a raid of 40: five cards and %d mentions, no member twice, three messages at most at the end, a late member answered %d time%s", #rep.mentions, answers, answers == 1 and "" or "s")
+    end)
+  end
+
   -- (12) the choice, on tables alone (Awards.lua makes no client call): a member { sfx, guid, name, v }
   do
     local A = yezin.C.Awards
