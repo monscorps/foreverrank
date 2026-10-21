@@ -1106,9 +1106,9 @@ local function cardOf(c, name, officer)
   local _, plan = c.C.Guide.Items(officer)
   for _, card in ipairs(plan.cards) do if card.d.name == name then return c.C.Guide.CardRows(card, plan), card, plan end end
 end
--- the tabs shown, left to right, and Settings' sections listed, top to bottom, by id. (The Runs module, on by default,
--- is left out of both lists: the runs stage's scenarios check its tab and its section)
-local ASIDE = { runs = true }
+-- the tabs shown, left to right, and Settings' sections listed, top to bottom, by id. (The Runs and Achievements
+-- modules, on by default, are left out of both lists: the runs and cards stages' scenarios check their own)
+local ASIDE = { runs = true, ach = true }
 local function tabsShown(c)
   local out = {}
   for id, b in pairs(c.C.UI.tabs) do if b:IsShown() and not ASIDE[id] then out[#out + 1] = { id = id, x = b.__points[1].x } end end
@@ -1467,7 +1467,10 @@ do
   do
     local P, db = yezin.C.Policy, yezin.env.CuteDB
     local ids, known = {}, {}
-    for _, def in ipairs(S.list) do ids[#ids + 1] = def.id end
+    for _, def in ipairs(S.list) do ids[#ids + 1] = def.id; known[def.id] = true end
+    -- (and the policy pairs with no value of their own, which Who sees what lists by category: the run fields,
+    -- Achievements)
+    for _, cat in ipairs(S.CATS) do for _, def in ipairs(S.byCat[cat]) do if not known[def.id] then ids[#ids + 1] = def.id; known[def.id] = true end end end
     for _, f in ipairs(S.FOUND) do ids[#ids + 1] = "gc_" .. f[1] end
     for _, c in ipairs(S.game.cats) do ids[#ids + 1] = "gc" .. c.id end
     for _, id in ipairs(ids) do known[id] = true end
@@ -1941,12 +1944,12 @@ do
   end
   c0 = #yezin.chat
   yezin.env.SlashCmdList.CUTE("modules")
-  assert(yezin.C.UI.page == "settings" and yezin.C.UI.section == "modules" and yezin.chat[#yezin.chat]:find("modules: Guide on; Runs on. The dashboard's pages are always on.", 1, true),
+  assert(yezin.C.UI.page == "settings" and yezin.C.UI.section == "modules" and yezin.chat[#yezin.chat]:find("modules: Guide on; Runs on; Achievements on. The dashboard's pages are always on.", 1, true),
     "/cute modules lists the Guide on and opens Settings there: " .. table.concat(yezin.chat, "\n", c0 + 1))
   yezin.C.Modules.Set("guide", false)
   assert(yezin.chat[#yezin.chat] == yezin.chat[c0 + 1], "switched off by the box, nothing said")
   yezin.env.SlashCmdList.CUTE("modules")
-  assert(yezin.chat[#yezin.chat]:find("modules: Guide off; Runs on. The dashboard's pages are always on.", 1, true), "/cute modules lists it off: " .. yezin.chat[#yezin.chat])
+  assert(yezin.chat[#yezin.chat]:find("modules: Guide off; Runs on; Achievements on. The dashboard's pages are always on.", 1, true), "/cute modules lists it off: " .. yezin.chat[#yezin.chat])
   yezin.C.UI:Open("settings", "modules")
   assert(sectionsShown(yezin) == "general vis rules modules race prog shame officers", "the officer's sections: " .. sectionsShown(yezin))
   check(yezin.C.UI.frame, "officer settings, modules, a fresh install")
@@ -13249,8 +13252,9 @@ do local function cardsStage()
     rex.C.UI:Open("settings", "shame")
     assert(texts(rex):find("Announcements on my screen", 1, true) and buttonOf(rex, "Test announcement"), "Settings > Halls: the two rows")
     check(rex.C.UI.frame, "halls: Settings > Halls")
+    local d0 = #rex.chat
     rex.env.SlashCmdList.CUTE("diag cards")
-    local diag = table.concat(rex.chat, "\n", #rex.chat - 1)
+    local diag = table.concat(rex.chat, "\n", d0 + 1)
     assert(diag:find("diag cards: 6 sets held", 1, true) and not diag:find("Rex", 1, true), "/cute diag cards: counts, no name")
   end)
   said[#said + 1] = "showing: one toast at a time, three waiting, two an hour, the rest to News; none in combat or an instance until after, News alone with the setting off; a member's and a secret guild line shown; the test announcement shows the toast and three cards and sends and keeps nothing; /cute card test hall; Settings > Halls; /cute diag cards"
@@ -13343,6 +13347,366 @@ do local function cardsStage()
     assert(#H(wynd).Sets() == 30 and #H(vala).Rows() == 100, "the caps: 30 sets, 100 rows")
     assert(setsBytes < 60000 and queueBytes < 60000, "the store bounded: " .. setsBytes .. " and " .. queueBytes .. " bytes")
     said[#said + 1] = string.format("a closed source locks its item and drops its card on receipt; a draft cleared stays as saved; New card by a name's start; every chip and an announcement of one to five at both sizes; the store at its caps: sets %d KB, queue %d KB", math.ceil(setsBytes / 1024), math.ceil(queueBytes / 1024))
+  end)
+
+
+  ----------------------------------------------------------------------------
+  -- achievements and firsts (R3 of the run report's design): the Achievements module, 1A and the ac code with its
+  -- reveals, the pending earns held through instances, ach_recent, the server's guild line, guild news and its filters,
+  -- the firsts ledger and its seeding, the three kinds of first, achievement and first cards in the queue (never
+  -- published by themselves), statistics in halls. The design's scenarios 13 and 14, and 10's achievements part
+  ----------------------------------------------------------------------------
+  -- the mock gains what the achievements read: C_AchievementInfo.IsGuildAchievement (AchievementInfoDocumentation.lua),
+  -- C_GuildInfo.GetGuildNewsInfo (GuildInfoDocumentation.lua:61, its struct at 707: day and month from 0), the events
+  -- GUILD_NEWS_UPDATE and CHAT_MSG_GUILD_ACHIEVEMENT (ChatInfoDocumentation.lua:1649, the guid its twelfth); and four
+  -- globals no doc lists, each on the evidence named, optional (a client without them reads them as missing)
+  UNDOCUMENTED.GetAchievementCategory = { "Blizzard_FrameXMLUtil/AchievementUtil.lua:42 (AchievementUtil.IsFeatOfStrength; the toc loads it for the mainline family, camelot not excluded)", optional = true }
+  UNDOCUMENTED.QueryGuildNews = { "Blizzard_Communities/GuildNews.lua:49 (the guild news frame's OnShow; the toc limits no game type)", optional = true }
+  UNDOCUMENTED.GetNumGuildNews = { "Blizzard_Communities/GuildNews.lua:88", optional = true }
+  UNDOCUMENTED.GetGuildNewsFilters = { "Blizzard_Communities/GuildNews.lua:298 (the news filters' popup: 1 guild achievements, 2 achievements, GuildNews.xml:401-406)", optional = true }
+  local GUILD_ACH = 990001
+  local function achEquip(c)
+    local env = c.env
+    c.news = c.news or {}
+    c.newsFilters = c.newsFilters or { true, true, true, true, true, true, false, false, true }
+    env.C_AchievementInfo = { IsGuildAchievement = function(id) return id == GUILD_ACH end, AreGuildAchievementsEnabled = function() return true end }
+    local getInfo = env.GetAchievementInfo
+    env.GetAchievementInfo = function(a, b)
+      if a == GUILD_ACH and b == nil then return GUILD_ACH, "Guild Together", 10, true, 1, 1, 2026, "The whole guild, together", 0, 236544, "", true, false, "", false end
+      return getInfo(a, b)
+    end
+    env.GetAchievementCategory = function(id) return id == GUILD_ACH and 15001 or math.floor(id / 10) end
+    env.QueryGuildNews = function()
+      c.newsAsked = (c.newsAsked or 0) + 1
+      if c.newsFires then c.timers[#c.timers + 1] = { t = c.clock + 1, f = function() fire(c, "GUILD_NEWS_UPDATE") end } end
+    end
+    env.GetNumGuildNews = function() return #c.news end
+    env.GetGuildNewsFilters = function() local f = c.newsFilters; return f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8], f[9] end
+    env.C_GuildInfo.GetGuildNewsInfo = function(i)
+      local n = c.news[i]
+      if not n then return nil end
+      local d = os.date("!*t", n.t)
+      return { isSticky = false, isHeader = false, newsType = n.type, whoText = n.who, whatText = "x", newsDataID = n.id, data = { 0, 0, 0 },
+        weekday = 0, day = d.day - 1, month = d.month - 1, year = d.year - 2000, guildMembersPresent = 0 }
+    end
+    return c
+  end
+  local function achar(name, rank, extra) return achEquip(cchar(name, rank, extra)) end
+  local function A(c) return c.C.Achievements end
+  local function b36(n) return yezin.C.Comm.b36(n) end
+  -- the server's guild line for an earn, as the game sends it: a link with the achievement's id, the member's GUID
+  local function serverLine(c, sender, guid, id)
+    fire(c, "CHAT_MSG_GUILD_ACHIEVEMENT", "%s has earned the achievement |cffffff00|Hachievement:" .. id .. ":" .. guid .. ":1:10:21:26:4294967295:4294967295:4294967295:4294967295|h[Achievement]|h!",
+      sender, "", "", sender, "", 0, 0, "", 0, 77, guid)
+  end
+  local function achItem(c, guid, id) return H(c).Item("a:" .. guid .. ":" .. id) end
+  local function firstItem(c, key, guid) return H(c).Item("f:" .. key .. ":" .. guid:match("([^%-]+)$")) end
+  local function guildSends(c, pattern) local n = 0; for _, m in ipairs(c.sent) do if m.channel == "GUILD" and m.msg:find(pattern) then n = n + 1 end end return n end
+  local function whispers(c, pattern) local n = 0; for _, m in ipairs(c.sent) do if m.channel == "WHISPER" and m.msg:find(pattern) then n = n + 1 end end return n end
+  local function achDigest(c) for _, r in ipairs(H(c).Rows()) do if r.digest == "ach" then return r end end end
+  local function queueRow(c, item) for _, r in pairs(rowsOf(c, "halls.queue")) do if r.tip and tipText(function(t) r.tip(t) end):find(item.card.title, 1, true) and r.name:GetText() == item.card.name then return r end end end
+
+  -- (13) achievements: an earn sends one 1A (on GUILD while Achievements is Everyone); alreadyEarned and a guild
+  -- achievement send none; officers add it to the day's row, members ignore it; an unknown id, an untrusted sender and
+  -- a 21st 1A in ten minutes are dropped; a 1A dated more than 6 hours before it came is dated by its arrival, one held
+  -- through an instance by its own time; the server's line and guild news make entries for a member without Cute,
+  -- marked server, and guild news' guild achievement a guild card; a secret line reads nothing; ach_recent at most 20
+  -- entries and 200 bytes, whispered to the officers and never in the guild's part of a record, and an officer who was
+  -- away learns the earns from it; with Achievements Only you a 1A is whispered, never on GUILD, its item locked
+  isolated({ gmember("Ada", 1, "PALADIN"), gmember("Mia", 3, "ROGUE"), gmember("Max", 3, "WARRIOR"), gmember("Nox", 3, "HUNTER"), gmember("Obe", 1, "WARLOCK") }, function()
+    local ada, mia, max = achar("Ada", 1, { class = "PALADIN" }), achar("Mia", 3, { class = "ROGUE" }), achar("Max", 3, { class = "WARRIOR" })
+    ada.news = { { type = 1, who = "Nox", id = 150032, t = EPOCH - 2 * 86400 }, { type = 0, id = GUILD_ACH, t = EPOCH - 86400 } }
+    ada.newsFires = true
+    for _, c in ipairs({ ada, mia, max }) do login(c) end
+    tickAll(100)
+    -- the registry: ac under Achievements in Who sees what, revealing the Legacy Challenge stats and revealed by them;
+    -- ach_recent hidden, riding with it and whispered to the officers alone
+    local S, P = ada.C.Stats, ada.C.Policy
+    assert(S.byCode.ac == "achievements" and S.byId.achievements.cat == "ach" and S.CAT_LABEL.ach == "Achievements" and S.byCat.ach[1] == S.byId.achievements, "ac, a row under Achievements")
+    local function reveals(id, other) for _, r in ipairs(S.byId[id].reveals or {}) do if r == other then return true end end return false end
+    for _, id in ipairs({ "lc_last", "lc_done", "lc_pts", "lc_cats" }) do assert(reveals("achievements", id) and reveals(id, "achievements"), "ac and " .. id .. " reveal each other") end
+    assert(S.HIDDEN.ach_recent and S.HIDDEN.ach_recent.with == "achievements" and S.HIDDEN.ach_recent.officers and S.HIDDEN.ach_recent.max == 200, "ach_recent: hidden, with ac, for the officers")
+    local saved = ada.env.CuteDB.policy
+    for _, id in ipairs({ "achievements", "lc_last", "lc_done", "lc_pts", "lc_cats" }) do
+      ada.env.CuteDB.policy = { vis = { [id] = "self" } }
+      for _, other in ipairs({ "achievements", "lc_last", "lc_done", "lc_pts", "lc_cats", "ach_recent" }) do assert(P:Route(other) == "self", id .. " closed: " .. other .. " goes to the officers too") end
+    end
+    ada.env.CuteDB.policy = saved
+    -- guild news, asked 30 s after login and read on GUILD_NEWS_UPDATE: Nox (no Cute) marked server, and the guild's
+    -- own achievement a guild card
+    assert(ada.newsAsked == 1, "guild news asked once: " .. tostring(ada.newsAsked))
+    local nox = guidOf("Nox")
+    local it = achItem(ada, nox, 150032)
+    assert(it and it.mark == "server" and it.card.name == "Nox" and it.card.kind == "ach" and it.card.title == "Dungeons 2" and it.card.class == "HUNTER", "guild news: Nox's earn, marked server")
+    local gc = H(ada).Item("g:" .. GUILD_ACH)
+    assert(gc and gc.card.guild and gc.card.name == "Cute" and gc.card.icon == 236544 and gc.card.title == "Guild Together", "the guild's achievement, a guild card")
+    -- an earn: one 1A on GUILD, a row in the officer's day; a member's client keeps nothing of it
+    fire(mia, "ACHIEVEMENT_EARNED", 150021, false)
+    tickAll(5)
+    assert(guildSends(mia, "^1A|") == 1, "one 1A on GUILD: " .. guildSends(mia, "^1A|"))
+    it = achItem(ada, mia.o.guid, 150021)
+    local digest = achDigest(ada)
+    assert(it and digest and it.card.title == "Exploration 1" and it.card.valueLabel == "Exploration" and it.card.value:find("^Earned ") and it.card.source == "a150021" and not it.mark,
+      "in the day's achievements row")
+    assert(#H(max).Rows() == 0 and not A(max).Firsts(), "a member's client keeps nothing of it")
+    -- an earn the account had already, and a guild achievement: nothing
+    fire(mia, "ACHIEVEMENT_EARNED", 150022, true); fire(mia, "ACHIEVEMENT_EARNED", GUILD_ACH, false)
+    tickAll(5)
+    assert(guildSends(mia, "^1A|") == 1, "alreadyEarned and a guild achievement send nothing")
+    -- the server's line: an earn Cute sent marked server; a member without Cute an entry, server; a secret line nothing
+    serverLine(ada, mia.sender, mia.o.guid, 150021)
+    assert(achItem(ada, mia.o.guid, 150021).mark == "server", "the server's line marks Mia's server")
+    serverLine(ada, "Nox-Forever", nox, 150033)
+    assert(achItem(ada, nox, 150033) and achItem(ada, nox, 150033).mark == "server", "a member without Cute, from the server's line")
+    local n0 = #digest.entries
+    fire(ada, "CHAT_MSG_GUILD_ACHIEVEMENT", secret("string"), secret("string"), "", "", secret("string"), "", 0, 0, "", 0, 78, secret("string"))
+    assert(#achDigest(ada).entries == n0, "a secret line reads nothing")
+    -- dropped: an id the client does not know, a member the officers marked untrusted, a 21st 1A in ten minutes
+    local now0 = mia.env.GetServerTime()
+    max.C.Comm.Queue({ msg = "1A|" .. b36(999999) .. "|" .. b36(now0) })
+    tickAll(3)
+    assert(not achItem(ada, max.o.guid, 999999), "an id the client does not know: dropped")
+    ada.C.Policy:SetUntrusted(max.o.guid, true)
+    fire(max, "ACHIEVEMENT_EARNED", 150011, false)
+    tickAll(3)
+    assert(not achItem(ada, max.o.guid, 150011), "an untrusted member's earn: dropped")
+    ada.C.Policy:SetUntrusted(max.o.guid, false)
+    tickAll(601)
+    local ids = {}
+    for _, cat in ipairs({ 15001, 15002, 15003, 15585, 15584, 15583, 15582 }) do for i = 1, 3 do ids[#ids + 1] = cat * 10 + i end end
+    for i = 1, 21 do max.C.Comm.Queue({ msg = "1A|" .. b36(ids[i]) .. "|" .. b36(now0 + i) }) end
+    tickAll(30)
+    local took = 0
+    for i = 1, 21 do if achItem(ada, max.o.guid, ids[i]) then took = took + 1 end end
+    assert(took == 20, "twenty 1A from one sender in ten minutes, the 21st dropped: " .. took)
+    -- dated: a 1A seven hours old by its arrival; one two hours old (held through an instance) by its own time
+    tickAll(601)
+    local t7, t2 = mia.env.GetServerTime() - 7 * 3600, mia.env.GetServerTime() - 2 * 3600
+    mia.C.Comm.Queue({ msg = "1A|" .. b36(150023) .. "|" .. b36(t7) })
+    mia.C.Comm.Queue({ msg = "1A|" .. b36(150024) .. "|" .. b36(t2) })
+    tickAll(5)
+    local i7, i2 = achItem(ada, mia.o.guid, 150023), achItem(ada, mia.o.guid, 150024)
+    assert(i7 and math.abs(i7.t - ada.env.GetServerTime()) <= 6 and i2 and i2.t == t2, "a 1A over six hours old dated by its arrival, one two hours old by its own")
+    -- held inside a dungeon and through the chat lockdown: nothing goes inside, one 1A once out, dated by its own time
+    mia.o.instance, mia.chatLocked = "party", true
+    fire(mia, "ACHIEVEMENT_EARNED", 150014, false)
+    local tEarn = mia.env.GetServerTime()
+    tickAll(30)
+    assert(guildSends(mia, "^1A|" .. b36(150014) .. "|") == 0 and #mia.C.Char().pending == 1, "held inside")
+    mia.o.instance, mia.chatLocked = "none", false
+    tickAll(15)
+    assert(guildSends(mia, "^1A|" .. b36(150014) .. "|") == 1 and mia.C.Char().pending == nil, "sent once out")
+    assert(achItem(ada, mia.o.guid, 150014).t == tEarn, "dated by its own time")
+    -- ach_recent: the newest 20 within 200 bytes; whispered to the officer, never on GUILD, a full record's included
+    local list = {}
+    for _, cat in ipairs({ 15001, 15002, 15003, 15004, 15585, 15584, 15583 }) do
+      local n = ({ [15001] = 6, [15002] = 4, [15004] = 2 })[cat] or 3
+      for i = 1, n do local id = cat * 10 + i; if id ~= 150021 and id ~= 150014 then list[#list + 1] = id end end
+    end
+    for _, id in ipairs(list) do fire(mia, "ACHIEVEMENT_EARNED", id, false) end
+    tickAll(60)
+    local rec = mia.C.Sample:Value("ach_recent")
+    local entries = 0
+    for _ in tostring(rec):gmatch("[^%.]+") do entries = entries + 1 end
+    assert(#list == 22 and entries == 20 and #rec <= 200, "ach_recent: the newest twenty within 200 bytes: " .. entries .. ", " .. #tostring(rec))
+    mia.C.Comm:Full()
+    tickAll(20)
+    assert(guildSends(mia, "ach_recent=") == 0 and whispers(mia, "ach_recent=") >= 1, "ach_recent whispered to the officer, never on GUILD")
+    -- an officer who was away: Obe logs in and learns Mia's earns from her ach_recent, in the answers to his ask
+    local obe = achar("Obe", 1, { class = "WARLOCK" })
+    login(obe)
+    tickAll(120)
+    local learned = 0
+    for _, id in ipairs(list) do if achItem(obe, mia.o.guid, id) then learned = learned + 1 end end
+    assert(learned >= 18, "the officer who was away learns the earns from ach_recent: " .. learned)
+    -- at most twenty new entries from one sender a day, none dated after the officer's own day
+    local today = A(obe).Day()
+    local before = A(obe).recentTaken[mia.o.guid .. ":" .. today] or 0
+    assert(before <= 20, "twenty a day at most: " .. before)
+    local nTaken = A(obe):Recent(mia.sender, b36(155801) .. ":" .. b36(today + 1))
+    assert(nTaken == 0 and not achItem(obe, mia.o.guid, 155801), "no day later than the officer's own")
+    -- Only you (the design's 10): a 1A whispered to each officer online, never on GUILD; its item locked, unpublishable
+    tickAll(601)
+    for _, c in ipairs({ ada, mia, max, obe }) do c.C.Policy:Set("achievements", "self") end
+    assert(mia.C.Policy:Route("lc_last") == "self" and mia.C.Policy:Route("ach_recent") == "self", "closed: Latest challenge, which an earn tells, closed with it")
+    local g0, w0 = guildSends(mia, "^1A|"), whispers(mia, "^1A|")
+    fire(mia, "ACHIEVEMENT_EARNED", 155821, false)
+    tickAll(8)
+    assert(guildSends(mia, "^1A|") == g0 and whispers(mia, "^1A|") == w0 + 2, "Only you: whispered to the two officers online, never on GUILD: " .. (whispers(mia, "^1A|") - w0))
+    local locked = achItem(ada, mia.o.guid, 155821)
+    assert(locked and not H(ada).Tickable(locked) and not H(ada).PublishState({ cards = { locked.card } }), "its item locked and unpublishable")
+    H(ada).OpenChip("queue")
+    H(ada).open[achDigest(ada).id] = true
+    ada.C.UI:Draw()
+    assert(texts(ada):find("Only you", 1, true), "the lock's word on its row")
+    for _, c in ipairs({ ada, mia, max, obe }) do c.C.Policy:Set("achievements", "all") end
+    -- the module off for a member: no 1A, no ach_recent; the officers' switch off for the guild: the same
+    max.C.Modules.Set("ach", false)
+    local m0 = guildSends(max, "^1A|")
+    fire(max, "ACHIEVEMENT_EARNED", 150015, false)
+    tickAll(5)
+    assert(guildSends(max, "^1A|") == m0 and max.C.Sample:Value("ach_recent") == nil, "switched off by the member: no 1A, no ach_recent")
+    max.C.Modules.Set("ach", true)
+    ada.C.Policy:SetRule("achGuild", 0)
+    ada.C.Comm:SendPolicy()
+    tickAll(5)
+    assert(max.C.Rules.Get("achGuild") == 0, "the officers' switch reached the member")
+    fire(max, "ACHIEVEMENT_EARNED", 150016, false)
+    tickAll(5)
+    assert(guildSends(max, "^1A|") == m0 and max.C.Sample:Value("ach_recent") == nil and not A(ada).Taking(), "off for the guild: no 1A, no ach_recent, nothing taken")
+    -- Settings > Achievements: the officers' switch, greyed for a member with who sets it
+    for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+      for _, c in ipairs({ ada, max }) do
+        c.C.UI:Open("settings", "ach")
+        c.C.UI.frame:SetSize(size[1], size[2])
+        c.C.UI:Open("settings", "ach")
+        assert(texts(c):find("On for the whole guild", 1, true) and (c == ada or texts(c):find("Set by the officers", 1, true)), "Settings > Achievements")
+        check(c.C.UI.frame, string.format("achievements: settings, %s, %dx%d", c == ada and "officer" or "member", size[1], size[2]))
+      end
+    end
+    ada.C.Policy:SetRule("achGuild", nil)
+    ada.C.Comm:SendPolicy()
+    tickAll(5)
+    assert(max.C.Rules.Get("achGuild") == 1 and A(ada).Taking(), "on again")
+    -- /cute diag cards: counts and states, no name
+    local c0 = #ada.chat
+    ada.env.SlashCmdList.CUTE("diag cards")
+    local diag = table.concat(ada.chat, "\n", c0 + 1)
+    assert(diag:find("achievements on", 1, true) and diag:find("guild news read", 1, true) and diag:find("server lines", 1, true) and diag:find("ledger", 1, true)
+      and not diag:find("Mia", 1, true) and not diag:find("Nox", 1, true), "/cute diag cards says the achievements' state, no name:\n" .. diag)
+    -- the queue with its rows: the day's row open, a guild card, a locked item, at both sizes
+    for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+      ada.C.UI.frame:SetSize(size[1], size[2])
+      H(ada).OpenChip("queue")
+      check(ada.C.UI.frame, string.format("achievements: the queue, %dx%d", size[1], size[2]))
+    end
+    ada.C.UI.frame:SetSize(1040, 640)
+    -- the guild card, as an announcement shows it: the guild's name, the achievement's icon in the picture
+    local CF = ada.C.CardFrame
+    local ac = {}
+    for k, v in pairs(it.card) do ac[k] = v end
+    ac.icon = 236544
+    CF:Announce({ at = 1, kind = "n", title = "Achievements", by = "Ada", cards = { gc.card, ac } })
+    assert(CF.cards[1].name:GetText() == "Cute" and CF.cards[1].drew == "guild" and CF.cards[1].portrait:IsShown() and CF.cards[2].badge:IsShown(), "a guild card: the name, the icon at 96")
+    check(CF.frame, "achievements: a guild card and an achievement card")
+    CF.frame:Hide()
+  end)
+  said[#said + 1] = "achievements: an earn one 1A on GUILD, none for an earn the account had or a guild one; the officers' day row, nothing on a member's client; an unknown id, an untrusted sender, a 21st in ten minutes dropped; over six hours old dated by its arrival, two by its own; held inside and through the lockdown, sent once out; the server's line and guild news for a member without Cute, marked server, a guild card, a secret line nothing; ach_recent the newest twenty within 200 bytes, whispered to the officers, an officer away learns from it; Only you whispered and locked; off for a member and for the guild; Settings > Achievements; /cute diag cards"
+
+  -- (14) firsts: the ledger seeds 90 s into an officer's first login (guild news, the members' ach_recent); an earn with
+  -- no earlier entry is "Guild first?"; one guild news shows earlier is not; one whose earlier entry rests on one
+  -- member's Cute is, with that entry beside it; guild news with the achievements filter off seeds nothing and the
+  -- tooltip says so; a boss's first corroborated kill and the first member at the cap are suggested; nothing goes
+  -- without an officer's click, and a first published shows as GUILD FIRST; statistics in halls
+  isolated({ gmember("Fay", 1, "PRIEST"), gmember("Gil", 3, "MAGE"), gmember("Hal", 3, "SHAMAN"), gmember("Ivy", 3, "DRUID"), gmember("Kai", 1, "WARLOCK") }, function()
+    local gil, hal = achar("Gil", 3, { class = "MAGE", withStats = true, stat = { [2007] = 40 } }), achar("Hal", 3, { class = "SHAMAN", withStats = true })
+    login(gil); login(hal)
+    tickAll(30)
+    -- Gil earned Quests 3 while no officer was on: it rests in his ach_recent alone
+    fire(gil, "ACHIEVEMENT_EARNED", 150013, false)
+    tickAll(5)
+    -- Fay logs in: guild news holds Ivy's Quests 2 from two days ago; Kai's news filters hide achievements
+    local fay, kai = achar("Fay", 1, { class = "PRIEST", withStats = true }), achar("Kai", 1, { class = "WARLOCK" })
+    fay.news = { { type = 1, who = "Ivy", id = 150012, t = fay.env.GetServerTime() - 2 * 86400 } }
+    kai.news = fay.news
+    fay.newsFires, kai.newsFires = true, true
+    kai.newsFilters = { true, false, true, true, true, true, false, false, true }
+    login(fay); login(kai)
+    tickAll(60)
+    assert(not A(fay).Ready(), "a minute in: not seeded yet")
+    tickAll(40)
+    local L = A(fay).Firsts()
+    assert(A(fay).Ready() and L.v and L.e.a150012 and L.e.a150012.src == "news" and L.e.a150013 and L.e.a150013.src == "cute", "seeded: guild news and Gil's Cute")
+    assert(A(kai).Ready() and not A(kai).Firsts().e.a150012 and A(kai).news.state == "off", "the achievements filter off: guild news seeds nothing")
+    assert(not firstItem(fay, "a150013", gil.o.guid), "what seeded it is no first")
+    -- an earn with no earlier one: Guild first?, beside its day's row
+    fire(hal, "ACHIEVEMENT_EARNED", 150021, false)
+    tickAll(5)
+    local f1 = firstItem(fay, "a150021", hal.o.guid)
+    assert(f1 and f1.mark == "Guild first?" and f1.src == "first" and f1.card.kind == "first" and f1.card.title == "Exploration 1" and f1.card.source == "a150021"
+      and not f1.first.earlier and f1.rests:find("No earlier earn", 1, true), "no earlier earn: Guild first?")
+    assert(achItem(fay, hal.o.guid, 150021), "and in the day's row")
+    local fk = firstItem(kai, "a150021", hal.o.guid)
+    assert(fk and fk.rests:find("news filters", 1, true), "Kai's says guild news is hidden by the news filters: " .. tostring(fk and fk.rests))
+    -- guild news shows Ivy earlier: no first
+    fire(hal, "ACHIEVEMENT_EARNED", 150012, false)
+    tickAll(5)
+    assert(achItem(fay, hal.o.guid, 150012) and not firstItem(fay, "a150012", hal.o.guid), "guild news shows an earlier earn: no first")
+    -- an earlier earn on Gil's Cute alone: a first, Gil's beside it
+    fire(hal, "ACHIEVEMENT_EARNED", 150013, false)
+    tickAll(5)
+    local f3 = firstItem(fay, "a150013", hal.o.guid)
+    assert(f3 and f3.first.earlier and f3.first.earlier.n == "Gil" and f3.rests:find("Gil", 1, true), "an earlier earn on one member's Cute: a first, that one beside it")
+    H(fay).OpenChip("queue")
+    local row = queueRow(fay, f3)
+    assert(row and tipText(function(t) row.tip(t) end):find("Gil", 1, true), "its tooltip names the earlier one")
+    -- a boss's first corroborated kill: one claim corroborates nothing, the second makes it a first
+    local tk = fay.env.GetServerTime()
+    fay.C.Stats.Known().labels = fay.C.Stats.Known().labels or {}
+    fay.C.Stats.Known().labels.e1230 = "Rhahk'Zor"
+    fay.C.Rules.Claim(gil.o.guid, 1230, tk, { [hal.o.guid] = true })
+    assert(not H(fay).Item("f:b1230:" .. sfx(gil)), "one claim: no first")
+    fay.C.Rules.Claim(hal.o.guid, 1230, tk + 2, { [gil.o.guid] = true })
+    local fb = H(fay).Item("f:b1230:" .. sfx(hal))
+    assert(fb and fb.card.kind == "first" and fb.card.value:find("^Killed ") and fb.card.title == "Rhahk'Zor" and fb.card.source == "b1230", "a boss's first corroborated kill")
+    fay.C.Rules.Claim(gil.o.guid, 1230, tk + 900, { [hal.o.guid] = true })
+    fay.C.Rules.Claim(hal.o.guid, 1230, tk + 901, { [gil.o.guid] = true })
+    assert(not H(fay).Item("f:b1230:" .. sfx(gil)), "the next kill no first")
+    -- the first member at the cap: Hal reaches 60
+    for _, m in ipairs(GUILD) do if m.guid == hal.o.guid then m.level = 60 end end
+    fay.C.Roster:Refresh()
+    hal.o.level = 60
+    hal.C.Sample:Read("level")
+    tickAll(5)
+    local fc = H(fay).Item("f:c60:" .. sfx(hal))
+    assert(fc and fc.card.title == "Level 60" and fc.card.valueLabel == "the level cap" and fc.card.source == "c60", "the first member at the cap")
+    for _, m in ipairs(GUILD) do if m.guid == gil.o.guid then m.level = 60 end end
+    fay.C.Roster:Refresh()
+    gil.o.level = 60
+    gil.C.Sample:Read("level")
+    tickAll(5)
+    assert(not H(fay).Item("f:c60:" .. sfx(gil)), "the second at the cap: no first")
+    -- nothing published by itself; then an officer's click publishes the first, GUILD FIRST on every member's client
+    assert(msgs(fay, "1C") == 0 and #H(gil).Sets() == 0, "nothing published without an officer's click")
+    for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+      fay.C.UI.frame:SetSize(size[1], size[2])
+      H(fay).OpenChip("queue")
+      check(fay.C.UI.frame, string.format("firsts: the queue, %dx%d", size[1], size[2]))
+    end
+    fay.C.UI.frame:SetSize(1040, 640)
+    tickAll(90)
+    H(fay).ticked[f1.id] = true
+    local set = H(fay):Compose(H(fay).Ticked())
+    assert(set.kind == "f" and set.title == "Guild first" and set.cards[1].kind == "first", "composed: GUILD FIRST")
+    set.chat = true
+    fay.hardware = true
+    local ok, why = H(fay):Publish(set, true)
+    fay.hardware = false
+    assert(ok, "published: " .. tostring(why))
+    tickAll(5)
+    local got = H(gil).Sets()[1]
+    assert(got and got.kind == "f" and got.cards[1].kind == "first" and got.cards[1].title == "Exploration 1" and got.cards[1].icon == nil, "Gil shows the GUILD FIRST set")
+    assert(fay.guildOut[#fay.guildOut].text == "Cute \194\183 Guild first: Hal earned Exploration 1.", "the guild line: " .. tostring(fay.guildOut[#fay.guildOut].text))
+    gil.C.CardFrame:Announce(got)
+    assert(gil.C.CardFrame.label:GetText() == "GUILD FIRST" and gil.C.CardFrame.cards[1].label:GetText() == "GUILD FIRST", "the announcement's header and card")
+    check(gil.C.CardFrame.frame, "firsts: a GUILD FIRST announcement")
+    -- statistics in halls: a game statistic picked by its own category, its leader from the roster
+    local hall = H(fay):ComputeHall({ kind = "fame", period = "a", stats = { "g2007" } })
+    assert(#hall.cards == 1 and hall.cards[1].name == "Gil" and hall.cards[1].value == "40" and hall.cards[1].source == "sg2007", "a hall from a game statistic: Gil's 40")
+    H(fay).PickStat("a", function() end, fay.C.UI.frame)
+    assert(menuEntry(fay, "Game statistics", "Deaths", "Total deaths"), "the picker lists the game's statistics by their category")
+    H(fay).PickStat("w", function() end, fay.C.UI.frame)
+    assert(not menuEntry(fay, "Game statistics"), "and none for a week")
+    -- memory: the ledger at its cap, the pending earns at theirs
+    for i = 1, 2100 do A(fay):Record("a" .. (200000 + i), { g = gil.o.guid, n = "Gil", t = tk - i, src = "cute", quiet = true }) end
+    assert(A(fay).Firsts().n == 2000, "the ledger at 2000: " .. A(fay).Firsts().n)
+    hal.o.instance = "party"
+    for _, cat in ipairs({ 15001, 15002, 15003, 15004, 15585, 15584, 15583, 15582, 15581, 15580, 15579, 15578, 15577 }) do for i = 1, 4 do fire(hal, "ACHIEVEMENT_EARNED", cat * 10 + i, false) end end
+    assert(#hal.C.Char().pending == 40, "forty pending earns at most: " .. #hal.C.Char().pending)
+    local ledgerBytes, pendingBytes = #json(A(fay).Firsts()), #json(hal.C.Char().pending)
+    assert(ledgerBytes < 200000 and pendingBytes < 4000, "bounded: " .. ledgerBytes .. " and " .. pendingBytes)
+    said[#said + 1] = string.format("firsts: seeded 90 s in from guild news and the members' ach_recent, the filter off seeding nothing; no earlier earn a Guild first?, an earlier one in guild news none, one on a member's Cute alone shown beside it; a boss's first corroborated kill, the first at the cap; nothing without a click, the first published as GUILD FIRST with its guild line; statistics in halls by their category; the ledger at 2000 %d KB, forty pending earns %d bytes",
+      math.ceil(ledgerBytes / 1024), pendingBytes)
   end)
 
   print("cards: " .. table.concat(said, "; "))
