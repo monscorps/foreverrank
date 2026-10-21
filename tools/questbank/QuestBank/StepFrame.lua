@@ -190,7 +190,9 @@ local function rowEnter(self)
   local mins = minsFromNow(steps, self.i)
   local trip = not (mins and mins > 0) and self.i > 1 and G.Mins(s, steps[self.i - 1]) or nil
   local when = (mins and mins > 0) and string.format("about %d min there", mins) or (trip and string.format("a trip of about %d min", trip)) or nil
-  local xp = s.qid and QB:Value(s.qid)
+  -- (the XP of every quest a hand-in of several takes, Replan's s.xp; the launch round gave the lowest id's alone)
+  local xp
+  if (s.n or 1) > 1 and s.xp then xp = s.xp > 0 and s.xp or nil else xp = s.qid and QB:Value(s.qid) end
   if when or xp then
     GameTooltip:AddDoubleLine(when or " ", xp and (QB.Comma(xp) .. " XP") or "", SOFT[1], SOFT[2], SOFT[3], SOFT[1], SOFT[2], SOFT[3])
   end

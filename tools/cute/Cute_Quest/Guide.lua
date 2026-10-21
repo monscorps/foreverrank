@@ -719,10 +719,12 @@ function G.Replan()
   -- a hand-in in reach: first, whatever its value (Target.lua)
   if cur and cur.name and cur.near and not k then
     local s = step("handin")
-    s.qid, s.n, s.near = cur.qid, cur.quests, true
+    s.qid, s.n, s.near, s.xp = cur.qid, cur.quests, true, 0
     placeNpc(s, cur.near)
     G.steps[1] = s
-    for id in pairs(cur.ids or {}) do if type(id) == "number" then doneQ[id] = true end end
+    for id in pairs(cur.ids or {}) do
+      if type(id) == "number" then doneQ[id] = true; s.xp = s.xp + ((QB:Value(id)) or 0) end
+    end
   end
   local pickups = readPickups()
   local function pickupsAt(stop)
@@ -759,12 +761,12 @@ function G.Replan()
           local s = byNpc[idx]
           if not s then
             s = step("handin")
-            s.qid, s.n = e.id, 0
+            s.qid, s.n, s.xp = e.id, 0, 0
             placeNpc(s, idx)
             byNpc[idx] = s
             G.steps[#G.steps + 1] = s
           end
-          s.n = s.n + 1
+          s.n, s.xp = s.n + 1, s.xp + (row.xp or 0) -- (the quests' XP together: the frame's tooltip)
           if e.id < s.qid then s.qid = e.id end
           doneQ[e.id] = true
         end

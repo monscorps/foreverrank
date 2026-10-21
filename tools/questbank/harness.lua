@@ -18355,6 +18355,33 @@ end)()
     G.steps = keep; G.ver = G.ver + 1; SF.Refresh()
   end }
 
+  -- 14. (the review round) "Hand in 3 quests at Marshal Dughan" showed one quest's XP in its tooltip, the lowest id's.
+  -- Now a hand-in of several quests at one NPC carries their XP together (Replan adds up the leg's rows)
+  ENGCASES[#ENGCASES + 1] = { "a hand-in of several quests at one NPC: its tooltip has their XP together", function()
+    local c = char("Pairs", "WARRIOR", "Warrior", 1, {}, { level = 5, world = { 0, -9460, 60 }, map = 1429, log = { { 7, 1 }, { 15, 1 } } })
+    local QB = c.QB
+    local G, SF = QB.Guide, QB.StepFrame
+    QB:Settings().welcome = nil
+    planned(c)
+    local s, texts = nil, {}
+    for _, x in ipairs(G.steps) do
+      texts[#texts + 1] = G.Text(x)
+      if x.kind == "handin" and (x.n or 0) > 1 then s = x end
+    end
+    assert(s, "one step for Marshal McBride's two: " .. table.concat(texts, " / "))
+    local want = 0
+    for _, leg in ipairs(QB.Target.Route().legs) do
+      for _, row in ipairs(leg.rows) do if row.q.turnIdx == s.npc and QB.state.log[row.q.id] then want = want + (row.xp or 0) end end
+    end
+    assert(want > (QB:Value(s.qid) or 0), "two quests pay more than one: " .. want)
+    local keep = G.steps
+    G.steps = { s }
+    G.ver = G.ver + 1; SF.Apply(); SF.Refresh()
+    local tip = rowTip(c.env.QuestBankStep.rows[1])
+    assert(tip:find(QB.Comma(want) .. " XP", 1, true), "the tooltip: both quests' XP, " .. QB.Comma(want) .. ": " .. tip)
+    G.steps = keep; G.ver = G.ver + 1; SF.Refresh()
+  end }
+
   for _, case in ipairs(ENGCASES) do
     case[2]()
     print("engine: " .. case[1] .. ": ok")
