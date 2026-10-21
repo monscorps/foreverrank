@@ -12063,6 +12063,86 @@ do local function runsStage()
     said[#said + 1] = string.format("memory: a raid run's saved state %d KB, the history of 50 %d KB, the new stats %d bytes of a full record", math.floor(runBytes / 1024 + 0.5), math.floor(histBytes / 1024 + 0.5), added)
   end
 
+  -- (4.1, 4.4) what each client counts of its own (quests, gold looted, a level, the lines typed and "where are you",
+  -- jumps, consumables, yards, items received) and what the loot history gives every client (rolls, need rolls, wins):
+  -- the 2V carries the own keys; the loot history's awards reach the report
+  isolated({ gmember("Ivo", 1), gmember("Jem", 3), gmember("Kip", 3), gmember("Lor", 3) }, function()
+    local cs = { gchar("Ivo", 1), gchar("Jem", 3) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    local G = group({ cs[1], cs[2], { name = "Kip", class = "ROGUE" }, { name = "Lor", class = "HUNTER" } })
+    zone(cs, "party", 36, "The Deadmines")
+    tickAll(40)
+    local jem = cs[2]
+    local r = jem.C.Runs.Current()
+    fire(jem, "QUEST_TURNED_IN", 214, 500, 300)
+    jem.o.money = jem.o.money + 300; fire(jem, "PLAYER_MONEY")
+    jem.o.money = jem.o.money + 750; fire(jem, "PLAYER_MONEY")
+    fire(jem, "MERCHANT_SHOW"); jem.o.money = jem.o.money + 99; fire(jem, "PLAYER_MONEY"); fire(jem, "MERCHANT_CLOSED")
+    fire(jem, "PLAYER_LEVEL_UP", 31)
+    jem.env.C_ChatInfo.SendChatMessage("where are you", "PARTY")
+    jem.env.C_ChatInfo.SendChatMessage("pull now", "PARTY")
+    jem.env.JumpOrAscendStart(); jem.env.JumpOrAscendStart()
+    fire(jem, "BAG_UPDATE_DELAYED"); tickAll(2)
+    jem.o.bags[0][1].count = 3
+    fire(jem, "BAG_UPDATE_DELAYED"); tickAll(2)
+    jem.speed = 7
+    tickAll(10)
+    jem.speed = 0
+    fire(jem, "CHAT_MSG_LOOT", "You receive loot: |cff0070dd|Hitem:30002:0|h[Item]|h|r.", "", "", "", "", "", 0, 0, "", 0, 0, jem.o.guid)
+    fire(jem, "CHAT_MSG_LOOT", "Kip receives loot: |cff0070dd|Hitem:30005:0|h[Item]|h|r.", "", "", "", "", "", 0, 0, "", 0, 0, guidOf("Kip"))
+    local v = jem.C.Runs:OwnValues()
+    assert(v.q and v.q[1] == 214 and v.gd == 750 and v.lv == 1 and v.ch == 2 and v.wy == 1 and v.ju == 2 and v.cn == 2,
+      "the own counts: quests " .. tostring(v.q and #v.q) .. ", gold " .. tostring(v.gd) .. ", level " .. tostring(v.lv) .. ", lines " .. tostring(v.ch) .. ", where " .. tostring(v.wy) .. ", jumps " .. tostring(v.ju) .. ", consumables " .. tostring(v.cn))
+    assert(v.yd and v.yd >= 56 and v.yd <= 84 and v.lq == 3 and v.ln == 1, "yards " .. tostring(v.yd) .. ", items " .. tostring(v.ln) .. " of quality " .. tostring(v.lq))
+    -- (the loot history: one boss's drops, its rolls on the loot history's own clock)
+    local t0 = jem.clock + 77777
+    fight(G, 60, nil, 1230)
+    local function roll(name, n, state) return { playerName = name, playerGUID = guidOf(name), playerClass = "MAGE", isSelf = false, state = state or 3, roll = n } end
+    G.lootInfos = { { encounterName = "Boss", encounterID = 1230, startTime = t0 + 60, duration = 60 } }
+    G.lootDrops[1230] = {}
+    for k = 1, 5 do
+      local d = { lootListKey = k, itemHyperlink = "|cff0070dd|Hitem:" .. (k == 5 and 30002 or (30001 + 3 * k)) .. ":0|h[Item]|h|r", playerRollState = 3, startTime = t0 + 60, duration = 60,
+        rollInfos = { roll("Lor", 40 + k, 0), roll("Kip", k == 1 and 1 or 30, 3), roll("Jem", k == 2 and 100 or 50, 3), roll("Ivo", 20, 3) } }
+      d.winner = k == 5 and roll("Ivo", 99, 3) or roll("Lor", 45, 0)
+      G.lootDrops[1230][k] = d
+    end
+    tickAll(40)
+    jem.C.Runs:ReadLoot()
+    local loot = jem.C.Runs.Current().loot
+    assert(loot[sfx("Jem")].hr == 100 and loot[sfx("Kip")].lr == 1 and loot[sfx("Lor")].nd == 5 and loot[sfx("Ivo")].wn == 1 and loot[sfx("Ivo")].lq == 3,
+      "the loot history: Jem's hundred, Kip's one, Lor's five need rolls, Ivo's rare")
+    for _, enc in ipairs({ 1236, 1238, 1234 }) do fight(G, 60, nil, enc); tickAll(40) end
+    tickAll(200)
+    zone(cs, "none", 0)
+    tickAll(25)
+    local rep = lastReport(jem)
+    assert(holderOf(rep, "FH") == sfx("Jem") and holderOf(rep, "BD") == sfx("Kip") and holderOf(rep, "NA") == sfx("Lor") and holderOf(rep, "LB") == sfx("Ivo"),
+      "the loot history's awards: " .. cardsOf(rep))
+  end)
+  -- (and the 2V carries the own keys in a group all of the guild)
+  isolated({ gmember("Mio", 1), gmember("Ned", 3) }, function()
+    local cs = { gchar("Mio", 1), gchar("Ned", 3) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    local G = group(cs)
+    zone(cs, "party", 36, "The Deadmines")
+    tickAll(40)
+    local ned = cs[2]
+    fire(ned, "QUEST_TURNED_IN", 166, 0, 0)
+    ned.env.JumpOrAscendStart()
+    ned.env.C_ChatInfo.SendChatMessage("where r u", "PARTY")
+    ned.o.money = ned.o.money + 100; fire(ned, "PLAYER_MONEY")
+    die(G, ned); tickAll(3); rez(G, ned)
+    fight(G, 30, { Ned = { [0] = 500 } }, 1230)
+    tickAll(40)
+    local keys = keysSent(ned)
+    for _, k in ipairs({ "t", "o", "de", "fd", "dm", "mt", "q", "ch", "wy", "ju", "gd" }) do assert(keys[k], "the 2V carries " .. k) end
+    local mio = cs[1].C.Runs.Current().members[sfx(ned)]
+    assert(mio.v.q[1] == 166 and mio.v.ju == 1 and mio.v.de == 1 and mio.v.dm == 500, "the scribe holds Ned's values")
+  end)
+  said[#said + 1] = "the own counts (quests, gold looted less a quest's reward and not at a merchant, a level, lines and where, jumps, consumables, yards, items) in the 2V, and the loot history's rolls, needs and wins on the cards"
+
   -- (12) the choice, on tables alone (Awards.lua makes no client call): a member { sfx, guid, name, v }
   do
     local A = yezin.C.Awards
