@@ -15,7 +15,8 @@
 -- The queue is its own and keeps Comm's rule for the chat lockdown (Comm.lua M:Locked, asked before each send): one
 -- message a second; hellos, 2E, 2Q, 2A, 2R and 2W ahead of 2P and 2V; a newer 2V takes the place of one waiting; a
 -- checkpoint waits for the end of combat. Results as Comm reads them (Enum.SendAddonMessageResult,
--- ChatConstantsDocumentation.lua): 3 and 8 (throttle) try again in 3 s, five times; 5 (NotInGroup) empties the queue;
+-- ChatConstantsDocumentation.lua): 3 and 8 (throttle) try again in 3 s, 9 (GeneralError) in 10 s, five times (a
+-- checkpoint as often as it takes); 5 (NotInGroup) empties the queue;
 -- 11 (AddOnMessageLockdown) spends no try and drops nothing: the queue waits for ADDON_RESTRICTION_STATE_CHANGED with
 -- the Chat type and the Inactive state (RestrictedActionsDocumentation.lua:97; it also fires Activating just before a
 -- restriction starts), and C_RestrictedActions.IsAddOnRestrictionActive, which reads false during any of the event's
@@ -107,7 +108,9 @@ local function send(msg, channel)
   res = C.Plain(res)
   RC.last = { res = res, at = C.Now() }
   if res == nil or res == true or res == 0 then return "sent" end
-  if res == 3 or res == 8 then return "later" end
+  -- (9 GeneralError passes too, given longer, as Comm reads it)
+  if res == 3 or res == 8 then return "later", nil, 3 end
+  if res == 9 then return "later", nil, 10 end
   if res == 5 then return "nogroup" end
   if res == 11 then return "locked" end
   return "drop", "result " .. tostring(res)
@@ -150,7 +153,7 @@ pump = C.Safe(function()
     end
     e.msgs, e.i = msgs, 1
   end
-  local r, why = send(e.msgs[e.i], channel)
+  local r, why, wait = send(e.msgs[e.i], channel)
   if r == "locked" then
     -- (no try spent, nothing dropped: the queue waits for the Chat restriction's Inactive, or a poll that finds none)
     local IE = C_InstanceEncounter
@@ -163,9 +166,10 @@ pump = C.Safe(function()
   end
   if r == "later" then
     e.tries = e.tries + 1
-    -- (the newest checkpoint is never given up for a throttle: it waits its 3 s as often as it takes)
-    if e.tries <= RETRIES or e.kind == "2V" then book(3) return end
-    r, why = "drop", "still throttled after " .. RETRIES .. " tries"
+    -- (the newest checkpoint is never given up for a throttle or an error: it waits its 3 s, or 10, as often as it
+    -- takes)
+    if e.tries <= RETRIES or e.kind == "2V" then book(wait or 3) return end
+    r, why = "drop", "still refused after " .. RETRIES .. " tries"
   end
   if r == "nogroup" then RC.out = {}; return end
   if r == "sent" then

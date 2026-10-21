@@ -11266,6 +11266,7 @@ do local function runsStage()
       if not G2 then return 5 end
       if c.chatLocked or G2.locked then c.r11 = (c.r11 or 0) + 1; return 11 end
       if c.rthrottle and c.rthrottle > 0 then c.rthrottle = c.rthrottle - 1; return 3 end
+      if c.rgeneral and c.rgeneral > 0 then c.rgeneral = c.rgeneral - 1; return 9 end
       c.rsent[#c.rsent + 1] = { msg = msg, at = c.clock, channel = channel }
       for _, e in ipairs(G2.members) do if e.c then BUS[#BUS + 1] = { from = c, prefix = prefix, msg = msg, channel = channel, to = e.c } end end
       return 0
@@ -11839,12 +11840,18 @@ do local function runsStage()
     fight(G, 30, { Rb = { [0] = 100 } }, 1236)
     tickAll(80)
     assert(rcount(c, "2V") == n1 + 1 and c.rthrottle == 0, "a checkpoint throttled eight times still goes: " .. rcount(c, "2V") - n1)
+    -- (a result 9, GeneralError: tried again 10 s on, as Comm reads it; a checkpoint never given up for it)
+    c.rgeneral = 7
+    local n2 = rcount(c, "2V")
+    fight(G, 30, { Rb = { [0] = 100 } }, 1238)
+    tickAll(100)
+    assert(rcount(c, "2V") == n2 + 1 and c.rgeneral == 0, "a checkpoint answered 9 seven times still goes: " .. rcount(c, "2V") - n2 .. ", " .. c.rgeneral)
     -- (a secret sourceGUID: this client's own row, nobody else's)
     G.meterSecret = true
     fight(G, 30, { Qa = { [0] = 700 }, Rb = { [0] = 800 }, Sc = { [0] = 900 } })
     tickAll(5)
     local tot = c.C.Runs.Current().meter.tot
-    assert(tot[sfx(c)] and tot[sfx(c)].dm == 1400 and (tot[sfx(cs[1])] or {}).dm == nil, "a secret sourceGUID: the own row alone")
+    assert(tot[sfx(c)] and tot[sfx(c)].dm == 1500 and (tot[sfx(cs[1])] or {}).dm == nil, "a secret sourceGUID: the own row alone")
     -- (secret chat events and a secret GUID read nowhere)
     fire(c, "CHAT_MSG_LOOT", secret("string"), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, secret("string"))
     fire(c, "UNIT_DIED", secret("string"))
