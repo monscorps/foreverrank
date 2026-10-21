@@ -54,7 +54,7 @@ SetResizable SetResizeBounds StartSizing CreateMaskTexture AddMaskTexture SetSca
 IsForbidden SetPushedTexture GetTextColor SetMultiLine HighlightText SetRotation SetAtlas SetPassThroughButtons SetCooldown
 SetHideCountdownNumbers SetUserPlaced GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness CreateLine SetTextInsets
 SetAttribute GetAttribute SetGradient SetClipsChildren PingLocation SetSnapToPixelGrid SetTexelSnappingBias
-EnableKeyboard SetPropagateKeyboardInput]])
+EnableKeyboard SetPropagateKeyboardInput IsProtected]])
 -- (the last three lines: the quest engine's, for a client made with o.quest = true; QuestBank's harness lists them)
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
 -- a PlayerModel's own and a QuestPOIFrame's own (the quest engine's journal and map files), as QuestBank's harness has them
@@ -12015,10 +12015,15 @@ do
     assert(g and q and g.__template:find("SecureActionButtonTemplate", 1, true), "secure buttons for both")
     assert(g:GetAttribute("type") == "click" and g:GetAttribute("clickbutton") == c.env.GuildMicroButton and q:GetAttribute("clickbutton") == c.env.QuestLogMicroButton, "a click on the game's micro buttons")
     assert(g.__parent == c.env.UIParent and g:IsShown() and q:IsShown(), "parented to UIParent, shown with their windows")
+    local said = {}
+    for _, l in ipairs(c.C.Diag()) do said[#said + 1] = l end
+    assert(said[#said]:find("^diag windows: game buttons guild shown, quests shown") and said[#said]:find("menus yes", 1, true), "/cute diag's last line, the game buttons: " .. said[#said])
     assert(c.C.UI.gameStand.label:GetText() == "Guild & Communities" and qwin(c).gameStand.label:GetText() == "Quest log", "named as the game's windows")
     c.combat = true
     fire(c, "PLAYER_REGEN_DISABLED")
     assert(not g:IsShown() and not q:IsShown(), "hidden as a fight begins")
+    local d = c.C.Windows.DiagLine()
+    assert(d:find("game buttons guild hidden, quests hidden", 1, true) and d:find("in combat yes", 1, true) and not d:find("Rone", 1, true), "/cute diag says the buttons' state, no name: " .. d)
     c.C.UI.frame:Hide(); c.C.UI:Toggle()
     assert(c.C.UI.frame:IsShown() and not g:IsShown(), "J opens in a fight, the secure button waits")
     c.combat = false

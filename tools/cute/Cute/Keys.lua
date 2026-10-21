@@ -143,8 +143,10 @@ function K.Apply()
   ensure()
   if inCombat() then
     if not regen then regen = true; owner:RegisterEvent("PLAYER_REGEN_ENABLED") end
+    K.waiting = true
     return false
   end
+  K.waiting = false
   if not (callable("ClearOverrideBindings") and callable("SetOverrideBindingClick")) then return false end
   ClearOverrideBindings(owner)
   K.held = {}

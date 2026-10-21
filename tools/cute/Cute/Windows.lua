@@ -122,6 +122,40 @@ function C.UI:OnBuilt()
   end
 end
 
+-- /cute diag's line for what only the live client shows: each game button (none, waiting, shown, hidden, and whether
+-- the client calls its frame protected), the keys held by override (the key names alone), whether they wait for a
+-- fight's end, and the game's menus. Never a name
+function W.DiagLine()
+  local parts = {}
+  for _, key in ipairs({ "guild", "quests" }) do
+    local win, s = C.UI.windows[key], secure[key]
+    local state
+    if not (win and win.gameStand) then state = _G[GAME[key].micro] and "unbuilt" or "no micro button"
+    elseif not s then state = "waiting"
+    else
+      -- (IsProtected's answer may be secret: SimpleScriptRegionAPIDocumentation.lua:540, ObjectSecurity)
+      local okP, prot = pcall(s.IsProtected, s)
+      state = (s:IsShown() and "shown" or "hidden") .. ((okP and C.Plain(prot) == true) and " protected" or "")
+    end
+    parts[#parts + 1] = key .. " " .. state
+  end
+  local held = {}
+  for k, id in pairs(C.Keys and C.Keys.held or {}) do held[#held + 1] = k .. "=" .. id end
+  table.sort(held)
+  return string.format("diag windows: game buttons %s; keys %s (applied %d)%s; menus %s; in combat %s", table.concat(parts, ", "),
+    #held > 0 and table.concat(held, " ") or "none", C.Keys and C.Keys.applied or 0, (C.Keys and C.Keys.waiting) and ", waiting for the fight's end" or "",
+    (type(MenuUtil) == "table" and type(MenuUtil.CreateContextMenu) == "function") and "yes" or "no", inCombat() and "yes" or "no")
+end
+do
+  local coreDiag = C.Diag
+  function C.Diag()
+    local lines = coreDiag and coreDiag() or {}
+    local ok, l = pcall(W.DiagLine)
+    lines[#lines + 1] = ok and l or ("diag windows: " .. tostring(l))
+    return lines
+  end
+end
+
 ----------------------------------------------------------------------------
 -- the menu: right-click on the minimap button, or the game's addon compartment
 ----------------------------------------------------------------------------
