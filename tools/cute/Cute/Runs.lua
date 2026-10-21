@@ -334,6 +334,17 @@ local function sendable(key, settled, guildOnly)
   if A().REUSED[code] and not guildOnly then return false end
   return R.Route(code)
 end
+R.AllGuild = allGuild
+-- the route a report's cards take (A.Pick's, and a received 2A's check): the policy's; with anyone outside the guild
+-- in the group, no award reading a code the guild set for itself, but deaths, which every client observes of every
+-- member (UNIT_DIED, 4.4): the others' values of those were never sent, so only the builder's own would rank, and
+-- its 2A and Send to party would carry them to the stranger
+function R.CardRoute(guildOnly)
+  return function(code)
+    if code ~= "de" and A().REUSED[code] and not guildOnly then return false end
+    return R.Route(code)
+  end
+end
 
 -- own values now: the counts, the clock (t), when this client stopped (o), the meter's own row, the dead seconds so far
 function R:OwnValues()
@@ -687,7 +698,7 @@ function R:Build(run, why)
     end
   end
   local db = R.DB()
-  local cards, mentions = A().Pick(members, { n = #members, raid = run.kind == "r" or #members >= 6, bosses = run.nb, runId = run.id, history = db.list }, R.Route)
+  local cards, mentions = A().Pick(members, { n = #members, raid = run.kind == "r" or #members >= 6, bosses = run.nb, runId = run.id, history = db.list }, R.CardRoute(allGuild()))
   local _, known = R.KnownBosses(run.inst)
   local rep = { id = run.id, kind = run.kind, inst = run.inst, map = run.map, place = placeOf(run), start = run.start, dur = endT,
     bosses = run.nb, known = math.max(known, run.nb), wipes = run.wipes, deaths = deaths, cards = cards, mentions = mentions, gone = gone,
@@ -1008,13 +1019,14 @@ function R:HeardReport(body)
   if not run or run.got2A then return end
   local kv = {}
   for k, s in body:gmatch("(%l)=([^;]*)") do kv[k] = s end
+  local route = R.CardRoute(allGuild())
   local function cards(s, out)
     out = out or {}
     for sfx, code, v in (s or ""):gmatch("(%w+)%.(%u%u)%.(%w+)") do
       local a = A().Of(code)
       local value = unb36(v)
       if not a or not value then return nil end
-      for _, r in ipairs(a.reads) do if not R.Route(r) then return nil end end
+      for _, r in ipairs(a.reads) do if not route(r) then return nil end end
       if sfx ~= mySfx() and not run.members[sfx] then return nil end
       out[#out + 1] = { sfx, code, value, a.kind }
     end

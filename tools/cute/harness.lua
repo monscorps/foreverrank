@@ -11637,8 +11637,23 @@ do local function runsStage()
       die(G, cs[3]); tickAll(3); rez(G, cs[3])
       tickAll(60)
     end
+    -- (the scribe's own guild-only counts: gold looted, a "where are you", a level; no card of a stranger's run reads
+    -- them, so neither its 2A nor the party line carries them)
+    local kai = cs[1]
+    kai.o.money = kai.o.money + 5000; fire(kai, "PLAYER_MONEY")
+    kai.env.C_ChatInfo.SendChatMessage("where are you", "PARTY")
+    fire(kai, "PLAYER_LEVEL_UP", 31)
     zone(cs, "none", 0)
     tickAll(25)
+    local GUILD_ONLY = { we = true, ju = true, cn = true, le = true, ge = true }
+    for _, c in ipairs(cs) do
+      local r = lastReport(c)
+      for _, x in ipairs(r and r.cards or {}) do
+        for _, code in ipairs(c.C.Awards.BY[x[2]].reads) do assert(not GUILD_ONLY[code], c.o.name .. ": a card reading a guild-only code with a stranger in the group: " .. cardsOf(r)) end
+      end
+      local said2 = table.concat(c.C.Awards.Text(r, function() return "X" end), "\n")
+      assert(not said2:find("looted", 1, true) and not said2:find("times asked", 1, true) and not said2:find(" level", 1, true), c.o.name .. ": a guild-only count on the party line:\n" .. said2)
+    end
     local METER = { dm = true, hl = true, ab = true, tk = true, av = true, ["in"] = true, dp = true, mt = true }
     local REUSED = { de = true, dt = true, fd = true, wy = true, ju = true, cn = true, lv = true, gd = true }
     for _, c in ipairs(cs) do
