@@ -412,11 +412,12 @@ function ConvertTo-FindsLua($data) {
     $votes = Get-Whole $r[4] 0 9999
     if ($null -eq $map -or $null -eq $id -or $null -eq $votes) { throw "a number out of range" }
     if (-not ($kind -is [string]) -or -not (@("b", "k", "h", "r") -ccontains $kind)) { throw ("a kind outside the shape: " + $kind) }
-    if (-not ($r[3] -is [string]) -or -not ($r[3] -cmatch '^\d{1,4},\d{1,4}(;\d{1,4},\d{1,4}){0,3}$')) { throw "a spot list that isn't one" }
+    # (\A and \z: .NET's $ also matches before a last line end, and \d any script's digits; the text goes into Lua as it is)
+    if (-not ($r[3] -is [string]) -or -not ($r[3] -cmatch '\A[0-9]{1,4},[0-9]{1,4}(;[0-9]{1,4},[0-9]{1,4}){0,3}\z')) { throw "a spot list that isn't one" }
     $extra = $null
     switch ($kind) {
       "b" { $extra = ConvertTo-LuaTitle $r[5] }
-      "h" { if ($r[5] -is [string] -and $r[5] -cmatch '^\d{1,2}\.\d{1,3}$') { $extra = '"' + $r[5] + '"' } }
+      "h" { if ($r[5] -is [string] -and $r[5] -cmatch '\A[0-9]{1,2}\.[0-9]{1,3}\z') { $extra = '"' + $r[5] + '"' } }
       "k" { $x = Get-Whole $r[5] 0 99999999; if ($null -ne $x) { $extra = [string]$x } }
       "r" { $x = Get-Whole $r[5] 0 100; if ($null -ne $x) { $extra = [string]$x } }
     }
