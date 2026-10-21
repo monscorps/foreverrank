@@ -18706,6 +18706,40 @@ end)()
     print(string.format("xpm: four Deadmines quests held: %.0f min of work (one run), not %.0f", r.W, 4 * run + walks))
   end }
 
+  -- the review: players' times (disc.json "dur") replaced the estimate for a dungeon's quest, where Timer.lua times the
+  -- objectives' ticks and never the run, and for a group quest, a party's work or one player's; the pace compared the
+  -- same against the estimate. Neither counts now: gen_data.py --selftest-dur (made-up times, where the generator's
+  -- inputs are), and the pace from three such quests done in a fifth of the time stays 1
+  F62CASES[#F62CASES + 1] = { "players' times and the pace leave out a dungeon's quests and group quests", function()
+    local inputs = io.open(HERE .. "/../../research/questbank/manifest.json")
+    if inputs then
+      inputs:close()
+      local p = io.popen("cd '" .. HERE .. "' && python3 gen_data.py --selftest-dur 2>&1")
+      local out = p and p:read("*a") or ""
+      if p then p:close() end
+      assert(out:find("selftest-dur: OK", 1, true), "gen_data.py --selftest-dur:\n" .. out)
+      print("xpm: " .. (out:match("(selftest%-dur: OK[^\n]*)")))
+    else
+      print("xpm: gen_data.py --selftest-dur: skipped (no research/ here)")
+    end
+    local c = char("Party")
+    local Tm, M, D = c.QB.Timer, c.QB.Model, c.QB.Data
+    local picked = {}
+    for _, flag in ipairs({ 1, 2 }) do
+      local ids = {}
+      for id, v in pairs(D.DO) do if v > 0 and v % 4096 >= 10 and D.Q[id] and D.Q[id][10] % 4 == flag then ids[#ids + 1] = id end end
+      table.sort(ids)
+      for i = 1, 3 do picked[#picked + 1] = ids[i] end
+    end
+    for _, id in ipairs(picked) do
+      local _, work = M.Do(id)
+      Tm.DB().quests[id] = { a = 1, w = work * 60 * 0.2, k = 5 }
+      Tm.Done(id)
+      tick(c, 2)
+    end
+    assert(#picked == 6 and Tm.SpeedFactor() == 1, "six dungeon's and group quests done fast: the pace stays 1, " .. tostring(Tm.SpeedFactor()))
+  end }
+
   for _, case in ipairs(F62CASES) do
     case[2]()
     print("xpm: " .. case[1] .. ": ok")

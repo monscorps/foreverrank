@@ -31,6 +31,8 @@ Icons and textures: file IDs from the Forever client's interface manifest; a mis
                                                      # (its own fixture and made-up uploads; writes nothing)
   python3 tools/questbank/gen_data.py --selftest-survey  # check the quest survey's answers (probe_pull.py's merge of its
                                                          # fixture) as the build reads them; writes nothing
+  python3 tools/questbank/gen_data.py --selftest-dur  # check players' times of a quest's work (disc.json "dur", made up)
+                                                      # as D.DO takes them; writes nothing
 """
 import collections, csv, html, json, math, os, re, sys
 from travel import Travel, DETOUR, RUN
@@ -2435,7 +2437,8 @@ lines.append("D.SREQ = " + keyed(SREQ))
 #   unknown  no objective data (Forever's own quests, most of them): the work is its zone's median, and the number is
 #         stored negative: the addon says "est."
 #   players  disc.json "dur" (probe_pull.py's merge of Timer.lua's measured work, no character in it): with
-#         DUR_MIN samples or more their median replaces the estimated work
+#         DUR_MIN samples or more their median replaces the estimated work, but for a dungeon's quest (the run is not
+#         measured) and a group quest (whether a party did it is not recorded)
 # D.DO[id] = walk tenths * 4096 + work tenths (work at most 409.5 minutes); negative when the work is its zone's median.
 # A group quest's work is a party's: the addon triples it for you alone (Model.lua)
 # ---------------------------------------------------------------------------
@@ -2444,6 +2447,7 @@ GAP_S = 10.0          # seconds between spawns where no area is known
 DUNGEON_MIN = 35.0    # a dungeon run, until Timer.lua measures one
 DUR_MIN = 3           # players' samples before their median replaces the estimate
 _DUR = DISC.get("dur") or {}
+SELFTEST_DUR = "--selftest-dur" in sys.argv
 
 
 def _leg_min(a, b, fac):
@@ -2596,13 +2600,24 @@ def quest_walk(qid):
     return mins
 
 
+# gen_data.py --selftest-dur: made-up players' times in place of disc.json's (as probe_pull.py's merge writes them),
+# three samples of ten minutes each for the first quest of the open world, the first dungeon's quest and the first group
+# quest whose work is estimated from their objectives; dur_selftest() below checks what D.DO took
+_DUR_TEST = {}
+if SELFTEST_DUR:
+    for _flag in (0, 1, 2):
+        _DUR_TEST[_flag] = next(q for q in IDS if Q[q][9] & 3 == _flag and quest_work(q)[1] and 0 < quest_work(q)[0] != 600)
+    _DUR = {str(q): {"a1": 600.0, "b2": 600.0, "c3": 600.0} for q in _DUR_TEST.values()}
+
 DO, _DO_WORK, _DO_WALK = {}, {}, {}
 _by_cat_work, _by_cat_walk = collections.defaultdict(list), collections.defaultdict(list)
 for qid in IDS:
     w, known = quest_work(qid)
     walk = quest_walk(qid)
     samples = [float(v) for v in ((_DUR.get(str(qid)) or {}).values())]
-    if len(samples) >= DUR_MIN:
+    # (not a dungeon's quest: Timer.lua times its objectives' ticks, never the run; nor a group quest: a party's work
+    # or one player's, the samples don't say which)
+    if len(samples) >= DUR_MIN and not Q[qid][9] & 3:
         w, known = sorted(samples)[len(samples) // 2], True  # (seconds of work, as Timer.lua measures it)
     _DO_WORK[qid] = (w / 60.0, known)
     _DO_WALK[qid] = walk
@@ -2637,6 +2652,25 @@ lines.append("-- turn-in) and the objectives' own (the work); negative when the 
 lines.append("D.DO = " + keyed(DO))
 print("quest minutes: %d quests, %d estimated from their zone (D.DO); %d with players' times" % (
     len(DO), DO_EST, sum(1 for v in _DUR.values() if len(v) >= DUR_MIN)))
+
+
+def dur_selftest():
+    """--selftest-dur: players' times replace an open-world quest's estimated work; a dungeon's quest keeps its run (the
+    times are its objectives' alone) and a group quest its estimate (a party's work or one player's: they don't say)."""
+    for flag, q in sorted(_DUR_TEST.items()):
+        work = abs(DO[q]) % 4096
+        est = int(round(quest_work(q)[0] / 6.0))
+        if flag == 0:
+            assert work == 100, ("an open-world quest takes the players' ten minutes", q, work)
+        else:
+            assert work == est and work != 100, ("a %s keeps its estimate" % ("dungeon's quest" if flag == 1 else "group quest"), q, work, est)
+    print("selftest-dur: OK (players' times taken for quest %d, not for a dungeon's %d nor a group quest %d)" % (
+        _DUR_TEST[0], _DUR_TEST[1], _DUR_TEST[2]))
+
+
+if SELFTEST_DUR:
+    dur_selftest()
+    raise SystemExit(0)
 
 # ---------------------------------------------------------------------------
 # reward items

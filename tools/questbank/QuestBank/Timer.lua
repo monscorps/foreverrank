@@ -133,8 +133,9 @@ function Timer.Done(id)
 end
 
 -- this character's pace: the median of the work measured against the work estimated (D.DO, not an estimate from the
--- zone) over the last PACE_N quests completed with work measured, from 0.5 to 2; 1 with fewer than PACE_MIN. Worked out
--- again after a completion, into tables kept for it
+-- zone) over the last PACE_N quests completed with work measured, from 0.5 to 2; 1 with fewer than PACE_MIN. Not a
+-- dungeon's quest (its estimate is the run, the work measured its objectives' ticks) nor a group quest (the estimate
+-- is a party's, the work may be one player's). Worked out again after a completion, into tables kept for it
 local PACE_N, PACE_MIN = 20, 3
 Timer.PACE_N, Timer.PACE_MIN = PACE_N, PACE_MIN
 local paceAt, paceKey, pace = -1, nil, 1
@@ -146,8 +147,10 @@ function Timer.SpeedFactor()
   paceAt, paceKey, pace = paceVer, key, 1
   local M = QB.Model
   local n = 0
+  local Qs = QB.Data and QB.Data.Q
   for id, q in pairs(db().quests) do
-    if type(q) == "table" and q.c and q.w and q.w > 0 and M and M.Do then
+    local r = Qs and Qs[id]
+    if type(q) == "table" and q.c and q.w and q.w > 0 and M and M.Do and r and r[10] % 4 == 0 then
       local _, work, est = M.Do(id)
       if work and work > 0 and not est then
         n = n + 1
