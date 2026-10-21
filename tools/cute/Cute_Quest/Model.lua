@@ -171,11 +171,12 @@ function M.MinutesText(t, est)
   return (est and "est. " or "") .. m .. " min"
 end
 
--- the floor a quest's XP a minute must reach: 60 XP a minute at level 20's scale, or six tenths of what this session has
--- measured (Timer.XPPerHour), whichever is more
+-- the floor a quest's XP a minute must reach: 60 XP a minute at level 20's scale, or six tenths of the quests' XP this
+-- session has measured, whichever is more (Timer.QuestXPPerHour: the quests' rewards alone, as they stood at the last
+-- hand-in, so the floor holds still between hand-ins; all the XP, kills too, would put most quests under it)
 function M.Floor(level)
   local f = 60 * QB.Scale(level)
-  local rate = QB.Timer and QB.Timer.XPPerHour and QB.Timer.XPPerHour()
+  local rate = QB.Timer and QB.Timer.QuestXPPerHour and QB.Timer.QuestXPPerHour()
   if rate and rate > 0 then f = math.max(f, 0.6 * rate / 60) end
   return f
 end
@@ -187,6 +188,8 @@ function M.Gain(leg, sep)
   for _, row in ipairs(leg.rows or {}) do xp = xp + (row.xp or 0) end
   local a, b = leg.arrive or 0, leg.leave or 0
   if b - a >= 0.1 then return string.format("level %.1f%s%.1f", a, sep or " to ", b) end
+  -- (at the level cap, the level lock's or the game's: no XP is earned, whatever the quests pay)
+  if a >= (QB.CAP or 60) then return "at the level cap, no XP" end
   if xp <= 0 then return "no XP yet" end
   local T = QB.Data.TO_NEXT
   local need = T[floor(a)] or T[#T]
@@ -438,25 +441,33 @@ local function pendingRow(e)
   return (cat and cat.dungeon and not (D.SPOT and D.SPOT[q.id])) and true or false
 end
 
--- the work an entry of the route still asks for, in minutes (XP a minute, goal "rate"): a quest held, what is left of its
--- walk and work (none once it is complete, nor for a step handed you by another hand-in); a pick-up, its whole walk and
--- work and the hand-in
+-- the work an entry of the route still asks for, in minutes (XP a minute, goal "rate"): a quest held, the work left and
+-- its walk only while nothing of it is done (once you have been at its objectives, the route's travel takes you to its
+-- hand-in; none once it is complete, nor for a step handed you by another hand-in); a pick-up, its whole walk and work
+-- and the hand-in. A dungeon's quest returns its run apart, with its place: the route counts one run a dungeon (problem)
 local function entryWork(e, mf, kf)
   local q = e.q
   if e.after or not (D.DO and D.DO[q.id]) then return 0 end
   local le = QB.state and QB.state.log and QB.state.log[q.id]
+  local t, walk, work
   if le then
     if le.complete then return 0 end
     local left = 1
     local have, need
     if QB.Progress then have, need = QB:Progress(q.id) end
     if have and need and need > 0 then left = math.max(0, 1 - have / need) end
-    local _, _, walk, work = M.QuestMinutes(q.id, 0, mf, kf, M.PartyHas(q.id), left)
-    return walk + work
+    _, _, walk, work = M.QuestMinutes(q.id, 0, mf, kf, M.PartyHas(q.id), left)
+    if left < 1 then walk = 0 end
+    t = walk + work
+  else
+    if e.st and e.st.code == "banked" then return 0 end
+    t, _, walk, work = M.QuestMinutes(q.id, 0, mf, kf, M.PartyHas(q.id))
   end
-  if e.st and e.st.code == "banked" then return 0 end
-  return (M.QuestMinutes(q.id, 0, mf, kf, M.PartyHas(q.id)))
+  if q.dungeon and q.cat then return t - work, work, q.cat end
+  return t
 end
+-- each dungeon's run, the longest of its quests' (problem: kept between plans, emptied each time)
+local runMost, runCount = {}, {}
 
 local function problem(entries, opts)
   D = QB.Data
@@ -518,11 +529,23 @@ local function problem(entries, opts)
   -- a quest held, a pick-up's whole walk and work; Model's QuestMinutes), the floor (M.Floor) and the level it starts at
   local kf = QB.Timer and QB.Timer.SpeedFactor and QB.Timer.SpeedFactor() or 1
   P.stopWork, P.W, P.F, P.startFrac = {}, 0, M.Floor(opts.level), M.Frac(opts.level, opts.xp or 0)
+  -- (one run a dungeon, the longest its quests ask, shared among the stops its quests are handed in at)
+  for k in pairs(runMost) do runMost[k], runCount[k] = nil, nil end
+  for i = 1, n do
+    for _, e in ipairs(stops[i].rows) do
+      local _, run, cat = entryWork(e, mf, kf)
+      if cat then runMost[cat], runCount[cat] = math.max(runMost[cat] or 0, run), (runCount[cat] or 0) + 1 end
+    end
+  end
   for i = 1, n do
     local w = 0
-    for _, e in ipairs(stops[i].rows) do w = w + entryWork(e, mf, kf) end
+    for _, e in ipairs(stops[i].rows) do
+      local x, _, cat = entryWork(e, mf, kf)
+      w = w + x + (cat and runMost[cat] / runCount[cat] or 0)
+    end
     P.stopWork[i], P.W = w, P.W + w
   end
+  for k in pairs(runMost) do runMost[k], runCount[k] = nil, nil end
   -- a stop worth next to nothing waits until everything worth the trip is handed in (a quest held and not done pays
   -- nothing yet: pendingRow): less than CHEAP at your level, and questing (goal "rate") also less than the floor of XP a
   -- minute pays for the way there and back from its nearest stop (or from you) and its quests' work: a 340-XP delivery
@@ -929,8 +952,10 @@ local SWITCH, SWITCH_MIN = 0.05, 0.5
 M.SWITCH = SWITCH
 local function clearly(P, a, b, start)
   if P.goal == "rate" then
+    -- (the same levels at the end, as nearly always: the minutes decide, and only by half a minute or more,
+    -- SWITCH_MIN, as for the other goals; a short hand-in route is 5% quicker for seconds)
     local ra, rb = perHour(P, a[2], a[3]), perHour(P, b[2], b[3])
-    if ra > rb + math.max(SWITCH * math.abs(rb), 1e-9) then return true end
+    if ra > rb + math.max(SWITCH * math.abs(rb), 1e-9) and (math.abs(a[2] - b[2]) > 1e-6 or b[3] - a[3] >= SWITCH_MIN) then return true end
     if ra < rb - 1e-9 then return false end
   else
     for k = P.goal == "hour" and 1 or 2, 2 do

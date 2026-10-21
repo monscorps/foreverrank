@@ -133,8 +133,9 @@ function Timer.Done(id)
 end
 
 -- this character's pace: the median of the work measured against the work estimated (D.DO, not an estimate from the
--- zone) over the last PACE_N quests completed with work measured, from 0.5 to 2; 1 with fewer than PACE_MIN. Worked out
--- again after a completion, into tables kept for it
+-- zone) over the last PACE_N quests completed with work measured, from 0.5 to 2; 1 with fewer than PACE_MIN. Not a
+-- dungeon's quest (its estimate is the run, the work measured its objectives' ticks) nor a group quest (the estimate
+-- is a party's, the work may be one player's). Worked out again after a completion, into tables kept for it
 local PACE_N, PACE_MIN = 20, 3
 Timer.PACE_N, Timer.PACE_MIN = PACE_N, PACE_MIN
 local paceAt, paceKey, pace = -1, nil, 1
@@ -146,8 +147,10 @@ function Timer.SpeedFactor()
   paceAt, paceKey, pace = paceVer, key, 1
   local M = QB.Model
   local n = 0
+  local Qs = QB.Data and QB.Data.Q
   for id, q in pairs(db().quests) do
-    if type(q) == "table" and q.c and q.w and q.w > 0 and M and M.Do then
+    local r = Qs and Qs[id]
+    if type(q) == "table" and q.c and q.w and q.w > 0 and M and M.Do and r and r[10] % 4 == 0 then
       local _, work, est = M.Do(id)
       if work and work > 0 and not est then
         n = n + 1
@@ -194,6 +197,12 @@ function Timer.XPPerHour()
 end
 function Timer.SessionXP() return gain end
 
+-- the quests' XP this session (their rewards at the hand-in; the catalog's figure where the game hides it) an hour, as
+-- it stood at the last hand-in ten minutes into the session or later: the floor of XP a minute reads it (Model.lua's
+-- Floor), so the floor moves at a hand-in, a real event, and never with a kill or the clock. nil until then
+local questGain, questRate = 0, nil
+function Timer.QuestXPPerHour() return questRate end
+
 function Timer.Record(event, a1, a2)
   if event == "PLAYER_XP_UPDATE" then Timer.NoteXP(); return end
   if event == "PLAYER_LEVEL_UP" then
@@ -219,6 +228,16 @@ function Timer.Record(event, a1, a2)
     if type(id) ~= "number" then return end
     local q = db().quests[id]
     if q and not q.d then q.d = clock() end
+    -- (the payload: questID, xpReward, moneyReward; QuestLogDocumentation.lua's QuestTurnedIn)
+    local x = plain(a2)
+    if type(x) ~= "number" then
+      local v = QB.Quest and QB.Quest.Get(id)
+      x = v and QB.Model and QB.Model.XpAt and QB.Model.XpAt(v, level()) or 0
+    end
+    questGain = questGain + x
+    since = since or now()
+    local secs = now() - since
+    if secs >= 600 then questRate = questGain / (secs / 3600) end
   elseif event == "PLAYER_ENTERING_WORLD" then
     sessionLevel, sessionStart = level(), now()
     if not since then Timer.NoteXP() end
@@ -232,12 +251,13 @@ function Timer.Record(event, a1, a2)
   if Timer.frame and Timer.frame:IsShown() then Timer.Update() end
 end
 
--- the oldest quest still in the log that this character accepted since the timers began
+-- the oldest quest still in the log that this character accepted since the timers began (a row the work alone made,
+-- Timer.Tick for a quest held before the timers began, has no accept time: not one of them)
 local function oldestOpen()
   local best, at
   local log = QB.state and QB.state.log or {}
   for id, q in pairs(db().quests) do
-    if not q.d and log[id] and (not at or q.a < at) then best, at = id, q.a end
+    if type(q) == "table" and q.a and not q.d and log[id] and (not at or q.a < at) then best, at = id, q.a end
   end
   return best, at
 end

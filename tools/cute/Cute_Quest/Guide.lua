@@ -309,19 +309,22 @@ local partyHas = function(id) return QB.Model.PartyHas(id) end
 function G.Rank(c, level)
   return (c.rank or 0) * (partyHas(c.id) and 1.5 or 1)
 end
-local ranked, best, fillAt = {}, {}, {}
+local ranked, best, fillAt, candOf, NONE = {}, {}, {}, {}, {}
 local function byRank(a, b)
   local ba, bb = best[a.id] and 1 or 0, best[b.id] and 1 or 0
   if ba ~= bb then return ba > bb end
   if a.grank ~= b.grank then return a.grank > b.grank end
   return a.id < b.id
 end
--- the party's quests, told apart without a string: the members' step version and how many quests they hold
+-- the party's quests, told apart without a string: their ids summed, and how many (not the members' steps, which change
+-- with every kill they make: Sync's stepVer)
 local function partyMark()
   local S = QB.Sync
   if not (S and S.members) then return 0 end
-  local n = (S.stepVer or 0) * 4096
-  for _, m in pairs(S.members) do if m.quests then for _ in pairs(m.quests) do n = n + 1 end end end
+  local n = 0
+  for _, m in pairs(S.members) do
+    if m.quests then for id in pairs(m.quests) do if type(id) == "number" then n = n + 1 + id end end end
+  end
   return n
 end
 -- a real event since the last fill: the inputs it was made from, in fillAt
@@ -360,8 +363,19 @@ function G.Fill(level)
     if qualifies(id) then n = n + 1 else p.auto[id] = nil end
   end
   if not fillChanged(level, n) then return n end
+  -- a pick no longer worth the time (under the floor of XP a minute now: a level gained, your pace, one made by
+  -- 6.1.1's rule and saved) or behind a step not taken goes, at a fill alone, never while you walk
+  local cands = QB.UI and QB.UI.Candidates and QB.UI:Candidates(nil, level) or NONE
+  for k in pairs(candOf) do candOf[k] = nil end
+  for _, c in ipairs(cands) do candOf[c.id] = c end
+  local moved = false
+  for id in pairs(p.auto) do
+    local c = candOf[id]
+    if c and (c.waste or c.locked) then p.auto[id], n, moved = nil, n - 1, true end
+  end
+  for k in pairs(candOf) do candOf[k] = nil end
   fillAt.n = n
-  if free <= n or n >= AUTO_MAX then return n end
+  if free <= n or n >= AUTO_MAX then return n, moved end
   -- the best place's set: what you could take there now (the Now view's first place you don't skip; alone, its first
   -- place out of a dungeon: a run is a party's)
   for k in pairs(best) do best[k] = nil end
@@ -386,7 +400,7 @@ function G.Fill(level)
     return true
   end
   for k = #ranked, 1, -1 do ranked[k] = nil end
-  for _, c in ipairs(QB.UI and QB.UI.Candidates and QB.UI:Candidates(nil, level) or {}) do
+  for _, c in ipairs(cands) do
     if not p.auto[c.id] and not c.waste and not c.locked and inReach(c) and qualifies(c.id) then
       c.grank = G.Rank(c, level)
       ranked[#ranked + 1] = c
@@ -400,8 +414,8 @@ function G.Fill(level)
     n = n + 1
   end
   fillAt.n = n
-  if QB.tracing and n > was then QB.Trace("fill: %d pick(s) made, %d in all, the best place's first", n - was, n) end
-  return n
+  if QB.tracing and (n > was or moved) then QB.Trace("fill: %d pick(s) made, %d in all, the best place's first%s", n - was, n, moved and "; one or more no longer worth the time dropped" or "") end
+  return n, moved or n > was
 end
 
 -- the Train step: your level teaches something (D.SPELL_LV, the levels a class learns a new spell at) that you have
@@ -681,8 +695,8 @@ function G.Replan()
     local before = QB:Plan().auto
     local n0 = 0
     for _ in pairs(before) do n0 = n0 + 1 end
-    local n1 = G.Fill(QB.state.level or 1)
-    if n1 ~= n0 and not G.filling then
+    local n1, moved = G.Fill(QB.state.level or 1)
+    if (n1 ~= n0 or moved) and not G.filling then
       -- new picks: the route is planned again with them, and Replan runs again from QB:Changed
       G.filling = true
       QB.sigPlan, QB.sigNow = nil, nil
