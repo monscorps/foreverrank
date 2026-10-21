@@ -1187,6 +1187,9 @@ local function yes(fn, ...)
   local ok, v = pcall(fn, ...)
   return ok and plain(v) == true
 end
+-- inside a dungeon, a raid or a battleground: nothing to steer by (the Deeprun Tram, an instance map the guide steers
+-- through, is not inside). The arrow goes away there (Arrow.lua, A.Inside)
+function TV.Inside() return instanceMap() ~= TRAM_MAP and inInstance() end
 
 -- yards from you to the way a ride's step sails: its track from the step's pier to the far one (the loop's other half
 -- left out), never the pier itself, so standing on it or near it is not "on the boat's way". A leg of 2,000 yards or

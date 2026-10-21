@@ -316,6 +316,7 @@ function A:Show(name, p, about, tomtom)
   A.back = nil
   A.Invalidate()
   self:Create()
+  if A.inside then A.away = true; self.frame:Hide() return false end -- (inside: shown as you leave)
   self.frame:Show()
   self:Update()
   return A.temp == t
@@ -1207,10 +1208,37 @@ function A:Set(on)
   QB:Settings().arrow = on and true or false
   A.temp = nil -- on: it points where its mode says; off: hidden, the waypoint's showing too
   self:Create()
+  if on and A.inside then A.away = true; self.frame:Hide() return end -- (inside: back as you leave)
+  A.away = nil
   self.frame:SetShown(on and true or false)
   if on then self:Update() end
 end
 
+-- (the launch round) inside a dungeon, a raid or a battleground (Travel.lua, TV.Inside) the arrow said "Leave the
+-- dungeon first" for a whole run: it goes away at the loading screen in, whatever turns it on or shows a place clicked
+-- meanwhile (A.away: it was up, or asked for), and is back at the loading screen out where it is still wanted (the
+-- switch on, or a place shown for now). Read at each loading screen and new zone, never per frame
+function A.Inside()
+  local inside = (TV.Inside and TV.Inside()) and true or false
+  if inside == (A.inside == true) then return inside end
+  A.inside = inside
+  local f = A.frame
+  if inside then
+    if f and f:IsShown() then A.away = true; f:Hide() end
+  elseif A.away then
+    A.away = nil
+    if f and (QB:Settings().arrow or A.temp) then f:Show(); A:Update() end
+  end
+  return inside
+end
+
 function A:Init()
+  if not A.eventFrame then
+    local ev = CreateFrame("Frame")
+    A.eventFrame = ev
+    ev:SetScript("OnEvent", QB.Safe(function() A.Inside() end, "arrow: instance"))
+    for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA" }) do pcall(ev.RegisterEvent, ev, e) end
+  end
+  A.Inside()
   if QB:Settings().arrow then self:Set(true) end
 end

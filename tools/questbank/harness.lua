@@ -17770,6 +17770,49 @@ end)()
     assert(qt.QB.MiniView.blocked, "and its minimap left to it")
   end }
 
+  -- 4. "In a dungeon the arrow says Leave the dungeon first for the whole run": inside a dungeon, a raid or a
+  -- battleground the arrow has nothing to steer by; it goes away at the loading screen in (whatever turns it on or
+  -- shows a click meanwhile) and is back at the loading screen out. The Deeprun Tram is an instance the travel guide
+  -- steers through: the arrow stays
+  ENGCASES[#ENGCASES + 1] = { "the arrow away inside a dungeon, back as you leave; the tram keeps it", function()
+    local c = char("Delver", "WARRIOR", "Warrior", 1, {}, { level = 20 })
+    local env, QB = c.env, c.QB
+    local A = QB.Arrow
+    A:Set(true); A:Update()
+    local F = env.QuestBankArrow
+    assert(F:IsShown(), "out in the world: the arrow up")
+    local ev = A.eventFrame
+    assert(ev and ev.__scripts.OnEvent, "the arrow hears the loading screens")
+    local function load(inside, inst)
+      env.IsInInstance = function() return inside, inside and "party" or "none" end
+      c.instance = inst
+      ev.__scripts.OnEvent(ev, "PLAYER_ENTERING_WORLD", false, false)
+      tick(c, 1)
+    end
+    load(true, { "The Deadmines", 1, 36 })
+    assert(not F:IsShown(), "in the Deadmines: the arrow away, not Leave the dungeon first: " .. tostring(F.dist:GetText()))
+    A:Set(true)
+    assert(not F:IsShown() and QB:Settings().arrow == true, "switched on inside: still away, the switch kept")
+    A:Show("Mr. Smite", { c = 0, wx = -11000, wy = 1500 })
+    assert(not F:IsShown(), "a place clicked inside: still away")
+    A:EndTemp(nil, true)
+    for _ = 1, 3 do tick(c, 1) end
+    assert(not F:IsShown(), "and stays away for the run")
+    load(false, nil)
+    assert(F:IsShown() and F.dist:GetText() ~= "Leave the dungeon first", "out again: the arrow back")
+    -- off while you were inside: stays off as you leave
+    load(true, { "The Deadmines", 1, 36 })
+    A:Set(false)
+    load(false, nil)
+    assert(not F:IsShown(), "switched off inside: off as you leave")
+    A:Set(true)
+    -- the tram: an instance map the guide steers through
+    load(true, { "Deeprun Tram", 0, 369 })
+    assert(F:IsShown(), "on the Deeprun Tram: the arrow stays")
+    load(false, nil)
+    env.IsInInstance = nil
+  end }
+
   for _, case in ipairs(ENGCASES) do
     case[2]()
     print("engine: " .. case[1] .. ": ok")
