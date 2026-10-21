@@ -3,7 +3,7 @@
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
 if QB.dormant then return end
-QB.version = "6.1.1"
+QB.version = "6.2.0"
 -- the engine, for a host that runs beside QuestBank and must not run a second one (Cute_Quest reads this table
 -- instead of its own copy while QuestBank is loaded); QuestBank itself never reads it
 QuestBankAPI = QB
