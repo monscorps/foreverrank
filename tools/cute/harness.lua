@@ -11954,6 +11954,32 @@ do local function runsStage()
   end)
   said[#said + 1] = "a 2W as the group and the policy are now: no guild code with a stranger since, none from a scribe in doubt"
 
+  -- (13.1) a member the officers marked untrusted is nobody's scribe, the leader included (every guild client holds the
+  -- same marks, its own too), so its 2A is not taken; and the scribe's 2A with a value past what its award can show
+  -- is not shown
+  isolated({ gmember("Mal", 1), gmember("Nod", 3), gmember("Ora", 3) }, function()
+    local cs = { gchar("Mal", 1), gchar("Nod", 3), gchar("Ora", 3) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    for _, c in ipairs(cs) do c.env.CuteDB.policy = c.env.CuteDB.policy or {}; c.env.CuteDB.policy.untrusted = { [cs[1].o.guid] = true } end
+    local G = group(cs)
+    zone(cs, "party", 36, "The Deadmines")
+    tickAll(40)
+    for _, c in ipairs(cs) do assert(c.C.Runs:Scribe() ~= sfx(cs[1]), c.o.name .. ": an untrusted leader is no scribe") end
+    local s = cs[2].C.Runs:Scribe()
+    local scribe, to = cs[2], cs[3]
+    if s == sfx(cs[3]) then scribe, to = cs[3], cs[2] end
+    local id = to.C.Runs.Current().id
+    local b36 = to.C.Comm.b36
+    to.C.RunComm:Receive("CuteRun", "2A|" .. id .. "|1/1|k=d;c=" .. sfx(cs[1]) .. ".HD." .. b36(99), "PARTY", cs[1].sender)
+    assert(not to.C.Runs.Current().got2A, "an untrusted leader's 2A: not taken")
+    to.C.RunComm:Receive("CuteRun", "2A|" .. id .. "|1/1|k=d;c=" .. sfx(scribe) .. ".HD." .. b36(500), "PARTY", scribe.sender)
+    assert(not to.C.Runs.Current().got2A, "a 2A's value past what its award can show: not shown")
+    to.C.RunComm:Receive("CuteRun", "2A|" .. id .. "|1/1|k=d;c=" .. sfx(scribe) .. ".OS." .. b36(5000), "PARTY", scribe.sender)
+    assert(not to.C.Runs.Current().got2A, "an interrupt count past its key's bounds: not shown")
+  end)
+  said[#said + 1] = "an untrusted member is nobody's scribe, the leader included; a 2A value past its award's bounds not shown"
+
   -- (4) the lockdown: a 2V answered 11 spends no try, the Chat restriction's Activating holds it and only its Inactive
   -- lets it go, once; a lockdown for the whole stay sends nothing inside, a disband inside gives each client its own
   -- report, and the id and the scribe settle once the group is out; the meter read only out of combat; a secret

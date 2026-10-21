@@ -287,6 +287,18 @@ end, function(v) return tostring(v), "lowest roll" end)
 award("GC", "thanks", "Good Company", "Made the run better just by being in it.", {}, nil, function(v) return A.Clock(v), "in the run" end)
 award("SH", "thanks", "Steady Hands", "Kept calm and kept going.", { "de" }, nil, function(v) return tostring(v), v == 1 and "death" or "deaths" end)
 
+-- a card's value on receipt (a scribe's 2A): within what its award can show. A number, the most; a key, that key's
+-- bounds (KEYS); RUN, seconds within the run. A share is a whole per cent; Two Jobs carries its share times ten plus a
+-- rank of 1 or 2; Lucky Bags a quality; the rest what their keys bound
+local VALUE = { HD = 100, LF = 100, BW = 100, TJ = 1002, OS = "in", CW = "dp", IW = "tk", NS = 0, PW = 16, LB = 8, FH = 100, TB = "yd",
+  NR = "ch", DG = "lv", CM = "gd", WL = "cn", FI = "de", OA = RUN, SP = RUN, WF = "av", LO = "wy", PG = "ju", NA = 200, BD = 100, GC = RUN, SH = "de" }
+function A.ValueOK(code, v, dur)
+  local b = VALUE[code]
+  if type(v) ~= "number" or v ~= v or v < 0 or b == nil then return false end
+  if b == RUN then return v <= (dur or 0) + 120 end
+  if type(b) == "number" then return v <= b end
+  return A.InBounds(b, v, dur)
+end
 -- the line a card shows under its title, and its value: (text, what it is)
 function A.Show(code, value)
   local a = BY[code]

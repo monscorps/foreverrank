@@ -311,20 +311,25 @@ local function mySfx() return sfxOf(C.MyGUID()) end
 ----------------------------------------------------------------------------
 -- the scribe
 ----------------------------------------------------------------------------
--- (of a given run, the group as it is now: a message queued while this client was scribe is judged again as it leaves)
+-- (of a given run, the group as it is now: a message queued while this client was scribe is judged again as it leaves.
+-- A member the officers marked untrusted is nobody's scribe, the leader included: every guild client holds the same
+-- marks, so each leaves the same member out, the marked one's own client too)
+local function untrusted(guid) return C.Policy and C.Policy.Untrusted and C.Policy:Untrusted(guid) or false end
+R.Untrusted = untrusted
 function R.ScribeOf(run)
   if not run then return nil end
   local g = R.Group()
-  local me = mySfx()
+  local me, myG = mySfx(), C.MyGUID() or ""
   local lead = g.leader
   local lm = lead and run.members[lead]
-  if lead and (lead == me or (lm and lm.hello and not lm.out)) then return lead end
+  if lead and not untrusted(lead == me and myG or (lm and lm.g)) and (lead == me or (lm and lm.hello and not lm.out)) then return lead end
   if not inGroup() then return me end
-  local best, bestG = me, C.MyGUID() or ""
+  local best, bestG
+  if not untrusted(myG) then best, bestG = me, myG end
   for sfx, m in pairs(run.members) do
-    if m.hello and g[sfx] and not m.gone and not m.out and m.g < bestG then best, bestG = sfx, m.g end
+    if sfx ~= me and m.hello and g[sfx] and not m.gone and not m.out and not untrusted(m.g) and (not bestG or m.g < bestG) then best, bestG = sfx, m.g end
   end
-  return best
+  return best or me
 end
 function R:Scribe() return R.ScribeOf(self.run) end
 function R:IsScribe() return self:Scribe() == mySfx() end
@@ -1144,8 +1149,8 @@ function R:TakeOffer(run)
   local lead = g.leader
   local lm = lead and run.members[lead]
   local pick
-  if lead and (lead == mySfx() or (lm and lm.hello)) then pick = offers[lead]
-  else for _, o in pairs(offers) do if not pick or o.t < pick.t then pick = o end end end
+  if lead and not untrusted(lm and lm.g or (lead == mySfx() and C.MyGUID())) and (lead == mySfx() or (lm and lm.hello)) then pick = offers[lead]
+  else for sfx, o in pairs(offers) do if not untrusted(run.members[sfx] and run.members[sfx].g) and (not pick or o.t < pick.t) then pick = o end end end
   local myT = idTime(run.id)
   if not (pick and myT and pick.t < myT) then return end
   run.answered = true
@@ -1162,12 +1167,15 @@ function R:HeardReport(body)
   local kv = {}
   for k, s in body:gmatch("(%l)=([^;]*)") do kv[k] = s end
   local route = R.CardRoute(allGuild())
+  -- (seconds in a card, a first death or time in the run, bounded by the report's own length, four hours at most:
+  -- this client's clock may have started later than the scribe's)
+  local dur = math.min(unb36(kv.d or "") or el(run), MAX_BACK)
   local function cards(s, out)
     out = out or {}
     for sfx, code, v in (s or ""):gmatch("(%w+)%.(%u%u)%.(%w+)") do
       local a = A().Of(code)
       local value = unb36(v)
-      if not a or not value then return nil end
+      if not a or not value or not A().ValueOK(code, value, dur) then return nil end
       for _, r in ipairs(a.reads) do if not route(r) then return nil end end
       if sfx ~= mySfx() and not run.members[sfx] then return nil end
       out[#out + 1] = { sfx, code, value, a.kind }
