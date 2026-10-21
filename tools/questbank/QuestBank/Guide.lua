@@ -292,27 +292,53 @@ local function readPickups()
   return pickups
 end
 
--- the fill: the quests Now ranks best (UI:Candidates' rank: XP plus half the chain over trip and loop minutes, a
--- quarter when probably behind you), weighed by the drop rate as Now weighs it, half again as much when a party
--- member holds or can take it (Sync); never grey unless its chain pays the planner's low-value line, never more
--- than two levels above you, never one you put off or skipped, never one on your own list; up to the log's free
--- slots minus two, at most AUTO_MAX. Picks already made stay while they still qualify, so the plan holds still.
+-- the fill: the quests worth your time by XP a minute (UI:Candidates' rank: the quest's XP and the steps its chain
+-- carries, over the trip and its own minutes; a quarter when probably behind you), the best place's set first (the Now
+-- view's first place, UI.PlaceGroups: where to go), half again as much when a party member holds or can take it (Sync);
+-- never under the floor of XP a minute (c.waste: a 340-XP delivery across two zones is no pick), never a step behind
+-- another (its head carries it), never grey unless its chain pays the planner's low-value line, never more than two
+-- levels above you, never one you put off or skipped, never one on your own list; up to the log's free slots minus two,
+-- at most AUTO_MAX. Picks already made stay while they still qualify, and new ones are made on a real event alone (your
+-- level, your log, a hand-in, a jump in place, what you skip, the party's quests: fillAt), never for walking on: the
+-- owner saw the route flip from Southshore to Alterac mid-run.
 -- Its reach: a giver within 20 minutes, but 3 + your level minutes under 17 (a level-1 character is led around its
 -- own valley, not 2,700 yards across the mountains to Coldridge: the straight-line minutes make that 8), and under
--- level 10 only a giver placed on your own map, never one the catalog cannot place
-local function partyHas(id)
-  local S = QB.Sync
-  if not (S and S.members) then return false end
-  for _, m in pairs(S.members) do if m.quests and m.quests[id] then return true end end
-  return false
-end
+-- level 10 only a giver placed on your own map, never one the catalog cannot place; from level 10 the best place's set
+-- wherever it is (its trip is in its XP a minute already)
+local partyHas = function(id) return QB.Model.PartyHas(id) end
 function G.Rank(c, level)
-  local drop = QB.Data.DROP and QB.Data.DROP[c.id]
-  local weight = (drop and drop < 25) and (0.5 + drop / 50) or 1
-  return (c.rank or 0) * weight * (partyHas(c.id) and 1.5 or 1)
+  return (c.rank or 0) * (partyHas(c.id) and 1.5 or 1)
 end
-local ranked = {}
-local function byRank(a, b) if a.grank ~= b.grank then return a.grank > b.grank end return a.id < b.id end
+local ranked, best, fillAt = {}, {}, {}
+local function byRank(a, b)
+  local ba, bb = best[a.id] and 1 or 0, best[b.id] and 1 or 0
+  if ba ~= bb then return ba > bb end
+  if a.grank ~= b.grank then return a.grank > b.grank end
+  return a.id < b.id
+end
+-- the party's quests, told apart without a string: the members' step version and how many quests they hold
+local function partyMark()
+  local S = QB.Sync
+  if not (S and S.members) then return 0 end
+  local n = (S.stepVer or 0) * 4096
+  for _, m in pairs(S.members) do if m.quests then for _ in pairs(m.quests) do n = n + 1 end end end
+  return n
+end
+-- a real event since the last fill: the inputs it was made from, in fillAt
+-- (n: the picks still standing; fewer than the fill left, one was put off or no longer qualifies: fill again)
+local function fillChanged(level, n)
+  local s = QB.state
+  local skip = QB.UI and QB.UI.SkipMark and QB.UI.SkipMark(QB:Settings()) or 0
+  local party = partyMark()
+  if fillAt.level == level and fillAt.log == (s.logCount or 0) and fillAt.done == (QB.doneVer or 0) and fillAt.jump == (QB.jumpVer or 0)
+    and fillAt.skip == skip and fillAt.skipQ == (QB.skipVer or 0) and fillAt.party == party and fillAt.survey == (QB.surveyVer or 0)
+    and fillAt.char == QB.charKey and fillAt.n and n >= fillAt.n then
+    return false
+  end
+  fillAt.level, fillAt.log, fillAt.done, fillAt.jump, fillAt.skip, fillAt.skipQ, fillAt.party, fillAt.survey, fillAt.char =
+    level, s.logCount or 0, QB.doneVer or 0, QB.jumpVer or 0, skip, QB.skipVer or 0, party, QB.surveyVer or 0, QB.charKey
+  return true
+end
 function G.Fill(level)
   local p = QB:Plan()
   local s = QB.state
@@ -323,7 +349,7 @@ function G.Fill(level)
     if not q or q.lvl > level + 2 or (q.req or 1) > level then return false end
     if p.add[id] or putOff(id) or QB:IsSkipped(id) or s.log[id] or QB.API.IsDone(id) then return false end
     local st = QB:Status(q)
-    -- (a chain's later step counts as Now lists it: the pick-ups lead to the chain's first open step)
+    -- (a chain's later step picked before: the pick-ups lead to the chain's first open step)
     if st.code ~= "todo" and st.code ~= "item" and st.code ~= "prereq" then return false end
     if QB.QuestMap and QB.QuestMap.Grey(q, level) and QB:ChainLead(id) < line then return false end
     return true
@@ -333,9 +359,24 @@ function G.Fill(level)
   for id in pairs(p.auto) do
     if qualifies(id) then n = n + 1 else p.auto[id] = nil end
   end
+  if not fillChanged(level, n) then return n end
+  fillAt.n = n
   if free <= n or n >= AUTO_MAX then return n end
+  -- the best place's set: what you could take there now (the Now view's first place you don't skip; alone, its first
+  -- place out of a dungeon: a run is a party's)
+  for k in pairs(best) do best[k] = nil end
+  if QB.UI and QB.UI.PlaceGroups and not QB:Banking() then
+    local grouped = IsInGroup and IsInGroup() and true or false
+    for _, g in ipairs(QB.UI.PlaceGroups(level, true)) do
+      if not g.skipped and (grouped or not g.cat.dungeon) then
+        for _, it in ipairs(g.set) do if it.grp == 2 then best[it.id] = true end end
+        break
+      end
+    end
+  end
   local reach, myMap = math.min(20, 3 + level), s.mapID
   local function inReach(c)
+    if best[c.id] and level >= 10 then return true end
     if c.mins == nil then return level >= 10 end
     if c.mins > reach then return false end
     if level < 10 and myMap then
@@ -346,17 +387,20 @@ function G.Fill(level)
   end
   for k = #ranked, 1, -1 do ranked[k] = nil end
   for _, c in ipairs(QB.UI and QB.UI.Candidates and QB.UI:Candidates(nil, level) or {}) do
-    if not p.auto[c.id] and not c.waste and inReach(c) and qualifies(c.id) then
+    if not p.auto[c.id] and not c.waste and not c.locked and inReach(c) and qualifies(c.id) then
       c.grank = G.Rank(c, level)
-      if c.value and c.value >= line then ranked[#ranked + 1] = c end
+      ranked[#ranked + 1] = c
     end
   end
   table.sort(ranked, byRank)
+  local was = n
   for _, c in ipairs(ranked) do
     if n >= free or n >= AUTO_MAX then break end
     p.auto[c.id] = true
     n = n + 1
   end
+  fillAt.n = n
+  if QB.tracing and n > was then QB.Trace("fill: %d pick(s) made, %d in all, the best place's first", n - was, n) end
   return n
 end
 
@@ -524,9 +568,9 @@ function G.Grind(level, me)
   return grind
 end
 
--- "about 14 min to level 6": the XP still needed (the game's bar, else D.TO_NEXT) over the plan's XP a minute until
--- ten minutes of play have been measured (Timer.XPPerHour), then over the measured rate; nil at the cap or with
--- nothing to go on. Returns the words, the minutes and whether they are measured
+-- "about 14 min to level 6": the XP still needed (the game's bar, else D.TO_NEXT) over the plan's XP a minute (its
+-- travel and its quests' minutes) until ten minutes of play have been measured (Timer.XPPerHour), then over the
+-- measured rate; nil at the cap or with nothing to go on. Returns the words, the minutes and whether they are measured
 local function spanText(mins)
   if mins < 1 then return "under a minute" end
   if mins < 90 then return string.format("about %d min", math.floor(mins + 0.5)) end
@@ -552,8 +596,9 @@ function G.TimeToLevel()
   else
     local r = QB.routePlan
     if not (r and r.xp and r.xp > 0 and r.t and r.t > 0) then return nil end
-    -- the plan's XP a minute, with a minute a quest of doing (the planner counts travel and hand-ins, not the kills)
-    local perMin = r.xp / (r.t + (r.count or 0))
+    -- the plan's XP a minute: its travel and hand-ins, and the work its quests still ask (the quest minutes, Model.lua:
+    -- route.W; a route planned before them counted a minute a quest)
+    local perMin = r.xp / (r.t + (r.W or r.count or 0))
     mins, measured = need / perMin, false
   end
   -- the minutes as the words round them: under one, whole minutes to 90, then tens

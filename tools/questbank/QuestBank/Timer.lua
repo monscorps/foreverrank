@@ -116,6 +116,8 @@ function Timer.Tick(ids, n)
     q.k = (q.k or 0) + 1
   end
   if added then trim(db(), added) end
+  -- (/qb trace: whether the work is measured in play, for a report)
+  if QB.tracing and QB.Trace then QB.Trace("timer: %d quest(s) moved, %.0f s of work each", n, share) end
 end
 
 -- the first time a quest is complete: when, and at what level (its work is whole: the pace below counts it)
@@ -127,6 +129,7 @@ function Timer.Done(id)
   if type(q) ~= "table" then q = {}; t.quests[id] = q; trim(t, id) end
   q.c, q.lv = clock(), level()
   paceVer = paceVer + 1
+  if QB.tracing and QB.Trace then QB.Trace("timer: quest %d complete, %.0f s of work in %d looks", id, q.w or 0, q.k or 0) end
 end
 
 -- this character's pace: the median of the work measured against the work estimated (D.DO, not an estimate from the

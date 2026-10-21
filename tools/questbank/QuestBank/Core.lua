@@ -1616,6 +1616,24 @@ local function stepOpen(nq, lvl, banking, s)
   return nq ~= nil and Q.ForMe(nq) and not API.IsDone(nq.id) and not s.log[nq.id] and not nq.sodLeftover and not nq.repeatable
     and not Q.Behind(nq.id) and not QB:SkipsQuest(nq) and (nq.req or 1) <= lvl + (banking and 0 or 2)
 end
+-- (questing: a chain's head carries the steps it opens, Lists.lua's bundle)
+function QB:StepOpen(nq, lvl) return stepOpen(nq, lvl or self.state.level or 1, false, self.state) end
+
+-- a quest behind a step of its chain you have not taken yet (Status's "First: ..."; a step you hold or finished puts every
+-- step before it behind you, and one behind a step you hold is next: "Hand in X first"), worked out without a status
+-- table: it counts only in its head's bundle (Lists.lua)
+function QB:Locked(q)
+  local pre = q and q.pre
+  if not pre then return false end
+  local from = 1
+  for k = #pre, 1, -1 do
+    if Q.PreDone(pre[k]) or Q.HeldOf(pre[k]) then from = k break end
+  end
+  for k = from, #pre do
+    if not Q.PreDone(pre[k]) and not Q.HeldOf(pre[k]) then return true end
+  end
+  return false
+end
 
 -- a chain worth carrying on: the best later step you could take (up to three steps on), what it
 -- pays and how many steps on. At a lock it's the step to bank instead, and only when it pays more
@@ -2493,7 +2511,7 @@ function QB:Recompute(sync)
   local mode = QB.mode
   local opts = {
     level = self.state.level, xp = self.state.xp, mounted = (self:Mounted()),
-    goal = mode == "quest" and "route" or set.goal, fac = QB.faction, cap = QB.CAP, mode = mode,
+    goal = mode == "quest" and "rate" or set.goal, fac = QB.faction, cap = QB.CAP, mode = mode,
   }
   local nowOpts = {}
   for k, v in pairs(opts) do nowOpts[k] = v end
@@ -2508,7 +2526,7 @@ function QB:Recompute(sync)
       if place.hub > 0 or QB.Model.Off(place.c) then nowOpts.start, nowOpts.jump = wp, QB.jumpVer or 0 end
     end
     nowOpts.noHearth = (run and run.hearthUsed) or not API.HearthReady()
-    nowOpts.goal = "route"
+    nowOpts.goal = mode == "quest" and "rate" or "route" -- (questing: levels an hour, the quests' work counted; Model.lua)
     -- (in the air or as a ghost nothing is handed in where you are: no stop in reach goes first, Model.lua)
     nowOpts.noReach = QB.Target and QB.Target.NoHandin and QB.Target.NoHandin() or nil
     if mode == "quest" then opts.start, opts.jump, opts.noHearth, opts.noReach = nowOpts.start, nowOpts.jump, nowOpts.noHearth, nowOpts.noReach end
@@ -2678,6 +2696,7 @@ local pending = false
 function QB:MarkDirty()
   if QB.Arrow and QB.Arrow.Invalidate then QB.Arrow.Invalidate() end
   self.dirty = true
+  QB.dirtyVer = (QB.dirtyVer or 0) + 1 -- (what is kept until the plan's inputs change: Lists.lua's places)
   if pending then return end
   pending = true
   C_Timer.After(0.3, QB.Safe(function()

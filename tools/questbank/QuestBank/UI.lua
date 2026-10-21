@@ -2282,6 +2282,10 @@ local function fillRow(r, it, width, v)
   r.lvl:SetText("L" .. q.lvl)
   local mins = (not held and st.code ~= "done" and not st.behind) and it.mins or nil
   local awayText = mins and (mins < 1 and "here" or string.format("%d min", math.floor(mins + 0.5))) or ""
+  -- questing: the quest's own minutes, the trip to its giver included (Model.lua's quest minutes; "est." where its work
+  -- is its zone's median), not the trip alone
+  local est = false
+  if it.T and not held and st.code ~= "done" and not st.behind then awayText, est = QB.Model.MinutesText(it.T, it.est), it.est and true or false end
   -- a chain opens under its row; a step shown under one carries no toggle of its own
   local chained = not it.sub and ((q.pre ~= nil) or (q.nextSteps ~= nil and #q.nextSteps > 0))
   if chained then
@@ -2292,8 +2296,10 @@ local function fillRow(r, it, width, v)
   end
   -- a chain's row says what its steps cost; the minutes to its giver would only crowd that out
   if st.code == "prereq" then awayText = "" end
-  -- the minutes column takes room from the status only when it has something to say
-  r.status:SetWidth(math.max(100, width - 450 - 76 - (awayText ~= "" and 48 or 0)))
+  -- the minutes column takes room from the status only when it has something to say (more for "est.")
+  local awayW = (awayText ~= "" and est) and 64 or 40
+  r.away:SetWidth(awayW)
+  r.status:SetWidth(math.max(100, width - 450 - 76 - (awayText ~= "" and (awayW + 8) or 0)))
   UI.RewardIcons(r, q)
   -- the name runs on into the reward icons' room when the quest shows none (and the green arrow's when it has none)
   local anyRw = r.rw[1]:IsShown() or r.rw[2]:IsShown() or r.rw[3]:IsShown()
@@ -2566,10 +2572,13 @@ function UI:RefreshPrepView(v)
     shownCards = shownCards + 1
     local a = g.cat
     local worth = math.floor((g.left + g.fetch) / 10 + 0.5) * 10
+    -- where to go now, questing: what its set pays (the quests worth your time there), and its XP a minute
+    if v.now and not banking and g.setXP and g.setXP > 0 then worth = math.floor(g.setXP / 10 + 0.5) * 10 end
     local minsText = ""
     if g.nearest then
       minsText = g.nearest < 1 and " \194\183 you're here" or string.format(a.dungeon and " \194\183 %d min to the entrance" or " \194\183 %d min away", math.floor(g.nearest + 0.5))
     end
+    if v.now and not banking and g.value and g.value > 0 then minsText = minsText .. string.format(" \194\183 %s XP a minute", QB.Comma(math.floor(g.value + 0.5))) end
     local lv = g.lvlN > 0 and string.format("L%d", math.floor(g.lvlSum / g.lvlN + 0.5)) or ""
     local zone = a.dungeon and (a.where ~= "" and a.where or "Dungeon") or (a.where or "")
     -- (a place with no zone of its own, the class quests: no empty part between two dots)
@@ -2604,7 +2613,10 @@ function UI:RefreshPrepView(v)
     table.sort(g.quests, function(x, z)
       if x.grp ~= z.grp then return x.grp < z.grp end
       if x.grp == 3 and (x.st.code == "banked") ~= (z.st.code == "banked") then return x.st.code == "banked" end
-      return x.value > z.value
+      -- questing: the most XP a minute first (PlaceGroups' it.rate); banking, the most XP
+      if x.rate and z.rate and x.rate ~= z.rate then return x.rate > z.rate end
+      if x.value ~= z.value then return x.value > z.value end
+      return x.q.id < z.q.id
     end)
     UI.Together(g.quests)
     c.band = g.band
@@ -3197,7 +3209,7 @@ function UI:RefreshRouteView(v)
     l.travel:SetText(label)
     local here = mapID and mapID == s.m and "  |cff6cdc74you are here|r" or ""
     l.name:SetText(s.name .. here)
-    l.level:SetText(string.format("level %.1f > %.1f", leg.arrive, leg.leave))
+    l.level:SetText(QB.Model.Gain(leg, " > "))
     l.pin.stop = s
     l.pin:SetShown(s.m and s.m > 0)
     l.note:SetText("")
