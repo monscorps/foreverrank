@@ -16,9 +16,9 @@
 --            nothing from a sender past 10 sets in an hour and nothing for an answer to 1G (News alone). A card whose
 --            source the policy routes Only you now is dropped. Cute's own guild line from an officer is hidden
 --            (H.LineFilter), so a member with Cute sees a set once
---   1G       every client once, a minute after its hello: the newest set it holds. An officer holding newer ones answers
---            with them (the last five), the lowest GUID first and the others only where no answer came meanwhile, once
---            in half an hour an asker
+--   1G       every client once, a minute after its hello: the newest set it holds and the stamp of the records the
+--            officers turned on (Records.lua). An officer holding newer ones answers with them (the last five, and 1O),
+--            the lowest GUID first and the others only where no answer came meanwhile, once in half an hour an asker
 --   1W       a run's cards to the officers (9.3): the run's guild member with the smallest GUID among those with Runs on
 --            whispers them to each officer online, held while inside an instance; an officer takes 4 a sender an hour,
 --            one per run, and queues them
@@ -27,7 +27,10 @@
 --            untrusted, the stat routed Everyone, within its bounds; no member twice). Last week is each member's value
 --            as a reset replaced it (H:Seen keeps it as the roster takes it)
 --   The tab  J's Halls tab is the core's shame page retitled (its id kept): chips Hall of Shame (0.7's live cards),
---            News, and Queue for officers; Settings > Halls; /cute halls, /cute card test [hall], /cute diag cards
+--            News, Records (Records.lua's, while it is on) and Queue for officers; Settings > Halls; /cute halls, /cute
+--            card test [hall], /cute diag cards
+--   Local    a set this client made itself, never sent (a fastest clear that fell, Records.lua): kept in News and toasted
+--            as a set is, once a day an instance; no 1G asks for it or answers with it
 -- And the two weekly stats the halls read beside the runs' own: Deaths this week and Quests this week (section 10).
 local _, C = ...
 local H = { parts = {}, toasts = {}, ticked = {}, open = {}, answered = {}, waiting = {}, senders = {}, runsHeard = {} }
@@ -440,7 +443,9 @@ end
 
 -- the sets held, newest first (the last 30), and the newest one's stamp
 function H.Sets() return H.DB().sets end
-function H.Newest() local s = H.Sets()[1]; return s and tonumber(s.at) or 0 end
+-- (a local set, rec, is none of the officers': 1G neither asks for it nor answers with it)
+function H.Newest() for _, s in ipairs(H.Sets()) do if not s.rec then return tonumber(s.at) or 0 end end return 0 end
+local function newestAny() local s = H.Sets()[1]; return s and tonumber(s.at) or 0 end
 local function keep(set)
   local sets = H.Sets()
   local at = 1
@@ -659,12 +664,38 @@ function H:Took(set, sender, answer)
   refresh()
 end
 
+-- a set this client made itself (Records.lua: a fastest clear that fell), key its instance's: kept in News and toasted
+-- as a set is, once a day a key; a second one the same day takes the first one's News row, quietly (9.6). Its stamp
+-- is a half second, so no officer's set (a whole second) is ever taken for it
+function H:KeepLocal(set, key)
+  local d = H.DB()
+  if type(d.recDay) ~= "table" then d.recDay = {} end
+  local day = today()
+  local again = d.recDay[key] == day
+  if again then
+    for i = #d.sets, 1, -1 do local s = d.sets[i]; if s.rec and s.key == key and s.day == day then table.remove(d.sets, i) end end
+  end
+  set.at = math.floor(now()) + 0.5
+  while true do
+    local taken = false
+    for _, s in ipairs(d.sets) do if tonumber(s.at) == set.at then taken = true end end
+    if not taken then break end
+    set.at = set.at + 1
+  end
+  set.rec, set.key, set.day, set.got = true, key, day, now()
+  keep(set)
+  d.recDay[key] = day
+  if not again and H.Prefs().toast ~= false then self:Toast(set) end
+  refresh()
+  return set
+end
+
 -- 1G: the newest set this client holds, asked once a minute after its hello (not at a /reload: the saved sets are the
 -- guild's as it was a moment ago). An officer holding newer sets answers (13.2)
 function H:Ask()
   if H.asked or not (C.Roster and C.Roster:InGuild()) then return end
   H.asked = true
-  C.Comm.Queue({ msg = "1G|" .. string.format("%.0f", H.Newest()) .. "|0" })
+  C.Comm.Queue({ msg = "1G|" .. string.format("%.0f", H.Newest()) .. "|" .. string.format("%.0f", C.Records and C.Records.Stamp() or 0) })
 end
 -- the lowest GUID among this officer and the officers the roster lists online answers first
 local function firstOfficer()
@@ -675,32 +706,43 @@ local function firstOfficer()
   end
   return true
 end
+-- (the records' stamp beside the sets': an officer whose list of the records on is newer answers with 1O too)
+local function recStamp() return C.Records and C.Records.Stamp() or 0 end
 function H:Asked(text, sender)
-  local a = tonumber(text:match("^1G|(%d+)|%d*$") or "")
-  if not a or not officer() or H.Newest() <= a then return end
+  local a, ra = text:match("^1G|(%d+)|(%d*)$")
+  a, ra = tonumber(a or ""), tonumber(ra or "") or 0
+  if not a or not officer() or (H.Newest() <= a and recStamp() <= ra) then return end
   local who = C.Roster:GuidOf(sender) or sender
   for k, t in pairs(H.answered) do if now() - t >= ANSWER_AGAIN then H.answered[k] = nil end end
   if H.answered[who] then return end
   H.waiting[who] = math.min(H.waiting[who] or a, a)
+  H.waitingRec = math.min(H.waitingRec or ra, ra)
   if H.answering then return end
   H.answering = true
-  local heard0 = H.heardAnswerAt or 0
-  C_Timer.After(firstOfficer() and (1 + 0.4 * rnd()) or (4 + 4 * rnd()), C.Safe(function() H:Answer(heard0) end, "halls: answer"))
+  local heard0, recHeard0 = H.heardAnswerAt or 0, C.Records and C.Records.heardAt or 0
+  C_Timer.After(firstOfficer() and (1 + 0.4 * rnd()) or (4 + 4 * rnd()), C.Safe(function() H:Answer(heard0, recHeard0) end, "halls: answer"))
 end
--- one answer covers every asker waiting: the sets newer than the oldest of theirs, the last five
-function H:Answer(heard0)
+-- one answer covers every asker waiting: the sets newer than the oldest of theirs, the last five; 1O where this
+-- officer's list of the records on is newer than the oldest asker's
+function H:Answer(heard0, recHeard0)
   H.answering = false
-  local waiting = H.waiting
-  H.waiting = {}
+  local waiting, recSince = H.waiting, H.waitingRec
+  H.waiting, H.waitingRec = {}, nil
   if not officer() then return end
   local since
   for who, a in pairs(waiting) do since = since and math.min(since, a) or a; H.answered[who] = now() end
   if not since then return end
+  -- (another officer's 1O since, as new as this one's list, said it)
+  local Rc = C.Records
+  if Rc and recSince and recStamp() > recSince and not ((Rc.heardAt or 0) > (recHeard0 or 0) and (Rc.heardAt or 0) >= recStamp()) then
+    C.Comm.Queue({ msg = Rc.Message() })
+    Rc.sent = (Rc.sent or 0) + 1
+  end
   -- (another officer's answer since, as new as this one's newest, said it: the askers count as answered all the same)
   local heard = H.heardAnswerAt or 0
-  if heard > (heard0 or 0) and heard >= H.Newest() then return end
+  if H.Newest() <= since or (heard > (heard0 or 0) and heard >= H.Newest()) then return end
   local list = {}
-  for _, s in ipairs(H.Sets()) do if tonumber(s.at) > since and #list < ANSWER_SETS then list[#list + 1] = s end end
+  for _, s in ipairs(H.Sets()) do if not s.rec and tonumber(s.at) > since and #list < ANSWER_SETS then list[#list + 1] = s end end
   for i = #list, 1, -1 do for _, m in ipairs(H.Messages(list[i], true)) do C.Comm.Queue({ msg = m }) end end
   H.answers = (H.answers or 0) + 1
 end
@@ -1168,9 +1210,10 @@ function H.AddChip(def)
   table.sort(H.chips, function(a, b) return (a.order or 50) < (b.order or 50) end)
   return true
 end
+-- (a chip's when: shown only while it says so, a module's chip while the module is on)
 local function chipsFor(isOfficer)
   local out = {}
-  for _, c in ipairs(H.chips) do if not c.officer or isOfficer then out[#out + 1] = c end end
+  for _, c in ipairs(H.chips) do if (not c.officer or isOfficer) and (not c.when or c.when()) then out[#out + 1] = c end end
   return out
 end
 -- sets come since the News chip was last open
@@ -1217,6 +1260,7 @@ local function bandButton(ui, x, w, label, on, fn, tip)
   else b:SetScript("OnEnter", nil); b:SetScript("OnLeave", nil) end
   return b
 end
+H.BandButton = bandButton
 function H.Draw(ui)
   local isOfficer = C.Roster:MeOfficer()
   local list = chipsFor(isOfficer)
@@ -1233,7 +1277,7 @@ function H.Draw(ui)
   local w = ui.scroll:Width()
   local x = 0
   -- (News open: what came is seen now, its count gone from the chip as it opens)
-  if chip == "news" then H.DB().seenAt = H.Newest() end
+  if chip == "news" then H.DB().seenAt = newestAny() end
   local unseen = H.Unseen()
   for _, c in ipairs(list) do
     local title = c.title
@@ -1267,6 +1311,9 @@ function H.Draw(ui)
     bandButton(ui, bx, 90, "New card", true, newCard)
     bx = bx - 94; bandButton(ui, bx, 90, "New hall", true, function() H.NewHall("shame", "a"); C.UI:Draw() end)
     bx = bx - 94; bandButton(ui, bx, 90, "Compose", n >= 1 and n <= 5, compose, function(tip) tip:AddLine("Compose", 1, 1, 1); tip:AddLine(why, 0.85, 0.85, 0.85, true) end)
+  elseif valid[chip].band then
+    -- (a module's chip draws its own controls on the right: Records' Add)
+    valid[chip].band(ui, w)
   end
   ui:SetBand(28)
   if chip == "shame" then if ui.DrawShame then ui:DrawShame() end
@@ -1314,6 +1361,7 @@ local function say(ui, x, y, w, s, c)
   C.UI.FitText(l, s, w - 4)
   return l
 end
+H.Say = say
 local function scrollButton(ui, x, y, w, label, fn)
   local b = ui.buttons:Get()
   b:ClearAllPoints()
@@ -1375,7 +1423,8 @@ function H.DrawNews(ui)
     r.who:SetText(dayOf(set.at))
     r.fn = function(_, which)
       if which == "RightButton" then
-        if C.Roster:MeOfficer() and type(MenuUtil) == "table" and type(MenuUtil.CreateContextMenu) == "function" then
+        -- (a local set, a record this client showed, is nobody's to update or withdraw)
+        if not set.rec and C.Roster:MeOfficer() and type(MenuUtil) == "table" and type(MenuUtil.CreateContextMenu) == "function" then
           MenuUtil.CreateContextMenu(r, function(_, root)
             root:CreateTitle(set.title or "")
             if set.kind == "h" or set.kind == "s" then root:CreateButton("Update", function() local ok, why = H:Update(set); if not ok and why then C.Print("not updated: " .. why .. ".") end end) end
@@ -1388,9 +1437,9 @@ function H.DrawNews(ui)
     end
     r.tip = function(tip)
       tip:AddLine((H.HEAD[set.kind] or "") .. ": " .. (set.title or ""), 1, 1, 1)
-      tip:AddLine("Published by " .. (set.by or "?") .. ", " .. (U.Ago(set.got or set.at) or ""), 0.7, 0.7, 0.7)
+      tip:AddLine(set.rec and ("A guild record, " .. (U.Ago(set.got or set.at) or "")) or ("Published by " .. (set.by or "?") .. ", " .. (U.Ago(set.got or set.at) or "")), 0.7, 0.7, 0.7)
       for _, c in ipairs(set.cards or {}) do tip:AddLine((c.title or "") .. ": " .. (c.name or "?"), 0.85, 0.85, 0.85) end
-      tip:AddLine(C.Roster:MeOfficer() and "Click: the set. Right-click: update or withdraw it." or "Click: the set.", 0.5, 0.5, 0.5, true)
+      tip:AddLine((C.Roster:MeOfficer() and not set.rec) and "Click: the set. Right-click: update or withdraw it." or "Click: the set.", 0.5, 0.5, 0.5, true)
     end
   end)
   ui.virtual = function() rows:Show(ui.scroll.bar:GetValue() or 0, ui.scroll:View()) end
@@ -1847,8 +1896,9 @@ function H.Diag()
       H.toastsShown or 0, #H.toasts, recent(H.toastLog, HOUR), quiet and "free" or ("held: " .. tostring(why)), H.filterOK and "on" or "missing", H.hidden or 0, H.posted or 0, H.refused or 0,
       H.asked and "asked" or "not asked", H.answers or 0, H.wSent or 0, type(C.Char().pendingW) == "table" and #C.Char().pendingW or 0),
   }
-  -- (the achievements' own: Achievements.lua)
+  -- (the achievements' own: Achievements.lua; the records': Records.lua)
   if C.Achievements and C.Achievements.Diag then for _, l in ipairs(C.Achievements.Diag()) do out[#out + 1] = l end end
+  if C.Records and C.Records.Diag then for _, l in ipairs(C.Records.Diag()) do out[#out + 1] = l end end
   return out
 end
 do

@@ -26,8 +26,15 @@ local api = C.Api
 local function counters() return C.Char().counters end
 function S:Counter(id) return counters()[id] or 0 end
 -- the window hears of a change only where it shows the stat and its text changed (UI.lua), so the five-second ticker
--- that moves time played and the session draws nothing on a page that does not show them
-local function shown(id, old, new) if C.UI and C.UI.ValueChanged then C.UI:ValueChanged(id, old, new) end end
+-- that moves time played and the session draws nothing on a page that does not show them. S:OnValue's fn(id, old,
+-- new) hears every change of your own values too (Records.lua: the guild's records; it returns at once for a stat
+-- that holds none)
+local valuers = {}
+function S:OnValue(fn) valuers[#valuers + 1] = fn end
+local function shown(id, old, new)
+  if C.UI and C.UI.ValueChanged then C.UI:ValueChanged(id, old, new) end
+  for _, fn in ipairs(valuers) do fn(id, old, new) end
+end
 function S:Set(id, v)
   local old = self.values[id]
   if old == v then return end

@@ -61,6 +61,7 @@
 --                                  the officers (1W); handed to Halls as they come, 1W only whispered
 --   1A|id|time                     an achievement a member earned, for the officers (Achievements.lua): on GUILD, or
 --                                  whispered to each officer where the officers keep Achievements to themselves
+--   1O|at|code.code...             the guild records the officers turned on (Records.lua): on GUILD, from an officer
 -- Only-you is routing, not hiding (Policy.lua P:Route): a value the officers keep to themselves never goes on GUILD. It
 -- goes in the same messages (1D, 1F, 1L, 1K) whispered to each officer online (Roster.lua R:OfficerTargets: the roster's
 -- ranks, the policy's threshold, the sender strings their own Cute's messages came under, each one the roster names
@@ -1790,7 +1791,11 @@ function M:Receive(text, channel, sender)
     -- a member's recent earns and level for the officers' queue and firsts: Achievements.lua)
     if C.Halls then C.Halls:Seen(sender, dkv) end
     if C.Achievements then C.Achievements:Seen(sender, dkv, whispered, kind) end
+    -- (a fastest clear's stat defined before the roster takes it, so its route and bounds are the stat's; the guild's
+    -- records see what the roster kept: Records.lua)
+    if C.Records then C.Records:Before(dkv) end
     R:Apply(sender, dkv, whispered)
+    if C.Records and not whispered then C.Records:After(sender, dkv, true) end
     if not whispered then self:WantWhole(sender, had, true) end
   elseif kind == "1F" then
     -- (the record as it came: Apply vets its GUID again and marks the sender; a part since an ask's since, its version
@@ -1798,7 +1803,9 @@ function M:Receive(text, channel, sender)
     local had = CuteDB.roster[sender] ~= nil
     if C.Halls then C.Halls:Seen(sender, kv) end
     if C.Achievements then C.Achievements:Seen(sender, kv, whispered, kind) end
+    if C.Records then C.Records:Before(kv) end
     R:Apply(sender, kv, whispered)
+    if C.Records and not whispered then C.Records:After(sender, kv, false) end
     if not whispered then self:WantWhole(sender, had, (text:match("^1F|%d+|%d+|([^|]*)|") or ""):sub(-1) == "s") end
     -- (whispers that waited for this sender's record to carry its GUID are taken now)
     local w = not whispered and M.waiting[sender]
@@ -1921,6 +1928,9 @@ function M:Receive(text, channel, sender)
   elseif kind == "1A" and C.Achievements then
     -- an achievement a member earned (an officer's client takes it, a member's ignores it): Achievements.lua
     C.Achievements:Receive(text, sender)
+  elseif kind == "1O" and C.Records then
+    -- the guild records the officers turned on (from an officer, on GUILD): Records.lua
+    C.Records:Receive(text, sender, whispered)
   end
 end
 

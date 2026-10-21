@@ -26,8 +26,9 @@
 --           within 30 minutes with two of its members in your group (and in its instance) resumes it, a crash asks the
 --           scribe for this client's last checkpoint (2R, 2W)
 -- What the report shows (Awards.lua chooses, CardFrame.lua draws) is saved in CuteDB.chars[me].runs.list, newest
--- first. The run stats (Runs, Shout-outs, Bloopers and their weeks) are the core's: defined here as the file loads, so
--- a client with Runs off still decodes, ranks and shows a guild mate's.
+-- first. The run stats (Runs, Shout-outs, Bloopers, their weeks and the personal bests) are the core's: defined here as
+-- the file loads, so a client with Runs off still decodes, ranks and shows a guild mate's. A full clear's time is
+-- Records.lua's stat, set from here.
 local _, C = ...
 local R = { run = nil, heard = {} }
 C.Runs = R
@@ -63,6 +64,13 @@ do
   def("roasts", "Bloopers", { code = "rx", grows = true, reveals = { "roasts_week" }, hint = "BLOOPER cards in run reports" })
   def("roasts_week", "Bloopers this week", { code = "rk", hint = "BLOOPER cards since Monday" })
   for _, id in ipairs({ "runs_week", "honors_week", "roasts_week" }) do C.Sample.WEEKLY[id] = true end
+  -- the personal bests, the most of a run's own counts in one run (section 10), each going the way of what it is
+  -- counted from (the meter in runs, deaths); and where each run stat holds a guild record (Records.lua)
+  def("pb_ints", "Most interrupts in a run", { code = "ip", hi = 2000, reveals = { "run_meter" }, hint = "the most interrupts this character made in one run" })
+  def("pb_dispels", "Most dispels in a run", { code = "dp", hi = 2000, reveals = { "run_meter" }, hint = "the most dispels this character made in one run" })
+  def("pb_deaths", "Most deaths in a run", { code = "dq", hi = 200, reveals = { "deaths" }, hint = "the most deaths this character had in one run" })
+  for id, within in pairs({ runs = "all", honors = "all", roasts = "all", runs_week = "week", honors_week = "week", roasts_week = "week",
+    pb_ints = "run", pb_dispels = "run", pb_deaths = "run" }) do S.byId[id].record, S.byId[id].recordIn = "max", within end
   -- the run fields: a policy code each (two letters for life), set under the Runs heading of Who sees what. No value of
   -- their own travels (kept out of S.list, so no record carries them): they route the run's own keys (Awards.lua
   -- A.KEYS), and the Me page shows whether this character's Runs counts them
@@ -827,6 +835,18 @@ local function bump(rep)
   if mine and (mine.kind == "star" or mine.kind == "shout") then S:Bump("honors"); S:Bump("honors_week")
   elseif mine and mine.kind == "blooper" then S:Bump("roasts"); S:Bump("roasts_week") end
 end
+-- the personal bests, from this run's own counts where higher; a full clear's time where faster: seconds from the
+-- run's start to its last kill, which every member counts from the same start, so the group's times agree (Records.lua
+-- keeps it as the instance's c<instanceID>, two voices making the guild's record)
+local BESTS = { pb_ints = "in", pb_dispels = "dp", pb_deaths = "de" }
+local function bests(run, own)
+  local S = C.Sample
+  for id, k in pairs(BESTS) do
+    local v = own and own[k]
+    if type(v) == "number" and v > S:Counter(id) then S:Set(id, math.floor(v)) end
+  end
+  if run.inst and type(run.lastKill) == "number" and fullClear(run) and C.Records then C.Records.OwnClear(run.inst, run.lastKill) end
+end
 
 -- the report shown: never in combat or during a loading screen (it waits for PLAYER_REGEN_ENABLED, and 2 s after
 -- PLAYER_ENTERING_WORLD); with Settings > Runs "Show the report when a run ends" unticked, the history alone
@@ -851,6 +871,8 @@ end
 function R:Finish(rep, shown)
   local run = self.run
   if not run then return end
+  -- (this run's own counts, for the personal bests: read while it is still the run)
+  local own = rep and self:OwnValues() or nil
   self.run = nil
   -- (no new run in this instance until you have been out of it: the members still inside hear the roster change after
   -- the end)
@@ -865,6 +887,7 @@ function R:Finish(rep, shown)
     if shown and shown ~= rep then shown.n = rep.n end
     R.Keep(shown or rep)
     bump(rep)
+    bests(run, own)
     self:Show(shown or rep)
     -- (the run's cards to the officers, from the guild member who sends them: Halls.lua, 1W)
     if C.Halls and C.Halls.RunEnded then C.Safe(function() C.Halls:RunEnded(run, shown or rep) end, "halls: run cards")() end

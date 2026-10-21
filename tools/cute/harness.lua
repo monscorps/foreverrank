@@ -1106,9 +1106,9 @@ local function cardOf(c, name, officer)
   local _, plan = c.C.Guide.Items(officer)
   for _, card in ipairs(plan.cards) do if card.d.name == name then return c.C.Guide.CardRows(card, plan), card, plan end end
 end
--- the tabs shown, left to right, and Settings' sections listed, top to bottom, by id. (The Runs and Achievements
--- modules, on by default, are left out of both lists: the runs and cards stages' scenarios check their own)
-local ASIDE = { runs = true, ach = true }
+-- the tabs shown, left to right, and Settings' sections listed, top to bottom, by id. (The Runs, Achievements and
+-- Records modules, on by default, are left out of both lists: the runs and cards stages' scenarios check their own)
+local ASIDE = { runs = true, ach = true, records = true }
 local function tabsShown(c)
   local out = {}
   for id, b in pairs(c.C.UI.tabs) do if b:IsShown() and not ASIDE[id] then out[#out + 1] = { id = id, x = b.__points[1].x } end end
@@ -1944,12 +1944,12 @@ do
   end
   c0 = #yezin.chat
   yezin.env.SlashCmdList.CUTE("modules")
-  assert(yezin.C.UI.page == "settings" and yezin.C.UI.section == "modules" and yezin.chat[#yezin.chat]:find("modules: Guide on; Runs on; Achievements on. The dashboard's pages are always on.", 1, true),
+  assert(yezin.C.UI.page == "settings" and yezin.C.UI.section == "modules" and yezin.chat[#yezin.chat]:find("modules: Guide on; Runs on; Achievements on; Records on. The dashboard's pages are always on.", 1, true),
     "/cute modules lists the Guide on and opens Settings there: " .. table.concat(yezin.chat, "\n", c0 + 1))
   yezin.C.Modules.Set("guide", false)
   assert(yezin.chat[#yezin.chat] == yezin.chat[c0 + 1], "switched off by the box, nothing said")
   yezin.env.SlashCmdList.CUTE("modules")
-  assert(yezin.chat[#yezin.chat]:find("modules: Guide off; Runs on; Achievements on. The dashboard's pages are always on.", 1, true), "/cute modules lists it off: " .. yezin.chat[#yezin.chat])
+  assert(yezin.chat[#yezin.chat]:find("modules: Guide off; Runs on; Achievements on; Records on. The dashboard's pages are always on.", 1, true), "/cute modules lists it off: " .. yezin.chat[#yezin.chat])
   yezin.C.UI:Open("settings", "modules")
   assert(sectionsShown(yezin) == "general vis rules modules race prog shame officers", "the officer's sections: " .. sectionsShown(yezin))
   check(yezin.C.UI.frame, "officer settings, modules, a fresh install")
@@ -3375,7 +3375,8 @@ do
       check(rona.C.UI.frame, string.format("member statistics, discovered, %dx%d", size[1], size[2]))
     end
     wynn.C.UI.frame:SetSize(1040, 640); rona.C.UI.frame:SetSize(1040, 640)
-    -- the policy per discovered category: Bosses only-you; Settings has the four pairs
+    -- the policy per discovered category: Bosses only-you; Settings has the five pairs (Fastest clears the fifth,
+    -- Records.lua's)
     wynn.C.Policy:Set("gc_bosses", "self")
     wynn.C.Comm:SendPolicy()
     tickAll(3)
@@ -3387,7 +3388,7 @@ do
     wynn.C.UI:Open("settings", "vis")
     local pairs4 = 0
     for _, fr in ipairs(wynn.frames) do if fr.__kind == "CheckButton" and fr:IsVisible() and fr.vis == "self" and type(fr.statId) == "string" and fr.statId:match("^gc_%l+$") then pairs4 = pairs4 + 1 end end
-    assert(pairs4 == 4, "four discovered pairs in Settings: " .. pairs4)
+    assert(pairs4 == 5, "five discovered pairs in Settings: " .. pairs4)
     check(wynn.C.UI.frame, "officer settings, discovered categories")
     -- the Me page counts what you discovered; the Officers page what the guild learned
     xavi.C.UI:Open("me")
@@ -13715,6 +13716,358 @@ do local function cardsStage()
     said[#said + 1] = string.format("firsts: seeded 90 s in from guild news and the members' ach_recent, the filter off seeding nothing; no earlier earn a Guild first?, an earlier one in guild news none, one on a member's Cute alone shown beside it; a boss's first corroborated kill, the first at the cap; nothing without a click, the first published as GUILD FIRST with its guild line; statistics in halls by their category; the ledger at 2000 %d KB, forty pending earns %d bytes",
       math.ceil(ledgerBytes / 1024), pendingBytes)
   end)
+
+
+  ----------------------------------------------------------------------------
+  -- records (R4 of the run report's design): the Records module, the personal bests and the fastest clears (c a
+  -- dynamic prefix, the category cc), 1O, Records:Seen with its rules (two voices for a clear, 5% better and the
+  -- instance's level range before a toast, every record off at first), the NEW RECORD toast and the "Record?" rows, the
+  -- Records chip with its switches and Preview, statistic records. The design's scenario 17, and 18's and 19's records
+  -- parts
+  ----------------------------------------------------------------------------
+  local function Rc(c) return c.C.Records end
+  local function lmember(name, rank, class, level) local m = gmember(name, rank, class); m.level = level; return m end
+  local function recOf(c, id) return Rc(c).Entries()[id] end
+  local function newsRecords(c) local n = 0; for _, s in ipairs(H(c).News("records")) do if s.rec then n = n + 1 end end return n end
+  local function rowLabeled(c, text) for _, r in pairs(rowsOf(c, "records")) do if r.name:IsShown() and r.name:GetText() == text then return r end end end
+
+  -- the registry: the personal bests (Runs.lua, the core's), Fastest clears (cc, a discovered category) and a clear's
+  -- route; the Records module on by default and every record off; a run's end sets the personal bests where higher and
+  -- a full clear's time where faster, a test report nothing
+  isolated({ gmember("Rex", 1, "PALADIN"), gmember("Rue", 3, "MAGE") }, function()
+    local rex, rue = cchar("Rex", 1, { class = "PALADIN" }), cchar("Rue", 3)
+    login(rex); login(rue)
+    tickAll(30)
+    local S, P = rue.C.Stats, rue.C.Policy
+    for id, code in pairs({ pb_ints = "ip", pb_dispels = "dp", pb_deaths = "dq" }) do
+      local d = S.byId[id]
+      assert(d and d.cat == "runs" and d.code == code and d.record == "max" and d.recordIn == "run" and d.slow and S.byCode[code] == id, "the personal best " .. id)
+    end
+    assert(S.byId.pb_ints.label == "Most interrupts in a run" and S.byId.pb_dispels.label == "Most dispels in a run" and S.byId.pb_deaths.label == "Most deaths in a run", "their labels")
+    assert(S.byId.runs.record == "max" and S.byId.runs.recordIn == "all" and S.byId.runs_week.recordIn == "week" and S.byId.deaths_week.recordIn == "week"
+      and S.byId.deaths.record == "max" and S.byId.gold_earned.recordIn == "all" and not S.byId.level.record, "the stats that hold a record, and where")
+    -- (each best goes the way of what it is counted from: the meter in runs, deaths)
+    local saved = rue.env.CuteDB.policy
+    rue.env.CuteDB.policy = { vis = { run_meter = "self" } }
+    assert(P:Route("pb_ints") == "self" and P:Route("pb_dispels") == "self" and P:Route("pb_deaths") == "all", "Meter in runs closed keeps the meter's bests")
+    rue.env.CuteDB.policy = { vis = { deaths = "self" } }
+    assert(P:Route("pb_deaths") == "self" and P:Route("pb_ints") == "all", "Deaths closed keeps the most deaths in a run")
+    local found
+    for _, f in ipairs(S.FOUND) do if f[1] == "clears" then found = f end end
+    assert(found and found[3] == "cc" and found[2] == "Fastest clears" and S.byCode.cc == "gc_clears" and P.Code("gc_clears") == "cc", "Fastest clears, code cc")
+    assert(S.IsDynamic("c36") and S.IsDynamic("e1230") and not S.IsDynamic("c") and not S.IsDynamic("cx1"), "c a dynamic prefix beside g e f i k")
+    local def = Rc(rue).ClearDef(36)
+    assert(def and def.cat == "found" and def.learned == "clears" and def.record == "min" and def.lo == 120 and Rc(rue).Kind("c36") == "min", "a clear's stat")
+    rue.env.CuteDB.policy = { vis = { gc_clears = "self" } }
+    assert(P:Route("c36") == "self", "Fastest clears closed")
+    rue.env.CuteDB.policy = { vis = { gc_dungeons = "self" } }
+    assert(P:Route("c36") == "self", "Dungeons closed keeps a dungeon's clear (Dungeons and Raids both where the kind is not known)")
+    rue.env.CuteDB.policy = saved
+    assert(P:Route("c36") == "all", "and open by default")
+    assert(S.Implausible("c36", 60) and not S.Implausible("c36", 1500), "a clear under two minutes cannot be")
+    assert(rue.C.Modules.byId.records and rue.C.Modules.byId.records.active and Rc(rue).Active(), "Records, built in, on by default")
+    assert(next(Rc(rue).List().codes) == nil and not Rc(rue).IsOn("deaths") and not Rc(rue).IsOn("c36") and not Rc(rue).IsOn("g2007"), "every record off at first")
+    -- a run's end: the bests from its own counts where higher, a full clear's time (to its last kill) where faster
+    local Rn = rue.C.Runs
+    rue.C.Stats.Label("i36", "The Deadmines", true, nil, "party")
+    rue.C.Stats.Label("e1230", "Rhahk'Zor", true, 36)
+    local bosses = Rn.KnownBosses(36)
+    assert(next(bosses), "the Deadmines' bosses known")
+    local function finish(ints, dps, deaths, last, clear)
+      local me, mate = sfx(rue), sfx(rex)
+      local t0 = rue.env.GetServerTime() - 2400
+      local run = { id = rue.C.Comm.b36(t0) .. "-" .. me, kind = "d", inst = 36, place = "The Deadmines", start = t0, at = t0, seq = 0, members = {},
+        own = { ["in"] = ints, dp = dps, de = deaths }, bosses = {}, nb = 0, wipes = 0, dorder = 0, maps = {}, meter = { done = {}, tot = {} }, loot = {},
+        joined = 0, fought = true, together = 2, lastKill = last }
+      for enc in pairs(clear and bosses or {}) do run.bosses[enc] = true; run.nb = run.nb + 1 end
+      run.members[me] = { g = rue.o.guid, n = "Rue", c = "MAGE", r = "Human", s = 2, first = 0, obs = {}, hello = "0.7.1" }
+      run.members[mate] = { g = rex.o.guid, n = "Rex", c = "PALADIN", r = "Human", s = 2, first = 0, obs = { de = 0 }, v = { t = 2400, de = 0 }, seq = 1, hello = "0.7.1" }
+      Rn.run = run
+      Rn:Finish(Rn:Build(run))
+      rue.C.CardFrame.frame:Hide()
+    end
+    local Sm = rue.C.Sample
+    finish(7, 3, 2, 1500, true)
+    assert(Sm:Counter("pb_ints") == 7 and Sm:Counter("pb_dispels") == 3 and Sm:Counter("pb_deaths") == 2 and Sm:Counter("c36") == 1500, "the bests and the clear set")
+    finish(4, 5, 1, 1400, true)
+    assert(Sm:Counter("pb_ints") == 7 and Sm:Counter("pb_dispels") == 5 and Sm:Counter("pb_deaths") == 2 and Sm:Counter("c36") == 1400, "higher bests and a faster clear taken, the rest kept")
+    finish(9, 0, 0, 1300, false)
+    assert(Sm:Counter("pb_ints") == 9 and Sm:Counter("c36") == 1400, "a run that cleared nothing moves no clear")
+    finish(1, 1, 1, 1450, true)
+    assert(Sm:Counter("c36") == 1400 and Sm:Value("c36") == 1400, "a slower clear moves nothing")
+    rue.env.SlashCmdList.CUTE("run test")
+    assert(Sm:Counter("pb_ints") == 9 and Sm:Counter("c36") == 1400, "a test report bumps nothing")
+    rue.C.CardFrame.frame:Hide()
+    -- (your own clear goes to the guild like a discovery: on the slow flush and in the statistics pass)
+    tickAll(125)
+    local held = rex.env.CuteDB.roster[rue.sender]
+    assert(held and held.stats.c36 == 1400 and held.stats.pb_ints == 9, "the officer holds Rue's clear and best")
+    assert(rex.C.Stats.byId.c36 and rex.C.Stats.byId.c36.learned == "clears", "and has defined the clear's stat as it came")
+  end)
+  said[#said + 1] = "records' registry: the personal bests (codes ip, dp, dq) going the way of the meter in runs and deaths, Fastest clears (cc) with a clear going its instance's way, c dynamic, a clear under two minutes no clear; Records on by default with every record off; a run's end sets the bests where higher and a full clear's time where faster, a test report nothing"
+
+  -- (17) records: every record off at first; a second voice within 5 s makes a clear record and one toast on every
+  -- client; a clear by members above the instance's range is quiet; a holder's own improvement is quiet, and a second
+  -- record of an instance in a day updates its News row quietly; a login's full records announce nothing; an untrusted
+  -- or implausible value is no record; a "most" record that is on becomes a "Record?" row, one that is off nothing; a
+  -- statistic record; 1O from the officers alone, one a minute, newest wins, and in the answer to 1G
+  isolated({ lmember("Ola", 1, "PALADIN", 30), lmember("Oti", 1, "PRIEST", 30), lmember("Bea", 3, "MAGE", 20), lmember("Cid", 3, "ROGUE", 20), lmember("Dot", 3, "DRUID", 20),
+    lmember("Eli", 3, "HUNTER", 20), lmember("Hux", 3, "WARRIOR", 40), lmember("Ike", 3, "SHAMAN", 40), lmember("Zed", 3, "WARLOCK", 20) }, function()
+    local ola = cchar("Ola", 1, { class = "PALADIN", withStats = true })
+    local bea = cchar("Bea", 3, { class = "MAGE", level = 20, withStats = true, stat = { [2007] = 40 } })
+    local cid = cchar("Cid", 3, { class = "ROGUE", level = 20, withStats = true, stat = { [2007] = 25 } })
+    local dot, eli = cchar("Dot", 3, { class = "DRUID", level = 20 }), cchar("Eli", 3, { class = "HUNTER", level = 20 })
+    local hux, ike = cchar("Hux", 3, { class = "WARRIOR", level = 40 }), cchar("Ike", 3, { class = "SHAMAN", level = 40 })
+    local zed = cchar("Zed", 3, { class = "WARLOCK", level = 20 })
+    local all = { ola, bea, cid, dot, eli, hux, ike, zed }
+    for _, c in ipairs(all) do login(c) end
+    tickAll(100)
+    for _, c in ipairs(all) do assert(next(Rc(c).List().codes) == nil, "every record off at first") end
+    -- the Deadmines' range: Bea and Cid kill its first boss together at 20 (the seed's 18-23 stands where it ships)
+    local function enter(c, kind, id, name) c.o.instance, c.o.instanceID, c.o.instName = kind, id, name; fire(c, "PLAYER_ENTERING_WORLD", false, false) end
+    bea.o.party, cid.o.party = { "Cid" }, { "Bea" }
+    for _, c in ipairs({ bea, cid }) do enter(c, "party", 36, "The Deadmines"); fire(c, "ENCOUNTER_END", 1230, "Rhahk'Zor", 1, 5, 1, {}) end
+    tickAll(35)
+    for _, c in ipairs({ bea, cid }) do enter(c, "none", 0, nil) end
+    bea.o.party, cid.o.party = nil, nil
+    tickAll(35)
+    for _, c in ipairs(all) do
+      local top = Rc(c).RangeTop(36)
+      assert(top and top >= 20 and top < 40, c.o.name .. " knows the Deadmines' range: " .. tostring(top))
+    end
+    local function toasts(c) return H(c).toastsShown or 0 end
+    local function clear(c, secs) assert(Rc(c).OwnClear(36, secs), c.o.name .. "'s clear taken") end
+    -- off: Dot and Eli set the first record, quietly everywhere
+    clear(dot, 2000); clear(eli, 2001)
+    tickAll(125)
+    for _, c in ipairs(all) do
+      local r = recOf(c, "c36")
+      assert(r and r.v == 2000 and r.g == dot.o.guid and r.m == 1 and toasts(c) == 0, c.o.name .. ": the first record, quietly: " .. tostring(r and r.v))
+    end
+    local function recordRows(c) local k = 0; for _, r in ipairs(H(c).Rows()) do if r.src == "record" then k = k + 1 end end return k end
+    assert(recordRows(ola) == 0, "a record that is off is never queued")
+    -- the officer turns Fastest clears on, on the Records chip: its heading's switch, one for every instance
+    H(ola).OpenChip("records")
+    assert(chipOf(ola, "Records"), "the Records chip")
+    local head = rowLabeled(ola, "Fastest clears")
+    assert(head and head.sw:IsShown(), "the Fastest clears heading has the officer's switch")
+    local o0 = msgs(ola, "1O")
+    click(head.sw)
+    assert(Rc(ola).IsOn("c36") and Rc(ola).List().codes.cc and msgs(ola, "1O") == o0, "on, the 1O on its way")
+    tickAll(3)
+    assert(msgs(ola, "1O") == o0 + 1, "the 1O went at once")
+    for _, c in ipairs(all) do assert(Rc(c).IsOn("c36"), c.o.name .. " takes the officers' list") end
+    -- Hux and Ike, twenty levels above the Deadmines, beat it by a quarter: quiet
+    clear(hux, 1500); clear(ike, 1501)
+    tickAll(125)
+    for _, c in ipairs(all) do
+      local r = recOf(c, "c36")
+      assert(r and r.v == 1500 and r.g == hux.o.guid and toasts(c) == 0, c.o.name .. ": a clear above the range, quiet")
+    end
+    -- one voice is no record; the second within 5 s makes it, and every client shows it once
+    clear(bea, 1200)
+    tickAll(125)
+    assert(recOf(ola, "c36").v == 1500 and recOf(dot, "c36").v == 1500, "one voice is no record")
+    clear(cid, 1202)
+    tickAll(125)
+    for _, c in ipairs(all) do
+      local r = recOf(c, "c36")
+      assert(r and r.v == 1200 and r.g == bea.o.guid and r.m == 1, c.o.name .. ": the record, Bea's")
+      assert(toasts(c) == 1 and newsRecords(c) == 1, c.o.name .. ": one toast, one News row: " .. toasts(c) .. ", " .. newsRecords(c))
+    end
+    local set = H(dot).News("records")[1]
+    assert(set.kind == "r" and set.rec and #set.cards == 1 and set.cards[1].kind == "record" and set.cards[1].title == "The Deadmines" and set.cards[1].name == "Bea"
+      and set.cards[1].value == "20:00" and set.cards[1].line == "With 1 guild mate." and set.cards[1].valueLabel == "fastest clear", "the NEW RECORD card: " .. tostring(set.cards[1].line))
+    assert(msgs(bea, "1C") == 0 and msgs(ola, "1C") == 0, "nothing sent: every client decides alone")
+    assert(H(dot).Newest() == 0, "a record shown is no published set (1G asks none of it)")
+    -- the announcement as it opens
+    local CF = dot.C.CardFrame
+    CF:Announce(set)
+    assert(CF.label:GetText() == "NEW RECORD" and CF.cards[1].label:GetText() == "RECORD" and CF.sub:GetText():find("^Guild record"), "the NEW RECORD announcement: " .. tostring(CF.sub:GetText()))
+    check(CF.frame, "records: a NEW RECORD announcement")
+    CF.frame:Hide()
+    -- a holder's own improvement is quiet
+    clear(bea, 1100); clear(cid, 1102)
+    tickAll(125)
+    for _, c in ipairs(all) do assert(recOf(c, "c36").v == 1100 and toasts(c) == 1, c.o.name .. ": the holder's own improvement, quiet") end
+    -- the second record of the instance today: its News row again, no toast
+    clear(dot, 1000); clear(eli, 1001)
+    tickAll(125)
+    for _, c in ipairs(all) do
+      assert(recOf(c, "c36").v == 1000 and recOf(c, "c36").g == dot.o.guid and toasts(c) == 1 and newsRecords(c) == 1 and H(c).News("records")[1].cards[1].name == "Dot",
+        c.o.name .. ": a second record today updates its News row quietly")
+    end
+    -- the next day: within 5% is quiet, past it a toast again
+    for _, c in ipairs(all) do c.dayShift = 86400 end
+    clear(bea, 990); clear(cid, 991)
+    tickAll(125)
+    for _, c in ipairs(all) do assert(recOf(c, "c36").v == 990 and toasts(c) == 1, c.o.name .. ": within 5%, quiet") end
+    clear(eli, 900); clear(dot, 902)
+    tickAll(125)
+    for _, c in ipairs(all) do assert(recOf(c, "c36").v == 900 and recOf(c, "c36").g == eli.o.guid and toasts(c) == 2 and newsRecords(c) == 2, c.o.name .. ": the next day, a toast again") end
+    -- an untrusted member is no voice; a value under two minutes is none
+    ola.C.Policy:SetUntrusted(zed.o.guid, true)
+    ola.C.Comm:SendPolicy()
+    tickAll(5)
+    clear(zed, 800); clear(hux, 801)
+    tickAll(125)
+    for _, c in ipairs(all) do if c ~= zed then assert(recOf(c, "c36").v == 900, c.o.name .. ": an untrusted voice backs nothing") end end
+    ike.C.Comm.Queue({ msg = "1D|4|c36=" .. ike.C.Comm.b36(61) })
+    tickAll(5)
+    for _, c in ipairs(all) do if c ~= ike then assert(recOf(c, "c36").v == 900, c.o.name .. ": a clear that cannot be is none") end end
+    -- "most": Bea's 3 deaths hold it while it is off; on, Cid's 4 is a Record? row in the officer's Queue, and no
+    -- member's; his 5th is his own improvement; jumps, off, change quietly
+    for _ = 1, 3 do fire(bea, "PLAYER_DEAD") end
+    tickAll(5)
+    assert(recOf(ola, "deaths").g == bea.o.guid and recOf(ola, "deaths").v >= 3, "Bea's deaths hold the record")
+    local o1 = msgs(ola, "1O")
+    H(ola).OpenChip("records")
+    local drow = rowLabeled(ola, "Deaths")
+    assert(drow and drow.sw:IsShown() and drow.pv:IsShown(), "the officer's switch and Preview on the row")
+    click(drow.sw)
+    tickAll(3)
+    assert(Rc(ola).IsOn("deaths") and msgs(ola, "1O") == o1 + 1 and Rc(bea).IsOn("deaths") and Rc(bea).IsOn("c36"), "Deaths on, sent at once with the list")
+    -- (changes within the minute wait: Deaths this week on and off again goes as one 1O a minute after the last)
+    H(ola).OpenChip("records")
+    click(rowLabeled(ola, "Deaths this week").sw)
+    H(ola).OpenChip("records")
+    click(rowLabeled(ola, "Deaths this week").sw)
+    tickAll(30)
+    assert(msgs(ola, "1O") == o1 + 1, "a minute between: still waiting")
+    tickAll(35)
+    assert(msgs(ola, "1O") == o1 + 2 and Rc(bea).IsOn("deaths") and not Rc(bea).IsOn("deaths_week") and Rc(bea).Stamp() == Rc(ola).Stamp(), "one 1O a minute on, the newest list")
+    local deaths0 = recOf(ola, "deaths").v
+    for _ = 1, deaths0 + 1 do fire(cid, "PLAYER_DEAD") end
+    tickAll(5)
+    local rq
+    for _, r in ipairs(H(ola).Rows()) do if r.src == "record" then rq = r end end
+    assert(rq and rq.mark == "Record?" and rq.card.kind == "blooper" and rq.card.title == "Deaths" and rq.card.name == "Cid" and rq.card.source == "sdeaths", "a Record? row: Cid's deaths")
+    for _, c in ipairs({ bea, cid, dot }) do assert(#H(c).Rows() == 0 and toasts(c) == 2, c.o.name .. ": no queue, no toast") end
+    fire(cid, "PLAYER_DEAD")
+    tickAll(5)
+    local n = 0
+    for _, r in ipairs(H(ola).Rows()) do if r.src == "record" then n = n + 1 end end
+    assert(n == 1 and recOf(ola, "deaths").g == cid.o.guid, "his own improvement: no second row")
+    for _ = 1, 3 do dot.env.JumpOrAscendStart() end
+    tickAll(125)
+    n = 0
+    for _, r in ipairs(H(ola).Rows()) do if r.src == "record" then n = n + 1 end end
+    assert(recOf(ola, "jumps") and recOf(ola, "jumps").g == dot.o.guid and n == 1, "jumps, off: the table alone")
+    -- a statistic: Add on the chip's band, the game's own category; filled with today's best, and Cid's taking it a
+    -- Record? row
+    H(ola).OpenChip("records")
+    local add = buttonOf(ola, "Add")
+    assert(add, "Add in the band")
+    press(add)
+    local pick = menuEntry(ola, "Game statistics", "Deaths", "Total deaths")
+    assert(pick and pick.fn, "the picker offers the game's statistics")
+    pick.fn()
+    tickAll(65)
+    assert(Rc(ola).IsOn("g2007") and recOf(ola, "g2007") and recOf(ola, "g2007").g == bea.o.guid and recOf(ola, "g2007").v == 40, "Total deaths on: Bea's 40")
+    assert(Rc(dot).IsOn("g2007") and recOf(dot, "g2007") and recOf(dot, "g2007").v == 40, "and on Dot's client")
+    cid.o.stat[2007] = 55
+    cid.C.Sample:Read("g2007")
+    tickAll(125)
+    local srq
+    for _, r in ipairs(H(ola).Rows()) do if r.src == "record" and r.card.source == "sg2007" then srq = r end end
+    assert(srq and srq.card.name == "Cid" and srq.card.title == "Total deaths" and recOf(ola, "g2007").v == 55, "a statistic's Record? row")
+    -- a member's 1O is nobody's
+    local refused = Rc(dot).refused
+    bea.C.Comm.Queue({ msg = "1O|" .. string.format("%.0f", bea.env.GetServerTime() + 999) .. "|ju" })
+    tickAll(3)
+    assert(Rc(dot).refused == refused + 1 and not Rc(dot).IsOn("jumps"), "a member's 1O is refused")
+    -- a login's full records announce nothing: Oti logs in, takes the records quietly and the list in the answer to 1G
+    local oti = cchar("Oti", 1, { class = "PRIEST" })
+    login(oti)
+    tickAll(200)
+    assert(recOf(oti, "c36") and recOf(oti, "c36").v == 900 and toasts(oti) == 0 and newsRecords(oti) == 0, "a login's records: quiet")
+    assert(Rc(oti).IsOn("c36") and Rc(oti).IsOn("deaths") and Rc(oti).IsOn("g2007"), "the officers' list in the answer to 1G")
+    for _, r in ipairs(H(oti).Rows()) do assert(r.src ~= "record", "no Record? row from a login") end
+    -- the Records chip and Settings > Records, for an officer and a member, at both sizes; Preview
+    for _, c in ipairs({ ola, dot }) do
+      H(c).OpenChip("records")
+      for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+        c.C.UI.frame:SetSize(size[1], size[2])
+        H(c).OpenChip("records")
+        check(c.C.UI.frame, string.format("records: the chip, %s, %dx%d", c == ola and "officer" or "member", size[1], size[2]))
+        c.C.UI:Open("settings", "records")
+        assert(texts(c):find("On for the whole guild", 1, true) and (c == ola or texts(c):find("Set by the officers", 1, true)), "Settings > Records")
+        check(c.C.UI.frame, string.format("records: settings, %s, %dx%d", c == ola and "officer" or "member", size[1], size[2]))
+      end
+      c.C.UI.frame:SetSize(1040, 640)
+    end
+    H(dot).OpenChip("records")
+    local mrow = rowLabeled(dot, "The Deadmines")
+    assert(mrow and not mrow.sw:IsShown() and not mrow.pv:IsShown() and mrow.what:GetText():find("Eli", 1, true) and mrow.what:GetText():find("and 1", 1, true), "a member's row: no switch, the holder and mates")
+    assert(not buttonOf(dot, "Add"), "no Add for a member")
+    H(ola).OpenChip("records")
+    local prow = rowLabeled(ola, "The Deadmines")
+    press(prow.pv)
+    local OCF = ola.C.CardFrame
+    assert(OCF.frame:IsShown() and OCF.label:GetText() == "NEW RECORD" and OCF.cards[1].name:GetText() == "Eli", "Preview: the card its holder would get now")
+    check(OCF.frame, "records: a Preview")
+    OCF.frame:Hide()
+    -- Records off for a member: no chip, no table kept, no toast; off for the guild: the same for everyone
+    eli.C.Modules.Set("records", false)
+    H(eli).OpenChip("shame")
+    assert(not Rc(eli).Active() and not chipOf(eli, "Records"), "off: no Records chip")
+    local e0 = recOf(eli, "c36").v
+    clear(bea, 700); clear(cid, 701)
+    tickAll(125)
+    assert(recOf(eli, "c36").v == e0 and toasts(eli) == 2, "off: no table kept, no toast")
+    assert(toasts(dot) == 2 and recOf(dot, "c36").v == 700, "a second record today on the others: quiet, its row again")
+    eli.C.Modules.Set("records", true)
+    ola.C.UI:Open("settings", "records")
+    local sw = checkBox(ola, function(f) return f.label and f.label:GetText() == "On for the whole guild" end)
+    assert(sw, "the guild's switch")
+    click(sw)
+    ola.C.Comm:SendPolicy()
+    tickAll(5)
+    assert(not Rc(bea).GuildOn() and not Rc(bea).Active() and not Rc(ola).Active(), "off for the whole guild")
+    ola.C.Policy:SetRule("recGuild", nil)
+    ola.C.Comm:SendPolicy()
+    tickAll(5)
+    assert(Rc(bea).Active(), "on again")
+    -- /cute diag cards: counts and states, no name
+    local c0 = #ola.chat
+    ola.env.SlashCmdList.CUTE("diag cards")
+    local diag = table.concat(ola.chat, "\n", c0 + 1)
+    assert(diag:find("records on", 1, true) and diag:find("1O sent", 1, true) and not diag:find("Bea", 1, true) and not diag:find("Eli", 1, true), "/cute diag cards, the records' line:\n" .. diag)
+    -- (19) the table at its cap, and the list
+    local E = Rc(ola).Entries()
+    for i = 1, 500 do E["g" .. (900000 + i)] = { v = 123456789, g = bea.o.guid, n = "Abcdefghijkl", c = "WARRIOR", t = 1800000000 } end
+    local function cap() local k = 0; for _ in pairs(E) do k = k + 1 end return k end
+    for i = 1, 500 do if cap() > 400 then E["g" .. (900000 + i)] = nil end end
+    assert(cap() == 400, "400 entries")
+    Rc(ola).List().codes.g999999 = true
+    Rc(ola):Seen("g999999", bea.o.guid, 5, true)
+    assert(cap() == 400 and not E.g999999, "a new record past the cap is not kept")
+    local tableBytes = #json(E)
+    local L = Rc(ola).List()
+    for i = 1, 70 do L.codes["g" .. (800000 + i)] = true end
+    local msg = Rc(ola).Message()
+    assert(#msg <= 255, "1O within a message: " .. #msg)
+    assert(tableBytes < 50000, "the table at 400: " .. tableBytes)
+    said[#said + 1] = string.format("records: every record off at first; a second voice within 5 s a clear record and one toast on every client, nothing sent; members above the range quiet; a holder's own improvement quiet; a second record of an instance in a day its News row again; within 5%% quiet, past it the next day a toast; an untrusted voice and a clear under two minutes none; a most record on a Record? row in the officer's Queue alone, its holder's improvement none, one off the table alone; a statistic added on the band, filled and a Record? row; a member's 1O refused, one a minute, a login's records quiet and the list in the answer to 1G; the chip and Settings > Records at both sizes, Preview; off for a member and for the guild; /cute diag cards; the table at 400 %d KB, 1O %d bytes", math.ceil(tableBytes / 1024), #msg)
+  end)
+
+  -- the Records chip with nothing in it, for a member and an officer
+  isolated({ gmember("Nia", 1, "MAGE"), gmember("Nor", 3, "ROGUE") }, function()
+    local nia, nor = cchar("Nia", 1), cchar("Nor", 3, { class = "ROGUE" })
+    login(nia); login(nor)
+    tickAll(30)
+    for _, c in ipairs({ nia, nor }) do
+      H(c).OpenChip("records")
+      for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+        c.C.UI.frame:SetSize(size[1], size[2])
+        H(c).OpenChip("records")
+        assert(c == nia and rowLabeled(c, "Fastest clears") or texts(c):find("No records yet: they fill in as the guild plays.", 1, true), "the empty chip")
+        check(c.C.UI.frame, string.format("records: the empty chip, %s, %dx%d", c == nia and "officer" or "member", size[1], size[2]))
+      end
+      c.C.UI.frame:SetSize(1040, 640)
+    end
+  end)
+  said[#said + 1] = "the empty Records chip at both sizes"
 
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end

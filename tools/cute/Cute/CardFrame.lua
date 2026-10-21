@@ -6,8 +6,9 @@
 -- by Esc (UISpecialFrames) or Close; the windows design's tokens and type. Width 32 + n x 180 + (n - 1) x 12 units for
 -- n cards, at least 420; height 560, a raid's 662; scaled to fit where the screen is narrower. Announcement mode (CF:Announce):
 -- a published set (GUILD NEWS, GUILD FIRST, NEW RECORD, HALL OF FAME, HALL OF SHAME), who published it and when, a
--- hall's Members ranked, its cards, News and Close; Preview mode: an officer's set before it goes, the guild chat line
--- it would post under the cards, Publish and Back.
+-- hall's Members ranked, its cards, News and Close (a record this client showed itself says so instead of who
+-- published it); Preview mode: an officer's set before it goes, the guild chat line it would post under the cards,
+-- Publish and Back. A look (a record's Preview on the Records chip): its card as it stands, Close alone.
 local _, C = ...
 local CF = { cards = {} }
 C.CardFrame = CF
@@ -352,6 +353,8 @@ function CF:Announce(set, opts)
   local sub
   if opts.preview then sub = "Not published yet"
   elseif opts.test then sub = "A test: nothing is sent or kept"
+  elseif opts.look then sub = "The card this record gives now: nothing is sent"
+  elseif set.rec then sub = "Guild record" .. ((set.got or set.at) and (DOT .. (U.Ago(set.got or set.at) or "")) or "")
   else sub = "Published by " .. (set.by or "?") .. ((set.got or set.at) and (DOT .. (U.Ago(set.got or set.at) or "")) or "") end
   local facts = ((set.kind == "h" or set.kind == "s") and tonumber(set.ranked)) and { { tostring(set.ranked), "Members ranked" } } or {}
   local factsW = #facts * FACT_W
@@ -398,7 +401,7 @@ function CF:Announce(set, opts)
   local list
   if opts.preview then
     list = { { "Back", 80, function() f:Hide() end }, { "Publish", 90, function() HL.PublishClick(set) end } }
-  elseif opts.test then
+  elseif opts.test or opts.look then
     list = { { "Close", 80, function() f:Hide() end } }
   else
     list = { { "Close", 80, function() f:Hide() end }, { "News", 90, function() f:Hide(); HL.OpenChip("news") end } }
