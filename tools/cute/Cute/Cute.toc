@@ -19,5 +19,6 @@ Policy.lua
 Comm.lua
 UI.lua
 Guide.lua
+Awards.lua
 Settings.lua
 Bindings.xml

@@ -11124,6 +11124,165 @@ do
   print("core: " .. table.concat(said, "; "))
 end
 
+-- [stage: runs] that stage's tests go right below this line
+-- runs: the run report (R1 of the run report's design, 2026-10-21): the Runs module's run (starts, the hello and the
+-- scribe, checkpoints, ends, recovery), each client's own counts and what every client observes, CuteRun and its queue,
+-- the 26 awards and the choice, the card and its picture, CuteCardFrame in report mode, Send to party, the history and
+-- the Runs tab, the test report, the run fields in Who sees what and the run stats. Its scenarios carry the design's
+-- numbers (1-12, 18, 19, 20)
+do local function runsStage()
+  local said = {}
+
+  -- (12) the choice, on tables alone (Awards.lua makes no client call): a member { sfx, guid, name, v }
+  do
+    local A = yezin.C.Awards
+    assert(A and A.Pick, "Awards.lua loads")
+    local function mem(name, v, order)
+      local g = guidOf(name)
+      return { sfx = g:match("([^%-]+)$"), guid = g, name = name, v = v, order = order }
+    end
+    local ALL = function() return true end
+    local function codes(cards) local out = {}; for _, c in ipairs(cards) do out[#out + 1] = c[2] end return table.concat(out, " ") end
+    local function holder(cards, code) for _, c in ipairs(cards) do if c[2] == code then return c[1] end end end
+    -- the 26: codes for life, two capital letters, none twice; seven GOLD STAR, nine SHOUT-OUT, eight BLOOPER, two
+    -- THANKS; every quip at most 56 characters
+    local kinds, seen = {}, {}
+    for _, a in ipairs(A.LIST) do
+      assert(a.code:match("^%u%u$") and not seen[a.code], "a code for life: " .. a.code)
+      seen[a.code] = true
+      kinds[a.kind] = (kinds[a.kind] or 0) + 1
+      assert(#a.quip <= 56 and #a.title <= 24 and not (a.quip .. a.title):find("[\128-\255]"), "a quip at most 56 characters: " .. a.code)
+    end
+    assert(#A.LIST == 26 and kinds.star == 7 and kinds.shout == 9 and kinds.blooper == 8 and kinds.thanks == 2, "26 awards: " .. #A.LIST)
+    -- every key a 2V carries has its bounds and (but the run's clock) its policy code
+    for _, k in ipairs(A.ORDER) do
+      assert(A.KEYS[k] and (A.KEYS[k].list or (A.KEYS[k].lo and A.KEYS[k].hi)), "bounds for " .. k)
+      assert(k == "t" or k == "o" or A.CodeOf(k), "a policy code for " .. k)
+    end
+    -- each award reachable: a fixture where one member meets it and four do nothing much
+    local base = function() return { t = 1800, de = 1, dt = 20, dm = 100, hl = 100, ab = 0, tk = 100, av = 10, ["in"] = 0, dp = 0, ch = 0, wy = 0, yd = 500, ju = 0, cn = 0, lv = 0, gd = 0 } end
+    local FIX12 = {
+      HD = { dm = 5000 }, LF = { hl = 5000 }, OS = { ["in"] = 9 }, CW = { dp = 7 }, IW = { tk = 9000, de = 0 }, BW = { ab = 900 },
+      TJ = { dm = 900, hl = 200 }, NS = { de = 0, tk = 400 }, PW = { q = { 11, 12, 13 } }, LB = { lq = 4, ln = 2 }, FH = { hr = 100 },
+      TB = { yd = 2400 }, NR = { ch = 30 }, DG = { lv = 1 }, CM = { gd = 5000 }, WL = { cn = 6 }, FI = { de = 6 }, OA = { fd = 60 },
+      SP = { dt = 400 }, WF = { av = 900 }, LO = { wy = 2 }, PG = { ju = 250 }, NA = { nd = 5 }, BD = { lr = 2 } }
+    for code, extra in pairs(FIX12) do
+      local ms = {}
+      for i, name in ipairs({ "Ana", "Bo", "Cy", "Dee", "Eli" }) do
+        local v = base()
+        if i == 1 then for k, x in pairs(extra) do v[k] = x end end
+        if code == "PW" and i == 2 then v.q = { 11, 12, 13 } end
+        if code == "NS" then v.de = (i == 1) and 0 or 2; if i == 2 then v.tk = 900 end end
+        if code == "TJ" and i == 2 then v.hl, v.dm = 400, 1000 end
+        ms[i] = mem(name, v)
+      end
+      local cards, mentions = A.Pick(ms, { n = 5, bosses = 3, runId = "k1-0A000001" }, ALL)
+      local found = holder(cards, code) or holder(mentions, code)
+      assert(found == ms[1].sfx, code .. " reachable from its fixture: " .. codes(cards))
+    end
+    -- THANKS for a member with nothing: Steady Hands where their deaths are at most the median, else Good Company
+    do
+      local ms = { mem("Ana", { t = 900, de = 0, dm = 9000, hl = 0 }), mem("Bo", { t = 900, de = 0, hl = 9000, dm = 0 }), mem("Cy", { t = 900, de = 0 }) }
+      local cards = A.Pick(ms, { n = 3, bosses = 1, runId = "x" }, ALL)
+      assert(#cards == 3 and holder(cards, "SH") == ms[3].sfx, "a member with nothing gets Steady Hands: " .. codes(cards))
+      ms[3].v.de = 4
+      cards = A.Pick(ms, { n = 3, bosses = 1, runId = "x" }, ALL)
+      assert(holder(cards, "GC") == ms[3].sfx or holder(cards, "FI") == ms[3].sfx, "deaths above the median: Good Company, or a blooper: " .. codes(cards))
+    end
+    -- thresholds at their edges: Off Switch at 5 (8 in a raid), Floor Inspector at 3, Pogo Stick at 100, Spectator at 180 s,
+    -- Narrator at 15, a share at 1.25 fair shares
+    local function gets(code, v, n)
+      local ms = {}
+      for i = 1, n or 5 do ms[i] = mem("Edge" .. i, (i == 1) and v or { t = 1800, de = 0 }) end
+      local cards, mentions = A.Pick(ms, { n = n or 5, bosses = 2, runId = "e" }, ALL)
+      return holder(cards, code) ~= nil or holder(mentions, code) ~= nil
+    end
+    assert(gets("OS", { ["in"] = 5, t = 1800 }) and not gets("OS", { ["in"] = 4, t = 1800 }), "Off Switch at 5")
+    assert(gets("OS", { ["in"] = 8, t = 1800 }, 8) and not gets("OS", { ["in"] = 7, t = 1800 }, 8), "Off Switch at 8 in a raid")
+    assert(gets("FI", { de = 3, t = 1800 }) and not gets("FI", { de = 2, t = 1800 }), "Floor Inspector at 3")
+    assert(gets("PG", { ju = 100, t = 1800 }) and not gets("PG", { ju = 99, t = 1800 }), "Pogo Stick at 100")
+    assert(gets("SP", { dt = 180, t = 1800 }) and not gets("SP", { dt = 179, t = 1800 }), "Spectator at 180 s")
+    assert(gets("NR", { ch = 15, t = 1800 }) and not gets("NR", { ch = 14, t = 1800 }), "Narrator at 15")
+    do
+      -- (five members: a fair share is a fifth, 1.25 of it a quarter)
+      local function hd(top)
+        local ms = { mem("S1", { dm = top, t = 1800 }) }
+        for i = 2, 5 do ms[i] = mem("S" .. i, { dm = (100 - top) / 4, t = 1800 }) end
+        return holder(A.Pick(ms, { n = 5, bosses = 1, runId = "s" }, ALL), "HD") ~= nil
+      end
+      assert(hd(25) and not hd(24), "Headliner at 1.25 fair shares")
+    end
+    -- the headline a GOLD STAR where one is eligible, however a shout-out scores; no repeats; at most two bloopers, and
+    -- one where any is eligible; none in a report of two
+    do
+      local ms = { mem("Ha", { t = 1800, de = 0, ["in"] = 5 }), mem("Hb", { t = 1800, de = 0, ch = 90 }), mem("Hc", { t = 1800, de = 9, dt = 900, ju = 900 }),
+        mem("Hd", { t = 1800, de = 8, wy = 9, fd = 10 }), mem("He", { t = 1800, de = 7, cn = 30 }) }
+      local cards = A.Pick(ms, { n = 5, bosses = 2, runId = "h" }, ALL)
+      assert(A.BY[cards[1][2]].kind == "star", "the headline a GOLD STAR: " .. codes(cards))
+      local mm, aa, bl = {}, {}, 0
+      for _, c in ipairs(cards) do
+        assert(not mm[c[1]] and not aa[c[2]], "no member and no award twice: " .. codes(cards))
+        mm[c[1]], aa[c[2]] = true, true
+        if A.BY[c[2]].kind == "blooper" then bl = bl + 1 end
+      end
+      assert(#cards == 5 and bl >= 1 and bl <= 2, "five cards, one or two bloopers: " .. codes(cards))
+      local two = A.Pick({ ms[3], ms[4] }, { n = 2, bosses = 2, runId = "h" }, ALL)
+      for _, c in ipairs(two) do assert(A.BY[c[2]].kind ~= "blooper", "no blooper in a report of two: " .. codes(two)) end
+      assert(#two == 2, "two cards for two: " .. codes(two))
+      -- (a group of five where the shout-outs score highest still gets its one blooper)
+      local fun = { mem("Fa", { t = 1800, de = 0, ch = 200 }), mem("Fb", { t = 1800, de = 0, cn = 90 }), mem("Fc", { t = 1800, de = 0, gd = 99999 }),
+        mem("Fd", { t = 1800, de = 0, lv = 2 }), mem("Fe", { t = 1800, de = 1, wy = 1 }) }
+      local f = A.Pick(fun, { n = 5, bosses = 1, runId = "f" }, ALL)
+      assert(holder(f, "LO") == fun[5].sfx, "the one blooper placed before the shout-outs fill the last card: " .. codes(f))
+    end
+    -- a repeat in the scribe's last two reports scores lower; ties fall by the run id; the same input the same cards
+    do
+      local ms = { mem("Ra", { t = 1800, de = 0, dm = 5000, hl = 0 }), mem("Rb", { t = 1800, de = 0, hl = 5000, dm = 0 }), mem("Rc", { t = 1800, de = 0 }) }
+      local facts = { n = 3, bosses = 1, runId = "r1" }
+      local c1 = A.Pick(ms, facts, ALL)
+      local first = c1[1][2]
+      local hist = { { cards = { { c1[1][1], first, 1 } } } }
+      local c2 = A.Pick(ms, { n = 3, bosses = 1, runId = "r1", history = hist }, ALL)
+      assert(c2[1][2] ~= first, "the headline given last time scores less: " .. codes(c1) .. " then " .. codes(c2))
+      -- (two reports with the member since: the repeat no longer counts)
+      local old = { { cards = { { c1[1][1], "GC", 1 } } }, { cards = { { c1[1][1], "GC", 1 } } }, { cards = { { c1[1][1], first, 1 } } } }
+      assert(A.Pick(ms, { n = 3, bosses = 1, runId = "r1", history = old }, ALL)[1][2] == first, "a repeat older than two reports with them counts not")
+      assert(codes(A.Pick(ms, facts, ALL)) == codes(c1), "the same input, the same cards")
+      -- two equal pairs (Off Switch and Clean Sweep, the same strength): which leads falls by the run id
+      local eq = { mem("Ta", { t = 1800, de = 0, ["in"] = 6 }), mem("Tb", { t = 1800, de = 0, dp = 6 }), mem("Tc", { t = 1800, de = 0 }) }
+      local orders = {}
+      for i = 1, 12 do orders[A.Pick(eq, { n = 3, bosses = 1, runId = "tie" .. i }, ALL)[1][2]] = true end
+      assert(orders.OS and orders.CW, "ties fall by the run id")
+    end
+    -- a closed field takes its awards off: Meter in runs Only you leaves no meter award
+    do
+      local ms = { mem("Ma", { t = 1800, de = 0, dm = 9000, ["in"] = 20 }), mem("Mb", { t = 1800, de = 5 }), mem("Mc", { t = 1800, de = 0 }) }
+      local cards = A.Pick(ms, { n = 3, bosses = 1, runId = "m" }, function(code) return code ~= "rm" end)
+      for _, c in ipairs(cards) do for _, code in ipairs(A.BY[c[2]].reads) do assert(code ~= "rm", "no meter award with Meter in runs closed: " .. codes(cards)) end end
+    end
+    -- a raid: five cards, up to ten mentions, no member twice
+    do
+      local ms = {}
+      local keys = { "dm", "hl", "in", "dp", "tk", "ab", "ch", "yd", "ju", "cn", "gd", "wy", "dt", "de", "lv", "av" }
+      for i = 1, 20 do
+        local v = { t = 3600, de = 0 }
+        local k = keys[(i - 1) % #keys + 1]
+        v[k] = ({ dm = 90000, hl = 80000, ["in"] = 30, dp = 30, tk = 99000, ab = 9000, ch = 60, yd = 9000, ju = 400, cn = 20, gd = 50000, wy = 5, dt = 900, de = 9, lv = 1, av = 9000 })[k]
+        if k == "tk" then v.de = 0 end
+        ms[i] = mem("Raid" .. i, v)
+      end
+      local cards, mentions = A.Pick(ms, { n = 20, bosses = 4, runId = "raid" }, ALL)
+      local mm = {}
+      for _, c in ipairs(cards) do assert(not mm[c[1]]); mm[c[1]] = true end
+      for _, c in ipairs(mentions) do assert(not mm[c[1]], "a mention's member on no card"); mm[c[1]] = true end
+      assert(#cards == 5 and #mentions >= 5 and #mentions <= 10, "a raid: five cards, mentions: " .. #cards .. ", " .. #mentions)
+    end
+  end
+  said[#said + 1] = "the choice: 26 awards each reachable, thresholds at their edges, a GOLD STAR headline, one or two bloopers and none in two, repeats score less, ties by the run id, a closed field no award, a raid's mentions"
+
+  print("runs: " .. table.concat(said, "; "))
+end runsStage() end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end
