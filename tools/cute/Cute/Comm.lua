@@ -995,6 +995,16 @@ end
 -- channel (an officer: the officers online), ten at most. The lowest answers first and each next a second later, so the
 -- rest hear the first answer before their own goes (a random wait alone let a cohort that drew the same second answer
 -- together, none hearing the others)
+-- (GUIDs ordered byte by byte, as Policy.lua orders its codes: Lua's < on strings asks the C runtime's collation,
+-- which a Norwegian or German Windows client may order otherwise, and two clients would each take the first place)
+local function before(a, b)
+  for i = 1, math.min(#a, #b) do
+    local x, y = a:byte(i), b:byte(i)
+    if x ~= y then return x < y end
+  end
+  return #a < #b
+end
+M.Before = before
 local function place(officer)
   local mine, n = C.MyGUID() or "", 0
   local R = C.Roster
@@ -1003,12 +1013,12 @@ local function place(officer)
     for _, t in ipairs(R:OfficerTargets()) do
       local e = CuteDB.roster[t]
       local g = type(e) == "table" and type(e.stats) == "table" and e.stats.guid
-      if type(g) == "string" and g < mine then n = n + 1 end
+      if type(g) == "string" and before(g, mine) then n = n + 1 end
     end
   else
     for key, e in pairs(CuteDB.roster) do
       local g = type(e) == "table" and e.ch and type(e.stats) == "table" and e.stats.guid
-      if type(g) == "string" and g < mine then
+      if type(g) == "string" and before(g, mine) then
         local m = R.byGuid[g]
         if m and m.online and not m.self then n = n + 1 end
       end
@@ -1068,7 +1078,7 @@ local function first()
   local mine = C.MyGUID() or ""
   local thr = C.Policy:LineThreshold()
   for _, m in ipairs(C.Roster.members) do
-    if m.online and not m.self and m.rank <= thr and type(m.guid) == "string" and m.guid < mine then return false end
+    if m.online and not m.self and m.rank <= thr and type(m.guid) == "string" and before(m.guid, mine) then return false end
   end
   return true
 end

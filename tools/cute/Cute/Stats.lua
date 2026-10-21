@@ -863,7 +863,10 @@ D("ghost_time", "Time as a ghost", "leveling", { track = true, slow = true, fmt 
 D("gold_earned", "Gold earned", "leveling", { track = true, slow = true, fmt = goldOf, hint = "every rise of your purse, summed" })
 D("gold_quests", "Gold from quests", "leveling", { track = true, fmt = goldOf })
 D("vendor_sales", "Sold to vendors", "leveling", { track = true, fmt = goldOf, hint = "while a merchant was open" })
-D("mount", "Mount", "leveling", { kind = "flag", read = function()
+-- (read at login, at each loading screen and on its events, never by the heartbeat: until a character owns a mount it
+-- walks every mount id, and 0.7.0 did that every minute for most of the guild in the first weeks.
+-- MountJournalDocumentation.lua: NEW_MOUNT_ADDED; PetJournalInfoDocumentation.lua: COMPANION_LEARNED)
+D("mount", "Mount", "leveling", { kind = "flag", beat = false, on = { "NEW_MOUNT_ADDED", "COMPANION_LEARNED", "PLAYER_LEVEL_UP" }, read = function()
   local ids = Get(api("C_MountJournal", "GetMountIDs"))
   if type(ids) ~= "table" then return nil end
   local info = api("C_MountJournal", "GetMountInfoByID")

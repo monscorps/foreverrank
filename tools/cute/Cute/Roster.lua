@@ -32,7 +32,7 @@ C.Roster = R
 
 -- records kept at most (a guild holds a thousand), how long a record lives unseen, and how far apart two complete
 -- lists that lack a record's member must be to delete it
-local CAP, UNSEEN, MISS_APART, PRUNE_EVERY = 1000, 90 * 86400, 60, 3600
+local CAP, UNSEEN, MISS_APART, PRUNE_EVERY, LEFT_SURE = 1000, 90 * 86400, 60, 3600, 30
 
 local function now() return C.Now() end
 
@@ -145,6 +145,16 @@ end
 -- panel reads only its permissions, so Cute asks for the roster then, R:Start). One that comes while C_Club lists
 -- nobody yet is read at the first refresh that lists the guild (R.infoDue)
 local INFO = { GUILD_ROSTER_UPDATE = true }
+-- each part of a refresh on its own: one that raises (a saved record left odd, say) leaves the rest to run, Guild Info's
+-- read above all (0.7.0 ran the whole refresh as one, and a raise in the prune left the policy unread for the session:
+-- nothing of yours ever went)
+local function step(where, fn)
+  local ok, err = pcall(fn)
+  if not ok then
+    if CUTE_DEV then error(err, 0) end
+    C.Err.Record(tostring(err), "", where)
+  end
+end
 function R:Refresh(event)
   if not self:InGuild() then
     -- out of a guild the hello is owed again, said on the next refresh in one (Comm.lua); its Guild Info is no more ours
@@ -153,11 +163,17 @@ function R:Refresh(event)
     if #self.members > 0 then
       self.members, self.byGuid, self.byFirst, self.self, self.trusted = {}, {}, {}, nil, false
       self.updatedAt = now()
+      self.leftAt = now()
       self:Changed()
       if C.UI and C.UI.Refresh then C.UI:Refresh() end
+    elseif self.leftAt and now() - self.leftAt >= LEFT_SURE then
+      -- (out of the guild at two reads half a minute apart: left or kicked, not a blip)
+      self.leftAt = nil
+      step("roster: left", function() self:LeftGuild() end)
     end
     return
   end
+  self.leftAt = nil
   -- in a guild: this guild's policy (the saved variables are the account's, its characters perhaps in other guilds),
   -- then a hello not said yet (you joined one since login) goes now, before any change of yours does
   if C.Policy and C.Policy.ForClub then C.Policy:ForClub(self:ClubId()) end
@@ -208,73 +224,100 @@ function R:Refresh(event)
   table.sort(offs)
   self.offSig = table.concat(offs, "|")
   -- a ding the channel told before this roster had it (R:Apply) is judged now
-  self:Dings()
+  step("roster: dings", function() self:Dings() end)
   -- what came before the roster was known, or under an older roster, judged by this one (R:Sweep); then, the first
   -- time, the saved records teach the guild's knowledge (R:VoiceOf waits for the roster)
-  if (first or changed) and self:Sweep() then changed = true end
+  step("roster: sweep", function() if (first or changed) and self:Sweep() then changed = true end end)
   if first then
-    if C.Sample and C.Sample.loaded then C.Stats.LearnSaved() end
-    if C.Rules and C.Rules.started then C.Rules:LearnSaved(); C.Rules:Dirty(true) end
-    if C.SavedVersions then C.SavedVersions() end
-    if C.Comm and C.Comm.RosterTrusted then C.Comm:RosterTrusted() end
+    step("roster: learn", function()
+      if C.Sample and C.Sample.loaded then C.Stats.LearnSaved() end
+      if C.Rules and C.Rules.started then C.Rules:LearnSaved(); C.Rules:Dirty(true) end
+      if C.SavedVersions then C.SavedVersions() end
+    end)
+    step("roster: ask", function() if C.Comm and C.Comm.RosterTrusted then C.Comm:RosterTrusted() end end)
   end
-  -- (the records against the list, where that can find something: the list's members not the last whole list's, a
-  -- record made or changed since, a miss being counted, or an hour gone. 0.7.0 walked every record at every read)
-  local keysSame = complete and self.keyN == #members and self.keySet ~= nil
-  if keysSame then for key in pairs(seen) do if not self.keySet[key] then keysSame = false break end end end
-  if complete then self.keySet, self.keyN = seen, #members end
-  local pruneNow = complete and not (keysSame and self.prunedRec == self.recVersion and next(self.misses) == nil
-    and self.prunedAt and now() - self.prunedAt < PRUNE_EVERY)
-  if pruneNow then
-    self.prunedAt = now()
-    -- your own records go now; another's when its member is missing from two complete lists a minute apart at least
-    -- (the reads at login come seconds apart), or unseen 90 days
-    local db = CuteDB.roster
-    local gone = false
-    self.missAt = self.missAt or {}
-    for key, e in pairs(db) do
-      if self:IsSelfRecord(key, e) then db[key] = nil; self.misses[key] = nil; gone = true
-      elseif not self:MemberOf(key) then
-        if not self.missAt[key] or now() - self.missAt[key] >= MISS_APART then
-          self.misses[key], self.missAt[key] = (self.misses[key] or 0) + 1, now()
-        end
-        if self.misses[key] >= 2 then db[key] = nil; self.misses[key], self.missAt[key] = nil, nil; gone = true end
-      else self.misses[key], self.missAt[key] = nil, nil end
+  step("roster: prune", function()
+    -- (the records against the list, where that can find something: the list's members not the last whole list's, a
+    -- record made or changed since, a miss being counted, or an hour gone. 0.7.0 walked every record at every read)
+    local keysSame = complete and self.keyN == #members and self.keySet ~= nil
+    if keysSame then for key in pairs(seen) do if not self.keySet[key] then keysSame = false break end end end
+    if complete then self.keySet, self.keyN = seen, #members end
+    local pruneNow = complete and not (keysSame and self.prunedRec == self.recVersion and next(self.misses) == nil
+      and self.prunedAt and now() - self.prunedAt < PRUNE_EVERY)
+    if pruneNow then
+      self.prunedAt = now()
+      -- your own records go now; another's when its member is missing from two complete lists a minute apart at least
+      -- (the reads at login come seconds apart), or unseen 90 days
+      local db = CuteDB.roster
+      local gone = false
+      self.missAt = self.missAt or {}
+      for key, e in pairs(db) do
+        if self:IsSelfRecord(key, e) then db[key] = nil; self.misses[key] = nil; gone = true
+        elseif not self:MemberOf(key) then
+          if not self.missAt[key] or now() - self.missAt[key] >= MISS_APART then
+            self.misses[key], self.missAt[key] = (self.misses[key] or 0) + 1, now()
+          end
+          if self.misses[key] >= 2 then db[key] = nil; self.misses[key], self.missAt[key] = nil, nil; gone = true end
+        else self.misses[key], self.missAt[key] = nil, nil end
+      end
+      if gone then changed = true; self:Identity() end
     end
-    if gone then changed = true; self:Identity() end
-  end
-  if complete then
-    -- (the account's characters this complete read does not list with a rank, counted once in half a minute, as the
-    -- asks after a save read the roster again within seconds: R:AccountOfficer)
-    self.charMissAt = self.charMissAt or {}
-    for _, rec in pairs(type(CuteDB.chars) == "table" and CuteDB.chars or {}) do
-      local g = type(rec) == "table" and type(rec.guid) == "string" and rec.guid or nil
-      if g then
-        local m = self.byGuid[g]
-        if m and m.rank ~= 99 then self.charMisses[g], self.charMissAt[g] = nil, nil
-        elseif not self.charMissAt[g] or now() - self.charMissAt[g] >= 30 then
-          self.charMisses[g], self.charMissAt[g] = (self.charMisses[g] or 0) + 1, now()
+    if complete then
+      -- (the account's characters this complete read does not list with a rank, counted once in half a minute, as the
+      -- asks after a save read the roster again within seconds: R:AccountOfficer)
+      self.charMissAt = self.charMissAt or {}
+      for _, rec in pairs(type(CuteDB.chars) == "table" and CuteDB.chars or {}) do
+        local g = type(rec) == "table" and type(rec.guid) == "string" and rec.guid or nil
+        if g then
+          local m = self.byGuid[g]
+          if m and m.rank ~= 99 then self.charMisses[g], self.charMissAt[g] = nil, nil
+          elseif not self.charMissAt[g] or now() - self.charMissAt[g] >= 30 then
+            self.charMisses[g], self.charMissAt[g] = (self.charMisses[g] or 0) + 1, now()
+          end
         end
       end
     end
-  end
-  if pruneNow and self:Expire() then changed = true; self:Identity() end
-  if pruneNow then self.prunedRec = self.recVersion end
+    if pruneNow and self:Expire() then changed = true; self:Identity() end
+    if pruneNow then self.prunedRec = self.recVersion end
+  end)
   -- Guild Info read where the event says it may have changed, and the policy it names applied, with the officers' word
   -- that came before the ranks were known (Policy.lua P:Refresh); then the whispers that came before the roster
   -- (Comm.lua), by the newest policy, so an officer whose threshold it raised keeps them
   local read = self.infoDue == true
   self.infoDue = nil
-  if C.Policy and C.Policy.Refresh then C.Policy:Refresh(read) end
-  if first and C.Comm and C.Comm.ReplayEarly then C.Comm:ReplayEarly() end
-  if self:PurgeCheck() then changed = true end
+  step("roster: guild info", function() if C.Policy and C.Policy.Refresh then C.Policy:Refresh(read) end end)
+  if first then step("roster: early", function() if C.Comm and C.Comm.ReplayEarly then C.Comm:ReplayEarly() end end) end
+  step("roster: purge", function() if self:PurgeCheck() then changed = true end end)
   -- the officers this client tells its Only-you values: one no more is forgotten (told again when made one again), and
   -- one this refresh made an officer is told now (Comm.lua)
-  if C.Comm and C.Comm.Officers then C.Comm:Officers() end
+  step("roster: officers", function() if C.Comm and C.Comm.Officers then C.Comm:Officers() end end)
   if changed then
     self.updatedAt = now()
     if C.UI and C.UI.Refresh then C.UI:Refresh() end
   end
+end
+
+-- out of the guild for sure (left or kicked): its records stay (parked with it when another guild comes, Policy.lua
+-- P:ForClub), but the values its officers keep to themselves go, unless another character of this account is one of
+-- its officers (0.7.0 kept them: an officer who left held every member's Only-you values for good). The number gone
+function R:LeftGuild()
+  local club, me = CuteDB.policyClub, C.Me()
+  if club == nil then return 0 end
+  for key, rec in pairs(type(CuteDB.chars) == "table" and CuteDB.chars or {}) do
+    if key ~= me and type(rec) == "table" and rec.officerOf ~= nil and rec.officerOf ~= false and tostring(rec.officerOf) == tostring(club) then return 0 end
+  end
+  local n, routes = 0, {}
+  for _, e in pairs(CuteDB.roster or {}) do
+    if type(e) == "table" and type(e.stats) == "table" then
+      for id in pairs(e.stats) do
+        local r = routes[id]
+        if r == nil then r = (type(id) == "string" and C.Policy:Route(id)) or "self"; routes[id] = r end
+        if r == "self" then e.stats[id] = nil; if type(e.at) == "table" then e.at[id] = nil end; n = n + 1 end
+      end
+    end
+  end
+  if n > 0 then self:Changed() end
+  return n
 end
 
 -- records unseen ninety days, and the longest unseen past the cap: whatever the list, which says nothing of them (a
@@ -424,7 +467,11 @@ end
 -- just saved): now, or as ten seconds since the last ask end (the game answers one in ten at most), and once more
 -- twelve seconds after that ask where a still() says Guild Info has not answered yet (the game may let an ask pass
 -- that came just after another, and a read of the text from before is no answer until then: Policy.lua P:ReadLine)
-R.stills = {}
+-- A doubt that outlasts the reads backs off: the re-check twelve seconds on, then 30, 60 and 120 while it keeps finding
+-- the doubt (inside an instance, where Guild Info may read empty the whole run, or in the chat lockdown, a minute at
+-- least: 0.7.0 asked every twelve seconds for the whole run)
+R.stills, R.stillRound = {}, 0
+local STILL_WAIT = { 12, 30, 60, 120 }
 function R:AskSoon(still)
   if still then self.stills[#self.stills + 1] = still end
   local wait = self.askedAt and (self.askedAt + 10 - now()) or 0
@@ -438,8 +485,11 @@ function R:AskSoon(still)
   local stills = self.stills
   self.stills = {}
   if #stills == 0 then return end
-  C_Timer.After(12, C.Safe(function()
-    for _, f in ipairs(stills) do if f() then R:AskSoon(); return end end
+  local wait2 = STILL_WAIT[math.min(self.stillRound + 1, #STILL_WAIT)]
+  if self.stillRound > 0 and (C.Get(IsInInstance) == true or (C.Comm and C.Comm.Locked and C.Comm:Locked())) then wait2 = math.max(wait2, 60) end
+  C_Timer.After(wait2, C.Safe(function()
+    for _, f in ipairs(stills) do if f() then R.stillRound = R.stillRound + 1; R:AskSoon(); return end end
+    R.stillRound = 0
   end, "roster: Guild Info again"))
 end
 
@@ -462,7 +512,12 @@ function R:Start()
   self:Refresh()
   -- the game answers a roster request about every ten seconds at most; ask again now and then for ranks and online state
   -- (its answer, GUILD_ROSTER_UPDATE, refreshes the roster: C_Club's own changes come by their events)
-  local function again() C_Timer.After(60, C.Safe(again, "roster: again")); askRoster() end
+  local function again()
+    C_Timer.After(60, C.Safe(again, "roster: again"))
+    askRoster()
+    -- (out of the guild a moment ago: read again, so leaving is judged, R:LeftGuild)
+    if R.leftAt then R:Refresh() end
+  end
   C_Timer.After(60, C.Safe(again, "roster: again"))
 end
 
@@ -1038,7 +1093,10 @@ function R:Apply(name, kv, whispered)
   -- differently) is folded into this one, only where the roster names this sender by that GUID's member (a copy that
   -- claimed another's GUID would take their record over and delete it), and never from a whisper
   local folded = false
-  if not whispered and type(kv.guid) == "string" and self:Vouch(name, kv.guid) == "same" then
+  -- (only where this record's GUID is new, or another record holds it: a record's every first chunk carries its GUID,
+  -- and 0.7.0 walked every record for each)
+  local other = type(kv.guid) == "string" and self:KeysByGuid()[kv.guid]
+  if not whispered and type(kv.guid) == "string" and (guidWas ~= kv.guid or (other and other ~= name)) and self:Vouch(name, kv.guid) == "same" then
     for k, other in pairs(db) do
       if k ~= name and type(other.stats) == "table" and other.stats.guid == kv.guid then
         for id, v in pairs(other.stats) do if e.stats[id] == nil then e.stats[id] = v; e.at[id] = other.at and other.at[id] end end
@@ -1077,7 +1135,7 @@ function R:Apply(name, kv, whispered)
   -- what the rules weigh (Rules.lua): the XP a level takes, kills and their levels, levels and worn slots
   if C.Rules then C.Rules:Observe(e.stats, kv, g, prev) end
   -- a member's Cute newer than yours (Core.lua), from a voice the officers have not marked untrusted
-  if kv.addon_ver ~= nil and g and not P:Untrusted(g) then C.SawVersion(kv.addon_ver) end
+  if kv.addon_ver ~= nil and g and not P:Untrusted(g) then C.SawVersion(kv.addon_ver, g) end
   e.seen, e.online = t, true
   self.updatedAt = t
   if created or folded or e.stats.guid ~= guidWas or e.stats.addon_ver ~= verWas or e.ch ~= chWas then self:Identity() else self:Changed() end
@@ -1143,8 +1201,9 @@ function R:Rows()
         stats = e and e.stats or {}, at = e and e.at or {} })
     end
   end
-  -- records no member claimed: people the roster has not listed (yet)
-  for key, e in pairs(db) do
+  -- records no member claimed: people the roster has not listed (yet); none out of a guild, where only you show
+  local guildless = not self:InGuild()
+  for key, e in pairs(guildless and {} or db) do
     local g = recordGuid(e)
     if not claimed[key] and not (g and self.byGuid[g]) then
       add({ key = key, name = key, entry = e, addon = true, online = false, rank = 99, class = e.class, guid = g,

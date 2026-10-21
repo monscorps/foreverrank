@@ -238,11 +238,31 @@ function C.VersionNewer(a, b)
   end
   return false
 end
--- a guild member's version, as it arrives (Roster.lua) or as a saved record keeps it (at login). C.newer is the newest
--- seen this session that is newer than yours: the status line shows it (UI.lua)
-function C.SawVersion(v)
+-- a guild member's version, as it arrives (Roster.lua) or as a saved record keeps it (at login), by the GUID it speaks
+-- for (who). C.newer is the newest version newer than yours that two members run, it or one newer (two voices, as
+-- everything the guild learns: 0.7.0 took one member's word, so one edited copy's version had every client online say
+-- an update was out): the status line shows it (UI.lua)
+C.newerBy = {}
+local function voicesAtLeast(v)
+  local seen, n = {}, 0
+  for other, set in pairs(C.newerBy) do
+    if not C.VersionNewer(v, other) then for g in pairs(set) do if not seen[g] then seen[g], n = true, n + 1 end end end
+  end
+  return n
+end
+function C.SawVersion(v, who)
   v = C.Plain(v)
-  if not C.VersionNewer(v, C.version) then return end
+  if not C.VersionNewer(v, C.version) or type(who) ~= "string" then return end
+  local set = C.newerBy[v]
+  if not set then
+    local n = 0
+    for _ in pairs(C.newerBy) do n = n + 1 end
+    if n >= 32 then return end
+    set = {}
+    C.newerBy[v] = set
+  end
+  set[who] = true
+  if voicesAtLeast(v) < 2 then return end
   if C.newer and not C.VersionNewer(v, C.newer) then return end
   C.newer = v
   if CuteDB and not CuteDB.toldNewer then
@@ -259,7 +279,7 @@ function C.SavedVersions()
   for key, e in pairs(CuteDB.roster or {}) do
     local st = type(e) == "table" and type(e.stats) == "table" and e.stats or nil
     local g = st and C.Roster:VoiceOf(key, e)
-    if g and type(st.addon_ver) == "string" and not C.Roster:IsSelfRecord(key, e) and not C.Policy:Untrusted(g) then C.SawVersion(st.addon_ver) end
+    if g and type(st.addon_ver) == "string" and not C.Roster:IsSelfRecord(key, e) and not C.Policy:Untrusted(g) then C.SawVersion(st.addon_ver, g) end
   end
 end
 -- the first login on this version: its changelog line, once, ten seconds on, after the login's own lines. A first run
@@ -273,8 +293,18 @@ function C.WhatsNew()
   end
   local line = type(C.CHANGES) == "table" and C.CHANGES[C.version] or nil
   if type(line) ~= "string" or line == "" or CuteDB.toldChanges == C.version then return end
+  local was = CuteDB.toldChanges
   CuteDB.toldChanges = C.version
   C.Print(C.COLOR .. "Cute " .. C.version .. "|r: " .. line, true)
+  -- (and the versions between the last one told and this one, newest first, three at most: a 0.5.x user is told the
+  -- Guide moved to Settings, Modules in 0.6.0)
+  if not C.ParseVersion(was) then return end
+  local skipped = {}
+  for v, l in pairs(C.CHANGES) do
+    if type(l) == "string" and l ~= "" and C.VersionNewer(v, was) and C.VersionNewer(C.version, v) then skipped[#skipped + 1] = v end
+  end
+  table.sort(skipped, function(a, b) return C.VersionNewer(a, b) end)
+  for i = 1, math.min(3, #skipped) do C.Print(C.COLOR .. "Cute " .. skipped[i] .. "|r: " .. C.CHANGES[skipped[i]], true) end
 end
 
 ----------------------------------------------------------------------------
@@ -410,14 +440,45 @@ function C.InitDB()
   end
   -- (what members passed on to each other in 0.6.0's builds before the policy lived in Guild Info)
   CuteDB.relay = nil
-  CuteDB.version = C.version
+  -- a file a crash or a hand left odd: a record or a character that is no table goes, and each keeps the tables the
+  -- code reads (0.7.0 raised on such at every roster read and every stat, and a refresh that raised read no Guild Info)
+  for key, e in pairs(CuteDB.roster) do
+    if type(key) ~= "string" or type(e) ~= "table" then CuteDB.roster[key] = nil
+    else
+      if type(e.stats) ~= "table" then e.stats = {} end
+      if type(e.at) ~= "table" then e.at = {} end
+      if e.seen ~= nil and type(e.seen) ~= "number" then e.seen = nil end
+    end
+  end
+  for key, rec in pairs(CuteDB.chars) do
+    if type(key) ~= "string" or type(rec) ~= "table" then CuteDB.chars[key] = nil
+    else
+      if type(rec.counters) ~= "table" then rec.counters = {} end
+      if rec.modules ~= nil and type(rec.modules) ~= "table" then rec.modules = {} end
+    end
+  end
+  -- (a newer Cute's file, this one run after it: the version stays the newest that ran, so its one-time steps do not
+  -- run again when it comes back)
+  if not C.VersionNewer(was, C.version) then CuteDB.version = C.version end
 end
 function C.Settings() return CuteDB.settings end
 -- this character's own record (counters, declared role; the main is account-wide, in settings)
 function C.Char()
   local me = C.Me() or "?"
   local rec = CuteDB.chars[me]
-  if not rec then rec = { counters = {}, modules = {} }; CuteDB.chars[me] = rec end
+  local g = C.MyGUID()
+  if not rec then
+    -- (a rename, a realm transfer, a surname changed: the record this character's GUID kept under its old key, taken
+    -- over, so its counters go on and no receiver marks the lifetime counts as gone down)
+    if g and me ~= "?" then
+      for key, old in pairs(CuteDB.chars) do
+        if key ~= me and type(old) == "table" and old.guid == g then rec = old; CuteDB.chars[key] = nil; break end
+      end
+    end
+    rec = rec or { counters = {}, modules = {} }
+    CuteDB.chars[me] = rec
+  end
+  if g and rec.guid == nil and me ~= "?" then rec.guid = g end
   rec.counters = rec.counters or {}
   if rec.role == nil then
     -- 0.1.0 kept the role in the account-wide settings, where the warrior's "Tank" became the priest's: take it once
@@ -473,7 +534,8 @@ local function errorsList()
   local list = CuteDB and CuteDB.errors or {}
   if #list == 0 then C.Print("no errors recorded.") return end
   for _, e in ipairs(list) do
-    C.Print(string.format("%s (x%d, last %s) %s", e.msg, e.count or 1, e.last or "", e.where or ""))
+    -- (a | doubled: an error's text names a texture or a link, which chat would draw as one)
+    C.Print(string.format("%s (x%d, last %s) %s", (tostring(e.msg):gsub("|", "||")), e.count or 1, e.last or "", (tostring(e.where or ""):gsub("|", "||"))))
   end
 end
 
