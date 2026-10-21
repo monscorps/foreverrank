@@ -10745,6 +10745,74 @@ do
   end)
   said[#said + 1] = "/cute diag: the channel, the lockdown, the hold, the list, the cost, no name"
 
+  -- (p) a since the responder cannot bear out is answered whole. The asker's hold moves at its logout whether or not
+  -- every answer came, so each responder judges a since by the answer it gave that asker's ask before it: one that went
+  -- after the since (a pass deferred behind the ten minutes, an answer owed through a lockdown and paid once the asker
+  -- had gone) or never (an ask passed by within three minutes of the last) bears out nothing. 0.7.1's first build took
+  -- every since, and the asker never had what it missed
+  local function cyraOf(c) return c.env.CuteDB.roster["Cyra-Forever"] end
+  local function oldFile() return { chars = { ["Cobb-Forever"] = { guid = guidOf("Cobb"), counters = {}, hold = { club = "7", at = EPOCH + 100 } } },
+    roster = { ["Cyra-Forever"] = { seen = EPOCH + 100, stats = { guid = guidOf("Cyra"), level = 30, zone = "Old" }, at = {}, ch = true } } } end
+  -- a pass deferred: Cyra forced one for Cato, so Cobb's waits out the ten minutes; he logs out before it goes
+  isolated({ member("Coraline", 1), member("Cobb", 3), member("Cyra", 3), member("Cato", 3) }, function()
+    local off, b = char("Coraline", 1), char("Cyra", 3, { withStats = true })
+    login(off); login(b)
+    tickAll(200)
+    b.C.Comm:Receive("1R|" .. guidOf("Cato") .. "|0|0|" .. b.C.Policy:Fp(), "GUILD", "Cato-Forever")
+    tickAll(100)
+    assert(b.C.Comm.passAt, "Cyra forced a pass for Cato")
+    local db = oldFile()
+    local a = char("Cobb", 3)
+    login(a, db)
+    tickAll(200)
+    assert(cyraOf(a).stats.zone == "Duskwood" and cyraOf(a).stats.g2001 == nil, "Cobb has Cyra's record, her pass waits: " .. tostring(cyraOf(a).stats.g2001))
+    fire(a, "PLAYER_LOGOUT"); leave(a)
+    local hold = db.chars["Cobb-Forever"].hold.at
+    assert(hold > EPOCH + 100, "his hold moved")
+    tickAll(500)
+    local a2 = char("Cobb", 3)
+    login(a2, db)
+    tickAll(800)
+    assert(cyraOf(a2).stats.g2001 == 1234, "his next ask, since that hold, has her pass whole: " .. tostring(cyraOf(a2).stats.g2001))
+    for _, x in ipairs({ off, b, a2 }) do leave(x) end
+  end)
+  -- an answer owed through a lockdown, paid after the asker left; then an ask passed by within three minutes
+  isolated({ member("Coraline", 1), member("Cobb", 3), member("Cyra", 3) }, function()
+    local off, b = char("Coraline", 1), char("Cyra", 3)
+    login(off); login(b)
+    tickAll(200)
+    lock(b)
+    local db = oldFile()
+    local a = char("Cobb", 3)
+    login(a, db)
+    tickAll(200)
+    assert(cyraOf(a).stats.zone == "Old" and b.C.Comm.answerOwed, "Cyra owes Cobb her record")
+    fire(a, "PLAYER_LOGOUT"); leave(a)
+    unlock(b)
+    tickAll(60)
+    local a2 = char("Cobb", 3)
+    login(a2, db)
+    tickAll(120)
+    assert(cyraOf(a2).stats.zone == "Duskwood", "his next ask has her record whole: " .. tostring(cyraOf(a2).stats.zone))
+    fire(a2, "PLAYER_LOGOUT"); leave(a2)
+    -- she moves while he is away; he is back within three minutes of his last ask, which she passes by
+    b.o.zone = "Feralas"
+    fire(b, "ZONE_CHANGED_NEW_AREA")
+    tickAll(5)
+    local a3 = char("Cobb", 3)
+    login(a3, db)
+    tickAll(110)
+    assert(cyraOf(a3).stats.zone == "Duskwood", "an ask within three minutes of the last is passed by")
+    fire(a3, "PLAYER_LOGOUT"); leave(a3)
+    tickAll(200)
+    local a4 = char("Cobb", 3)
+    login(a4, db)
+    tickAll(120)
+    assert(cyraOf(a4).stats.zone == "Feralas", "the next ask, since a hold that ask bore out nothing of, has her record whole: " .. tostring(cyraOf(a4).stats.zone))
+    for _, x in ipairs({ off, b, a4 }) do leave(x) end
+  end)
+  said[#said + 1] = "a since the responder's last answer to that asker does not bear out is answered whole: a pass deferred, an answer owed through a lockdown, an ask passed by"
+
   print("core: " .. table.concat(said, "; "))
 end
 
