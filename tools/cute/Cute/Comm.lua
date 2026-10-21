@@ -1444,6 +1444,19 @@ function M:AnswerGame()
   M:FullGame(true, officers, not guild)
   if guild then answered("pass", "pass", nil, C.Roster:InGuild()) end
 end
+-- the statistics pass for the asks, a minute or so on, once for all that come while it waits
+function M:GameSoon()
+  if M.answeringGame then return end
+  M.answeringGame = true
+  local wait = GAME_AFTER - 30 + (math.random and (29 * math.random()) or 5)
+  C_Timer.After(wait, C.Safe(function()
+    M.answeringGame = false
+    if not C.Policy:Settled() or M:Locked() then M.gameOwed = true; M:OwedSoon(); return end
+    M:AnswerGame()
+  end, "comm: answer statistics"))
+end
+-- (this character has statistics, discoveries or kill claims to pass)
+local function hasPass() return #C.Stats.byCat.game > 0 or #C.Stats.byCat.found > 0 or next(C.Rules.OwnClaims()) ~= nil end
 -- an answer to the asks, once for all that come while it waits: two to forty seconds on, so a login heard by a guild
 -- online is answered over forty seconds, not twenty
 function M:AnswerSoon()
@@ -1466,7 +1479,9 @@ local function sinceOf(since)
   return math.min(since, C.ServerNow())
 end
 -- a member who holds no record of yours asks for it whole (1Q: after a since answer or a delta from a sender it holds
--- none of), answered as a fresh ask wanting the whole record, the guild's part alone, once in ASK_AGAIN seconds
+-- none of), answered as a fresh ask wanting the whole record, the guild's part alone, once in ASK_AGAIN seconds, and
+-- the whole statistics pass with it (the ten-minute pass bounds it): its later asks, since its hold, would never bring
+-- what the pass said before (0.7.1's first build sent the record alone)
 M.wholeAsked, M.wholeAskedOf = {}, {}
 function M:AskedWhole(sender)
   local who = C.Roster:GuidOf(sender) or sender
@@ -1474,10 +1489,16 @@ function M:AskedWhole(sender)
   if M.wholeAsked[who] and t - M.wholeAsked[who] < 180 then return end
   M.wholeAsked[who] = t
   local e = self:Entry(who)
-  e.rec, e.nr, e.pass = true, 0, false
+  e.rec, e.nr, e.pass = true, 0, C.ServerNow()
   await("rec", e)
   M.answerGuild, M.answerFull = true, true
   self:AnswerSoon()
+  if hasPass() then
+    e.pass, e.np = true, 0
+    await("pass", e)
+    M.answerGameGuild, M.gameFull = true, true
+    self:GameSoon()
+  end
 end
 -- the record of a sender this client holds none of came in part (a delta, or an answer since its since: partial):
 -- its whole record asked for (1Q), of the member the roster names by the sender string (by GUID: no name on the
@@ -1817,7 +1838,7 @@ function M:Receive(text, channel, sender)
     if fresh and not R:OfficerVoice(sender) then self:AskedWord(wstamp, who) end
     self:AnswerSoon()
     -- the statistics pass, never for a bare ask (0.3.x, 0.5.x: the record alone)
-    if stamp ~= nil and (#C.Stats.byCat.game > 0 or #C.Stats.byCat.found > 0 or next(C.Rules.OwnClaims()) ~= nil) then
+    if stamp ~= nil and hasPass() then
       -- (an ask while a pass waits is answered by it: counted only where it makes that pass the guild's too. A since this
       -- client's last pass to the asker does not bear out gets the whole pass whatever GAME_AGAIN says: the ten-minute
       -- pass bounds what that costs)
@@ -1831,15 +1852,7 @@ function M:Receive(text, channel, sender)
         end
       end
       if gameFresh and (not M.answeringGame or not M.answerGameGuild) then M.gameAnswered[who] = t; if not covered then M.answerGameGuild = true end end
-      if (gameFresh or officer) and not M.answeringGame then
-        M.answeringGame = true
-        local wait = GAME_AFTER - 30 + (math.random and (29 * math.random()) or 5)
-        C_Timer.After(wait, C.Safe(function()
-          M.answeringGame = false
-          if not C.Policy:Settled() or M:Locked() then M.gameOwed = true; M:OwedSoon(); return end
-          M:AnswerGame()
-        end, "comm: answer statistics"))
-      end
+      if gameFresh or officer then M:GameSoon() end
     elseif stamp ~= nil then
       -- (no statistics, discoveries or claims: no pass owed)
       ent.pass = C.ServerNow()

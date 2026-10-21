@@ -10945,6 +10945,30 @@ do
   end)
   said[#said + 1] = "a /reload in the lockdown keeps a queued kill claim and an owed answer"
 
+  -- (v) a record asked for whole by GUID (1Q: a file that lost it, a since part from a sender it holds nothing of) is
+  -- answered with its statistics pass too. 0.7.1's first build sent the record alone, and the asker's later asks, all
+  -- since its hold, never brought what the pass had said before it
+  isolated({ member("Coraline", 1), member("Cobb", 3), member("Cyra", 3) }, function()
+    local off, a, b = char("Coraline", 1), char("Cobb", 3), char("Cyra", 3, { withStats = true })
+    local db = {}
+    login(off); login(a, db); login(b)
+    tickAll(200)
+    assert(db.roster[b.sender].stats.g2001 == 1234, "Cobb has Cyra's statistics")
+    fire(a, "PLAYER_LOGOUT"); leave(a)
+    db.roster[b.sender] = nil
+    b.o.zone = "Feralas"
+    b.C.Sample:Set("zone", "Feralas")
+    tickAll(30)
+    local a2 = char("Cobb", 3)
+    login(a2, db)
+    tickAll(700)
+    local rec = db.roster[b.sender]
+    assert(count(a2, "1Q") == 1 and rec and rec.stats.zone == "Feralas", "Cobb asked her record whole and has it")
+    assert(rec.stats.g2001 == 1234, "and her statistics: " .. tostring(rec.stats.g2001))
+    for _, x in ipairs({ off, b, a2 }) do leave(x) end
+  end)
+  said[#said + 1] = "a record asked for whole by GUID comes with its statistics pass"
+
   print("core: " .. table.concat(said, "; "))
 end
 
