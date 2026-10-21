@@ -36,6 +36,9 @@ SF.SCALES = SCALES
 local function settings() return QB:Settings().guide end
 local function fighting() return InCombatLockdown and InCombatLockdown() or false end
 local trackerOut, trackerHooked, trackerWait = false, false, false -- (the game's quest tracker: SF.Tracker)
+-- (the windows round) its scale while out of sight, the one it had (kept for the session), and Edit Mode open
+local OUT_SCALE = 0.01
+local trackerScale, trackerEditing = nil, false
 -- the first time the tracker goes out of sight the frame says where it went, for NOTE_S seconds, once for good
 -- (guide.trackerTold, set as the note shows: a /reload under the welcome card still has it to tell); its menu brings
 -- the tracker back
@@ -765,19 +768,32 @@ end
 -- hidden, moved or reparented by an addon, the right-hand container's layout would run as the addon. So it goes out of
 -- sight by its alpha, the way the game's own managed-frame system does it (ManagedFrameSystem.lua,
 -- AnimOutManagedFrames), never in a fight; when the game puts the alpha back (AnimInManagedFrames) it goes again, after
--- the fight if in one. Back at once when the setting or the step frame goes off. (Out of sight, its lines still take a
--- click where they stand, as the game's own fade leaves them.)
+-- the fight if in one. Back at once when the setting or the step frame goes off.
+-- (the windows round) Out of sight its lines still took a click where they stood, as the game's own fade leaves them;
+-- so its scale goes to a hundredth beside the alpha: a C-side property that writes nothing into the frame's tables, and
+-- that no OnSizeChanged or OnShow (ObjectiveTrackerContainer.lua:29-37) nor the managed frame's OnHide
+-- (ManagedFrameSystem.lua:21-23) hears, so the container's layout never runs for it. The frame stays shown: the game's
+-- logic, its item buttons and autoQuestWatch are untouched. The scale it had is kept for the session and put back with
+-- the alpha; Edit Mode's enter ("EditMode.Enter", EditModeManager.lua:105) puts both back so the player can place it,
+-- its exit (:124) and EDIT_MODE_LAYOUTS_UPDATED take it out of sight again. Alpha and scale are all it is asked
 local function tracker()
   local t = ObjectiveTrackerFrame
   return type(t) == "table" and type(t.SetAlpha) == "function" and type(t.GetAlpha) == "function" and t or nil
+end
+local function scaleOf(t)
+  if type(t.GetScale) ~= "function" then return nil end
+  local ok, sc = pcall(t.GetScale, t)
+  sc = ok and QB.Plain(sc) or nil
+  return type(sc) == "number" and sc or nil
 end
 function SF.Tracker()
   local t = tracker()
   if not t then return end
   local f = SF.frame
-  local want = settings().hideTracker ~= false and f ~= nil and f:IsShown() and true or false
+  local want = settings().hideTracker ~= false and f ~= nil and f:IsShown() and not trackerEditing and true or false
   if fighting() then trackerWait = true return end
   trackerWait = false
+  local scales = type(t.SetScale) == "function"
   if want then
     if not trackerHooked and type(hooksecurefunc) == "function" then
       trackerHooked = true
@@ -789,12 +805,20 @@ function SF.Tracker()
     if not trackerOut and not settings().trackerTold then SF.notePending = true end
     trackerOut = true
     if t:GetAlpha() ~= 0 then t:SetAlpha(0) end
+    local sc = scales and scaleOf(t)
+    if sc and sc ~= OUT_SCALE then trackerScale = sc; t:SetScale(OUT_SCALE) end
   elseif trackerOut then
     trackerOut = false
     t:SetAlpha(1)
+    if scales and trackerScale and scaleOf(t) == OUT_SCALE then t:SetScale(trackerScale) end
   end
 end
 SF.TrackerOut = function() return trackerOut end
+-- Edit Mode, and the layouts it applies (SF.Init registers them)
+local function editMode(on)
+  trackerEditing = on
+  SF.Tracker()
+end
 
 -- shown while the Guide and the frame are on, or a welcome waits
 function SF.Apply()
@@ -859,5 +883,16 @@ function SF:Menu(s)
 end
 
 function SF:Init()
+  -- (the windows round) Edit Mode's enter and exit, as camelot's MainMenuBarEndCaps.lua:7-11 hears them, and its
+  -- layouts applied: the game's quest tracker back while it is open, out of sight again after (SF.Tracker)
+  if type(EventRegistry) == "table" and type(EventRegistry.RegisterCallback) == "function" then
+    pcall(EventRegistry.RegisterCallback, EventRegistry, "EditMode.Enter", QB.Safe(function() editMode(true) end, "step frame: edit mode"), SF)
+    pcall(EventRegistry.RegisterCallback, EventRegistry, "EditMode.Exit", QB.Safe(function() editMode(false) end, "step frame: edit mode"), SF)
+  end
+  if not SF.events then
+    SF.events = CreateFrame("Frame")
+    pcall(SF.events.RegisterEvent, SF.events, "EDIT_MODE_LAYOUTS_UPDATED")
+    SF.events:SetScript("OnEvent", QB.Safe(function() if trackerOut then SF.Tracker() end end, "step frame: edit mode"))
+  end
   SF.Apply()
 end

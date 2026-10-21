@@ -458,7 +458,8 @@ local function newClient(o)
     otf.Header.MinimizeButton:SetPoint("RIGHT", otf.Header, "RIGHT", -1, 0)
     -- (its left edge as the game lays it out: from UIParent's right edge, wherever the screen's width is now)
     rawset(otf.Header, "GetLeft", function() return env.UIParent.__w + otf.__points[1].x - 260 end)
-    for _, m in ipairs({ "Show", "Hide", "SetShown", "SetPoint", "ClearAllPoints", "SetAllPoints", "SetParent", "SetScale", "EnableMouse" }) do
+    -- (its scale is a C-side property its layout does not hear: the windows round sets it beside the alpha, windows D3)
+    for _, m in ipairs({ "Show", "Hide", "SetShown", "SetPoint", "ClearAllPoints", "SetAllPoints", "SetParent", "EnableMouse" }) do
       rawset(otf, m, function() error("an addon called " .. m .. " on the game's quest tracker (a managed frame: its layout would run as the addon)", 2) end)
     end
     env.ObjectiveTrackerFrame = otf
@@ -20775,6 +20776,8 @@ local function lookChar(name, o)
   if o.ui then c.env.UIParent:SetSize(o.ui[1], o.ui[2]) end
   if o.saved then c.env.QuestBankDB = o.saved end
   login(c)
+  -- (the harness's older blocks log in with the Guide off: on, as a fresh install has it, its welcome answered)
+  if not o.saved then c.QB:Settings().guide.on, c.QB:Settings().welcome = true, nil; c.QB.StepFrame.Apply() end
   return c
 end
 
@@ -20823,6 +20826,58 @@ do
   local picked = lookChar("Pickedmaps", { saved = { settings = { v544 = true, v600 = true, mapIconPct = 75, guide = { on = true, frame = true, locked = false, scale = 1 } } } })
   assert(picked.QB:Settings().mapIconPct == 75, "a size picked stays")
   print("windows D2: a new install's map icons at the game's size (100), a save's own size kept")
+end
+
+-- D3. The game's quest tracker out of sight takes no click: 6.1.1 left it at alpha 0, where its lines still took a click
+-- where they stand (its own note in StepFrame.lua). Now its scale goes to 0.01 beside the alpha (a C-side property: no
+-- OnSizeChanged, OnShow or OnHide for the right-hand container to lay itself out by), the scale it had kept for the
+-- session and put back with the alpha (the row off, the step frame off); nothing else is called on it; never in a
+-- fight; Edit Mode's enter puts both back so the player can place it, its exit and EDIT_MODE_LAYOUTS_UPDATED set them
+-- again. The step frame's default place stays where the tracker at its own size leaves room
+do
+  local c = lookChar("Scaled")
+  local s, SF, T = c.QB:Settings(), c.QB.StepFrame, c.env.ObjectiveTrackerFrame
+  local f = c.env.QuestBankStep
+  assert(f:IsShown() and T:GetAlpha() == 0 and T:GetScale() == 0.01, "out of sight: alpha 0 and scale 0.01: " .. T:GetAlpha() .. ", " .. T:GetScale())
+  local placed = f.__points[1].x
+  -- every method asked of the tracker from here on, by name
+  local calls = {}
+  local mt = getmetatable(T)
+  local idx = mt.__index
+  mt.__index = function(t, k) local v = idx(t, k); if type(v) == "function" then calls[k] = (calls[k] or 0) + 1 end; return v end
+  s.guide.hideTracker = false; SF.Apply()
+  assert(T:GetAlpha() == 1 and T:GetScale() == 1, "the row off: alpha and scale back")
+  rawset(T, "__scale", 0.9) -- (the scale it has: the session's to keep)
+  s.guide.hideTracker = true; SF.Apply()
+  assert(T:GetAlpha() == 0 and T:GetScale() == 0.01 and f.__points[1].x == placed, "on again: out of sight, the step frame where it was")
+  s.guide.frame = false; SF.Apply()
+  assert(T:GetAlpha() == 1 and T:GetScale() == 0.9, "the step frame off: back at the scale it had")
+  s.guide.frame = true; SF.Apply()
+  -- in a fight nothing is touched; after it, out of sight again
+  s.guide.hideTracker = false
+  c.combat = true; SF.Apply()
+  assert(T:GetAlpha() == 0 and T:GetScale() == 0.01, "in a fight: left as it is")
+  c.combat = false; c.ev(c.QB.eventFrame, "PLAYER_REGEN_ENABLED")
+  assert(T:GetAlpha() == 1 and T:GetScale() == 0.9, "the fight over: back")
+  s.guide.hideTracker = true; SF.Apply()
+  -- Edit Mode: back while it is open, out of sight again as it closes or lays the frames out again
+  c.env.EventRegistry:TriggerEvent("EditMode.Enter")
+  assert(T:GetAlpha() == 1 and T:GetScale() == 0.9, "Edit Mode open: the tracker back to be placed")
+  c.env.EventRegistry:TriggerEvent("EditMode.Exit")
+  assert(T:GetAlpha() == 0 and T:GetScale() == 0.01, "Edit Mode closed: out of sight again")
+  rawset(T, "__scale", 1); rawset(T, "__alpha", 1) -- (a layout applied: the system's own place and look)
+  local ev = SF.events
+  assert(ev and ev.__scripts.OnEvent, "the step frame hears EDIT_MODE_LAYOUTS_UPDATED")
+  ev.__scripts.OnEvent(ev, "EDIT_MODE_LAYOUTS_UPDATED")
+  assert(T:GetAlpha() == 0 and T:GetScale() == 0.01, "a layout applied: out of sight again")
+  s.guide.hideTracker = false; SF.Apply()
+  assert(T:GetScale() == 1, "the row off: the scale the layout gave it")
+  mt.__index = idx
+  local other = {}
+  for k in pairs(calls) do if k ~= "SetAlpha" and k ~= "GetAlpha" and k ~= "SetScale" and k ~= "GetScale" then other[#other + 1] = k end end
+  table.sort(other)
+  assert(#other == 0, "nothing but its alpha and its scale asked of the tracker: " .. table.concat(other, ", "))
+  print("windows D3: the game's quest tracker out of sight at alpha 0 and scale 0.01 (no click lands on it), its scale kept and put back with the alpha, never in a fight, back for Edit Mode and out again after it; nothing else called on it")
 end
 
 local seen = {}
