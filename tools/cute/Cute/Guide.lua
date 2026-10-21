@@ -490,7 +490,7 @@ function G.MakeRow(parent)
   r.mark:SetSize(2, 12)
   r.pips = {}
   r.invite = UI.Button(r, "Invite", 58, 16)
-  r.invite:SetScript("OnClick", function(self) if self.mate then G.Invite(self.mate) end end)
+  r.invite:SetScript("OnClick", C.Safe(function(self) if self.mate then G.Invite(self.mate) end end, "guide: invite"))
   r.invite:SetScript("OnEnter", C.Safe(function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     if self.why then GameTooltip:AddLine(self.why, 1, 1, 1, true) end

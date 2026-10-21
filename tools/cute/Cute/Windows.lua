@@ -205,6 +205,12 @@ do
     if word == "keys" and rest == "" then C.UI.OpenSettings("keys") return end
     if word == "setup" and rest == "" then C.Setup.Show(true) return end
     if word == "menu" and rest == "" then W.Menu() return end
+    -- (help in two lines, as the core's, naming both windows: the core's first line knew one)
+    if m == "help" then
+      C.Print("/cute opens the guild window, /cute quests your quests" .. (C.Modules.byId.quests and "" or " (with Cute_Quest)") .. "; /cute settings, keys, setup or menu; /cute race, prog, shame, statistics, officers, me, route, dungeons, gear or a module's name opens that tab.")
+      C.Print("/cute modules lists the modules; /cute resend asks the guild for their records again; /cute help more: what to paste in a bug report.")
+      return
+    end
     return core(msg)
   end, "slash")
 end

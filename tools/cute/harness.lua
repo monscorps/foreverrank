@@ -10958,6 +10958,7 @@ do
     local n0 = #off.chat
     off.env.SlashCmdList.CUTE("help")
     assert(#off.chat == n0 + 2 and off.chat[n0 + 2]:find("/cute help more", 1, true), "two lines of help")
+    assert(off.chat[n0 + 1]:find("/cute quests", 1, true) and off.chat[n0 + 1]:find("guild window", 1, true), "the help names both windows: " .. off.chat[n0 + 1])
     off.env.SlashCmdList.CUTE("help more")
     assert(#off.chat == n0 + 3 and off.chat[n0 + 3]:find("/cute diag", 1, true), "the paste tools under help more")
     local old = db.roster["Old-Forever"]
