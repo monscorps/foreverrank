@@ -24,17 +24,24 @@ are left out.
   python3 tools/probe_pull.py --rebuild             # start disc.json over from the uploads kept in research/probe (no pull)
   python3 tools/probe_pull.py --parse FILE          # print a SavedVariables file or export as JSON
   python3 tools/probe_pull.py --selftest            # the parser and the merge against tools/fixtures/probe/
+  python3 tools/probe_pull.py --publish-finds       # send research/questbank/finds.json to the Worker (owner-run)
+
+Every run also writes research/questbank/finds.json: what two players' files agree on (finds_rows), the set the Worker
+serves at /api/finds.json once published, and gen_data.py's D.FIND beside the guides' seed. QuestBank.lua and
+Cute_Quest.lua (Cute's copy of the engine, counted as source "cute") are read through the allow-list (strip): the
+parts that hold no name. Cute.lua is never read.
 
 The admin key is read from worker/.probe-admin-key (gitignored) or the PROBE_ADMIN_KEY
-environment variable; it is never printed. Nothing here writes to the Worker.
+environment variable; it is never printed. Nothing here writes to the Worker but --publish-finds.
 """
-import argparse, base64, datetime, gzip, hashlib, json, os, re, sys, urllib.error, urllib.request
+import argparse, base64, collections, datetime, gzip, hashlib, json, os, re, sys, urllib.error, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 ENDPOINT = "https://foreverrank.andustemme.workers.dev"
 KEY_FILE = os.path.join(REPO, "worker", ".probe-admin-key")
 OUT = os.path.join(REPO, "research", "questbank", "disc.json")
+FINDS_OUT = os.path.join(REPO, "research", "questbank", "finds.json")
 RAW_DIR = os.path.join(REPO, "research", "probe")
 
 
@@ -176,15 +183,48 @@ def parse_savedvariables(text):
 
 
 # ------------------------------------------------------------------------------------ the uploads
+# What may leave a player's PC (docs/superpowers/specs/2026-10-21-cute-windows-design.md, 11.2 and 11.5): one allow-list
+# for QuestBank.lua and Cute_Quest.lua alike, applied by the uploader before it sends, by the page's upload script, by
+# the Worker before it stores, and here to every upload as it is read (the rows stored before the list existed carry
+# the rest: characters by name, their bank, plans, travel, runs, settings). Hand-in times are cut to the minute, and an
+# error keeps its message (which carries the file and line) and where it was caught, never its stack or times. The same
+# list is written in uploader/QuestBank-Uploader.ps1 and worker/src/allow.js; --selftest checks all three agree
+ALLOW = ("disc", "game", "live", "liveEra", "turnins", "diag", "errors")
+ERROR_KEYS = ("msg", "where", "count", "version")
+SAVEDVARS = ("questbank-savedvars", "cutequest-savedvars")  # the engine's own file, under QuestBank or under Cute
+
+
+def strip(data):
+    """A QuestBankDB or CuteQuestDB as it may be kept: the allow-list's parts only."""
+    if not isinstance(data, dict):
+        return data
+    out = {k: data[k] for k in ALLOW if k in data}
+    t = out.get("turnins")
+    if isinstance(t, list):
+        out["turnins"] = [dict(r, at=_at(r["at"])) if isinstance(r, dict) and "at" in r else r for r in t]
+    e = out.get("errors")
+    if isinstance(e, list):
+        out["errors"] = [{k: (r[k][:300] if isinstance(r[k], str) else r[k]) for k in ERROR_KEYS if k in r} for r in e if isinstance(r, dict)]
+    elif e is not None:
+        out["errors"] = []
+    return out
+
+
 def decode(text):
-    """(kind, data): what an upload holds. data is the JSON-shaped content; disc(data) finds the notes."""
-    t = text.lstrip("﻿").strip()
+    """(kind, data): what an upload holds. data is the JSON-shaped content; disc(data) finds the notes. QuestBank.lua and
+    Cute_Quest.lua (Cute's copy of the engine) are read through the allow-list; Cute.lua (CuteDB: the guild's roster,
+    GUIDs and, on officers' clients, members' Only-you values) is never read."""
+    t = text.lstrip("\ufeff").strip()
     if re.match(r"^FPROBE[12]:", t):
         return "export", json.loads(t[t.index(":") + 1:])
     if re.match(r"^ForeverProbeDB\s*=", t):
         return "probe-savedvars", parse_savedvariables(t)["ForeverProbeDB"]
     if re.match(r"^QuestBankDB\s*=", t):
-        return "questbank-savedvars", parse_savedvariables(t)["QuestBankDB"]
+        return "questbank-savedvars", strip(parse_savedvariables(t)["QuestBankDB"])
+    if re.match(r"^CuteQuestDB\s*=", t):
+        return "cutequest-savedvars", strip(parse_savedvariables(t)["CuteQuestDB"])
+    if re.match(r"^CuteDB\s*=", t):
+        raise ValueError("a Cute.lua (the guild's roster and values): never read")
     raise ValueError("not an FPROBE export or a ForeverProbe/QuestBank SavedVariables file")
 
 
@@ -192,7 +232,7 @@ def disc_of(kind, data):
     """QuestBankDB.disc wherever the upload keeps it, or None."""
     if not isinstance(data, dict):
         return None
-    if kind == "questbank-savedvars":
+    if kind in SAVEDVARS:
         d = data.get("disc")
     else:
         qb = data.get("questbank")
@@ -277,7 +317,7 @@ def merge_seen(acc, kind, data):
     build is the client build the upload ran on (disc.build) and era is QuestBankDB.liveEra (the
     addon's purge of pre-cut readings: 0 means the table may still hold them; hand-ins carry 9, each
     one is dated). gen_data.py decides what counts."""
-    if kind != "questbank-savedvars" or not isinstance(data, dict):
+    if kind not in SAVEDVARS or not isinstance(data, dict):
         return 0
     disc = data.get("disc") if isinstance(data.get("disc"), dict) else {}
     try:
@@ -433,7 +473,10 @@ LOOT_UPLOAD = (400, 40)                  # sources, and items per source, the ad
 # tries). Quest titles and numbers only: a player's name is nowhere in it, and nothing else of the record is read.
 SURVEY_KEYS = ("survey", "surveyNo", "surveyB", "surveyCheck")
 SURVEY_UPLOAD = 8000                     # quests read from one upload at most (the client knows about 6,600)
-EXTRA_KEYS = SPOT_KEYS + LOOT_KEYS + SURVEY_KEYS  # what the notes' digest leaves out
+# QuestBank 6.2's world notes (Finds.lua) and the ones uploaded before and merged by nothing (Camp.lua's sellers,
+# Guide.lua's trainers, Walk.lua's trails, Travel.lua's rides): a part with its own digest, each file one voice
+WORLD_KEYS = ("find", "flown", "rides", "sell", "trainer", "walk", "qtime")
+EXTRA_KEYS = SPOT_KEYS + LOOT_KEYS + SURVEY_KEYS + WORLD_KEYS + ("findAt", "findN", "qtimeAt", "qtimeN", "token")  # what the notes' digest leaves out
 
 
 def _pairs(v):
@@ -667,7 +710,7 @@ def merge_probe(acc, kind, data):
     tools/apply_probe_spells.py takes the spells to the site's spellbook, tools/scavenge_items.py the items and tooltips."""
     if not isinstance(data, dict):
         return
-    if kind == "questbank-savedvars":
+    if kind in SAVEDVARS:
         g = data.get("game")
         if not isinstance(g, dict) or forever_iface(g.get("iface")) is not True:
             return  # no block, or another client's: QuestBank writes it on Forever only, and an odd file is skipped all the same
@@ -818,38 +861,294 @@ def _digest(v):
 
 
 # ----------------------------------------------------------------------------------- the work a quest takes
-# QuestBank's Timer.lua (6.2) notes per character, in QuestBankDB.chars[key].timer.quests, the seconds of work at each
-# quest's objectives: w over k looks of the log where its objectives moved, and c when it was first complete. A quest
-# complete (c) and seen move in DUR_K looks or more is one sample: disc.json "dur" = { quest id: { sample: seconds } },
-# the sample named by a digest of the quest and its own numbers (taken, complete, work), never by the character, so the
-# same completion sent again is one sample and no name is kept. gen_data.py takes the median as the quest's work once
-# three samples stand (DUR_MIN there). More than DUR_MAX seconds is no measure of a quest's work
+# QuestBank's Timer.lua (6.2) notes per character the seconds of work at each quest's objectives: w over k looks of the
+# log where its objectives moved. The characters' table never leaves the PC (the allow-list), so Finds.lua copies each
+# completion measured in DUR_K looks or more into QuestBankDB.disc.qtime = { [quest id] = { w, k, lv, w, k, lv, ... } }
+# (three numbers a completion) with no character and no time of day. Each is one sample: disc.json "dur" = { quest id: { sample: seconds } }, the sample
+# named by a digest of the file's voice (below), the quest and its own numbers, so the same completion sent again is one
+# sample. gen_data.py takes the median as the quest's work once three samples stand (DUR_MIN there). More than DUR_MAX
+# seconds is no measure of a quest's work
 DUR_K, DUR_MAX = 3, 4 * 3600
 
 
-def merge_dur(acc, chars):
-    """One upload's characters' timer rows into disc.json's "dur"; returns how many samples were new."""
+def merge_dur(acc, qtime, voter=""):
+    """One upload's disc.qtime into disc.json's "dur"; returns how many samples were new."""
     out = acc.setdefault("dur", {})
     added = 0
-    for ch in (chars or {}).values() if isinstance(chars, dict) else ():
-        timer = ch.get("timer") if isinstance(ch, dict) else None
-        rows = timer.get("quests") if isinstance(timer, dict) else None
-        if not isinstance(rows, dict):
+    for qid, flat in _pairs(qtime):
+        q = _key(qid, 999999)
+        flat = [x for _, x in _pairs(flat)]
+        if not q:
             continue
-        for qid, r in rows.items():
-            if not isinstance(r, dict):
+        for i in range(0, len(flat) - 2, 3):
+            w, k, lv = flat[i], _whole(flat[i + 1], 1, 10 ** 6), _whole(flat[i + 2], 0, 200)
+            if isinstance(w, bool) or not isinstance(w, (int, float)) or not k or k < DUR_K or not 0 < w <= DUR_MAX:
                 continue
-            w, k, c = r.get("w"), r.get("k"), r.get("c")
-            if not (isinstance(w, (int, float)) and isinstance(k, (int, float)) and isinstance(c, (int, float))):
-                continue
-            if k < DUR_K or not 0 < w <= DUR_MAX or not str(qid).isdigit():
-                continue
-            key = _digest({"q": str(qid), "a": r.get("a"), "c": c, "w": round(w, 1)})[:12]
-            d = out.setdefault(str(int(qid)), {})
+            key = _digest({"v": voter, "q": q, "w": round(w, 1), "k": k, "lv": lv})[:12]
+            d = out.setdefault(str(q), {})
             if key not in d:
                 d[key] = round(float(w), 1)
                 added += 1
     return added
+
+
+# ------------------------------------------------------------------------------------- one file, one voice
+# QuestBank 6.2 (and Cute_Quest) keeps disc.token, a random token made once per saved file: what follows votes once per
+# file however often its growing copy comes back. The voice is a digest of the token, never the token itself. Files
+# from before 6.2 have none and share one voice, "u": however many there are, they count as one witness
+def voice(disc):
+    tok = disc.get("token") if isinstance(disc, dict) else None
+    if isinstance(tok, str) and re.fullmatch(r"[0-9a-f]{16}", tok):
+        return "t" + hashlib.sha256(("token:" + tok).encode()).hexdigest()[:11]
+    return "u"
+
+
+VOICES = 64  # voices kept per find, crossing, seller or trainer: past that the one heard longest ago goes
+
+
+def _voted(table, key, who, rec, stamp):
+    """rec as voice who's word on key (its latest replaces its earlier), at most VOICES voices."""
+    votes = table.setdefault(key, {})
+    rec["at"] = stamp
+    votes[who] = rec
+    if len(votes) > VOICES:
+        for old in sorted(votes, key=lambda v: (votes[v].get("at", 0), v))[:len(votes) - VOICES]:
+            del votes[old]
+
+
+def _clean_title(t):
+    """A title as the addon cleans it (Finds.lua, Cute's S.LABEL_MAX): one line, no escape codes or separators, at most
+    60 bytes on a whole character; None when nothing is left or it isn't a string."""
+    if not isinstance(t, str):
+        return None
+    t = re.sub(r"\s+", " ", re.sub(r"[\x00-\x1f\x7f]", " ", re.sub(r"[|;=]", "", t))).strip()
+    b = t.encode("utf-8")[:60]
+    t = b.decode("utf-8", "ignore").strip()
+    return t or None
+
+
+# ------------------------------------------------------------------------------------------------ finds
+# QuestBank 6.2's Finds.lua notes what the world holds beyond quests: QuestBankDB.disc.find = { ["o<object>"|
+# "c<creature>"|"i<item>"] = { p = { {uiMap, x, y, n}, ... } where the player stood (thousandths), h = { "class.subclass"
+# = n } the kinds of the items an object gave, k = { item ids } the key-class items in the bags when it was opened,
+# b = a book's title, r = a rare's level, n, v = build } }. disc.json "find" keeps each file's latest word per find:
+# { key: { voice: { p, h, k, b, r, v, at } } }; finds_rows() below says what two files agree on
+FIND_KEY = re.compile(r"^[oci]\d{1,9}$")
+FIND_UPLOAD = 600   # finds read from one file at most (the addon keeps 400 objects and 200 rares)
+
+
+def merge_find(acc, find, who, stamp):
+    out = acc.setdefault("find", {})
+    n = 0
+    for key, rec in sorted(_pairs(find), key=lambda kv: str(kv[0]))[:FIND_UPLOAD]:
+        if not (isinstance(key, str) and FIND_KEY.match(key) and isinstance(rec, dict)):
+            continue
+        r = {}
+        pts = [s for s in (_spot(p) for _, p in _pairs(rec.get("p"))) if s][:40]
+        if pts:
+            r["p"] = [list(s) for s in pts]
+        h = {}
+        for k, c in _pairs(rec.get("h")):
+            c = _whole(c, 1, 10 ** 6)
+            if isinstance(k, str) and re.fullmatch(r"\d{1,2}\.\d{1,3}", k) and c:
+                h[k] = c
+        if h:
+            r["h"] = dict(sorted(h.items(), key=lambda kv: -kv[1])[:6])
+        keys = sorted({x for x in (_whole(v, 1, 99999999) for _, v in _pairs(rec.get("k"))) if x})[:8]
+        if keys:
+            r["k"] = keys
+        b = _clean_title(rec.get("b"))
+        if b:
+            r["b"] = b
+        lv = _whole(rec.get("r"), 1, 100)
+        if lv and key[0] == "c":
+            r["r"] = lv
+        v = _whole(rec.get("v"), 1, 99999999)
+        if v:
+            r["v"] = v
+        if not (r.get("p") or r.get("b")):
+            continue  # nothing placed and nothing read: no find
+        _voted(out, key, who, r, stamp)
+        n += 1
+    return n
+
+
+def lock_keys(path=None):
+    """{key item id: [lock ids]} from the newest Forever client's Lock.csv: a lock's Type 1 entries name an item."""
+    if path is None:
+        wago = os.path.join(REPO, "research", "wago")
+        builds = sorted((int(d.split(".")[-1]), d) for d in os.listdir(wago) if re.match(r"^1\.60\.\d+\.\d+$", d)
+                        and os.path.exists(os.path.join(wago, d, "Lock.csv"))) if os.path.isdir(wago) else []
+        if not builds:
+            return {}
+        path = os.path.join(wago, builds[-1][1], "Lock.csv")
+    import csv
+    out = {}
+    for r in csv.DictReader(open(path, encoding="utf-8")):
+        for i in range(8):
+            if r.get("Type_%d" % i) == "1":
+                item = int(r.get("_Index_%d" % i) or 0)
+                if item > 0:
+                    out.setdefault(item, []).append(int(r["ID"]))
+    return out
+
+
+FIND_NEAR = SPOT_NEAR  # thousandths: two files' points this close on one map are the same place (the addon's OS_NEAR)
+
+
+def finds_rows(acc, keys=None):
+    """What two files agree on: [[uiMap, kind, id, "x,y;x,y", files, extra], ...], kind b (a book: extra its title), k (an
+    object opened with a key Lock.csv names: extra that key), h (an object looted: extra its items' kind) or r (a rare:
+    extra its level). A place ships when points of two files or more lie within FIND_NEAR of each other on one map (their
+    mean, at most four places a map); a book's title, a key or a level when two of those files say it. Sorted."""
+    keys = lock_keys() if keys is None else keys
+    rows = []
+    for key, votes in sorted((acc.get("find") or {}).items()):
+        kind0, fid = key[0], int(key[1:])
+        if kind0 == "i":
+            continue  # an item read has no place
+        by_map = {}
+        for who, rec in votes.items():
+            for m, x, y, _n in [tuple(p[:4]) for p in rec.get("p") or []]:
+                by_map.setdefault(m, []).append((x, y, who))
+        for m in sorted(by_map):
+            pts, places = by_map[m], []
+            # clusters: each point joins the first place within FIND_NEAR of its mean, else starts one
+            for x, y, who in sorted(pts):
+                for pl in places:
+                    if (pl["x"] - x) ** 2 + (pl["y"] - y) ** 2 <= FIND_NEAR ** 2:
+                        pl["pts"].append((x, y, who))
+                        pl["x"] = sum(p[0] for p in pl["pts"]) / len(pl["pts"])
+                        pl["y"] = sum(p[1] for p in pl["pts"]) / len(pl["pts"])
+                        break
+                else:
+                    places.append({"x": x, "y": y, "pts": [(x, y, who)]})
+            agreed = [pl for pl in places if len({p[2] for p in pl["pts"]}) >= 2]
+            if not agreed:
+                continue
+            agreed.sort(key=lambda pl: (-len({p[2] for p in pl["pts"]}), pl["x"], pl["y"]))
+            agreed = agreed[:4]
+            who_here = {p[2] for pl in agreed for p in pl["pts"]}
+            spots = ";".join("%d,%d" % (int(pl["x"] + 0.5), int(pl["y"] + 0.5)) for pl in agreed)
+            files = max(len({p[2] for p in pl["pts"]}) for pl in agreed)
+
+            def said(field, ok=lambda v: True):
+                c = collections.Counter()
+                for who in who_here:
+                    v = votes[who].get(field)
+                    for x in (v if isinstance(v, list) else [v]):
+                        if x is not None and ok(x):
+                            c[x] += 1
+                best = sorted(c.items(), key=lambda kv: (-kv[1], str(kv[0])))
+                return best[0][0] if best and best[0][1] >= 2 else None
+            if kind0 == "c":
+                lv = said("r")
+                rows.append([m, "r", fid, spots, files, lv or 0])
+                continue
+            title = said("b")
+            if title:
+                rows.append([m, "b", fid, spots, files, title])
+                continue
+            k = said("k", lambda x: x in keys)
+            if k:
+                rows.append([m, "k", fid, spots, files, k])
+                continue
+            kinds = collections.Counter()
+            for who in who_here:
+                for kk, c in (votes[who].get("h") or {}).items():
+                    kinds[kk] += 1
+            if kinds:
+                rows.append([m, "h", fid, spots, files, sorted(kinds.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]])
+    return rows
+
+
+# ------------------------------------------------------------------------------- what else a file shares
+# The rest of QuestBank's world notes, each file's latest word per thing (votes per voice, as the finds):
+#   "flown"  { "<TaxiNodes>><TaxiNodes>": { voice: [seconds, flights, Frequent Flier rank] } }  (disc.flown, 6.2)
+#   "rides"  { "<kind>:<town>><town>" or "x:<map>:<x>,<y>><map>:<x>,<y>": { voice: { t, n, b, l } } }  (disc.rides: the
+#            boat legs D.LINK knows, and 6.2's crossings no row knows)
+#   "sell"   { npc key: { voice: { n, p "uiMap:x,y", i [camp goods] } } }  (disc.sell, Camp.lua's camp-goods sellers)
+#   "trainer" { npc key: { voice: { n, cl, m, x, y } } }  (disc.trainer: the class trainers players opened, Guide.lua)
+#   "walk"   { voice: { continent: [cells] } }  (disc.walk: every 50-yard cell a file's trails pass through)
+# Only numbers, ids, map places and the NPCs' own names are read: never anything of a player's
+WALK_CELL = 50
+
+
+def _place(v):
+    """(c, wx, wy) of a {c, wx, wy} list, or None."""
+    if not isinstance(v, (list, dict)):
+        return None
+    v = [x for _, x in _pairs(v)]
+    if len(v) < 3:
+        return None
+    c, x, y = _whole(v[0], 0, 99999), _whole(v[1], -99999, 99999), _whole(v[2], -99999, 99999)
+    return None if None in (c, x, y) else [c, x, y]
+
+
+def merge_world(acc, d, who, stamp):
+    """One upload's disc.flown, disc.rides, disc.sell, disc.trainer and disc.walk; returns how many things it spoke of."""
+    n = 0
+    for key, e in _pairs(d.get("flown")):
+        if isinstance(key, str) and re.fullmatch(r"\d{1,5}>\d{1,5}", key) and isinstance(e, dict):
+            secs, cnt = _whole(e.get("secs"), 1, 3600), _whole(e.get("n"), 1, 10 ** 6)
+            if secs and cnt:
+                _voted(acc.setdefault("flown", {}), key, who, {"s": secs, "n": cnt, "ff": _whole(e.get("ff"), 0, 9) or 0}, stamp)
+                n += 1
+    for key, e in _pairs(d.get("rides")):
+        if not (isinstance(key, str) and isinstance(e, dict) and len(key) <= 120):
+            continue
+        if not (re.fullmatch(r"x:\d{1,6}:\d{1,4},\d{1,4}>\d{1,6}:\d{1,4},\d{1,4}", key) or re.fullmatch(r"[a-z]:[^|;=\n]{1,40}>[^|;=\n]{1,40}", key)):
+            continue
+        t, cnt = _whole(e.get("t"), 1, 7200), _whole(e.get("n"), 1, 10 ** 6)
+        b, l = _place(e.get("b")), _place(e.get("l"))
+        if t and cnt:
+            rec = {"t": t, "n": cnt}
+            if b:
+                rec["b"] = b
+            if l:
+                rec["l"] = l
+            _voted(acc.setdefault("rides", {}), key, who, rec, stamp)
+            n += 1
+    for key, e in _pairs(d.get("sell")):
+        if isinstance(key, str) and re.fullmatch(r"c\d{1,9}", key) and isinstance(e, dict):
+            p = e.get("p")
+            items = sorted({x for x in (_whole(v, 1, 99999999) for _, v in _pairs(e.get("i"))) if x})[:20]
+            if isinstance(p, str) and re.fullmatch(r"\d{1,6}:\d{1,3}(\.\d+)?,\d{1,3}(\.\d+)?", p) and items:
+                _voted(acc.setdefault("sell", {}), key, who, {"n": _clean_title(e.get("n")), "p": p, "i": items}, stamp)
+                n += 1
+    for key, e in _pairs(d.get("trainer")):
+        if isinstance(key, str) and re.fullmatch(r"c\d{1,9}", key) and isinstance(e, dict):
+            cl, m = _whole(e.get("cl"), 1, 20), _whole(e.get("m"), 1, 99999)
+            x, y = e.get("x"), e.get("y")
+            if cl and m and all(isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v <= 100 for v in (x, y)):
+                _voted(acc.setdefault("trainer", {}), key, who, {"n": _clean_title(e.get("n")), "cl": cl, "m": m,
+                                                                  "x": round(x, 1), "y": round(y, 1)}, stamp)
+                n += 1
+    cells = {}
+    for c, trails in _pairs(d.get("walk")):
+        c = _whole(int(c), 0, 99999) if str(c).isdigit() else None
+        if c is None:
+            continue
+        got = set()
+        for _, tr in _pairs(trails):
+            xs = [x for _, x in _pairs(tr)]
+            for i in range(0, len(xs) - 1, 2):
+                x, y = _whole(xs[i], -99999, 99999), _whole(xs[i + 1], -99999, 99999)
+                if x is not None and y is not None:
+                    got.add((x // WALK_CELL + 2000) * 10000 + (y // WALK_CELL + 2000))
+                if len(got) >= 20000:
+                    break
+        if got:
+            cells[str(c)] = sorted(got)
+    if cells:
+        walk = acc.setdefault("walk", {})
+        if who == "u":  # (the files before 6.2, one voice: their cells together)
+            old = walk.get(who) or {}
+            cells = {c: sorted(set(old.get(c) or []) | set(v)) for c, v in cells.items()}
+            cells.update({c: v for c, v in old.items() if c not in cells and c != "at"})
+        walk[who] = dict(cells, at=stamp)
+        n += 1
+    return n
 
 
 def merge_upload(acc, text, source="local"):
@@ -859,12 +1158,14 @@ def merge_upload(acc, text, source="local"):
     so a file where only a tooltip or a spot changed still brings that, and one where only the notes changed doesn't
     count its items or vote for its spots again. Notes from a client other than Forever are left out, spots too."""
     kind, data = decode(text)
+    if kind == "cutequest-savedvars":
+        source = "cute"  # (Cute's copy of the engine: counted apart, merged the same)
     meta = acc["meta"]
     meta["uploads"] += 1
     meta["sources"][source] = meta["sources"].get(source, 0) + 1
     seen_hashes = meta.setdefault("hashes", [])
     fresh = spotted = False
-    if kind == "questbank-savedvars" and isinstance(data, dict):
+    if kind in SAVEDVARS and isinstance(data, dict):
         g = data.get("game")
         if isinstance(g, dict) and g:
             h = _digest({"game": g})
@@ -893,9 +1194,20 @@ def merge_upload(acc, text, source="local"):
                 seen_hashes.append(h)
                 spotted = merge_loot(acc, loot) > 0 or spotted
                 fresh = True
-        # the work quests took (Timer.lua), sample by sample: a sample already merged is not counted again
-        if merge_dur(acc, data.get("chars")) > 0:
-            spotted = fresh = True
+        # what the world holds (Finds.lua: objects, rares, books), the flights, crossings, sellers, trainers and trails,
+        # and the work quests took (Timer.lua, by way of disc.qtime): each file's latest word, one voice a file
+        disc = disc_of(kind, data) or {}
+        world = {k: disc.get(k) for k in WORLD_KEYS if disc.get(k)}
+        if world:
+            who = voice(disc)
+            h = _digest({"world": world, "voice": who})  # (two files with the same notes are two voices)
+            if h not in seen_hashes:
+                seen_hashes.append(h)
+                meta["with_world"] = meta.get("with_world", 0) + 1
+                n = merge_find(acc, disc.get("find"), who, meta["with_world"]) + merge_world(acc, disc, who, meta["with_world"])
+                n += merge_dur(acc, disc.get("qtime"), who)
+                spotted = n > 0 or spotted
+                fresh = True
         # what the game told the quest survey (Survey.lua), a part of its own the same way
         disc = disc_of(kind, data) or {}
         if disc.get("survey") or disc.get("surveyNo"):
@@ -917,7 +1229,7 @@ def merge_upload(acc, text, source="local"):
     d = disc_of(kind, data)
     if d is None:
         return kind, spotted
-    if kind != "questbank-savedvars" and not from_forever({"disc": d}):
+    if kind not in SAVEDVARS and not from_forever({"disc": d}):
         # ForeverProbe's copy of the notes carries QuestBank's own stamps: one loaded on Era as an out-of-date addon copies Era's
         meta["other_client"] = meta.get("other_client", 0) + 1
         return kind, False
@@ -955,6 +1267,20 @@ def summary(acc):
     if sv or acc.get("sv_no"):
         out += "; quest survey: %d quests, %d with a whole reward list, %d the game never answered" % (
             len(sv), sum(1 for a in sv.values() if a.get("rw")), len(acc.get("sv_no") or {}))
+    voices = set()
+    for part in ("find", "flown", "rides", "sell", "trainer"):
+        for v in (acc.get(part) or {}).values():
+            voices.update(v)
+    voices.update(acc.get("walk") or {})
+    if voices:
+        rows = finds_rows(acc)
+        out += ("; finds: %d noted, %d two files agree on; %d flights, %d crossings and boat legs (%d x:), %d camp-goods sellers, "
+                "%d trainers, trails of %d file(s); %d voices") % (
+            len(acc.get("find") or {}), len(rows), len(acc.get("flown") or {}), len(acc.get("rides") or {}),
+            sum(1 for k in acc.get("rides") or {} if k.startswith("x:")), len(acc.get("sell") or {}), len(acc.get("trainer") or {}),
+            len(acc.get("walk") or {}), len(voices))
+    if acc.get("dur"):
+        out += "; the work of %d quests (%d samples)" % (len(acc["dur"]), sum(len(v) for v in acc["dur"].values()))
     if acc["meta"].get("other_client"):
         out += "; %d upload(s) from another client left out" % acc["meta"]["other_client"]
     return out
@@ -1285,8 +1611,9 @@ def selftest():
     assert merge_upload(acc6, grown, "fixture") == ("questbank-savedvars", True)
     assert sv["99999"]["u"] == 2 and sv["99999"]["rw"]["276903|"] == [2, 70338] and sv["99994"]["b"] == 70400
     assert acc6["meta"]["with_notes"] == 1, "a new survey answer merges the survey alone, not the notes again"
-    # the work quests took: a complete quest seen move in three looks or more is a sample, named by no character; the
-    # same file again adds none, a new completion one
+    # the work quests took: the characters' timer rows are never read (the allow-list drops chars, with the names in
+    # its keys); 6.2's disc.qtime brings the samples, a complete quest seen move in three looks or more, named by no
+    # character; the same file again adds none, a new completion one
     dur_text = notes_text.replace("QuestBankDB = {", """QuestBankDB = {
 	["chars"] = {
 		["Helga-ForeverNormal"] = {
@@ -1299,32 +1626,176 @@ def selftest():
 						["c"] = 1760000900,
 						["lv"] = 21,
 					},
-					[34] = {
-						["w"] = 40,
-						["k"] = 2,
-						["c"] = 1760001000,
-					},
-					[20] = {
-						["a"] = 1760000100,
-						["w"] = 300,
-						["k"] = 9,
-					},
-				},
-				["levels"] = {
 				},
 			},
 		},
 	},""", 1)
     acc7 = empty()
     merge_upload(acc7, dur_text, "fixture")
+    assert not acc7.get("dur"), "a character's timer rows are never read: %r" % acc7.get("dur")
+    qt = notes_text.replace('\t["disc"] = {', """\t["disc"] = {
+		["token"] = "0123456789abcdef",
+		["qtime"] = {
+			[127] = {
+				512.5, -- [1]
+				12, -- [2]
+				21, -- [3]
+			},
+			[34] = {
+				40, -- [1]
+				2, -- [2]
+				0, -- [3]
+			},
+		},""", 1)
+    assert qt != notes_text
+    merge_upload(acc7, qt, "fixture")
     assert acc7["dur"] == {"127": {list(acc7["dur"]["127"])[0]: 512.5}}, acc7["dur"]
-    assert "Helga" not in json.dumps(acc7["dur"]) and "Forever" not in json.dumps(acc7["dur"]), "no character in the samples"
-    merge_upload(acc7, dur_text, "fixture")
-    assert len(acc7["dur"]["127"]) == 1, "the same completion again is one sample"
-    again = dur_text.replace('["c"] = 1760000900,', '["c"] = 1760005000,')
-    assert merge_upload(acc7, again, "fixture")[1] and len(acc7["dur"]["127"]) == 2, "a new completion is a new sample"
+    assert "Helga" not in json.dumps(acc7) and "0123456789abcdef" not in json.dumps(acc7), "no character, and the token only as a digest"
+    more = qt.replace("40, -- [1]\n\t\t\t\t2, -- [2]", "40, -- [1]\n\t\t\t\t5, -- [2]", 1)
+    assert more != qt and merge_upload(acc7, more, "fixture")[1]
+    assert len(acc7["dur"]["127"]) == 1 and len(acc7["dur"]["34"]) == 1, "the same completion again is one sample; a new quest's is new"
+    again = qt.replace("21, -- [3]\n", "21, -- [3]\n\t\t\t\t300, -- [4]\n\t\t\t\t5, -- [5]\n\t\t\t\t21, -- [6]\n", 1)
+    assert again != qt and merge_upload(acc7, again, "fixture")[1] and len(acc7["dur"]["127"]) == 2, "a new completion is a new sample"
+    selftest_finds()
     print("selftest OK:", summary(acc))
     print("selftest OK:", summary(acc3))
+
+
+def _lua(v, ind=1):
+    """A JSON-shaped value as the client writes a saved variable (for the selftest's made-up files)."""
+    t = "\t" * ind
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return repr(v)
+    if isinstance(v, str):
+        return '"' + v.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    if isinstance(v, list):
+        return "{\n" + "".join("%s%s, -- [%d]\n" % (t, _lua(x, ind + 1), i + 1) for i, x in enumerate(v)) + "\t" * (ind - 1) + "}"
+    out = "{\n"
+    for k, x in v.items():
+        key = "[%d]" % k if isinstance(k, int) else '["%s"]' % k
+        out += "%s%s = %s,\n" % (t, key, _lua(x, ind + 1))
+    return out + "\t" * (ind - 1) + "}"
+
+
+def selftest_finds():
+    """The allow-list, Cute's files, and 6.2's world notes: finds, flights, crossings, sellers, trainers, trails."""
+    def sv(name, db):
+        return "%s = %s\n" % (name, _lua(db))
+    names = {"Helga-ForeverNormal": {"level": 20}}
+    full = {"disc": {"v": 1, "q": {}, "build": "70338", "iface": 16001}, "game": {"iface": 16001}, "live": {}, "liveEra": 3,
+            "turnins": [{"id": 300, "xp": 900, "level": 12, "at": "2026-10-22 18:04:31"}], "diag": {"addons": {"iface": 16001}},
+            "errors": [{"msg": "Interface/AddOns/QuestBank/Finds.lua:12: oops", "stack": "Helga's stack", "where": "finds", "count": 2,
+                        "first": "2026-10-22 18:04:31", "last": "2026-10-22 18:05:59", "version": "6.2.0"}],
+            "bank": {"Helga": 1}, "chars": names, "plans": {"Helga": 1}, "held": {}, "travel": {"gHelga": {}}, "runs": {}, "lock": {},
+            "run": {}, "settings": {"x": 1}, "profiles": {}, "reports": {}, "trace": {"lines": ["Helga"]}, "imported": True, "newKey": {"Helga": 1}}
+    for name, kind in (("QuestBankDB", "questbank-savedvars"), ("CuteQuestDB", "cutequest-savedvars")):
+        k, data = decode(sv(name, full))
+        assert k == kind and sorted(data) == sorted(ALLOW), (k, sorted(data))
+        assert data["turnins"][0]["at"] == "2026-10-22 18:04" and data["errors"] == [
+            {"msg": "Interface/AddOns/QuestBank/Finds.lua:12: oops", "where": "finds", "count": 2, "version": "6.2.0"}], data["errors"]
+        assert "Helga" not in json.dumps(data), "no name past the allow-list"
+    try:
+        decode(sv("CuteDB", {"roster": {"Helga": {}}}))
+        raise AssertionError("Cute.lua was read")
+    except ValueError as e:
+        assert "Cute.lua" in str(e)
+    acc = empty()
+    assert merge_upload(acc, sv("CuteQuestDB", full), "uploader")[0] == "cutequest-savedvars" and acc["meta"]["sources"] == {"cute": 1}
+
+    # finds: two files that agree ship, one alone never does; a file sent again is the same voice
+    def file(tok, find, **more):
+        d = {"v": 1, "q": {}, "build": "70338", "iface": 16001, "find": find}
+        if tok:
+            d["token"] = tok
+        d.update(more)
+        return sv("QuestBankDB", {"disc": d})
+    chest = lambda x, y, n=1: {"p": [[1429, x, y, n]], "h": {"7.5": n}, "n": n, "v": 70338}  # noqa: E731
+    acc = empty()
+    keys = {216523: [3732]}
+    merge_upload(acc, file("aaaaaaaaaaaaaaaa", {"o2843": chest(412, 654)}), "t")
+    assert finds_rows(acc, keys) == [], "one file is no agreement"
+    merge_upload(acc, file("aaaaaaaaaaaaaaaa", {"o2843": chest(414, 650, 2)}), "t")
+    assert finds_rows(acc, keys) == [] and len(acc["find"]["o2843"]) == 1, "the same file again: one voice"
+    merge_upload(acc, file(None, {"o2843": chest(420, 660)}), "t")
+    merge_upload(acc, file(None, {"o2843": chest(418, 658)}), "t")
+    assert len(acc["find"]["o2843"]) == 2, "files before 6.2 share one voice"
+    merge_upload(acc, file("bbbbbbbbbbbbbbbb", {"o2843": chest(408, 656),
+                                               "o424080": {"p": [[1435, 610, 220, 1]], "k": [216523, 282406]},
+                                               "o410001": {"p": [[1429, 654, 701, 1]], "b": "Archmage Theocritus' Research Journal"},
+                                               "c6582": {"p": [[1438, 300, 300, 1]], "r": 35},
+                                               "i281347": {"b": "Torn Page"},
+                                               "x1": {"p": [[1429, 1, 1, 1]]}, "o9": "junk", "o10": {"b": "|cffff0000Red|r=;"}}), "t")
+    rows = finds_rows(acc, keys)
+    assert rows == [[1429, "h", 2843, "413,655", 3, "7.5"]], rows
+    merge_upload(acc, file("cccccccccccccccc", {"o424080": {"p": [[1435, 600, 225, 1]], "k": [216523]},
+                                               "o410001": {"p": [[1429, 650, 700, 1]], "b": "Archmage Theocritus' Research Journal"},
+                                               "c6582": {"p": [[1438, 306, 296, 1]], "r": 35}}), "t")
+    rows = finds_rows(acc, keys)
+    assert [1429, "b", 410001, "652,701", 2, "Archmage Theocritus' Research Journal"] in rows, rows
+    assert [1435, "k", 424080, "605,223", 2, 216523] in rows and [1438, "r", 6582, "303,298", 2, 35] in rows, rows
+    assert acc["find"]["o10"]["t" + hashlib.sha256(b"token:bbbbbbbbbbbbbbbb").hexdigest()[:11]]["b"] == "cffff0000Redr", "a title cleaned"
+    assert "x1" not in acc["find"] and "o9" not in acc["find"] and "i281347" in acc["find"], "only the addon's keys"
+    # a key Lock.csv doesn't name is no key: the object stands as looted (or not at all)
+    assert not [r for r in finds_rows(acc, {}) if r[1] == "k"]
+    assert "aaaaaaaaaaaaaaaa" not in json.dumps(acc), "the token itself is never kept"
+
+    # the world: flights, crossings and boat legs, sellers, trainers, trails; one voice a file
+    world = {"flown": {"12>34": {"n": 3, "secs": 118, "ff": 1}, "bad": {"n": 1, "secs": 5}},
+             "rides": {"x:1429:300,400>1438:555,888": {"n": 2, "t": 8, "b": [0, -9000, 100], "l": [1, 9000, 900], "at": 29000000},
+                       "b:Menethil Harbor>Theramore": {"n": 1, "t": 290, "b": [0, -3905, -586], "l": [1, -4016, -4741]},
+                       "x:junk": {"n": 1, "t": 1}},
+             "sell": {"c1234": {"n": "Innkeeper Farley", "p": "1429:43.8,65.8", "c": 0, "wx": 1, "wy": 2, "i": [4470, 4471], "at": 1760000000}},
+             "trainer": {"c5497": {"n": "Jennea Cannon", "cl": 8, "m": 1453, "x": 38.6, "y": 79.6}},
+             "walk": {0: [[-9000, 100, -9015, 100, -9030, 100], [-9500, 900]], 1: [[9000, 900]]}}
+    acc = empty()
+    d = dict({"v": 1, "q": {}, "build": "70338", "iface": 16001, "token": "dddddddddddddddd"}, **world)
+    merge_upload(acc, sv("QuestBankDB", {"disc": d}), "t")
+    merge_upload(acc, sv("QuestBankDB", {"disc": dict(d, token="eeeeeeeeeeeeeeee")}), "t")
+    assert len(acc["flown"]["12>34"]) == 2 and list(acc["flown"]) == ["12>34"], acc["flown"]
+    assert set(acc["rides"]) == {"x:1429:300,400>1438:555,888", "b:Menethil Harbor>Theramore"} and len(acc["rides"]["x:1429:300,400>1438:555,888"]) == 2
+    one = list(acc["rides"]["x:1429:300,400>1438:555,888"].values())[0]
+    assert one["t"] == 8 and one["b"] == [0, -9000, 100] and "at" in one and one["at"] < 1000, "votes, no time of day: %r" % one
+    assert list(acc["sell"]["c1234"].values())[0] == {"n": "Innkeeper Farley", "p": "1429:43.8,65.8", "i": [4470, 4471], "at": 1}
+    assert list(acc["trainer"]["c5497"].values())[0]["cl"] == 8
+    w = list(acc["walk"].values())[0]
+    assert len(acc["walk"]) == 2 and len(w["0"]) == 3 and len(w["1"]) == 1, w
+    s = summary(acc)
+    assert "finds:" in s and "2 voices" in s, s
+    # one list in three places: the uploader's PowerShell and the Worker's allow.js say the same as ALLOW and ERROR_KEYS
+    ps1 = open(os.path.join(REPO, "uploader", "QuestBank-Uploader.ps1"), encoding="ascii").read()
+    js = open(os.path.join(REPO, "worker", "src", "allow.js"), encoding="utf-8").read()
+    lists = lambda pat, text: [re.findall(r'"(\w+)"|\'(\w+)\'', m) for m in re.findall(pat, text)]  # noqa: E731
+    flat = lambda found: [a or b for a, b in found[0]] if found else None  # noqa: E731
+    assert flat(lists(r"\$Allow\s*=\s*@\(([^)]*)\)", ps1)) == list(ALLOW), "the uploader's allow-list"
+    assert flat(lists(r"\$ErrorKeys\s*=\s*@\(([^)]*)\)", ps1)) == list(ERROR_KEYS), "the uploader's error fields"
+    assert flat(lists(r"export const ALLOW = \[([^\]]*)\]", js)) == list(ALLOW), "the Worker's allow-list"
+    assert flat(lists(r"export const ERROR_KEYS = \[([^\]]*)\]", js)) == list(ERROR_KEYS), "the Worker's error fields"
+    print("selftest OK: the allow-list, Cute's files and the world notes")
+
+
+def write_finds(acc, path):
+    """finds.json: { v: 1, at: the day (yyyymmdd, UTC), rows: finds_rows() }, the shape the Worker serves. Returns the rows."""
+    rows = finds_rows(acc)
+    day = int(datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d"))
+    json.dump({"v": 1, "at": day, "rows": rows}, open(path, "w"), separators=(",", ":"))
+    return len(rows)
+
+
+def publish_finds(endpoint, key, path=FINDS_OUT):
+    """POST finds.json to the Worker (/api/finds, admin key): the set the uploaders fetch once a day."""
+    if not os.path.exists(path):
+        sys.exit("no %s: run python3 tools/probe_pull.py first" % os.path.relpath(path, REPO))
+    body = open(path, "rb").read()
+    req = urllib.request.Request(endpoint.rstrip("/") + "/api/finds", data=body, method="POST",
+                                 headers={"x-admin-key": key, "content-type": "application/json",
+                                          "user-agent": "foreverrank-probe-pull/1.0 (tools/probe_pull.py)"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            print("published:", json.load(r))
+    except urllib.error.HTTPError as e:
+        sys.exit("HTTP %d from %s: %s" % (e.code, endpoint, e.read().decode("utf-8", "replace")[:200]))
 
 
 def main():
@@ -1337,9 +1808,13 @@ def main():
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--rebuild", action="store_true",
                     help="start over from the decoded uploads in --raw-dir, without pulling (run plain afterwards for what is new)")
+    ap.add_argument("--publish-finds", action="store_true",
+                    help="send research/questbank/finds.json to the Worker's /api/finds (admin key; the owner runs it)")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
+    if a.publish_finds:
+        return publish_finds(a.endpoint, admin_key())
     if a.parse:
         kind, data = decode(open(a.parse, encoding="utf-8").read())
         print(json.dumps({"kind": kind, "data": data}, indent=1, ensure_ascii=False))
@@ -1379,6 +1854,10 @@ def main():
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     json.dump(acc, open(a.out, "w"), indent=0, sort_keys=True)
     print("wrote %s: %s" % (os.path.relpath(a.out, REPO) if a.out.startswith(REPO) else a.out, summary(acc)))
+    if a.out == OUT:
+        rows = write_finds(acc, FINDS_OUT)
+        print("wrote %s: %d finds two files agree on (python3 tools/probe_pull.py --publish-finds sends them)" % (
+            os.path.relpath(FINDS_OUT, REPO), rows))
 
 
 if __name__ == "__main__":
