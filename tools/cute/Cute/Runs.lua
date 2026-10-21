@@ -251,8 +251,8 @@ end
 local function flags(run, answer)
   return run.kind .. "." .. b36(run.inst or run.map or 0) .. (answer and ".a" or "")
 end
--- (built as it leaves, with the id the run holds then: a hello held by a lockdown says the id settled meanwhile)
--- An answer waits one at a time (it says the group's id: one covers every newcomer waiting)
+-- (built as it leaves, with the id the run holds then: a hello held by a lockdown says the id settled meanwhile. An
+-- answer waits one at a time: it says the group's id, so one covers every newcomer waiting)
 function R:Hello(answer)
   local run = self.run
   if not run then return end
