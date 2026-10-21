@@ -196,6 +196,8 @@ end
 -- the run: start, members, the hello
 ----------------------------------------------------------------------------
 function R.Current() return R.run end
+-- the Runs tab drawn again where it is open (a run started or ended, a report kept: UI:Refresh, a second at most)
+local function redraw() local U = C.UI; if U and U.page == "runs" and U.Refresh then U:Refresh() end end
 local function save(run) local ch = C.Char(); ch.run = run end
 local function lootNow()
   local L = C_LootHistory
@@ -272,6 +274,7 @@ function R:Start(kind, place)
   end
   local id = run.id
   C_Timer.After(rnd(0, 3), C.Safe(function() if R.run and R.run.id == id then R:Hello() end end, "runs: hello"))
+  redraw()
 end
 
 -- the counting on or off for this client (Sample.lua counts the yards and the bag drops while it is on)
@@ -741,6 +744,7 @@ function R.Keep(rep)
   for i = #db.list, 1, -1 do if db.list[i].id == rep.id then table.remove(db.list, i) end end
   table.insert(db.list, 1, rep)
   while #db.list > db.keep do table.remove(db.list) end
+  redraw()
 end
 -- the run stats, from the card this client's own build gives you (a 2A only shows)
 local function bump(rep)
@@ -781,6 +785,7 @@ function R:Finish(rep, shown)
   self.endedIn = inst
   save(nil)
   self:Counting(false)
+  redraw()
   if rep then
     -- (a policy in doubt: no award is eligible, so this client's own report waits until it settles. A scribe's 2A
     -- carries no member count: the header's is this client's own build's)

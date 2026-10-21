@@ -128,6 +128,24 @@ local function placeLine(rep)
   if rep.kind ~= "g" then s = s .. DOT .. (rep.bosses or 0) .. "/" .. math.max(rep.known or 0, rep.bosses or 0) end
   return s
 end
+-- the band's line for the run on now: "Now: The Deadmines, 12:30, 3 bosses, scribe Brann" (dots between)
+function RU.BandText(snap)
+  return "Now: " .. snap.place .. DOT .. A().Clock(snap.t) .. (snap.kind ~= "g" and (DOT .. snap.bosses .. (snap.bosses == 1 and " boss" or " bosses")) or "") .. DOT .. "scribe " .. snap.scribe
+end
+-- the band's clock: one timer at a time, a second apart, while the Runs tab shows its run (it stops by itself)
+function RU.Tick()
+  if RU.ticking then return end
+  RU.ticking = true
+  C_Timer.After(1, C.Safe(function()
+    RU.ticking = false
+    local b, ui = RU.band, C.UI
+    if not (b and ui and ui.frame and ui.frame:IsShown() and ui.page == "runs" and b.fs:IsShown()) then return end
+    local snap = R():Snapshot()
+    if not snap then return end
+    ui.FitText(b.fs, RU.BandText(snap), b.room - 4)
+    RU.Tick()
+  end, "runs: the band's clock"))
+end
 local function deleteFromHistory(rep)
   local list = R().DB().list
   for i = #list, 1, -1 do if list[i] == rep then table.remove(list, i) end end
@@ -152,18 +170,24 @@ function RU.Draw(ui)
     l.bar:Hide()
     l.val:Hide(); l.who:Hide()
     l.fn, l.tip = nil, tip
+    -- (the line's own text shown: the Guide's big band row hides it on the pooled line it takes, Guide.lua bandRow)
     l.name:ClearAllPoints(); l.name:SetPoint("LEFT", 8, 0); l.name:SetJustifyH("LEFT")
+    l.name:Show()
     color(l.name, c)
     return l
   end
   local snap = R():Snapshot()
+  RU.band = nil
   if snap then
-    local text = "Now: " .. snap.place .. DOT .. A().Clock(snap.t) .. (snap.kind ~= "g" and (DOT .. snap.bosses .. (snap.bosses == 1 and " boss" or " bosses")) or "") .. DOT .. "scribe " .. snap.scribe
+    local text = RU.BandText(snap)
     local leader = call("IsInGroup") ~= true or call("UnitIsGroupLeader", "player") == true
-    local l = bandLine(text, K.INK, function(tip) tip:AddLine(text, 1, 1, 1, true) end)
+    local l = bandLine(text, K.INK, function(tip) tip:AddLine(RU.BandText(R():Snapshot() or snap), 1, 1, 1, true) end)
     local room = w - 16 - (leader and 80 or 0)
     l.name:SetWidth(room)
     U.FitText(l.name, text, room - 4)
+    -- (its clock moves on its own, once a second while the tab shows: the line's text alone, no draw)
+    RU.band = { fs = l.name, room = room }
+    RU.Tick()
     -- (the band's pooled buttons, anchored and sized as every page anchors them: TOPLEFT, the pool's height)
     if leader then
       local b = ui.bandButtons:Get()

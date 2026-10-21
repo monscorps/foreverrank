@@ -12019,16 +12019,30 @@ do local function runsStage()
     gus.C.UI:Open("runs")
     assert(texts(gus):find("No runs yet.", 1, true), "the empty Runs tab says so")
     check(gus.C.UI.frame, "runs: the empty Runs tab")
+    -- (the Guide's big band row hides the pooled band line's own text, Guide.lua bandRow: the Runs tab drawn after it
+    -- shows its line all the same)
+    gus.C.UI.bandLines.items[1].name:Hide()
+    gus.C.UI:Draw()
+    assert(texts(gus):find("No runs yet.", 1, true), "the Runs tab's band line after the Guide drew the band")
+    -- the tab open while a run starts: drawn again on its own, its clock running
     local G = group(cs)
     zone(cs, "party", 36, "The Deadmines")
     tickAll(40)
+    assert(texts(gus):find("Now: The Deadmines", 1, true), "the band: the run on now, drawn as it started")
+    local function bandText() local l = bandLine(gus, 1); return l and l.name:IsShown() and l.name:GetText() or "" end
+    local b1 = bandText()
+    tickAll(3)
+    assert(bandText() ~= b1 and bandText():find("^Now: The Deadmines"), "the band's clock runs: " .. b1 .. " / " .. bandText())
     gus.C.UI:Open("runs")
-    assert(texts(gus):find("Now: The Deadmines", 1, true), "the band: the run on now")
     check(gus.C.UI.frame, "runs: the Runs tab with a run on")
     local dmg = { Fen = { [7] = 30000, [0] = 2000 }, Gus = { [2] = 9000, [6] = 7 }, Hob = { [0] = 9000, [5] = 6, [8] = 9000 } }
     for _, enc in ipairs({ 1230, 1236, 1238, 1234 }) do fight(G, 60, dmg, enc); tickAll(60) end
     zone(cs, "none", 0)
     tickAll(25)
+    -- (the tab, still open, drew the report's row as it came)
+    local drawn
+    for _, r in ipairs(gus.C.UI.lists.runs.items) do if r:IsShown() and r.name:GetText() == "The Deadmines" then drawn = true end end
+    assert(drawn and not texts(gus):find("Now: The Deadmines", 1, true), "the open tab drew the report's row and dropped the band's run")
     local CF = gus.C.CardFrame
     assert(CF.frame and CF.frame:IsShown() and CF.rep and CF.rep.from == "scribe", "the report on the screen")
     local h = CF.frame:GetHeight()
