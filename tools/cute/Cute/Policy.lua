@@ -1284,7 +1284,7 @@ function P:Purge(ready)
   if self:Route("enchanted") == "self" and C.Stats.StripEnchantTraces then traces = traces + C.Stats.StripEnchantTraces(only) end
   if n > 0 then
     R:Changed()
-    if C.Rules then C.Rules:Dirty() end
+    if C.Rules then C.Rules:Dirty(true) end
     if C.UI and C.UI.Refresh then C.UI:Refresh() end
   end
   return n + traces

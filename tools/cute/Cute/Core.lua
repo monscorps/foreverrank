@@ -154,6 +154,51 @@ function C.ApiReport()
 end
 
 function C.Now() return (time and time()) or os.time() end
+
+----------------------------------------------------------------------------
+-- what the busy paths cost on this client, for /cute diag perf: each timed path's runs, total and longest time
+-- (debugprofilestop, milliseconds, where the client has it), and counts per minute (the last whole minute's and this
+-- one's). Counting allocates nothing per call
+----------------------------------------------------------------------------
+local Perf = { n = {}, ms = {}, max = {}, cur = {}, last = {}, minute = nil }
+C.Perf = Perf
+local function minuteNow() return math.floor(C.Now() / 60) end
+function Perf.Count(what, n)
+  local m = minuteNow()
+  if m ~= Perf.minute then
+    if Perf.minute then Perf.last = (m == Perf.minute + 1) and Perf.cur or {} end
+    Perf.cur, Perf.minute = {}, m
+  end
+  Perf.cur[what] = (Perf.cur[what] or 0) + (n or 1)
+end
+function Perf.Clock() return (debugprofilestop and debugprofilestop()) or 0 end
+function Perf.Add(what, ms)
+  Perf.n[what] = (Perf.n[what] or 0) + 1
+  Perf.ms[what] = (Perf.ms[what] or 0) + ms
+  if ms > (Perf.max[what] or 0) then Perf.max[what] = ms end
+end
+-- fn wrapped to time itself under what (its results passed on)
+function Perf.Timed(what, fn)
+  return function(...)
+    local t0 = Perf.Clock()
+    local a, b, c, d = fn(...)
+    Perf.Add(what, Perf.Clock() - t0)
+    return a, b, c, d
+  end
+end
+function Perf.Report()
+  local parts = {}
+  for _, what in ipairs({ "refresh", "rebuild", "receive", "draw" }) do
+    local n = Perf.n[what] or 0
+    parts[#parts + 1] = string.format("%s %d, %.1f ms avg, %.1f max", what, n, n > 0 and (Perf.ms[what] or 0) / n or 0, Perf.max[what] or 0)
+  end
+  minuteNow()
+  Perf.Count("tick", 0)
+  local last = Perf.last
+  local counts = {}
+  for _, what in ipairs({ "addon", "cute", "roster", "rebuilds", "drops" }) do counts[#counts + 1] = what .. " " .. (last[what] or 0) end
+  return "perf: " .. table.concat(parts, "; ") .. " | last minute: " .. table.concat(counts, ", ")
+end
 -- the server's clock (GetServerTime, SystemTimeDocumentation.lua), the one every client shares: the policy is stamped
 -- with it and a stamp is judged against it (Policy.lua); this client's own where the call reads nothing
 function C.ServerNow() return (C.Callable("GetServerTime") and C.Num("GetServerTime")) or C.Now() end
@@ -276,11 +321,21 @@ local function noRealm(s)
   return s
 end
 -- a name as a loose key: your realm cut, spaces and hyphens one space, lower case; nil for a Kstring, a secret or
--- nothing. A fallback only: where a GUID is known it decides
+-- nothing. A fallback only: where a GUID is known it decides. Kept per string once your realm reads (every roster
+-- read asks it of every member's name and every record's sender string), CANON_MAX strings at most
+local canonCache, canonN, CANON_MAX = {}, 0, 4096
 function C.Canon(s)
   s = C.Plain(s)
-  if type(s) ~= "string" or s == "" or C.IsKstring(s) then return nil end
-  return (noRealm(s):gsub("[%s%-]+", " "):lower())
+  if type(s) ~= "string" or s == "" then return nil end
+  local hit = canonCache[s]
+  if hit ~= nil then return hit or nil end
+  local v = (not C.IsKstring(s)) and (noRealm(s):gsub("[%s%-]+", " "):lower()) or false
+  if realmCache then
+    if canonN >= CANON_MAX then canonCache, canonN = {}, 0 end
+    canonCache[s], canonN = v, canonN + 1
+  end
+  if C.Perf then C.Perf.Count("canon") end
+  return v or nil
 end
 
 -- the key this character's saved data lives under (CuteDB.chars), and who set a policy: UnitFullName's two returns

@@ -342,7 +342,8 @@ function S.LearnEnchants(kinds, who, enchs)
       end
     end
   end
-  if new and C.Rules then C.Rules:Dirty() end
+  -- (a slot or a kind learned: a few a season, built at once)
+  if new and C.Rules then C.Rules:Dirty(true) end
   if new then
     -- your own Missing enchants (and the verdict) are asked again, and the window learns of it; an officer's client
     -- tells the members, who hear no member's enchants with the defaults (Comm.lua's 1N)
@@ -1719,7 +1720,7 @@ function S.ValueCame(id, key)
   if not S.LabelOf(id) then return end
   local e = CuteDB.roster[key]
   local voice = C.Roster and type(e) == "table" and C.Roster:VoiceOf(key, e) or nil
-  if S.Found(id, false, voice, true) and C.Rules and C.Rules.Dirty then C.Rules:Dirty() end
+  if S.Found(id, false, voice, true) and C.Rules and C.Rules.Dirty then C.Rules:Dirty(true) end
 end
 
 -- at login: every label saved defines its stat again, your own first, then the ones two members agree on, then the

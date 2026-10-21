@@ -3902,7 +3902,7 @@ do
     for _, c in ipairs(all) do login(c) end
     tickAll(45)
     local R = ruler.C.Rules
-    local function settle() tickAll(12) end -- (a kill, its claims and the model built again three seconds on)
+    local function settle() tickAll(35) end -- (a kill, its claims and the model built again: at most once in thirty seconds, Rules.lua R:Dirty)
     local function enter(c, kind, id, name) c.o.instance, c.o.instanceID, c.o.instName = kind, id, name; fire(c, "PLAYER_ENTERING_WORLD", false, false) end
     local function kill(c, enc, name) fire(c, "ENCOUNTER_END", enc, name, 1, 5, 1, {}) end
     -- a group: each in the others' party (UnitGUID of party1-4, which rule 9's claims name)
@@ -5636,7 +5636,8 @@ do
     cat.o.instance, cat.o.instanceID, cat.o.instName = "party", 36, "The Deadmines"
     fire(cat, "PLAYER_ENTERING_WORLD", false, false)
     fire(cat, "ENCOUNTER_END", 1230, "Rhahk'Zor", 1, 5, 1, {})
-    tickAll(12)
+    -- (the model built again at most once in thirty seconds from what members send, Rules.lua R:Dirty)
+    tickAll(35)
     local R = tru.C.Rules
     assert(R.Corroborated(1230, ann.o.guid) and R.Corroborated(1230, ben.o.guid) and not R.Corroborated(1230, cat.o.guid), "Ann's and Ben's kill corroborated, Cat's alone not")
     assert(R.Model().bosses[1230] and R.Model().bosses[1230].n == 2, "the boss seen by the two who killed it together: " .. tostring(R.Model().bosses[1230] and R.Model().bosses[1230].n))
@@ -10424,6 +10425,108 @@ do
     for _, x in ipairs({ off, b }) do leave(x) end
   end)
   said[#said + 1] = "a 0.5.x ask gets no statistics pass, a 0.7 ask the whole record and one, one pass in ten minutes"
+
+  -- (h) scale: a guild of 400, 150 online, three of them running Cute here (an officer and two members) holding 120 of
+  -- the others' records; a login wave of 25 asks in a minute, about half from members whose since this login's records
+  -- cover. Each client's queue stays short and what it sends in five minutes stays bounded: the answers coalesce, a
+  -- since gets what changed, the pass goes once in ten minutes (0.7.0 answered every new asker whole, its record and
+  -- its pass, the guild's traffic growing with the square of those online)
+  do
+    local guild = {}
+    for i = 1, 397 do guild[i] = { name = "Mm" .. i .. "-Forever", guid = string.format("Player-4242-%08X", 0x0B000000 + i), rank = 3, rankName = "Raider", class = "MAGE", level = 20 + i % 40, online = i <= 147 } end
+    guild[#guild + 1] = member("Coraline", 1); guild[#guild + 1] = member("Cobb", 3); guild[#guild + 1] = member("Cyra", 3)
+    isolated(guild, function()
+      local function saved()
+        local roster = {}
+        for i = 1, 120 do
+          local st = { guid = guild[i].guid, level = guild[i].level, addon_ver = "0.7.1", zone = "Duskwood", deaths = i, gold = 1000 * i }
+          for j = 1, 30 do st["g" .. (3000 + j)] = i + j end
+          roster[guild[i].name] = { seen = EPOCH + 900, online = guild[i].online, stats = st, at = {}, ch = true }
+        end
+        return { roster = roster }
+      end
+      local cs = { char("Coraline", 1, { withStats = true }), char("Cobb", 3, { withStats = true }), char("Cyra", 3, { withStats = true }) }
+      for _, c in ipairs(cs) do login(c, saved()) end
+      tickAll(240)
+      local before, most = {}, {}
+      for i, c in ipairs(cs) do before[i] = #c.sent; most[i] = 0 end
+      for k = 1, 25 do
+        local m = guild[150 + k]
+        for _, c in ipairs(cs) do
+          local since = (k % 2 == 0 and c.C.Comm.base) and string.format("%x", math.floor(c.C.Comm.base + 5)) or ""
+          c.C.Comm:Receive("1R|" .. m.guid .. "|0|0|" .. c.C.Policy:Fp() .. since, "GUILD", m.name)
+        end
+        for _ = 1, 2 do tickAll(1); for i, c in ipairs(cs) do most[i] = math.max(most[i], #c.C.Comm.out) end end
+      end
+      for _ = 1, 250 do tickAll(1); for i, c in ipairs(cs) do most[i] = math.max(most[i], #c.C.Comm.out) end end
+      local note = {}
+      for i, c in ipairs(cs) do
+        local n = #c.sent - before[i]
+        note[#note + 1] = c.o.name .. " " .. n .. " sent, queue " .. most[i]
+        -- (0.7.1 here: the officer 48, each member 29; the officer answers the officers' word to askers holding an older one)
+        assert(n <= (i == 1 and 42 or 22) and most[i] <= 30, "a login wave of 25 asks: " .. c.o.name .. " sent " .. n .. ", its queue at most " .. most[i] .. ": " .. kinds(c, before[i] + 1))
+      end
+      said[#said + 1] = "400 members, 150 online, a wave of 25 asks: " .. table.concat(note, "; ")
+    end)
+  end
+
+  -- (i) the work per roster read and per rebuild, a guild of 500 and an officer holding 500 records of 230 values each
+  -- (130 of them statistics and discoveries): a read with nothing changed walks no record and asks no officer list
+  -- again; a member coming online asks no officer list again; a storm of 300 records changing discoveries over a minute
+  -- builds the model three times at most, and records that change nothing build it never (0.7.0 walked every record at
+  -- every read, built the officer list again at every online flip, and the model every three seconds)
+  do
+    local guild = {}
+    for i = 1, 499 do guild[i] = { name = "Pp" .. i .. "-Forever", guid = string.format("Player-4242-%08X", 0x0C000000 + i), rank = 3, rankName = "Raider", class = "MAGE", level = 20 + i % 40, online = i <= 150 } end
+    guild[#guild + 1] = member("Coraline", 1)
+    isolated(guild, function()
+      local roster = {}
+      for i = 1, 499 do
+        local st = { guid = guild[i].guid, level = guild[i].level, addon_ver = "0.7.1", zone = "Duskwood" }
+        for j = 1, 96 do st["d" .. j] = j end
+        for j = 1, 100 do st["g" .. (3000 + j)] = i + j end
+        for j = 1, 10 do st["e" .. (5000 + j)] = 1; st["k" .. (5000 + j)] = 20 + j end
+        for j = 1, 10 do st["i" .. (600 + j)] = 1 end
+        roster[guild[i].name] = { seen = EPOCH + 900, online = guild[i].online, stats = st, at = {}, ch = true }
+      end
+      local c = char("Coraline", 1)
+      login(c, { roster = roster })
+      tickAll(120)
+      local R, Rules = c.C.Roster, c.C.Rules
+      local calls = { memberOf = 0, takes = 0, rebuild = 0 }
+      local realMemberOf, realTakes, realRebuild = R.MemberOf, R.TakesWhispers, Rules.Rebuild
+      R.MemberOf = function(...) calls.memberOf = calls.memberOf + 1; return realMemberOf(...) end
+      R.TakesWhispers = function(...) calls.takes = calls.takes + 1; return realTakes(...) end
+      Rules.Rebuild = function(...) calls.rebuild = calls.rebuild + 1; return realRebuild(...) end
+      -- a read with nothing changed
+      local reads = c.memberReads or 0
+      fire(c, "GUILD_ROSTER_UPDATE")
+      R:OfficerTargets()
+      assert(calls.memberOf == 0 and calls.takes == 0, "a read with nothing changed walks no record: " .. calls.memberOf .. " member lookups, " .. calls.takes .. " officer checks")
+      assert((c.memberReads or 0) - reads <= 500, "one GetMemberInfo a member: " .. ((c.memberReads or 0) - reads))
+      -- a member comes online
+      guild[300].online = true
+      fire(c, "GUILD_ROSTER_UPDATE")
+      R:OfficerTargets()
+      assert(calls.takes == 0, "a member online asks no officer list again: " .. calls.takes)
+      -- 300 records changing a discovery over a minute; then the same values again
+      tickAll(40)
+      calls.rebuild = 0
+      for k = 1, 300 do
+        c.C.Comm:Receive("1D|4|e" .. (5100 + k) .. "=1", "GUILD", guild[k].name)
+        if k % 5 == 0 then tickAll(1) end
+      end
+      tickAll(40)
+      local storm = calls.rebuild
+      assert(storm >= 1 and storm <= 3, "300 records over a minute build the model three times at most: " .. storm)
+      calls.rebuild = 0
+      for k = 1, 300 do c.C.Comm:Receive("1D|4|e" .. (5100 + k) .. "=1;zone=Duskwood;level=" .. c.C.Comm.b36(guild[k].level), "GUILD", guild[k].name); if k % 5 == 0 then tickAll(1) end end
+      tickAll(40)
+      assert(calls.rebuild == 0, "records that change nothing build nothing: " .. calls.rebuild)
+      R.MemberOf, R.TakesWhispers, Rules.Rebuild = realMemberOf, realTakes, realRebuild
+      said[#said + 1] = string.format("500 records of 230 values: a quiet read walks none, an online flip asks no officer list, a storm of 300 builds %d times, an echo none", storm)
+    end)
+  end
 
   print("core: " .. table.concat(said, "; "))
 end

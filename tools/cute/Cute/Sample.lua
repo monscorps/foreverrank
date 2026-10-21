@@ -531,7 +531,7 @@ local function killed(encounter, name, here)
   T.lastKill = { enc = encounter, inst = here.id, at = gtime() }
   S:Summaries()
   C.Rules:Killed(encounter)
-  C.Rules:Dirty()
+  C.Rules:Dirty(true)
 end
 -- ENCOUNTER_END (encounterID, encounterName, difficultyID, groupSize, success): a kill when success is 1. BOSS_KILL
 -- (encounterID, encounterName) counts only where no ENCOUNTER_END for the same encounter came within five seconds
