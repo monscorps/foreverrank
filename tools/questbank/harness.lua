@@ -18382,6 +18382,25 @@ end)()
     G.steps = keep; G.ver = G.ver + 1; SF.Refresh()
   end }
 
+  -- 15. (the review round) The step now's who-and-where line was cut at its end: "Chief Archaeologist Greywhisker -
+  -- Da...". Now it is cut as the next steps' rows are: the name before the place
+  ENGCASES[#ENGCASES + 1] = { "the step now's who and where: a long name is cut before the place", function()
+    local c = char("Digger", "MAGE", "Mage", 8, {}, { level = 20 })
+    local QB = c.QB
+    local G, SF = QB.Guide, QB.StepFrame
+    QB:Settings().welcome = nil; SF.Apply()
+    local keep = G.steps
+    G.steps = { handStep(QB, 741, "Chief Archaeologist Greywhisker", "Darnassus", 11.2, 1, "boat") }
+    for _, sc in ipairs({ 0.8, 1, 1.2 }) do
+      SF.SetScale(sc); G.ver = G.ver + 1; SF.Refresh()
+      local w = c.env.QuestBankStep.rows[1].where:GetText()
+      assert(w:find(" %- Darnassus$") and w:find("^Chief Archaeolog"), "at " .. sc .. ": the place kept, the name cut: " .. w)
+      for _, pr in ipairs(checkLayout(c.env.QuestBankStep, "step frame, a long NPC's name at " .. sc)) do STAGE_PROBLEMS[#STAGE_PROBLEMS + 1] = pr end
+    end
+    SF.SetScale(1)
+    G.steps = keep; G.ver = G.ver + 1; SF.Refresh()
+  end }
+
   for _, case in ipairs(ENGCASES) do
     case[2]()
     print("engine: " .. case[1] .. ": ok")

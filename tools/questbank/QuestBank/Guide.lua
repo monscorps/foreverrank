@@ -137,14 +137,18 @@ local function spotPlace(s)
   local TV = QB.Travel
   return (TV and TV.TownNear and TV.TownNear(s.c, s.wx, s.wy, 150)) or (s.m and QB.Data.MAPNAME and QB.Data.MAPNAME[s.m]) or nil
 end
--- who and where: the NPC of a pick-up or a hand-in, the quest of an objective spot, then the place; the place alone
--- where nobody is to be found (a dungeon's Do step, travel, training)
+-- who: the NPC of a pick-up or a hand-in, the quest of an objective spot; nil where nobody is to be found (a dungeon's
+-- Do step, travel, training)
+function G.Who(s)
+  if not s then return nil end
+  if (s.kind == "accept" or s.kind == "handin") and s.npc then return npcName(s.npc) end
+  if s.kind == "objective" and s.obj ~= "d" and s.qid then return questName(s.qid) end
+  return nil
+end
+-- who and where: G.Who, then the place; the place alone where nobody is to be found
 function G.Where(s)
   if not s then return nil end
-  local place = G.Place(s)
-  local who
-  if (s.kind == "accept" or s.kind == "handin") and s.npc then who = npcName(s.npc)
-  elseif s.kind == "objective" and s.obj ~= "d" and s.qid then who = questName(s.qid) end
+  local place, who = G.Place(s), G.Who(s)
   if who and place and who ~= place then return who .. " - " .. place end
   return who or place
 end

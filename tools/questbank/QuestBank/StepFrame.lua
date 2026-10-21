@@ -557,7 +557,10 @@ function SF.Refresh()
     local s, r = steps[i], f.rows[i]
     if i == 1 then
       rowText(r.text, s and G.Title(s) or ("Nothing to do: " .. (QB.CMD or "/qb")), nil)
-      rowText(r.where, s and G.Where(s) or "", nil)
+      -- (who and where cut as the next steps' rows are, the name before the place: "Chief Archaeologist Greywhisker
+      -- - Da..." lost the place)
+      local who, place = s and G.Who(s), s and G.Place(s)
+      if who and place and who ~= place then rowTwo(r.where, who, place) else rowText(r.where, who or place or "", nil) end
       r.mins:SetText((mins and mins > 0) and (mins .. " min") or "")
     elseif s then
       -- (the place once a trip: a step at the place of the one before it, or on its leg, gives its name alone)
