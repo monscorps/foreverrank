@@ -8,7 +8,9 @@ mobalytics and massivelyop answered 403 and were not worked around: their facts 
 
 Decision (owner delegated, 2026-10-21): Known.lua may carry bare ids (the 40 books and their quests, the secret items,
 the locks) so finds are recognised and counted; a name or a spot is never shown until the player or a guildmate has
-found it (spoiler-free by default, one-click reveal levels).
+found it (spoiler-free by default, one-click reveal levels). One exception, because the owner asked for it: the
+Cozy Sleeping Bag chain is shown one step at a time from level 14 (never its length or later places), as the
+reminders design says (2026-10-21-reminders-design.md, Sleeping bag).
 
 ## Headlines
 - 40 library books in the client: class 5 (Reagent), bind on pickup, unique, no vendor price; description ends
