@@ -18516,6 +18516,32 @@ end)()
     assert(item and item[1] == "Say quest XP in chat: on", "the menu's row: " .. tostring(item and item[1]))
   end }
 
+  -- 21. (the review round) A whispered "1R" from anyone got your level, XP, class, GUID's tail and every quest back,
+  -- whatever the share settings: /qb sync <you> from anyone got round them (and Cute's officers' Who sees what). Now a
+  -- whispered ask is answered only to someone you sent yours to (/qb sync Name), and inside a host never
+  ENGCASES[#ENGCASES + 1] = { "a whispered ask for your quests: answered only to whom you sent yours; never inside a host", function()
+    local c = char("Private", "WARRIOR", "Warrior", 1, {}, { level = 5, log = { { 7, 0 } } })
+    local QB = c.QB
+    local S = QB.Sync
+    tick(c, 20)
+    assert(S.ready, "party sync ready")
+    local function clear() for k = #S.out, 1, -1 do S.out[k] = nil end end
+    local function sentTo(name) local n = 0; for _, m in ipairs(S.out) do if m[3] == name then n = n + 1 end end; return n end
+    clear()
+    S:Receive("1R", "WHISPER", "Stranger-Forever")
+    assert(sentTo("Stranger-Forever") == 0, "a stranger's ask: nothing sent")
+    S:Whisper("Friend")
+    clear()
+    S:Receive("1R", "WHISPER", "Friend-Forever")
+    assert(sentTo("Friend-Forever") >= 2, "the friend you sent yours to: theirs answered: " .. sentTo("Friend-Forever"))
+    clear()
+    QB.host = true
+    S:Receive("1R", "WHISPER", "Friend-Forever")
+    QB.host = nil
+    assert(sentTo("Friend-Forever") == 0, "inside a host: never answered")
+  end }
+  end }
+
   for _, case in ipairs(ENGCASES) do
     case[2]()
     print("engine: " .. case[1] .. ": ok")
