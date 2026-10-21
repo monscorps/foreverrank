@@ -11388,6 +11388,73 @@ do
   end)
 end
 
+-- [stage: windows] that stage's tests go right below this line
+-- W1 (the windows round, sub-project A). The leaks Cute_Quest's copy of Sync had: guild sharing is off at every load
+-- (a hand-set true is off again), so nothing goes to GUILD and nothing is taken from it (a guild mate's 1L corrected
+-- XP numbers on one voice); in a raid the party sync says nothing (the Bridge's noRaidSync: a guild raid reached members
+-- the officers routed those values away from). And the game's map opens by QuestBank's tested path, OpenWorldMap and
+-- HideUIPanel, never ToggleWorldMap, and never in a fight
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1), member("Pim", 3) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(5)
+    c.C.Modules.Set("Cute_Quest", true); tick(c, 6)
+    local QB, s = c.addons[2].private, c.env.CuteQuestDB.settings
+    assert(QB.noRaidSync == true and s.share.guild == false, "the copy: no RAID sync, no guild sharing")
+    -- a guild mate's XP reading on GUILD: taken from nothing; the party's still heard
+    local recorded, record = 0, QB.Live.Record
+    QB.Live.Record = function(...) recorded = recorded + 1; return record(...) end
+    local f = QB.Sync.frame
+    f.__scripts.OnEvent(f, "CHAT_MSG_ADDON", "QuestBank", "1L|33:450:5", "GUILD", "Pim-Forever")
+    f.__scripts.OnEvent(f, "CHAT_MSG_ADDON", "QuestBank", "1S|5|100|A|WARRIOR|0|0|0|-1|0|0|6.1.1|0000000000", "GUILD", "Pim-Forever")
+    assert(recorded == 0 and next(QB.Sync.members) == nil, "a guild 1L and 1S change nothing")
+    f.__scripts.OnEvent(f, "CHAT_MSG_ADDON", "QuestBank", "1L|33:450:5", "PARTY", "Pim-Forever")
+    assert(recorded == 1, "the party's 1L is still heard")
+    QB.Live.Record = record
+    -- a guild raid: no 1S, 1Q or 1R on RAID, from a broadcast or a roster change
+    c.o.group = true
+    local inRaid = c.env.IsInRaid
+    c.env.IsInRaid = function() return true end
+    for k = #c.outbox, 1, -1 do c.outbox[k] = nil end
+    QB.Sync.lastStatus, QB.Sync.lastQuests = nil, nil
+    QB.Sync:Broadcast(false)
+    fire(c, "GROUP_ROSTER_UPDATE"); tick(c, 30)
+    for _, m in ipairs(c.outbox) do assert(m[3] ~= "RAID" and m[3] ~= "GUILD", "nothing of the engine's on RAID or GUILD: " .. tostring(m[3]) .. " " .. tostring(m[2]):sub(1, 30)) end
+    c.env.IsInRaid = function() return false end
+    QB.Sync.lastStatus, QB.Sync.lastQuests = nil, nil
+    QB.Sync:Broadcast(false); tick(c, 10)
+    local party = 0
+    for _, m in ipairs(c.outbox) do if m[3] == "PARTY" then party = party + 1 end end
+    assert(party > 0, "a party still hears the sync: " .. party)
+    c.env.IsInRaid, c.o.group = inRaid, nil
+    -- the game's map: OpenWorldMap, never ToggleWorldMap; a second ask on your own map keeps it; not in a fight
+    local toggled = 0
+    local toggle = c.env.ToggleWorldMap
+    c.env.ToggleWorldMap = function(...) toggled = toggled + 1; return toggle(...) end
+    for k = #c.panelCalls, 1, -1 do c.panelCalls[k] = nil end
+    assert(QB.UI.OpenMap() == true and c.map.shown and c.panelCalls[1] == "open", "opened by OpenWorldMap: " .. table.concat(c.panelCalls, ","))
+    assert(QB.UI.OpenMap(true) == false and not c.map.shown and c.panelCalls[2] == "hide", "shut by HideUIPanel when asked to toggle")
+    c.combat = true
+    local n0 = #c.chat
+    assert(QB.UI.OpenMap() == false and #c.panelCalls == 2 and #c.chat == n0 + 1, "in a fight: nothing called, one line said")
+    c.combat = false
+    assert(toggled == 0, "ToggleWorldMap never called")
+    c.env.ToggleWorldMap = toggle
+    -- a 0.7 save whose guild sharing was turned on by hand after the first run: off again at the next load
+    s.share.guild = true
+    local db, qdb = c.env.CuteDB, c.env.CuteQuestDB
+    leave(c)
+    local d = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    d.env.CuteQuestDB = qdb
+    login(d, db); tickAll(6)
+    if not d.addons[2].loaded then d.C.Modules.Set("Cute_Quest", true); tick(d, 6) end
+    assert(d.env.CuteQuestDB.settings.share.guild == false, "guild sharing off again at the next load")
+    leave(d)
+    print("windows W1: nothing to or from GUILD under Cute (a hand-set true off again), no RAID sync in a raid, the party still heard; the game's map by OpenWorldMap and HideUIPanel, never in a fight")
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

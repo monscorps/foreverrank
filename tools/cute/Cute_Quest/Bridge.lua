@@ -27,6 +27,9 @@ local UI = E.UI
 -- the arrow say those things
 function E:Print(msg) Cute.Print(msg) end
 E.quiet = true
+-- the party sync never on RAID (Sync.lua groupChannel): a guild raid would reach members the officers routed level, XP
+-- and the quest log away from; in a raid the party sync is silent. Cute's own channel carries what the guild sees
+E.noRaidSync = true
 -- the engine's words name the host: "Choose a reward: X is Cute's pick", "Nothing to do: /cute quests", the minimap
 -- menu's "Cute settings"; and they leave out the /qb commands a Cute player is never told of (host: Settings alone)
 E.NAME, E.CMD, E.host = "Cute", "/cute quests", true
@@ -133,7 +136,28 @@ function UI:ShowTab(tab) self:Open(tab) end
 function UI:TogglePage(tab) self:Open(tab) end
 function UI:Toggle() Cute.Open("quests") end
 function UI:Refresh() Cute.Refresh() end
-function UI.OpenMap() if type(ToggleWorldMap) == "function" then ToggleWorldMap() end end
+-- the game's world map as QuestBank's own window opens it (QuestBank/UI.lua UI.OpenMap): OpenWorldMap opens it and
+-- HideUIPanel shuts it, both the game's own panel code, so the map lays itself out and draws its pins as the game.
+-- Never ToggleWorldMap, which the game later blames on the addon; and not in a fight, where addons may not show or
+-- hide a panel (UIParentPanelManager.lua:854-858)
+function UI.OpenMap(toggle)
+  local wm = WorldMapFrame
+  if not (wm and OpenWorldMap and HideUIPanel) then return false end
+  if InCombatLockdown and InCombatLockdown() then
+    E:Print("In a fight only the game's own map key opens the map.")
+    return false
+  end
+  if wm:IsShown() then
+    if toggle then pcall(HideUIPanel, wm); return false end
+    -- open on another map: shut and opened again, where the game puts it on your zone
+    local ok, here = pcall(function() return MapUtil.GetDisplayableMapForPlayer() end)
+    here = ok and E.Plain(here) or nil
+    if not here or here == E.Plain(wm:GetMapID()) then return true end
+    pcall(HideUIPanel, wm)
+  end
+  pcall(OpenWorldMap)
+  return wm:IsShown() and true or false
+end
 function UI.MapPageOn() return false end
 function UI.Caret() end
 function UI:ShowMenu(title, items)
@@ -161,16 +185,14 @@ end
 UI.frame, UI.tab, UI.lastTab, UI.postFrame, UI.scrollToQuest = nil, nil, nil, nil, nil
 
 -- the module's defaults, once: no QuestBank map page (the Map key is the game's), no posting, no update nag, no
--- level-up line, no welcome card (the choices are Settings rows), no minimap button (Cute has one). And, once for a
--- fresh install and once for a 0.7 save (0.7.0 shipped it on), no sharing with the whole guild: the engine's 1S (level,
--- XP, class, GUID), 1Q (every quest and its progress) and 1R went to GUILD around the officers' Who sees what; Cute's
--- own channel carries what the guild sees. Party sync stays
+-- level-up line, no welcome card (the choices are Settings rows), no minimap button (Cute has one). And at every load
+-- no sharing with the whole guild (Cute has no row for it): the engine's 1S (level, XP, class, GUID), 1Q (every quest
+-- and its progress) and 1R went to GUILD around the officers' Who sees what, and with it off the engine takes nothing
+-- from GUILD either (Sync.lua S:Receive); Cute's own channel carries what the guild sees. Party sync stays
 local function firstRun()
   local s = E:Settings()
-  if not s.cuteGuildOff then
-    s.cuteGuildOff = true
-    if type(s.share) == "table" then s.share.guild = false end
-  end
+  s.cuteGuildOff = true
+  if type(s.share) == "table" then s.share.guild = false end
   if s.cuteDefaults then return end
   s.cuteDefaults = true
   s.mapPage, s.post.auto, s.updates, s.clockLevelMsg, s.welcome = false, false, false, false, nil

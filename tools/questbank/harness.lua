@@ -20715,6 +20715,49 @@ do
   assert(a and a.name.__fontFile == "Fonts\\ARIALN.TTF", "the arrow's name line in the skin's font")
 end
 
+-- [stage: windows] that stage's tests go right below this line
+-- The windows round's engine hooks (Cute's sub-project A). With guild sharing off nothing is taken from GUILD either: a
+-- guild mate's 1L corrected your XP numbers on one voice, and their 1S listed them as a party member. A host's
+-- QB.noRaidSync (Cute's Bridge sets it) keeps the party sync off RAID: in a raid it is silent; QuestBank alone still
+-- shares there, its players' own choice
+do
+  local c = newClient({ name = "Gated", level = 18, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1, race = "Human",
+    log = {}, done = {}, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Goldshire", guild = true, group = true })
+  login(c)
+  local QB, f = c.QB, c.QB.Sync.frame
+  local recorded = 0
+  local record = QB.Live.Record
+  QB.Live.Record = function(...) recorded = recorded + 1; return record(...) end
+  local function hear(msg, channel) f.__scripts.OnEvent(f, "CHAT_MSG_ADDON", "QuestBank", msg, channel, "Mate Steelhand-Forever Normal") end
+  QB:Settings().share.guild = false
+  hear("1L|118:450:18", "GUILD")
+  hear("1S|18|100|A|WARRIOR|0|0|0|-1|0|0|6.1.1|0000000000", "GUILD")
+  assert(recorded == 0 and next(QB.Sync.members) == nil, "guild sharing off: a guild mate's XP reading and status are taken from nothing")
+  hear("1L|118:450:18", "PARTY")
+  assert(recorded == 1, "the party is still heard")
+  QB:Settings().share.guild = true
+  hear("1L|118:450:18", "GUILD")
+  assert(recorded == 2, "guild sharing on: the guild is heard as before")
+  QB.Live.Record = record
+  QB:Settings().share.guild = false
+  -- in a raid: RAID while QuestBank is its own host, nothing with a host's noRaidSync
+  c.raid = true
+  local function raidSends()
+    c.outbox = {}
+    QB.Sync.lastStatus, QB.Sync.lastQuests = nil, nil
+    QB.Sync:Broadcast(false)
+    tick(c, 30)
+    local n = 0
+    for _, m in ipairs(c.outbox) do if m[3] == "RAID" then n = n + 1 end end
+    return n
+  end
+  assert(raidSends() > 0, "QuestBank alone: the party sync goes to RAID in a raid")
+  QB.noRaidSync = true
+  assert(raidSends() == 0, "a host's noRaidSync: nothing on RAID")
+  QB.noRaidSync, c.raid = nil, false
+  print("windows: guild sharing off takes nothing from GUILD (no 1L correction, no 1S member); a host's noRaidSync keeps the party sync off RAID")
+end
+
 local seen = {}
 local unique = {}
 for _, p in ipairs(problems) do if not seen[p] then seen[p] = true; unique[#unique + 1] = p end end
