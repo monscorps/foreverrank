@@ -13885,6 +13885,7 @@ do local function cardsStage()
     CF:Announce(set)
     assert(CF.label:GetText() == "NEW RECORD" and CF.cards[1].label:GetText() == "RECORD" and CF.sub:GetText():find("^Guild record"), "the NEW RECORD announcement: " .. tostring(CF.sub:GetText()))
     check(CF.frame, "records: a NEW RECORD announcement")
+    assert(tipText(function(t) H(dot).CardTip(t, set, set.cards[1]) end):find("two members' times agreed", 1, true), "the card's tooltip says what backs it")
     CF.frame:Hide()
     -- a holder's own improvement is quiet
     clear(bea, 1100); clear(cid, 1102)
@@ -13942,6 +13943,7 @@ do local function cardsStage()
     local rq
     for _, r in ipairs(H(ola).Rows()) do if r.src == "record" then rq = r end end
     assert(rq and rq.mark == "Record?" and rq.card.kind == "blooper" and rq.card.title == "Deaths" and rq.card.name == "Cid" and rq.card.source == "sdeaths", "a Record? row: Cid's deaths")
+    assert(tipText(function(t) H(ola).CardTip(t, { kind = "r" }, rq.card) end):find("A guild record: Deaths, all time.", 1, true), "its card's tooltip")
     for _, c in ipairs({ bea, cid, dot }) do assert(#H(c).Rows() == 0 and toasts(c) == 2, c.o.name .. ": no queue, no toast") end
     fire(cid, "PLAYER_DEAD")
     tickAll(5)
@@ -13953,6 +13955,23 @@ do local function cardsStage()
     n = 0
     for _, r in ipairs(H(ola).Rows()) do if r.src == "record" then n = n + 1 end end
     assert(recOf(ola, "jumps") and recOf(ola, "jumps").g == dot.o.guid and n == 1, "jumps, off: the table alone")
+    -- an untrusted member's "most" is none, nor a value past the stat's bounds
+    for _ = 1, 20 do fire(zed, "PLAYER_DEAD") end
+    ike.C.Comm.Queue({ msg = "1D|4|pb_deaths=" .. ike.C.Comm.b36(300) })
+    tickAll(5)
+    assert(recOf(ola, "deaths").g == cid.o.guid and not recOf(ola, "pb_deaths") and recOf(dot, "deaths").g == cid.o.guid, "an untrusted member and a value past its bounds hold nothing")
+    -- the officers close Deaths: the record goes from every client's table, its Record? row locks; opened, it fills
+    -- again as values come
+    ola.C.Policy:Set("deaths", "self")
+    ola.C.Comm:SendPolicy()
+    tickAll(5)
+    assert(not recOf(dot, "deaths") and not recOf(ola, "deaths") and not H(ola).Tickable(rq), "closed: no record of it anywhere, its row locked")
+    ola.C.Policy:Set("deaths", "all")
+    ola.C.Comm:SendPolicy()
+    tickAll(5)
+    fire(cid, "PLAYER_DEAD")
+    tickAll(5)
+    assert(recOf(dot, "deaths") and recOf(dot, "deaths").g == cid.o.guid and H(ola).Tickable(rq), "opened: filled again, its row free")
     -- a statistic: Add on the chip's band, the game's own category; filled with today's best, and Cid's taking it a
     -- Record? row
     H(ola).OpenChip("records")
@@ -14050,7 +14069,7 @@ do local function cardsStage()
     local msg = Rc(ola).Message()
     assert(#msg <= 255, "1O within a message: " .. #msg)
     assert(tableBytes < 50000, "the table at 400: " .. tableBytes)
-    said[#said + 1] = string.format("records: every record off at first; a second voice within 5 s a clear record and one toast on every client, nothing sent; members above the range quiet; a holder's own improvement quiet; a second record of an instance in a day its News row again; within 5%% quiet, past it the next day a toast; an untrusted voice and a clear under two minutes none; a most record on a Record? row in the officer's Queue alone, its holder's improvement none, one off the table alone; a statistic added on the band, filled and a Record? row; a member's 1O refused, one a minute, a login's records quiet and the list in the answer to 1G; the chip and Settings > Records at both sizes, Preview; off for a member and for the guild; /cute diag cards; the table at 400 %d KB, 1O %d bytes", math.ceil(tableBytes / 1024), #msg)
+    said[#said + 1] = string.format("records: every record off at first; a second voice within 5 s a clear record and one toast on every client, nothing sent; members above the range quiet; a holder's own improvement quiet; a second record of an instance in a day its News row again; within 5%% quiet, past it the next day a toast; an untrusted voice and a clear under two minutes none; a most record on a Record? row in the officer's Queue alone, its holder's improvement none, one off the table alone; an untrusted member's and an out-of-bounds most none; a stat the officers close leaves every table and locks its row; a statistic added on the band, filled and a Record? row; a member's 1O refused, one a minute, a login's records quiet and the list in the answer to 1G; the chip and Settings > Records at both sizes, Preview; off for a member and for the guild; /cute diag cards; the table at 400 %d KB, 1O %d bytes", math.ceil(tableBytes / 1024), #msg)
   end)
 
   -- the Records chip with nothing in it, for a member and an officer

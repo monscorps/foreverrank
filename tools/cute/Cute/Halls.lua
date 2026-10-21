@@ -1138,6 +1138,9 @@ function H.CardTip(tip, set, c)
   local sdef = stat and C.Stats.byId[stat]
   local line
   if code and C.CardFrame and C.CardFrame.RULE and C.CardFrame.RULE[code] then line = C.CardFrame.RULE[code] .. ", in a run."
+  -- (a record's: a fastest clear two members' times agreed on, or the stat and where it was held, Records.lua)
+  elseif stat and stat:match("^c%d+$") then line = "The guild's fastest clear of it: two members' times agreed."
+  elseif sdef and set.kind == "r" then line = "A guild record: " .. sdef.label .. ", " .. ((c.valueLabel and c.valueLabel ~= "") and c.valueLabel or "all time") .. "."
   elseif sdef then line = "The guild's best at " .. sdef.label .. " (" .. (PERIOD_WORD[set.period or "a"] or "all time") .. ")."
   elseif src:match("^a%d") then line = c.kind == "first" and "A guild first, as the officers judged it." or (c.guild and "An achievement the guild earned." or "An achievement a guild member earned.")
   elseif src:match("^b%d") then line = "A guild first: the first kill two members' Cute agreed on."
