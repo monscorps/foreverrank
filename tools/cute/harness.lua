@@ -12004,6 +12004,38 @@ do local function runsStage()
   end)
   said[#said + 1] = "namesakes take nobody for anybody: your echo never theirs, a third member tells two Branns apart"
 
+  -- (12) a Cute user out of any guild: no policy can settle there, so its run ends with no report of its own (nor the
+  -- scribe's: its fields are no guild's to route), a line says so once, and the next instance starts a run
+  isolated({ gmember("Gil", 1), gmember("Hep", 3) }, function()
+    local cs = { gchar("Gil", 1), gchar("Hep", 3) }
+    local solo = gchar("Ivy", 3, { inGuild = false })
+    for _, c in ipairs({ cs[1], cs[2], solo }) do login(c) end
+    tickAll(40)
+    local all = { cs[1], cs[2], solo }
+    local G = group(all)
+    local function runThrough(inst, name, encs)
+      zone(all, "party", inst, name)
+      tickAll(40)
+      assert(solo.C.Runs.Current() and solo.C.Runs.Current().inst == inst, "a run in " .. name .. " out of a guild")
+      for _, enc in ipairs(encs) do fight(G, 60, { Gil = { [0] = 900 }, Ivy = { [0] = 800 } }, enc); tickAll(60) end
+      tickAll(60)
+      cs[1].C.Runs:EndRun()
+      tickAll(40)
+      zone(all, "none", 0)
+      tickAll(10)
+    end
+    runThrough(36, "The Deadmines", { 1230, 1236 })
+    assert(not solo.C.Runs.Current() and not lastReport(solo) and lastReport(cs[2]), "out of a guild: the run over, no report; the guild's members have theirs")
+    local said1 = 0
+    for _, l in ipairs(solo.chat) do if l:find("need a guild", 1, true) then said1 = said1 + 1 end end
+    assert(said1 == 1, "a line says why, once: " .. said1)
+    runThrough(48, "Blackfathom Deeps", { 1240, 1242 })
+    local said2 = 0
+    for _, l in ipairs(solo.chat) do if l:find("need a guild", 1, true) then said2 = said2 + 1 end end
+    assert(not solo.C.Runs.Current() and said2 == 1, "the next run starts and ends; the line not said again: " .. said2)
+  end)
+  said[#said + 1] = "out of a guild: the run ends without a report, a line says why once, the next one starts"
+
   -- (4) the lockdown: a 2V answered 11 spends no try, the Chat restriction's Activating holds it and only its Inactive
   -- lets it go, once; a lockdown for the whole stay sends nothing inside, a disband inside gives each client its own
   -- report, and the id and the scribe settle once the group is out; the meter read only out of combat; a secret

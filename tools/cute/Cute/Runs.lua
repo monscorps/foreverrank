@@ -868,12 +868,25 @@ function R:Finish(rep, shown)
     self:Show(shown or rep)
   end
 end
+-- out of any guild no policy can settle (Policy:Left keeps no line): the run ends with no report, and a line says why
+-- once a session; the next run starts as any does
+local function outOfGuild() local Ro = C.Roster; return Ro and Ro.InGuild and not Ro:InGuild() or false end
+function R:NoGuild()
+  self:Finish(nil)
+  if R.saidNoGuild then return end
+  R.saidNoGuild = true
+  C.Print("run reports need a guild, whose officers set who sees what: this run ended without one.")
+end
 -- this client's own build, now or once the policy settles
 function R:BuildOwn(shown)
   local run = self.run
   if not run then return end
   if not reports(run) then self:Finish(nil) return end
-  if not C.Policy:Settled() then self.pending = { run = run, shown = shown } return end
+  if not C.Policy:Settled() then
+    if outOfGuild() then self:NoGuild() return end
+    self.pending = { run = run, shown = shown }
+    return
+  end
   self:ReadMeter()
   self:ReadLoot()
   self:Finish(self:Build(run), shown)
@@ -917,7 +930,11 @@ function R:ScribeReport()
   local run = self.run
   if not run then return end
   if not reports(run) then self:Finish(nil) return end
-  if not C.Policy:Settled() then self.pending = { run = run } return end
+  if not C.Policy:Settled() then
+    if outOfGuild() then self:NoGuild() return end
+    self.pending = { run = run }
+    return
+  end
   local rep = self:Build(run)
   local kv = { "k=" .. run.kind, "i=" .. b36(run.inst or run.map or 0), "s=" .. b36(run.start), "d=" .. b36(rep.dur), "b=" .. b36(rep.bosses),
     "n=" .. b36(rep.known), "w=" .. b36(rep.wipes), "x=" .. b36(rep.deaths) }
@@ -1214,7 +1231,11 @@ function R:HeardReport(body)
   self:ReadMeter()
   self:ReadLoot()
   if not reports(run) then self:Finish(nil) return end
-  if not C.Policy:Settled() then self.pending = { run = run, shown = shown } return end
+  if not C.Policy:Settled() then
+    if outOfGuild() then self:NoGuild() return end
+    self.pending = { run = run, shown = shown }
+    return
+  end
   self:Finish(self:Build(run), shown)
 end
 
@@ -1359,10 +1380,10 @@ end
 function R:Tick()
   yards()
   local run = self.run
-  if self.pending and C.Policy:Settled() then
+  if self.pending and (C.Policy:Settled() or outOfGuild()) then
     local p = self.pending
     self.pending = nil
-    -- (a scribe in doubt sent no 2A: the others built their own, and so does it)
+    -- (a scribe in doubt sent no 2A: the others built their own, and so does it; one out of a guild builds none)
     if self.run == p.run then self:BuildOwn(p.shown) end
   end
   showWaiting()
