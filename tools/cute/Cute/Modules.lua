@@ -280,6 +280,12 @@ local function loaded(name)
   return A and type(A.IsAddOnLoaded) == "function" and C.Get(A.IsAddOnLoaded, name) == true or false
 end
 local function registered(name) for _, def in ipairs(M.list) do if def.addon == name then return def end end end
+-- the base's window, not registered yet but on its way: its addon waits for a fight's end to load (one that failed
+-- to load, or that the client lacks, is no window: the card and the keys leave it out)
+function M.BaseComing()
+  for _, a in ipairs(M.found) do if a.base and M.pending[a.name] and not registered(a.name) then return true end end
+  return false
+end
 
 -- the game's AddOns list for this character: on before Cute loads one (a module switched off before is off there),
 -- off when it is switched off, so a module that is no LoadOnDemand one stays out at the next login too
@@ -308,6 +314,8 @@ function M.Load(name)
       regen:SetScript("OnEvent", C.Safe(function()
         pcall(regen.UnregisterEvent, regen, "PLAYER_REGEN_ENABLED")
         for n in pairs(M.pending) do M.pending[n] = nil; if M.OnKey(n) then M.Load(n) end end
+        -- (the keys count a window whose addon has loaded now, or has failed to: Keys.lua K.Windows)
+        if C.Keys and C.Keys.started then C.Keys.Apply() end
         if C.UI and C.UI.frame and C.UI.frame:IsShown() then C.UI:Draw() end
       end, "modules: after combat"))
     end
@@ -422,7 +430,9 @@ end
 
 -- at the first loading screen of a session: the built-in modules that are on start, the module addons are found, and
 -- the ones on for this character load. One the player switched off in the game's AddOns list since is the player's
--- word: its box goes unticked, and only a tick in Settings turns it on again
+-- word: its box goes unticked, and only a tick in Settings turns it on again. Not the base: it has no box to tick, and
+-- 0.7 itself put Cute_Quest off there for a character whose quest modules were all off (its M.Set), so the base is
+-- switched on there and loaded whatever the list says (M.Load enables it first)
 local function offInList(name)
   local A = addons()
   local state = A and type(A.GetAddOnEnableState) == "function" and C.Get(A.GetAddOnEnableState, name, character()) or nil
@@ -435,7 +445,7 @@ function M.Start()
   M.found = M.Scan()
   for _, a in ipairs(M.found) do
     if M.AddonWanted(a.name) and not registered(a.name) then
-      if offInList(a.name) then for key in pairs(choices()) do if folderOf(key) == a.name then choices()[key] = false end end else M.Load(a.name) end
+      if offInList(a.name) and not a.base then for key in pairs(choices()) do if folderOf(key) == a.name then choices()[key] = false end end else M.Load(a.name) end
     end
   end
 end

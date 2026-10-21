@@ -37,11 +37,11 @@ function K.Windows()
   end
   return out
 end
--- a window whose module addon the client lists (it registers its pages as it loads, at the login)
+-- a window whose module addon is on its way: it loads once a fight at the login ends, and registers its pages then
+-- (Modules.lua M.BaseComing; one that did not load is no window, so no key is held for it)
 function K.Expected(id)
   if id ~= "quests" then return false end
-  for _, a in ipairs(C.Modules.found) do if a.base then return true end end
-  return false
+  return C.Modules.BaseComing()
 end
 local function byId(id) for _, w in ipairs(WINDOWS) do if w.id == id then return w end end end
 

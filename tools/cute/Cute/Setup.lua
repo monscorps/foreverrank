@@ -34,12 +34,9 @@ local function answered()
 end
 -- the engine's settings (Cute_Quest's Bridge.lua door): nil while QuestBank runs the engine or no copy is here
 local function engine() return C.API.QuestSetup end
--- whether this client has the quest window's addon (its rows are left out otherwise)
-local function hasQuests()
-  if C.Modules.byId.quests then return true end
-  for _, a in ipairs(C.Modules.found) do if a.base then return true end end
-  return false
-end
+-- whether this client has the quest window: its addon registered, or loading once a fight ends (its rows are left out
+-- otherwise: one the client would not load is no window)
+local function hasQuests() return C.Modules.byId.quests ~= nil or C.Modules.BaseComing() end
 
 -- the rows, each { id, group, label, kind = "check" | "choice" | "key" | "fixed", ... }; a row only where its part is
 local function rows()
@@ -60,7 +57,8 @@ local function rows()
       add({ id = "light", group = "On screen", label = "Interact light", kind = "check" })
       add({ id = "accept", group = "Quests", label = "Accept for me", kind = "choice" })
       add({ id = "handin", group = "Quests", label = "Hand finished quests in for me", kind = "check" })
-    else
+    elseif C.Modules.byId.quests then
+      -- (the quest window registered and no engine of its own: QuestBank serves it, Bridge.lua's dormant copy)
       add({ id = "dormant", group = "On screen", kind = "line", label = "QuestBank is loaded: its step frame, arrow and camp bar are its own." })
     end
   end

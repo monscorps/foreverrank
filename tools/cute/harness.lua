@@ -12671,6 +12671,62 @@ do
   end)
 end
 
+-- W20 (the review of sub-project C): a 0.7 character whose quest modules were all off had Cute_Quest switched off in
+-- the game's AddOns list by 0.7 itself (its M.Set), never by the player. Cute_Quest is the base now, with no box to
+-- tick again: it is switched on there and loaded at the login, so the card's rows are the engine's (the "QuestBank is
+-- loaded" line only while QuestBank serves the engine) and the keys count the quest window. A base that waits for a
+-- fight's end is counted, and its keys follow once it loads; one that does not load is no window: no rows for it on
+-- the card and no key held for it (L stayed the game's)
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local guid = guidOf("Rone")
+    local state = {}
+    local function client() return newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true })) end
+    local function ids(list) local out = {}; for _, r in ipairs(list) do out[#out + 1] = r.id end; return table.concat(out, " ") end
+    local function windows(c) local out = {}; for _, w in ipairs(c.C.Keys.Windows()) do out[#out + 1] = w.id end; return table.concat(out, " ") end
+    local c = client()
+    login(c); tickAll(6)
+    -- 0.7's own word: every quest module off, and Cute_Quest off for this character in the game's AddOns list
+    local ch = c.C.Char()
+    for _, key in ipairs({ "Cute_Quest", "Cute_Quest:journal", "Cute_Quest:gear", "Cute_Quest:map", "Cute_Quest:camp" }) do ch.modules[key] = false end
+    ch.setup, ch.keys = nil, nil
+    state.Cute_Quest = { [guid] = false }
+    local db = c.env.CuteDB
+    leave(c)
+    local d = client()
+    login(d, db); tickAll(6)
+    assert(d.addons[2].loaded and d.C.Modules.byId.quests and state.Cute_Quest[guid] == true, "the base switched on in the AddOns list and loaded: " .. table.concat(d.addonCalls, ", "))
+    local rows = ids(d.C.Setup.Rows())
+    assert(rows:find("quests", 1, true) and rows:find("step", 1, true) and not rows:find("dormant", 1, true), "the card's rows are the engine's, no QuestBank line: " .. rows)
+    assert(windows(d) == "guild quests", "the keys count the quest window: " .. windows(d))
+    leave(d)
+    -- a login in a fight: the base loads after it, counted meanwhile, and its keys follow once it has loaded
+    local e = client()
+    e.combat = true
+    login(e, db); tick(e, 1)
+    assert(not e.addons[2].loaded and e.C.Modules.pending.Cute_Quest and windows(e) == "guild quests", "loading after the fight: the quest window counted: " .. windows(e))
+    e.C.Char().keys = { guild = "follow", quests = "follow" }
+    e.combat = false
+    fire(e, "PLAYER_REGEN_ENABLED"); tick(e, 1)
+    assert(e.addons[2].loaded and e.C.Keys.held.L == "quests", "loaded after the fight, L held for the quest window: " .. tostring(e.C.Keys.held.L))
+    leave(e)
+    -- a base the client will not load: no window, no rows, no key
+    local f = client()
+    local load = f.env.C_AddOns.LoadAddOn
+    f.env.C_AddOns.LoadAddOn = function(x) if x == "Cute_Quest" then return false, "INCOMPATIBLE" end return load(x) end
+    login(f, db); tickAll(6)
+    assert(not f.addons[2].loaded and not f.C.Modules.byId.quests, "the client would not load it")
+    local frows = ids(f.C.Setup.Rows())
+    assert(not frows:find("quests", 1, true) and not frows:find("dormant", 1, true) and not frows:find("dungeons", 1, true), "no quest rows on the card: " .. frows)
+    f.C.Char().keys = { guild = "follow", quests = "follow" }
+    f.C.Keys.Apply()
+    assert(windows(f) == "guild" and f.C.Keys.held.L == nil, "no key held for a window that is not there: " .. windows(f))
+    leave(f)
+    print("windows W20: a 0.7 character's Cute_Quest, off in the AddOns list by 0.7, switched on and loaded as the base: the card's rows the engine's, the keys counting L; after a fight's end when the login was in one; none of it for a base that does not load")
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end
