@@ -316,12 +316,15 @@ local function byRank(a, b)
   if a.grank ~= b.grank then return a.grank > b.grank end
   return a.id < b.id
 end
--- the party's quests, told apart without a string: the members' step version and how many quests they hold
+-- the party's quests, told apart without a string: their ids summed, and how many (not the members' steps, which change
+-- with every kill they make: Sync's stepVer)
 local function partyMark()
   local S = QB.Sync
   if not (S and S.members) then return 0 end
-  local n = (S.stepVer or 0) * 4096
-  for _, m in pairs(S.members) do if m.quests then for _ in pairs(m.quests) do n = n + 1 end end end
+  local n = 0
+  for _, m in pairs(S.members) do
+    if m.quests then for id in pairs(m.quests) do if type(id) == "number" then n = n + 1 + id end end end
+  end
   return n
 end
 -- a real event since the last fill: the inputs it was made from, in fillAt

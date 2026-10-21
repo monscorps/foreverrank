@@ -18789,6 +18789,33 @@ end)()
     assert(M.Floor(21) ~= F, "the next hand-in moves it")
   end }
 
+  -- the review: the fill's gate (a real event alone) counted the party's step version, and a member's step text changes
+  -- with every kill they make ("Kill Crushridge Ogre 3/10", 1G every ten seconds at most): in a party the fill ran
+  -- again on nearly every refresh, picking where you stood. A member's quests are the event, not their step
+  F62CASES[#F62CASES + 1] = { "the fill: a party member's kills are no event, a quest they take is", function()
+    local c = char("Partner", { world = { 0, -9260, -2200 } })
+    local QB, G, S = c.QB, c.QB.Guide, c.QB.Sync
+    QB:Settings().guide.on = true
+    settle(c)
+    S.members["Pal"] = { quests = { [20] = { code = "t" } }, step = "Kill Blackrock Outrunner 1/10" }
+    S.stepVer = (S.stepVer or 0) + 1
+    G.Fill(21)
+    local calls, cand = 0, QB.UI.Candidates
+    QB.UI.Candidates = function(...) calls = calls + 1; return cand(...) end
+    for k = 2, 6 do
+      S.members["Pal"].step = "Kill Blackrock Outrunner " .. k .. "/10"
+      S.stepVer = S.stepVer + 1
+      G.Fill(21)
+    end
+    local kills = calls
+    S.members["Pal"].quests[34] = { code = "t" }
+    G.Fill(21)
+    QB.UI.Candidates = cand
+    S.members["Pal"] = nil
+    assert(kills == 0, "a member's kills made " .. kills .. " fills")
+    assert(calls == 1, "a quest a member takes is an event: " .. calls)
+  end }
+
   for _, case in ipairs(F62CASES) do
     case[2]()
     print("xpm: " .. case[1] .. ": ok")
