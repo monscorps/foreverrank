@@ -192,7 +192,7 @@ function R:Refresh(event)
   end
   self.empties = 0
   self.listedWhole = complete == true
-  local members, byGuid, byFirst, seen, sig, me, top, unread = {}, {}, {}, {}, {}, nil, nil, 0
+  local members, byGuid, byFirst, seen, sig, names, me, top, unread = {}, {}, {}, {}, {}, {}, nil, nil, 0
   for _, m in ipairs(list) do
     if not seen[m.key] then
       seen[m.key] = true
@@ -206,10 +206,16 @@ function R:Refresh(event)
       if m.level and (not top or m.level > top) then top = m.level end
       -- (the name too: a rename, or a GUID's name read at last, changes who a sender string names)
       sig[#sig + 1] = m.key .. (m.online and "+" or "-") .. m.rank .. ":" .. tostring(m.level) .. ":" .. tostring(m.canon)
+      names[#names + 1] = m.key .. ":" .. tostring(m.canon)
     end
   end
   table.sort(sig)
   local signature = table.concat(sig, "|")
+  -- (who is named what, online or not: what a sender string names (R:SenderMember) with the unread names online, for
+  -- R:OfficerTargets)
+  table.sort(names)
+  local nameSig = table.concat(names, "|")
+  if nameSig ~= self.nameSig then self.nameSig, self.nameVersion = nameSig, (self.nameVersion or 0) + 1 end
   local changed = signature ~= self.signature or unread ~= (self.unread or 0)
   local first = not self.trusted
   self.members, self.byGuid, self.byFirst, self.self, self.signature, self.unread = members, byGuid, byFirst, me, signature, unread
@@ -809,9 +815,10 @@ end
 function R:OfficerTargets()
   if not self.trusted then return {} end
   local thr = math.min(C.Policy:Threshold(), C.Policy:LineThreshold())
-  -- (built again where a record changed who it is, or an officer came, went or moved: not for every member online or
-  -- off, 0.7.0's every roster change)
-  local at = self.recVersion .. ":" .. tostring(self.offSig)
+  -- (built again where a record changed who it is, or an officer came, went or moved, or what a sender string names
+  -- did (a name, a namesake, an unread name online: R:SenderMember): not for every member online or off, 0.7.0's every
+  -- roster change. 0.7.1's first build left the names out, and kept an officer a sender string no longer named)
+  local at = self.recVersion .. ":" .. tostring(self.nameVersion) .. ":" .. tostring(self.unread) .. ":" .. tostring(self.offSig)
   if self.targets and self.targetsAt == at and self.targetsThr == thr then return self.targets end
   local out = {}
   for key in pairs(CuteDB.roster) do

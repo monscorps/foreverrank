@@ -395,7 +395,9 @@ local function build(e)
   if e.covered and e.covered() then return nil, nil, nil end
   if not e.parts then return e.msg, nil, nil end
   if e.target then
-    if not C.Roster:OfficerSender(e.target) then return nil, {}, e.parts end
+    -- (a target no officer now leaves the officers to whisper to as well, built again: its parts are not queued to it
+    -- again at the next change)
+    if not C.Roster:OfficerSender(e.target) then C.Roster.targets = nil; return nil, {}, e.parts end
     return e.msg, e.parts, {}
   end
   local kept, back = {}, {}

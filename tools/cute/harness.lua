@@ -11055,6 +11055,33 @@ do
   end)
   said[#said + 1] = "a copy's made-up versions fill nothing, a real update still told"
 
+  -- (z) the officers to whisper to follow who a sender string names: a member online whose name reads in no form (a
+  -- Kstring the GUID call does not resolve) may be any one-word sender's namesake, so an officer known by one word is no
+  -- target while one is online, and one again once they are gone. 0.7.1's first build cached the list by the records
+  -- and the officers alone: a stale officer was whispered, refused and queued again every change, or a resolved one
+  -- told nothing
+  isolated({ member("Coraline", 1), member("Cobb", 3), { name = "|Kq77|k", guid = guidOf("Kay"), rank = 3, rankName = "Raider", class = "MAGE", level = 30, online = false } }, function()
+    local off, a = char("Coraline", 1), char("Cobb", 3, { money = 1000 })
+    login(off); login(a)
+    tickAll(60)
+    assert(off.env.CuteDB.roster[a.sender].stats.gold == 1000 and #a.C.Roster:OfficerTargets() == 1, "Coraline is told Cobb's gold")
+    GUILD[3].online = true
+    fire(a, "GUILD_ROSTER_UPDATE")
+    assert(#a.C.Roster:OfficerTargets() == 0, "an unread name online: a one-word sender names nobody for sure")
+    -- (a record changes meanwhile: the list built again while the name is unread)
+    a.C.Roster:Identity()
+    assert(#a.C.Roster:OfficerTargets() == 0, "built again, still none")
+    GUILD[3].online = false
+    fire(a, "GUILD_ROSTER_UPDATE")
+    assert(#a.C.Roster:OfficerTargets() == 1, "an officer again once it is gone")
+    tickAll(20)
+    a.o.money = 2000
+    fire(a, "PLAYER_MONEY")
+    tickAll(20)
+    assert(off.env.CuteDB.roster[a.sender].stats.gold == 2000, "told the gold again: " .. tostring(off.env.CuteDB.roster[a.sender].stats.gold))
+  end)
+  said[#said + 1] = "the officers to whisper to follow an unread name online"
+
   print("core: " .. table.concat(said, "; "))
 end
 
