@@ -354,9 +354,18 @@ end
 -- none; newer where its format is a newer Cute's; diff, the policy it carries, and fp its fingerprint, only where the
 -- one is of the other. A line whose text does not match its fingerprint (one 0.6.0's first builds wrote with the
 -- fingerprint alone, or an edit by hand) has no fp: it cannot be read, and an officer saves it again
+-- A newer Cute that changes the format writes this format's line too: the last line of this format is read wherever
+-- one is, and a line of a newer format alone holds this client until it updates (0.7.0 read the last line whatever its
+-- format, so a newer line beside an older one held every older client)
 local function parseLine(text)
-  local found
-  for l in (text .. "\n"):gmatch("([^\n]*)\n") do if cuteLine(l) then found = (l:gsub("\r$", "")) end end
+  local found, other
+  for l in (text .. "\n"):gmatch("([^\n]*)\n") do
+    if cuteLine(l) then
+      l = l:gsub("\r$", "")
+      if tonumber(l:match("^Cute (%d+) ")) == LINE_V then found = l else other = l end
+    end
+  end
+  found = found or other
   if not found then return nil end
   local v, at, thr, fp, rest = found:match("^Cute (%d+) (%w+) (%d) (" .. FP .. ")%s*(.-)%s*$")
   if tonumber(v) ~= LINE_V then return { newer = (tonumber(v) or 0) > LINE_V, at = 0, thr = DEFAULT_THRESHOLD } end
@@ -816,7 +825,8 @@ function P:ReadLine()
       line = type(self.line) == "table" and self.line or copyLine(k.line)
       if not self.missing then
         self.missing = true
-        if text ~= "" and C.Roster:MeOfficer() then C.Print("Cute's line is missing from Guild Info; Save to Guild Info to put it back.") end
+        -- (said after "Cute: ", so not "Cute's line" again)
+        if text ~= "" and C.Roster:MeOfficer() then C.Print("the policy line is missing from Guild Info; Save to Guild Info to put it back.") end
       end
       self.doubt = true
       k.doubt, k.wait = true, nil
@@ -1284,7 +1294,7 @@ function P:Purge(ready)
   if self:Route("enchanted") == "self" and C.Stats.StripEnchantTraces then traces = traces + C.Stats.StripEnchantTraces(only) end
   if n > 0 then
     R:Changed()
-    if C.Rules then C.Rules:Dirty() end
+    if C.Rules then C.Rules:Dirty(true) end
     if C.UI and C.UI.Refresh then C.UI:Refresh() end
   end
   return n + traces
@@ -1339,6 +1349,12 @@ function P:ForClub(club)
     CuteDB.policyClub = key
     if CuteDB.knownClub == nil then CuteDB.knownClub = key end
     return
+  end
+  -- (an officer of the guild left, gone into this one before the roster judged it left: its members' Only-you values
+  -- go before its records are parked, by its policy, Roster.lua R:LeftGuild)
+  if C.Roster and C.Roster.LeftGuild then
+    local ok, err = pcall(C.Roster.LeftGuild, C.Roster)
+    if not ok then if CUTE_DEV then error(err, 0) end C.Err.Record(tostring(err), "", "policy: the guild left") end
   end
   CuteDB.policyClub = key
   self:Left()

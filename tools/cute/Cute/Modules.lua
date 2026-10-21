@@ -87,8 +87,13 @@ function C:RegisterModule(def)
 end
 
 -- the one global Cute makes for module addons: Cute:RegisterModule({ ... }) from their own files, external always; and
--- what a module's pages need of the window and the core without reaching into them
-Cute = { version = C.version }
+-- what a module's pages need of the window and the core without reaching into them. Made where no other addon holds
+-- the name (0.7.0 wrote over whatever was there): one that does keeps it, and /cute errors says so
+local Cute = { version = C.version, isCute = true }
+C.API = Cute
+local held = _G.Cute
+if held == nil or (type(held) == "table" and held.isCute) then _G.Cute = Cute
+else C.Err.Note("another addon holds the global Cute: Cute's module addons cannot reach it", "modules") end
 function Cute:RegisterModule(def)
   -- (an external module is never core nor built in, and starts off: a fresh install starts with the dashboard)
   if type(def) == "table" then def.core, def.builtin, def.default = nil, nil, nil end

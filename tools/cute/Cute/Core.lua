@@ -154,6 +154,51 @@ function C.ApiReport()
 end
 
 function C.Now() return (time and time()) or os.time() end
+
+----------------------------------------------------------------------------
+-- what the busy paths cost on this client, for /cute diag perf: each timed path's runs, total and longest time
+-- (debugprofilestop, milliseconds, where the client has it), and counts per minute (the last whole minute's and this
+-- one's). Counting allocates nothing per call
+----------------------------------------------------------------------------
+local Perf = { n = {}, ms = {}, max = {}, cur = {}, last = {}, minute = nil }
+C.Perf = Perf
+local function minuteNow() return math.floor(C.Now() / 60) end
+function Perf.Count(what, n)
+  local m = minuteNow()
+  if m ~= Perf.minute then
+    if Perf.minute then Perf.last = (m == Perf.minute + 1) and Perf.cur or {} end
+    Perf.cur, Perf.minute = {}, m
+  end
+  Perf.cur[what] = (Perf.cur[what] or 0) + (n or 1)
+end
+function Perf.Clock() return (debugprofilestop and debugprofilestop()) or 0 end
+function Perf.Add(what, ms)
+  Perf.n[what] = (Perf.n[what] or 0) + 1
+  Perf.ms[what] = (Perf.ms[what] or 0) + ms
+  if ms > (Perf.max[what] or 0) then Perf.max[what] = ms end
+end
+-- fn wrapped to time itself under what (its results passed on)
+function Perf.Timed(what, fn)
+  return function(...)
+    local t0 = Perf.Clock()
+    local a, b, c, d = fn(...)
+    Perf.Add(what, Perf.Clock() - t0)
+    return a, b, c, d
+  end
+end
+function Perf.Report()
+  local parts = {}
+  for _, what in ipairs({ "refresh", "rebuild", "receive", "draw" }) do
+    local n = Perf.n[what] or 0
+    parts[#parts + 1] = string.format("%s %d, %.1f ms avg, %.1f max", what, n, n > 0 and (Perf.ms[what] or 0) / n or 0, Perf.max[what] or 0)
+  end
+  minuteNow()
+  Perf.Count("tick", 0)
+  local last = Perf.last
+  local counts = {}
+  for _, what in ipairs({ "addon", "cute", "roster", "rebuilds", "drops" }) do counts[#counts + 1] = what .. " " .. (last[what] or 0) end
+  return "perf: " .. table.concat(parts, "; ") .. " | last minute: " .. table.concat(counts, ", ")
+end
 -- the server's clock (GetServerTime, SystemTimeDocumentation.lua), the one every client shares: the policy is stamped
 -- with it and a stamp is judged against it (Policy.lua); this client's own where the call reads nothing
 function C.ServerNow() return (C.Callable("GetServerTime") and C.Num("GetServerTime")) or C.Now() end
@@ -193,11 +238,24 @@ function C.VersionNewer(a, b)
   end
   return false
 end
--- a guild member's version, as it arrives (Roster.lua) or as a saved record keeps it (at login). C.newer is the newest
--- seen this session that is newer than yours: the status line shows it (UI.lua)
-function C.SawVersion(v)
+-- a guild member's version, as it arrives (Roster.lua) or as a saved record keeps it (at login), by the GUID it speaks
+-- for (who). C.newer is the newest version newer than yours that two members run, it or one newer (two voices, as
+-- everything the guild learns: 0.7.0 took one member's word, so one edited copy's version had every client online say
+-- an update was out): the status line shows it (UI.lua). One version a member, the last it said (C.newerOf, by GUID:
+-- a first build kept 32 versions for the whole guild, and one copy that said 32 made-up ones silenced every real
+-- update after them)
+C.newerOf = {}
+local function voicesAtLeast(v)
+  local n = 0
+  for _, other in pairs(C.newerOf) do if not C.VersionNewer(v, other) then n = n + 1 end end
+  return n
+end
+function C.SawVersion(v, who)
   v = C.Plain(v)
-  if not C.VersionNewer(v, C.version) then return end
+  if type(who) ~= "string" then return end
+  if not C.VersionNewer(v, C.version) then C.newerOf[who] = nil return end
+  C.newerOf[who] = v
+  if voicesAtLeast(v) < 2 then return end
   if C.newer and not C.VersionNewer(v, C.newer) then return end
   C.newer = v
   if CuteDB and not CuteDB.toldNewer then
@@ -214,7 +272,7 @@ function C.SavedVersions()
   for key, e in pairs(CuteDB.roster or {}) do
     local st = type(e) == "table" and type(e.stats) == "table" and e.stats or nil
     local g = st and C.Roster:VoiceOf(key, e)
-    if g and type(st.addon_ver) == "string" and not C.Roster:IsSelfRecord(key, e) and not C.Policy:Untrusted(g) then C.SawVersion(st.addon_ver) end
+    if g and type(st.addon_ver) == "string" and not C.Roster:IsSelfRecord(key, e) and not C.Policy:Untrusted(g) then C.SawVersion(st.addon_ver, g) end
   end
 end
 -- the first login on this version: its changelog line, once, ten seconds on, after the login's own lines. A first run
@@ -223,13 +281,23 @@ function C.WhatsNew()
   if C.firstRun then
     C.firstRun = false
     CuteDB.toldChanges = C.version
-    C.Print("welcome to the guild's dashboard: /cute opens it, /cute help lists the rest.")
+    C.Print("/cute or the elf on the minimap opens the guild window.")
     return
   end
   local line = type(C.CHANGES) == "table" and C.CHANGES[C.version] or nil
   if type(line) ~= "string" or line == "" or CuteDB.toldChanges == C.version then return end
+  local was = CuteDB.toldChanges
   CuteDB.toldChanges = C.version
   C.Print(C.COLOR .. "Cute " .. C.version .. "|r: " .. line, true)
+  -- (and the versions between the last one told and this one, newest first, three at most: a 0.5.x user is told the
+  -- Guide moved to Settings, Modules in 0.6.0)
+  if not C.ParseVersion(was) then return end
+  local skipped = {}
+  for v, l in pairs(C.CHANGES) do
+    if type(l) == "string" and l ~= "" and C.VersionNewer(v, was) and C.VersionNewer(C.version, v) then skipped[#skipped + 1] = v end
+  end
+  table.sort(skipped, function(a, b) return C.VersionNewer(a, b) end)
+  for i = 1, math.min(3, #skipped) do C.Print(C.COLOR .. "Cute " .. skipped[i] .. "|r: " .. C.CHANGES[skipped[i]], true) end
 end
 
 ----------------------------------------------------------------------------
@@ -276,11 +344,21 @@ local function noRealm(s)
   return s
 end
 -- a name as a loose key: your realm cut, spaces and hyphens one space, lower case; nil for a Kstring, a secret or
--- nothing. A fallback only: where a GUID is known it decides
+-- nothing. A fallback only: where a GUID is known it decides. Kept per string once your realm reads (every roster
+-- read asks it of every member's name and every record's sender string), CANON_MAX strings at most
+local canonCache, canonN, CANON_MAX = {}, 0, 4096
 function C.Canon(s)
   s = C.Plain(s)
-  if type(s) ~= "string" or s == "" or C.IsKstring(s) then return nil end
-  return (noRealm(s):gsub("[%s%-]+", " "):lower())
+  if type(s) ~= "string" or s == "" then return nil end
+  local hit = canonCache[s]
+  if hit ~= nil then return hit or nil end
+  local v = (not C.IsKstring(s)) and (noRealm(s):gsub("[%s%-]+", " "):lower()) or false
+  if realmCache then
+    if canonN >= CANON_MAX then canonCache, canonN = {}, 0 end
+    canonCache[s], canonN = v, canonN + 1
+  end
+  if C.Perf then C.Perf.Count("canon") end
+  return v or nil
 end
 
 -- the key this character's saved data lives under (CuteDB.chars), and who set a policy: UnitFullName's two returns
@@ -355,14 +433,65 @@ function C.InitDB()
   end
   -- (what members passed on to each other in 0.6.0's builds before the policy lived in Guild Info)
   CuteDB.relay = nil
-  CuteDB.version = C.version
+  -- a file a crash or a hand left odd: a record or a character that is no table goes, and each keeps the tables the
+  -- code reads (0.7.0 raised on such at every roster read and every stat, and a refresh that raised read no Guild Info)
+  for key, e in pairs(CuteDB.roster) do
+    if type(key) ~= "string" or type(e) ~= "table" then CuteDB.roster[key] = nil
+    else
+      if type(e.stats) ~= "table" then e.stats = {} end
+      if type(e.at) ~= "table" then e.at = {} end
+      if e.seen ~= nil and type(e.seen) ~= "number" then e.seen = nil end
+    end
+  end
+  for key, rec in pairs(CuteDB.chars) do
+    if type(key) ~= "string" or type(rec) ~= "table" then CuteDB.chars[key] = nil
+    else
+      if type(rec.counters) ~= "table" then rec.counters = {} end
+      if rec.modules ~= nil and type(rec.modules) ~= "table" then rec.modules = {} end
+    end
+  end
+  -- (once: the times 0.7.0 kept for every statistic and discovery of every member, which nothing reads, Roster.lua;
+  -- and the statistics it kept as 0 from "--", never recorded, which are nothing now (Stats.lua S.Quantity, Roster.lua
+  -- R:Apply): a sender never sends that id again, so the 0 stayed for good. In the records held and those parked with
+  -- another guild; slimAt 2, so a file the first pass ran on (true) gets the second)
+  local slim = CuteDB.slimAt == true and 1 or tonumber(CuteDB.slimAt) or 0
+  if slim < 2 and C.Stats and C.Stats.IsDynamic then
+    local function slimmed(roster)
+      for _, e in pairs(type(roster) == "table" and roster or {}) do
+        if type(e) == "table" and type(e.at) == "table" then
+          for id in pairs(e.at) do if type(id) == "string" and C.Stats.IsDynamic(id) then e.at[id] = nil end end
+        end
+        if type(e) == "table" and type(e.stats) == "table" then
+          for id, v in pairs(e.stats) do if v == 0 and type(id) == "string" and id:match("^g%d+$") then e.stats[id] = nil end end
+        end
+      end
+    end
+    slimmed(CuteDB.roster)
+    for _, p in pairs(type(CuteDB.policies) == "table" and CuteDB.policies or {}) do if type(p) == "table" then slimmed(p.roster) end end
+    CuteDB.slimAt = 2
+  end
+  -- (a newer Cute's file, this one run after it: the version stays the newest that ran, so its one-time steps do not
+  -- run again when it comes back)
+  if not C.VersionNewer(was, C.version) then CuteDB.version = C.version end
 end
 function C.Settings() return CuteDB.settings end
 -- this character's own record (counters, declared role; the main is account-wide, in settings)
 function C.Char()
   local me = C.Me() or "?"
   local rec = CuteDB.chars[me]
-  if not rec then rec = { counters = {}, modules = {} }; CuteDB.chars[me] = rec end
+  local g = C.MyGUID()
+  if not rec then
+    -- (a rename, a realm transfer, a surname changed: the record this character's GUID kept under its old key, taken
+    -- over, so its counters go on and no receiver marks the lifetime counts as gone down)
+    if g and me ~= "?" then
+      for key, old in pairs(CuteDB.chars) do
+        if key ~= me and type(old) == "table" and old.guid == g then rec = old; CuteDB.chars[key] = nil; break end
+      end
+    end
+    rec = rec or { counters = {}, modules = {} }
+    CuteDB.chars[me] = rec
+  end
+  if g and rec.guid == nil and me ~= "?" then rec.guid = g end
   rec.counters = rec.counters or {}
   if rec.role == nil then
     -- 0.1.0 kept the role in the account-wide settings, where the warrior's "Tank" became the priest's: take it once
@@ -393,10 +522,14 @@ C.frame:SetScript("OnEvent", C.Safe(function(_, event, a1, a2)
     C.Safe(function() C.Modules.Start() end, "modules: start")()
     C.Safe(function() C.Roster:Start() end, "roster: start")()
     C.Safe(function() C.Sample:Start(initial, reloading) end, "sample: start")()
-    C.Safe(function() C.Comm:Start() end, "comm: start")()
+    C.Safe(function() C.Comm:Start(reloading) end, "comm: start")()
     -- the seed checked against this client (Rule 0, spread over frames), after the roster, before the Guide draws
     C.Safe(function() C.Rules:Start() end, "rules: start")()
     C.Safe(function() if C.UI and C.UI.OnWorld then C.UI:OnWorld() end end, "minimap button")()
+    -- (the window's draws timed for /cute diag perf, once)
+    C.Safe(function()
+      if C.UI and type(C.UI.Draw) == "function" and not C.drawTimed then C.drawTimed = true; C.UI.Draw = C.Perf.Timed("draw", C.UI.Draw) end
+    end, "perf")()
     -- versions: a login (not a /reload, nor a loading screen) may say a newer Cute again; the saved records' versions
     -- once a session; what is new in this one ten seconds on
     C.Safe(function()
@@ -408,16 +541,25 @@ C.frame:SetScript("OnEvent", C.Safe(function(_, event, a1, a2)
       end
     end, "versions")()
   elseif event == "PLAYER_LOGOUT" then
-    if C.Sample.ReadAll then C.Sample:ReadAll() end
+    -- (and at a /reload: how far this character holds the guild, Comm.lua M:Logout. 0.7.0 read every stat again here
+    -- for nothing it saved)
+    C.Comm:Logout()
   end
 end, "core: events"))
 
+-- (Cute's own, then the quest engine's where Cute_Quest runs: its errors are kept in CuteQuestDB, which /qb errors
+-- alone listed)
 local function errorsList()
   local list = CuteDB and CuteDB.errors or {}
-  if #list == 0 then C.Print("no errors recorded.") return end
-  for _, e in ipairs(list) do
-    C.Print(string.format("%s (x%d, last %s) %s", e.msg, e.count or 1, e.last or "", e.where or ""))
+  local engine = type(CuteQuestDB) == "table" and type(CuteQuestDB.errors) == "table" and CuteQuestDB.errors or {}
+  if #list == 0 and #engine == 0 then C.Print("no errors recorded.") return end
+  local function say(e, from)
+    if type(e) ~= "table" then return end
+    -- (a | doubled: an error's text names a texture or a link, which chat would draw as one)
+    C.Print(string.format("%s%s (x%d, last %s) %s", from, (tostring(e.msg):gsub("|", "||")), tonumber(e.count) or 1, tostring(e.last or ""), (tostring(e.where or ""):gsub("|", "||"))))
   end
+  for _, e in ipairs(list) do say(e, "") end
+  for _, e in ipairs(engine) do say(e, "quests: ") end
 end
 
 -- /cute diag: what this client says about you, your gear and the channel's senders, and what the guild has learned
@@ -506,6 +648,12 @@ function C.Diag()
   table.sort(suspect); table.sort(untrusted)
   local function named(list) return (officer and #list > 0) and (": " .. table.concat(list, ", ", 1, math.min(8, #list)) .. (#list > 8 and (" and " .. (#list - 8) .. " more") or "")) or "" end
   add(string.format("diag trust: suspect %d%s | untrusted %d%s", #suspect, named(suspect), #untrusted, named(untrusted)))
+  -- the channel and the load: the last send each way, the lockdown, the list against the club, the busy paths' cost
+  add("diag " .. C.Comm:ChannelReport())
+  add("diag " .. C.Comm:LockReport())
+  add("diag " .. C.Comm:SyncReport())
+  add("diag " .. C.Roster:ListReport())
+  add("diag " .. C.Perf.Report())
   return lines
 end
 
@@ -540,7 +688,10 @@ SlashCmdList.CUTE = C.Safe(function(msg)
   elseif msg == "diag" then for _, l in ipairs(C.Diag()) do C.Print(l) end
   elseif msg == "rules" then for _, l in ipairs(C.Rules.RulesReport()) do C.Print(l) end
   elseif msg == "help" then
-    C.Print("/cute opens the window; /cute race, prog, shame, statistics, officers or me opens that page, and so does a module's name (/cute guide switches the Guide on for this character when it is off); /cute settings opens Settings, /cute modules lists the modules and opens Settings there. /cute resend asks the guild to send their records again. To paste: /cute errors, /cute api (which client functions exist here), /cute diag (names, roster, senders and gear as this client gives them, what the guild has learned, the seed's state), /cute rules (each rule's threshold and who set it).")
+    C.Print("/cute opens the window, /cute settings its Settings; /cute race, prog, shame, statistics, officers, me or a module's name opens that page.")
+    C.Print("/cute modules lists the modules; /cute resend asks the guild for their records again; /cute help more: what to paste in a bug report.")
+  elseif msg == "help more" then
+    C.Print("To paste in a bug report: /cute errors; /cute diag (names, roster, channel and load as this client gives them, what the guild learned); /cute api (the client functions it has); /cute rules (each rule's threshold and who set it).")
   else
     local def, officer = pageFor(msg), C.Roster:MeOfficer()
     if not def then C.Print("no page or command \"" .. msg .. "\". /cute help lists them.")

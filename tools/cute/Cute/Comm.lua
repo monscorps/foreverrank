@@ -3,11 +3,21 @@
 --   1D|regver|k=v;k=v;...          what changed since the last send
 --   1F|part|parts|regver|k=v;...   the full record, in chunks (at the hello, and when asked); the game's statistics, where
 --                                  the client reports them, and what this character discovered (bosses, instances,
---                                  factions) follow in a pass of their own a minute and a half later
---   1R|guid|stamp|word|fp          please send your full record (answered after a random 1 to 20 s, the statistics
+--                                  factions) follow in a pass of their own a minute and a half later. regver "4s":
+--                                  the part of it that went on GUILD after an ask's since (M:Full), which a receiver
+--                                  holding no record of the sender takes as a part and asks the whole of (1Q)
+--   1R|guid|stamp|word|fp[since]   please send your full record (answered after a random 2 to 40 s, the statistics
 --                                  60 to 90 s on; one answer however many ask while it waits, one ask a sender in
---                                  three minutes, the statistics once in half an hour; an officer's always gets the
---                                  part the officers keep, whispered). The asker's GUID tells
+--                                  three minutes (and one whole after its since-ask), the statistics once in half an
+--                                  hour (or where its since is not borne out) and one pass forced for the
+--                                  guild in ten minutes whoever asks, never for a bare 0.3/0.5 ask; an officer's always
+--                                  gets the part the officers keep, whispered; one heard before this login's own record
+--                                  went is answered by it). since, in hex right after the fingerprint (a 0.6 or 0.7
+--                                  client reads a field of another length as no fingerprint, which it never answers
+--                                  by): the server time to which the asker holds everything said on GUILD (M:Logout),
+--                                  and a responder whose record went whole before it sends only what went after it,
+--                                  where its answer to that asker's ask before it had all gone by then (M:Borne). A
+--                                  /reload asks nothing (M:Wire). The asker's GUID tells
 --                                  it its own ask, which the game hands back to it (0.3.0 sent a bare 1R, 0.5.x no
 --                                  stamp: both still answered; they take the GUID to be everything after "1R|", which
 --                                  names nobody they know, so the rest passes them by). stamp: when the officers' word
@@ -16,6 +26,10 @@
 --                                  by it, Guild Info's line carries the policy itself); word: when the
 --                                  newest officers' word the asker holds was said (1N): an officer whose own is newer
 --                                  answers with it
+--   1Q|guid                        the record of the member with this GUID, whole, and its statistics pass: asked by a
+--                                  client that holds none of it after a part since its since or a delta came
+--                                  (M:WantWhole), answered by that member alone with its guild part; a 0.5-0.7 client
+--                                  passes it by
 --   1N|at|i/n|key=value;...        the officers' word: what the guild learned from what members' clients do not receive
 --                                  (with the defaults, which slots and kinds of item take an enchant), no GUID, no
 --                                  member's value, no count (Rules.lua R.WordParts). Sent by an officer's client when it
@@ -79,6 +93,7 @@ local PREFIX = "Cute"
 local LIMIT = 255       -- the client's cap on one addon message, header included
 local SLOW_FLUSH = 120  -- seconds between sends of the slow stats
 local RETRIES = 5       -- "try later" answers before a message is given up
+local CLAIM_AGAIN = 10  -- (a kill claim: to the back of the queue that many times first)
 local GAME_AFTER = 90   -- seconds after the hello before the statistics pass: a login's first minute stays small
 local FAIR = 10         -- seconds a whisper waits behind guild messages at most
 
@@ -152,6 +167,205 @@ local function state(kind, target)
   st.queuedTo[target] = st.queuedTo[target] or {}
   return st.sentTo[target], st.queuedTo[target]
 end
+-- when each part's text first went on GUILD this login, by kind and key (a resend of the same text keeps its time):
+-- what an ask's since is held against (M:Answer)
+M.sentAt = { v = {}, l = {}, k = {} }
+
+-- what each asker was answered (M.owe, by its GUID, else its sender string; kept across a /reload in the wire): the
+-- last OWE_EACH asks heard from it this login, each with the server time it came (at) and how its record (rec) and its
+-- statistics pass (pass) were answered: true while the answer waits or is on its way; the server time once the queue
+-- had sent all of it (nothing for the guild left behind it, nothing for the guild given up meanwhile: M.epoch); false
+-- where it was not (an ask within ASK_AGAIN of the last, a pass within GAME_AGAIN, a message given up). An ask's since
+-- says the asker holds everything said on GUILD up to it, which it can only where this client's answer to its ask
+-- before that time had all gone by then: M:Borne judges it, and a since it does not bear out is answered whole. (A first
+-- build took every since: a pass deferred behind the ten minutes, an answer owed through a lockdown and paid
+-- once the asker had gone, an ask passed by, and the asker never had what it missed)
+M.owe, M.epoch = {}, 0
+local OWE_EACH, OWE_MAX = 4, 512
+local oweN = 0
+-- the asks whose answer waits to be queued (rec, pass: the next record or pass for the guild takes them; helloRec,
+-- helloPass: this login's own record and pass, which answer an ask heard before the record went), and those whose
+-- answer is queued (sentRec, sentPass)
+local waits = { rec = {}, pass = {}, helloRec = {}, helloPass = {}, sentRec = {}, sentPass = {} }
+local SENT = { rec = "sentRec", pass = "sentPass" }
+function M:Entry(who)
+  local list = self.owe[who]
+  if not list then
+    -- (past OWE_MAX askers, the one asked longest ago is forgotten, and an asker with no entry is answered whole)
+    if oweN >= OWE_MAX then
+      local old, oldAt
+      for w, l in pairs(self.owe) do local a = l[#l] and l[#l].at or 0; if not oldAt or a < oldAt then old, oldAt = w, a end end
+      if old then self.owe[old], oweN, self.oweEvicted = nil, oweN - 1, true end
+    end
+    list = {}
+    self.owe[who], oweN = list, oweN + 1
+  end
+  local e = { at = C.ServerNow() }
+  list[#list + 1] = e
+  if #list > OWE_EACH then table.remove(list, 1); list.cut = true end
+  return e
+end
+-- the since an ask's part (rec or pass) is answered from: s, where the latest ask heard from who before it had that
+-- part all sent by then; nil, the whole, where it went after, still waits or never went. An asker heard asking nothing
+-- before its since was online as this login's own record and pass went (or asked before this login: its base is later)
+function M:Borne(who, s, part)
+  if s == nil then return nil end
+  local list = self.owe[who]
+  if not list then return (not self.oweEvicted) and s or nil end
+  for i = #list, 1, -1 do
+    local e = list[i]
+    if e.at <= s then local d = e[part]; return (type(d) == "number" and d <= s) and s or nil end
+  end
+  return (not list.cut) and s or nil
+end
+-- the queue holds nothing more for the guild: the answers queued have all gone, now, or not for sure where a guild
+-- message was given up since they were queued (M.epoch moved)
+local function drained()
+  if #waits.sentRec == 0 and #waits.sentPass == 0 then return end
+  for _, m in ipairs(M.out) do if not m.target then return end end
+  local t = C.ServerNow()
+  for part, key in pairs(SENT) do
+    for _, e in ipairs(waits[key]) do if e[part] == true then e[part] = (e.ep == M.epoch) and t or false end end
+    waits[key] = {}
+  end
+end
+-- an ask's part waiting in a list (one of waits)
+local function await(list, e)
+  local l = waits[list]
+  l[#l + 1] = e
+  if list == "sentRec" or list == "sentPass" then e.ep = M.epoch; drained() end
+end
+-- the answer queued now (ok: it was; else it was not, and the asks it takes are not answered) takes the asks waiting in
+-- list whose since it covers, every one where it is whole (since nil)
+local function answered(list, part, since, ok)
+  local left, sent = {}, waits[SENT[part]]
+  for _, e in ipairs(waits[list]) do
+    local need = tonumber(e[part == "rec" and "nr" or "np"]) or 0
+    if since == nil or (need > 0 and need >= since) then
+      if ok then e.ep = M.epoch; sent[#sent + 1] = e elseif e[part] == true then e[part] = false end
+    else left[#left + 1] = e end
+  end
+  waits[list] = left
+  drained()
+end
+-- (a /reload: the entries as the wire kept them, checked)
+local function restoreOwe(src)
+  M.owe, oweN = {}, 0
+  for who, list in pairs(type(src) == "table" and src or {}) do
+    if type(who) == "string" and type(list) == "table" and oweN < OWE_MAX then
+      local out = { cut = list.cut == true or nil }
+      for _, e in ipairs(list) do
+        if type(e) == "table" and tonumber(e.at) and #out < OWE_EACH then
+          local x = { at = tonumber(e.at), nr = tonumber(e.nr), np = tonumber(e.np) }
+          for _, part in ipairs({ "rec", "pass" }) do local d = e[part]; if type(d) == "number" or type(d) == "boolean" then x[part] = d end end
+          out[#out + 1] = x
+        end
+      end
+      if #out > 0 then M.owe[who], oweN = out, oweN + 1 end
+    end
+  end
+end
+-- the kill claims not sent yet (M.pendingClaims, by their text: a repeat kill's is kept nowhere else), in the wire too
+M.pendingClaims = {}
+-- (a /reload in a raid's lockdown, after a wipe say: what waited for it to end goes once it does. The claims not sent
+-- go with the release, as those claimed while the record waits (M:Release); the answers owed (an ask kept waiting,
+-- M.owe) are owed again, whole where one wanted it whole. A first build lost both)
+function M:Rearm(claims)
+  local sent = STATE.k.sent
+  for text, c in pairs(type(claims) == "table" and claims or {}) do
+    local with = {}
+    for g in pairs(type(c) == "table" and type(c.with) == "table" and c.with or {}) do if type(g) == "string" then with[g] = true end end
+    if type(text) == "string" and type(c) == "table" and tonumber(c.enc) and tonumber(c.t) and not sent[text] and #self.waitingClaims < 64 then
+      self.pendingClaims[text] = { enc = tonumber(c.enc), t = tonumber(c.t), with = with }
+      self.waitingClaims[#self.waitingClaims + 1] = { enc = tonumber(c.enc), t = tonumber(c.t), with = with }
+    end
+  end
+  local rec, pass = false, false
+  for _, list in pairs(self.owe) do
+    for _, e in ipairs(list) do
+      if e.rec == true then
+        rec = true
+        waits.rec[#waits.rec + 1] = e
+        local n = tonumber(e.nr) or 0
+        if n == 0 then self.answerFull = true elseif not self.answerFull then self.answerSince = math.min(self.answerSince or n, n) end
+      end
+      if e.pass == true then
+        pass = true
+        waits.pass[#waits.pass + 1] = e
+        local n = tonumber(e.np) or 0
+        if n == 0 then self.gameFull = true elseif not self.gameFull then self.gameSince = math.min(self.gameSince or n, n) end
+      end
+    end
+  end
+  if rec then self.answerGuild, self.answerOwed = true, true end
+  if pass then self.answerGameGuild, self.gameOwed = true, true end
+  if rec or pass then self:OwedSoon() end
+end
+
+-- what went, kept across a /reload (CuteDB.chars[me].wire, the same tables live: the saved variables write them at
+-- logout and at a /reload): a /reload is the same login, so it sends again only what changed since the last send
+-- before it, asks nothing and sends no forced record (0.7.0's /reload asked, and every client online resent its whole
+-- record and statistics). A login starts afresh: its record goes whole, its statistics pass after it. login: when this
+-- login began; base: when its record had gone (an ask whose since is later holds it, M:Answer); passAt: the last
+-- statistics pass forced for the guild; asked: when an ask of this login left
+local function fill(dst, src) for k, v in pairs(type(src) == "table" and src or {}) do if type(k) == "string" then dst[k] = v end end end
+function M:Wire(reloading)
+  local ch = C.Char()
+  local w = ch.wire
+  local again = reloading and type(w) == "table" and tonumber(w.login) ~= nil
+  if again then
+    fill(STATE.v.sent, w.sent); fill(STATE.l.sent, w.labels); fill(STATE.k.sent, w.claims)
+    for t, sent in pairs(type(w.told) == "table" and w.told or {}) do if type(t) == "string" and type(sent) == "table" then fill(state("v", t), sent) end end
+    for kind, at in pairs(type(w.sentAt) == "table" and w.sentAt or {}) do if M.sentAt[kind] then fill(M.sentAt[kind], at) end end
+    fill(self.toldTo, w.toldTo)
+    self.base, self.passAt = tonumber(w.base), tonumber(w.passAt)
+    restoreOwe(w.owe)
+    self:Rearm(w.claimsOwed)
+    self.reloaded = true
+    -- (an ask of this login that never left goes after the /reload)
+    self.askOwed = (not (tonumber(w.asked) and tonumber(w.asked) >= tonumber(w.login))) and "hello" or nil
+  end
+  ch.wire = { login = again and tonumber(w.login) or C.ServerNow(), sent = STATE.v.sent, labels = STATE.l.sent, claims = STATE.k.sent,
+    told = STATE.v.sentTo, sentAt = M.sentAt, toldTo = self.toldTo, base = self.base, passAt = self.passAt, asked = again and tonumber(w.asked) or nil,
+    owe = M.owe, claimsOwed = M.pendingClaims }
+  self.wire = ch.wire
+end
+-- the guild as this character holds it: CuteDB.chars[me].hold = { club, at }, everything sent on GUILD up to at. Moved
+-- on at logout (and at a /reload) only where this login's ask left a while before, and nothing heard was lost (the
+-- early buffer full): a /reload, which asks nothing, misses what was said during its loading screen, so its hold stays
+-- at the last one. The next login's ask carries it as since (M:Ask). Whether each answer to this login's ask came this
+-- client cannot know (one may wait out the ten-minute pass, or a responder's lockdown, or not come at all): each
+-- responder judges that by the answer it gave (M:Borne), and answers a since it does not bear out whole
+local SYNCED_AFTER = 100 -- seconds after the ask left: most answers have come
+-- (and a minute short of the logout: what went on GUILD as it came, still on its way, or sent in its last second (the
+-- server's time counts whole seconds, and a part goes again only where it went after the since) is sent again)
+local HOLD_MARGIN = 60
+function M:AskLeft()
+  local w = self.wire
+  if w then w.asked = C.ServerNow() end
+  self.syncedAt = C.Now()
+  if self.AskWholesSoon then self:AskWholesSoon() end
+end
+function M:Logout()
+  local club = C.Roster:ClubId()
+  if club == nil or not self.syncedAt or C.Now() - self.syncedAt < SYNCED_AFTER or self.lost then return end
+  C.Char().hold = { club = tostring(club), at = math.floor(C.ServerNow()) - HOLD_MARGIN }
+end
+-- the since an ask carries, in hex after the policy's fingerprint (a 0.6 or 0.7 client reads that field as a
+-- fingerprint, which it never answers by, and takes one of another length for none; 0.5.x takes the whole ask for a
+-- GUID it does not know): nothing where this character holds nothing of this guild
+function M:SinceHex()
+  local h, club = C.Char().hold, C.Roster:ClubId()
+  if type(h) ~= "table" or club == nil or h.club ~= tostring(club) or not tonumber(h.at) then return "" end
+  return string.format("%x", math.floor(tonumber(h.at)))
+end
+-- force as a part is chosen: true, every part; a number (an ask's since), every part whose text went on GUILD after it,
+-- or never this login; else none (only what changed goes)
+local function forced(force, kind, key)
+  if force == true then return true end
+  if type(force) == "number" then local t = M.sentAt[kind][key]; return t == nil or t > force end
+  return false
+end
 
 -- parts cut into messages that fit the limit, each starting with head. A part is { id (the id its route is the
 -- policy's for), key (what went is kept by), kv (its text), s (a value's wire text, or true) }; every message keeps its
@@ -183,7 +397,9 @@ local function build(e)
   if e.covered and e.covered() then return nil, nil, nil end
   if not e.parts then return e.msg, nil, nil end
   if e.target then
-    if not C.Roster:OfficerSender(e.target) then return nil, {}, e.parts end
+    -- (a target no officer now leaves the officers to whisper to as well, built again: its parts are not queued to it
+    -- again at the next change)
+    if not C.Roster:OfficerSender(e.target) then C.Roster.targets = nil; return nil, {}, e.parts end
     return e.msg, e.parts, {}
   end
   local kept, back = {}, {}
@@ -197,22 +413,94 @@ local function build(e)
   return e.head .. table.concat(list, ";"), kept, back
 end
 
--- one try at the client: sent, later (and how long to wait), gone (the officer it was whispered to logged off) or drop.
--- e.target: a whisper to that sender string (C_ChatInfo.SendAddonMessage's WHISPER and target, documented)
+-- one try at the client: sent, later (and how long to wait), locked (the game holds addon chat back), gone (the officer
+-- it was whispered to logged off) or drop. e.target: a whisper to that sender string (C_ChatInfo.SendAddonMessage's
+-- WHISPER and target, documented). The last result each way is kept for /cute diag (M.lastResult: GUILD, WHISPER)
+M.lastResult = {}
 local function send(e, msg)
   if not (C_ChatInfo and C_ChatInfo.SendAddonMessage) then return "sent" end
   local ok, res
   if e.target then ok, res = pcall(C_ChatInfo.SendAddonMessage, PREFIX, msg, "WHISPER", e.target)
   else ok, res = pcall(C_ChatInfo.SendAddonMessage, PREFIX, msg, "GUILD") end
+  M.lastResult[e.target and "WHISPER" or "GUILD"] = { res = ok and C.Plain(res) or "threw", at = C.Now() }
   if not ok then return "drop", tostring(res) end
   res = C.Plain(res)
   if res == nil or res == true or res == 0 then return "sent" end
-  -- Enum.SendAddonMessageResult: 3 AddonMessageThrottle and 8 ChannelThrottle pass; 9 GeneralError and
-  -- 11 AddOnMessageLockdown pass too, given longer; 12 TargetOffline is an officer gone, who gets it when they ask
+  -- Enum.SendAddonMessageResult (ChatConstantsDocumentation.lua): 3 AddonMessageThrottle and 8 ChannelThrottle pass;
+  -- 9 GeneralError passes too, given longer; 11 AddOnMessageLockdown is the chat lockdown (M:Locked), waited out
+  -- without counting a try; 12 TargetOffline is an officer gone, who gets it when they ask
   if res == 3 or res == 8 then return "later", 3 end
-  if res == 9 or res == 11 then return "later", 10 end
+  if res == 9 then return "later", 10 end
+  if res == 11 then return "locked" end
   if res == 12 and e.target then return "gone" end
   return "drop", "result " .. tostring(res)
+end
+
+-- the chat lockdown: while the game holds addon chat back (an encounter, a challenge or PvP match, a map that restricts
+-- communication such as a dungeon or raid: SecretPredicatesDocumentation.lua, SecretInChatMessagingLockdown) a message
+-- sent is answered 11, AddOnMessageLockdown. Asked before each send: C_ChatInfo.InChatMessagingLockdown
+-- (ChatInfoDocumentation.lua:293), C_RestrictedActions.IsAddOnRestrictionActive with Enum.AddOnRestrictionType.Chat
+-- (RestrictedActionsDocumentation.lua:55, RestrictedActionsConstantsDocumentation.lua:31), and the state
+-- ADDON_RESTRICTION_STATE_CHANGED said last (RestrictedActionsDocumentation.lua:97: it comes before a restriction
+-- starts, while IsAddOnRestrictionActive still says false, and after one ends: its Activating counts for LOCK_POLL
+-- seconds, the functions saying the rest, so an end the event never told cannot hold the queue for good); a result 11
+-- counts as the lockdown for LOCK_POLL seconds where none of them says so. While it holds the queue waits, no try
+-- counted (0.7.0 counted 11 as a try and gave a message up after five, the hello's ask with it: a relog inside a
+-- dungeon heard nobody's record all session), the answers it owes wait as owed rather than queued, and it goes again
+-- when the lockdown ends
+local LOCK_POLL = 10
+M.lockEvent, M.lockSeen = nil, nil
+local function restrictionKind()
+  local kinds = Enum and Enum.AddOnRestrictionType
+  return type(kinds) == "table" and C.Plain(kinds.Chat) or nil
+end
+function M:Locked()
+  if self.lockEvent and C.Now() - self.lockEvent < LOCK_POLL then return true end
+  local CI = C_ChatInfo
+  if type(CI) == "table" and type(CI.InChatMessagingLockdown) == "function" and C.Get(CI.InChatMessagingLockdown) == true then return true end
+  local RA, kind = C_RestrictedActions, restrictionKind()
+  if type(RA) == "table" and type(RA.IsAddOnRestrictionActive) == "function" and kind ~= nil and C.Get(RA.IsAddOnRestrictionActive, kind) == true then return true end
+  return self.lockSeen ~= nil and C.Now() - self.lockSeen < LOCK_POLL
+end
+-- (for /cute diag: the channel as this client last used it, by way: the last result of each, never a name; the queue,
+-- what was given up, the prefix's registration; and whether this rank may speak in guild chat at all
+-- (GuildInfoDocumentation.lua: C_GuildInfo.CanSpeakInGuildChat))
+function M:ChannelReport()
+  local function last(way)
+    local r = self.lastResult[way]
+    if not r then return way .. " none sent" end
+    return string.format("%s result %s %d s ago", way, tostring(r.res), math.floor(C.Now() - (r.at or C.Now())))
+  end
+  local GI = type(C_GuildInfo) == "table" and C_GuildInfo or {}
+  local speak = type(GI.CanSpeakInGuildChat) == "function" and tostring(C.Get(GI.CanSpeakInGuildChat)) or "missing"
+  return string.format("channel: %s | %s | queue %d, given up %d (%d past the cap)%s | prefix %s | CanSpeakInGuildChat %s",
+    last("GUILD"), last("WHISPER"), #self.out, self.drops or 0, self.capped or 0, self.paused and (", held since " .. math.floor(C.Now() - self.paused) .. " s") or "",
+    tostring(self.prefixResult), speak)
+end
+-- (and how far this character holds the guild, and this login's record: M:Wire, M:Logout)
+function M:SyncReport()
+  local h, club = C.Char().hold, C.Roster:ClubId()
+  local held = (type(h) == "table" and club ~= nil and h.club == tostring(club) and tonumber(h.at)) and (math.floor(C.ServerNow() - h.at) .. " s ago") or "nothing"
+  return string.format("sync: holds the guild to %s | this login %s, its record %s, %s | asked %s",
+    held, self.reloaded and "reloaded" or "fresh", self.base and ("whole " .. math.floor(C.ServerNow() - self.base) .. " s ago") or "not whole yet",
+    self.passAt and ("a pass " .. math.floor(C.Now() - self.passAt) .. " s ago") or "no pass forced", self.askOwed and "not yet (owed)" or (self.askLeft and (math.floor(C.Now() - self.askLeft) .. " s ago") or "not this login"))
+    .. self:OweReport()
+end
+-- (the answers this client owes, and the askers it keeps how it answered, M.owe: waiting, an answer not gone yet)
+function M:OweReport()
+  local waiting = 0
+  for _, list in pairs(self.owe) do local e = list[#list]; if e and (e.rec == true or e.pass == true) then waiting = waiting + 1 end end
+  return string.format(" | answers owed: record %s, pass %s; askers %d, %d waiting", self.answerOwed and "yes" or "no", self.gameOwed and "yes" or "no", oweN, waiting)
+end
+-- (for /cute diag: what each way of asking says now)
+function M:LockReport()
+  local function said(fn, ...) if type(fn) ~= "function" then return "missing" end local v = C.Get(fn, ...); return tostring(v) end
+  local CI, RA = type(C_ChatInfo) == "table" and C_ChatInfo or {}, type(C_RestrictedActions) == "table" and C_RestrictedActions or {}
+  local kind = restrictionKind()
+  return string.format("lockdown %s (InChatMessagingLockdown %s, restriction %s, event %s, result 11 %s) | AreOutgoingAddonChatMessagesRestricted %s",
+    self:Locked() and "on" or "off", said(CI.InChatMessagingLockdown), kind ~= nil and said(RA.IsAddOnRestrictionActive, kind) or "missing",
+    self.lockEvent and (math.floor(C.Now() - self.lockEvent) .. " s ago") or "never", self.lockSeen and (math.floor(C.Now() - self.lockSeen) .. " s ago") or "never",
+    said(CI.AreOutgoingAddonChatMessagesRestricted))
 end
 
 -- a message done with: its parts leave the queue; what the client took counts as gone that way. A value held back (the
@@ -226,7 +514,13 @@ local function mark(e, r, kept, back)
   if not (e.parts and e.kind) then return end
   local sent, q = state(e.kind, e.target)
   for _, p in ipairs(e.parts) do if q[p.key] == p.s then q[p.key] = nil end end
-  if r == "sent" then for _, p in ipairs(kept or {}) do sent[p.key] = p.s end end
+  if r == "sent" then
+    local at, t = not e.target and M.sentAt[e.kind], C.ServerNow()
+    for _, p in ipairs(kept or {}) do
+      if at and sent[p.key] ~= p.s then at[p.key] = t end
+      sent[p.key] = p.s
+    end
+  end
   if r == "gone" then return end
   if e.kind ~= "v" then
     if not e.target and back and #back > 0 and type(e.head) == "string" then
@@ -258,28 +552,97 @@ local function nextUp()
   return head
 end
 
-local pumping = false
+-- the pump: one message a turn. Its next turn is booked before anything that may raise: an error on the way (in
+-- building, routing or marking a message) takes that message out of the queue, its values marked to go with the next
+-- change, and the queue goes on (0.7.0's stopped for the session: nothing of yours left until /reload). A turn booked
+-- again replaces the one booked before (book), so the end of a lockdown can start the queue at once without two pumps
+local pumping, booked, current = false, false, nil
 local pump
+local bookGen = 0
+local function book(sec)
+  bookGen = bookGen + 1
+  local g = bookGen
+  booked = true
+  C_Timer.After(sec, function() if g == bookGen then pump() end end)
+end
+M.drops, M.paused = 0, nil
+-- (the ask that left, or that will not: the hello's is sent again where it never left, M:AskAgain)
+local function asked(e, r)
+  if not e.ask then return end
+  if r == "sent" then M.askOwed = nil; M.askLeft = C.Now(); if M.AskLeft then M:AskLeft() end
+  elseif r ~= "gone" then M.askOwed = e.hello and "hello" or true; M:AskAgain() end
+end
+-- (this login's record gone whole on GUILD for the first time: an ask whose since is later holds it, M:Answer)
+-- (and its first chunk gone: an ask heard before it is answered by that record, M.fullOut)
+local function based(e, r)
+  if r ~= "sent" or M.base or e.rec ~= "full" or e.target then return end
+  M.fullOut = M.fullOut or C.Now()
+  local i, n = (type(e.head) == "string" and e.head or ""):match("^1F|(%d+)|(%d+)|")
+  if i and i == n then M.base = C.ServerNow(); if M.wire then M.wire.base = M.base end end
+end
 pump = C.Safe(function()
+  booked, current = false, nil
   local e = nextUp()
-  if not e then pumping = false return end
+  if not e then pumping = false; booked = true return end
+  -- (the lockdown: nothing goes, no try counted, the queue asked again in a while or when it ends)
+  if M:Locked() then M.paused = M.paused or C.Now(); book(LOCK_POLL) return end
+  -- (the lockdown over, however it ended: the answers it held back go too)
+  if M.paused then M.paused = nil; M:PayOwed() end
+  current = e
   local msg, kept, back = build(e)
   local r, extra = "none", nil
   if msg then r, extra = send(e, msg) end
+  if r == "locked" then M.lockSeen = C.Now(); M.paused = C.Now(); book(LOCK_POLL) return end
   if r == "later" then
     e.tries = (e.tries or 0) + 1
-    if e.tries <= RETRIES then C_Timer.After(extra or 3, pump) return end
+    if e.tries <= RETRIES then book(math.min(30, extra or 3)) return end
     r, extra = "drop", "still throttled after " .. RETRIES .. " tries"
   end
+  -- (a kill claim the client refused, or kept answering "later", goes to the back of the queue, CLAIM_AGAIN times: a
+  -- repeat kill's is kept nowhere else, and one at the head holds nothing behind it. A first build retried it
+  -- there for good, and nothing else left)
+  if r == "drop" and e.kind == "k" and (e.again or 0) < CLAIM_AGAIN then
+    e.again, e.tries = (e.again or 0) + 1, 0
+    for i, x in ipairs(M.out) do if x == e then table.remove(M.out, i) break end end
+    M.out[#M.out + 1] = e
+    book(1)
+    return
+  end
   for i, x in ipairs(M.out) do if x == e then table.remove(M.out, i) break end end
+  -- (nothing left to send took no turn of the client's)
+  book(r == "none" and 0.05 or 1)
+  asked(e, r)
+  based(e, r)
   mark(e, r, kept, back)
   if e.done then e.done() end
-  if r == "drop" then C.Err.Note("addon message not sent (" .. tostring(extra) .. "); its stats go with the next change", "comm: sending") end
-  -- (nothing left to send took no turn of the client's)
-  C_Timer.After(r == "none" and 0.05 or 1, pump)
-end, "comm: sending")
--- the queue going again: a message queued, or the policy held at last (M:PolicySettled)
-function M.Kick() if not pumping and #M.out > 0 then pumping = true; C_Timer.After(0.05, pump) end end
+  if r == "drop" then M.drops = M.drops + 1; C.Perf.Count("drops"); C.Err.Note("addon message not sent (" .. tostring(extra) .. "); its stats go with the next change", "comm: sending") end
+  -- (a kill claim done with, sent or given up: no /reload sends it again)
+  if e.kind == "k" and e.parts then for _, p in ipairs(e.parts) do M.pendingClaims[p.key] = nil end end
+  -- (a guild message given up: the answers queued before it are not sent for sure, M:Borne; the queue's last for the
+  -- guild gone: they are)
+  if r == "drop" and not e.target then M.epoch = M.epoch + 1 end
+  drained()
+  current = nil
+end, "comm: sending", function()
+  local e = current
+  current = nil
+  if booked then return end
+  -- (an error on the way: the message it came on leaves the queue, which would raise it again, and is done with as one
+  -- the client dropped; then the next turn)
+  if e then
+    for i, x in ipairs(M.out) do if x == e then table.remove(M.out, i) break end end
+    pcall(asked, e, "drop")
+    pcall(mark, e, "drop")
+    if e.done then pcall(e.done) end
+    M.drops = M.drops + 1
+    C.Perf.Count("drops")
+    if not e.target then M.epoch = M.epoch + 1 end
+  end
+  book(1)
+end)
+-- the queue going again: a message queued, or the policy held at last (M:PolicySettled), or the lockdown over
+function M.Kick() if not pumping and #M.out > 0 then pumping = true; book(0.05) end end
+function M.Resume() if pumping then book(0.05) else M.Kick() end end
 -- a delta to a way (the guild channel, or one officer) that already has one waiting goes into that one: a newer value
 -- of an id takes the older one's place, a new id joins it while the message fits, and it keeps its turn; what does not
 -- fit goes as a message of its own. Every value message still waiting that way behind it (a later delta, a record's
@@ -350,11 +713,29 @@ end
 
 -- true when queued (a message already waiting with the same text to the same way is not queued twice, and a delta to a
 -- way with one waiting goes into it)
+-- The queue holds OUT_CAP messages at most: past it the oldest that may go makes room (its values marked to go with
+-- the next change, a label with the next pass); the ask, the policy and the word's answers (first) and a kill claim
+-- never do. 0.7.0's grew without bound while a lockdown or a storm of asks held it
+local OUT_CAP = 200
+local function room()
+  if #M.out < OUT_CAP then return end
+  for i, m in ipairs(M.out) do
+    if not (m.first or m.ask or m.kind == "k" or m == current) then
+      table.remove(M.out, i)
+      pcall(mark, m, "drop")
+      if not m.target then M.epoch = M.epoch + 1 end
+      M.drops, M.capped = M.drops + 1, (M.capped or 0) + 1
+      C.Perf.Count("drops")
+      return
+    end
+  end
+end
 local function queue(e)
   if CUTE_DEV then assert(#e.msg <= LIMIT, "an addon message of " .. #e.msg .. " bytes") end
   for _, m in ipairs(M.out) do if m.msg == e.msg and m.target == e.target then return false end end
   e = merge(e)
   if not e then return true end
+  room()
   e.at = clock()
   M.out[#M.out + 1] = e
   if e.parts and e.kind then
@@ -369,8 +750,11 @@ M.Queue = queue
 -- the "k=v" parts for a set of ids, skipping values already sent or already queued: those for the guild channel, and
 -- those the policy keeps to the officers (Policy.lua P:Route), per officer in targets (every one online where none
 -- given), each against what went its own way
-local function partsFor(ids, force, targets)
+-- (gforce: the guild channel's own, where it differs: an answer's since filters the guild's part, never the part an
+-- officer who asked is whispered)
+local function partsFor(ids, force, targets, gforce)
   targets = targets or C.Roster:OfficerTargets()
+  if gforce == nil then gforce = force end
   local guild, told = {}, {}
   for _, id in ipairs(ids) do
     local def = defOf(id)
@@ -380,11 +764,11 @@ local function partsFor(ids, force, targets)
       if C.Policy:Route(id) == "self" then
         for _, t in ipairs(targets) do
           local sent, q = state("v", t)
-          if force or (sent[id] ~= s and q[id] ~= s) then told[t] = told[t] or {}; table.insert(told[t], p) end
+          if force == true or (sent[id] ~= s and q[id] ~= s) then told[t] = told[t] or {}; table.insert(told[t], p) end
         end
       else
         local sent, q = state("v")
-        if force or (sent[id] ~= s and q[id] ~= s) then guild[#guild + 1] = p end
+        if forced(gforce, "v", id) or (sent[id] ~= s and q[id] ~= s) then guild[#guild + 1] = p end
       end
     end
   end
@@ -402,15 +786,31 @@ function whisper(told, make)
 end
 local function packer(head, kind) return function(parts) return pack(head, parts, nil, kind) end end
 
--- send what changed since the last send; slow stats wait for the flush (all = true) unless asked
+-- send what changed since the last send; slow stats wait for the flush (all = true) unless asked. The stats that change
+-- at every coin, kill, loot or step and say little each time (LAZY) go once in LAZY_EVERY seconds at most, the change
+-- waiting till then: 0.7.0 sent gold at every coin, a whisper to each officer online each time
+local LAZY, LAZY_EVERY = { gold = true, rested = true, bags_free = true, durability = true, subzone = true }, 10
+M.wentAt = {}
 function M:Changed(all)
   if not self.started or not C.Roster:InGuild() then return end
   -- before the hello nothing goes out: its full record carries it all; nor while the record waits for the policy
   if not self.hello or self.holding then return end
-  local ids = {}
+  local ids, t, soonest = {}, clock(), nil
   for id in pairs(C.Sample.dirty) do
     local def = defOf(id)
-    if def and (all or not def.slow) then ids[#ids + 1] = id; C.Sample.dirty[id] = nil end
+    if def and (all or not def.slow) then
+      local wait = (LAZY[id] and not all and self.wentAt[id]) and (self.wentAt[id] + LAZY_EVERY - t) or 0
+      if wait > 0 then soonest = math.min(soonest or wait, wait)
+      else
+        ids[#ids + 1] = id
+        C.Sample.dirty[id] = nil
+        if LAZY[id] then self.wentAt[id] = t end
+      end
+    end
+  end
+  if soonest and not self.lazyDue then
+    self.lazyDue = true
+    C_Timer.After(soonest, C.Safe(function() M.lazyDue = false; M:Changed() end, "comm: the changes held"))
   end
   table.sort(ids)
   if #ids == 0 then return end
@@ -435,20 +835,41 @@ function M:Opened(ids)
   if boss then self:Claims(true) end
 end
 
--- "k=v" parts as 1F chunks whose header is counted against the limit
-local function chunked(parts)
-  local longest = string.format("1F|%d|%d|%d|", 99, 99, C.REGVER) -- the longest header a chunk can get
+-- "k=v" parts as 1F chunks whose header is counted against the limit. rec: what the record is ("full", the whole
+-- record; "game", the statistics pass; "since", what changed since an ask's since, its version field marked "s" so a
+-- receiver that holds no record of the sender asks for the whole one: a 0.7 client takes the field for the version it
+-- never reads), kept on each chunk
+local function chunked(parts, rec)
+  local reg = C.REGVER .. (rec == "since" and "s" or "")
+  local longest = string.format("1F|%d|%d|%s|", 99, 99, reg) -- the longest header a chunk can get
   local list = pack("", parts, LIMIT - #longest, "v")
-  for i, e in ipairs(list) do e.head = string.format("1F|%d|%d|%d|", i, #list, C.REGVER); e.msg = e.head .. e.msg end
+  for i, e in ipairs(list) do e.head = string.format("1F|%d|%d|%s|", i, #list, reg); e.msg = e.head .. e.msg; e.rec = rec end
   return list
+end
+-- a newer record of the same kind replaces the chunks of an older one still waiting that way (the same ids, older
+-- values): their parts leave the queue's marks, the newer chunks queued in their place at the back
+local function superseded(rec, target)
+  if rec ~= "full" and rec ~= "game" then return end
+  for i = #M.out, 1, -1 do
+    local m = M.out[i]
+    if m.rec == rec and m.target == target and m ~= current then
+      table.remove(M.out, i)
+      local _, q = state("v", target)
+      for _, p in ipairs(m.parts or {}) do if q[p.key] == p.s then q[p.key] = nil end end
+    end
+  end
 end
 -- a record in chunks: the guild's part on GUILD, each officer's part whispered to that officer (after its own GUID, so
 -- an officer joins it to its member as the guild's part). whisperOnly: the officers' part alone
-local function record(guild, mine, whisperOnly)
-  if not whisperOnly then for _, e in ipairs(chunked(guild)) do queue(e) end end
+local function record(guild, mine, whisperOnly, rec)
+  if not whisperOnly then
+    superseded(rec, nil)
+    for _, e in ipairs(chunked(guild, rec)) do queue(e) end
+  end
   local gs = M.Encode(C.Stats.byId.guid, C.MyGUID())
   if gs then for _, parts in pairs(mine) do table.insert(parts, 1, { id = "guid", key = "guid", kv = "guid=" .. gs, s = gs }) end end
-  whisper(mine, chunked)
+  for t in pairs(mine) do superseded(rec, t) end
+  whisper(mine, function(parts) return chunked(parts, rec ~= "since" and rec or nil) end)
 end
 
 -- the whole record but the statistics and the discoveries, which have their own pass; the hidden stats first (Stats.lua:
@@ -472,11 +893,31 @@ local function recordIds(keep)
   end
   return ids
 end
-function M:Full(told, whisperOnly)
+-- since: the guild's part only what went on GUILD after it (an ask's since, M:Answer), the GUID and the version first
+-- whatever, and nothing at all where nothing else did; the officers told get their part whole
+local HEAD = { guid = true, addon_ver = true }
+function M:Full(told, whisperOnly, since)
   if not C.Roster:InGuild() then return end
   told = told or C.Roster:OfficerTargets()
-  local guild, mine = partsFor(recordIds(whisperOnly), true, told)
-  record(guild, mine, whisperOnly)
+  local guild, mine = partsFor(recordIds(whisperOnly), true, told, since or true)
+  if since then
+    local rest = 0
+    for _, p in ipairs(guild) do if not HEAD[p.id] then rest = rest + 1 end end
+    if rest == 0 then guild = {} end
+    -- (the head named whatever: a since part sent before it would leave a receiver without a record nothing to join)
+    local have = {}
+    for _, p in ipairs(guild) do have[p.id] = true end
+    if rest > 0 then
+      for i, id in ipairs({ "guid", "addon_ver" }) do
+        if not have[id] then
+          local def = defOf(id)
+          local s = def and M.Encode(def, C.Sample:Value(id))
+          if s then table.insert(guild, i, { id = id, key = id, kv = id .. "=" .. s, s = s }) end
+        end
+      end
+    end
+  end
+  record(guild, mine, whisperOnly or (since and #guild == 0), since and "since" or "full")
   for _, t in ipairs(told) do self.toldTo[t] = true end
 end
 -- an officer heard from for the first time this session (their record came after your hello: you logged in after
@@ -533,6 +974,7 @@ local function passIds(keep)
 end
 -- whisperOnly: the part the officers keep, to told alone (an officer's ask the guild's part answered lately, a new
 -- officer); passDone once this character's own pass has gone
+-- force: true, everything (an asker has seen none of it); a number, an ask's since: what went on GUILD after it
 function M:FullGame(force, told, whisperOnly)
   if not C.Roster:InGuild() then return end
   -- (never while the record waits for the policy: a few seconds on)
@@ -540,11 +982,13 @@ function M:FullGame(force, told, whisperOnly)
   local ids = passIds(whisperOnly)
   if #ids > 0 then
     local guild, mine = partsFor(ids, force, told)
-    record(guild, mine, whisperOnly)
+    record(guild, mine, whisperOnly, force == true and "game" or (type(force) == "number" and "since" or nil))
   end
   self:Labels(nil, force, told, whisperOnly)
   self:Claims(force, told, whisperOnly)
   if not told then self.passDone = true end
+  -- (the hello's own pass: it answers the asks heard before this login's record went)
+  if force == false and not told then self.helloPassQueued = true; answered("helloPass", "pass", nil, true) end
 end
 
 -- the labels: "key=label" for every discovered id with a value in this character's own record, the instance of each
@@ -576,11 +1020,11 @@ local function sortParts(kind, part, force, targets, guild, mine)
   if routeOf(part) == "self" then
     for _, t in ipairs(targets) do
       local sent, q = state(kind, t)
-      if force or not (sent[part.key] or q[part.key]) then mine[t] = mine[t] or {}; table.insert(mine[t], part) end
+      if force == true or not (sent[part.key] or q[part.key]) then mine[t] = mine[t] or {}; table.insert(mine[t], part) end
     end
   else
     local sent, q = state(kind)
-    if force or not (sent[part.key] or q[part.key]) then guild[#guild + 1] = part end
+    if forced(force, kind, part.key) or not (sent[part.key] or q[part.key]) then guild[#guild + 1] = part end
   end
 end
 function M:Labels(only, force, told, whisperOnly)
@@ -593,7 +1037,7 @@ function M:Labels(only, force, told, whisperOnly)
     if seen[id] then return end
     seen[id] = true
     local part = labelPart(id)
-    if part then sortParts("l", part, force or only ~= nil, targets, parts, mine) end
+    if part then sortParts("l", part, (only ~= nil) or force, targets, parts, mine) end
     -- a boss's instance goes with it, named, and the loot this character saw it drop
     local num = id:match("^e(%d+)$")
     local inst = num and k.inst and k.inst[tonumber(num)]
@@ -641,6 +1085,13 @@ end
 M.waitingClaims = {}
 function M:Claim(enc, t, with)
   if not (self.started and self.hello and C.Roster:InGuild()) then return end
+  local n = 0
+  for _ in pairs(self.pendingClaims) do n = n + 1 end
+  if n < 64 then
+    local set = {}
+    for g in pairs(type(with) == "table" and with or {}) do if type(g) == "string" then set[g] = true end end
+    self.pendingClaims[claimText(enc, t, with)] = { enc = enc, t = t, with = set }
+  end
   if self.holding then
     if #self.waitingClaims < 64 then self.waitingClaims[#self.waitingClaims + 1] = { enc = enc, t = t, with = with } end
     return
@@ -673,11 +1124,25 @@ end
 
 -- the ask, with the stamp of the officers' word this client holds (Policy.lua P:Stamp), of the newest officers' word
 -- (1N) it holds (Rules.lua R.WordStamp) and the fingerprint of the policy it routes by (Policy.lua P:Fp)
-function M:Ask()
+-- (hello: the hello's own ask, which alone carries since: an ask made for a reason (/cute resend, the officers' button,
+-- a value dropped while in doubt, many records missing) wants every record whole)
+function M:Ask(hello)
   if not C.Roster:InGuild() then return end
   local guid = C.MyGUID()
+  -- (one ask waiting at a time: a second would only be answered as the first)
+  for _, m in ipairs(self.out) do if m.ask then return end end
   queue({ msg = "1R|" .. (guid and (guid:gsub("[|;=]", "")) or "") .. "|" .. string.format("%.0f", C.Policy:Stamp()) .. "|"
-    .. string.format("%.0f", C.Rules.WordStamp()) .. "|" .. C.Policy:Fp(), first = true })
+    .. string.format("%.0f", C.Rules.WordStamp()) .. "|" .. C.Policy:Fp() .. ((hello and self.SinceHex) and self:SinceHex() or ""), first = true, ask = true, hello = hello })
+end
+-- an ask that never left (the client refused it, or an error on the way): asked again half a minute on, and when the
+-- lockdown ends (M:Restriction)
+function M:AskAgain()
+  if not self.askOwed or self.askAgainDue then return end
+  self.askAgainDue = true
+  C_Timer.After(30, C.Safe(function()
+    M.askAgainDue = false
+    if M.askOwed and M.hello and not M:Locked() then M:Ask(M.askOwed == "hello") elseif M.askOwed then M:AskAgain() end
+  end, "comm: ask again"))
 end
 -- parts as messages under one head, each saying which of how many it is ("i/n|" after the head): a receiver takes
 -- the whole once every part is in (a policy, the officers' word), and none of more than 64 messages, so what does not
@@ -755,6 +1220,16 @@ end
 -- channel (an officer: the officers online), ten at most. The lowest answers first and each next a second later, so the
 -- rest hear the first answer before their own goes (a random wait alone let a cohort that drew the same second answer
 -- together, none hearing the others)
+-- (GUIDs ordered byte by byte, as Policy.lua orders its codes: Lua's < on strings asks the C runtime's collation,
+-- which a Norwegian or German Windows client may order otherwise, and two clients would each take the first place)
+local function before(a, b)
+  for i = 1, math.min(#a, #b) do
+    local x, y = a:byte(i), b:byte(i)
+    if x ~= y then return x < y end
+  end
+  return #a < #b
+end
+M.Before = before
 local function place(officer)
   local mine, n = C.MyGUID() or "", 0
   local R = C.Roster
@@ -763,12 +1238,12 @@ local function place(officer)
     for _, t in ipairs(R:OfficerTargets()) do
       local e = CuteDB.roster[t]
       local g = type(e) == "table" and type(e.stats) == "table" and e.stats.guid
-      if type(g) == "string" and g < mine then n = n + 1 end
+      if type(g) == "string" and before(g, mine) then n = n + 1 end
     end
   else
     for key, e in pairs(CuteDB.roster) do
       local g = type(e) == "table" and e.ch and type(e.stats) == "table" and e.stats.guid
-      if type(g) == "string" and g < mine then
+      if type(g) == "string" and before(g, mine) then
         local m = R.byGuid[g]
         if m and m.online and not m.self then n = n + 1 end
       end
@@ -828,7 +1303,7 @@ local function first()
   local mine = C.MyGUID() or ""
   local thr = C.Policy:LineThreshold()
   for _, m in ipairs(C.Roster.members) do
-    if m.online and not m.self and m.rank <= thr and type(m.guid) == "string" and m.guid < mine then return false end
+    if m.online and not m.self and m.rank <= thr and type(m.guid) == "string" and before(m.guid, mine) then return false end
   end
   return true
 end
@@ -934,6 +1409,156 @@ local function takeAskers(field)
   M[field] = {}
   return out
 end
+-- the answer to the asks that came while it waited: the record (the guild's part where a fresh ask wants it, the
+-- officers' part to each officer who asked), and the statistics pass
+-- (since: the earliest since of the fresh asks, nil where one wants the whole record: M.answerFull)
+function M:Answer()
+  local guild, since = M.answerGuild, (not M.answerFull) and M.answerSince or nil
+  M.answerGuild, M.answerFull, M.answerSince = false, nil, nil
+  M:Full(takeAskers("askers"), not guild, guild and since or nil)
+  if guild then answered("rec", "rec", since, C.Roster:InGuild()) end
+end
+-- the statistics pass for the guild: what changed since the asks' since, or the whole pass, once in PASS_EVERY seconds
+-- whoever asks (the asks meanwhile wait for the next: 0.7.0 resent it whole for every new asker, about sixty messages a
+-- month in from each client online for every login); the officers who asked get their part whole at once
+local PASS_EVERY = 600
+function M:AnswerGame()
+  -- (while the record waits for the policy, the pass waits too: paid as it goes, M:Release)
+  if M.holding then M.gameOwed = true; M:OwedSoon() return end
+  local guild, since = M.answerGameGuild, (not M.gameFull) and M.gameSince or nil
+  M.answerGameGuild, M.gameFull, M.gameSince = false, nil, nil
+  local officers = takeAskers("gameAskers")
+  if guild and since then
+    M:FullGame(since, {}, false)
+    answered("pass", "pass", since, C.Roster:InGuild())
+    if #officers > 0 then M:FullGame(true, officers, true) end
+    return
+  end
+  if guild then
+    local wait = M.passAt and (M.passAt + PASS_EVERY - C.Now()) or 0
+    if wait > 0 then
+      if #officers > 0 then M:FullGame(true, officers, true) end
+      if not M.passDue then
+        M.passDue = true
+        C_Timer.After(wait, C.Safe(function()
+          M.passDue = false
+          M.answerGameGuild, M.gameFull = true, true
+          if not C.Policy:Settled() or M:Locked() then M.gameOwed = true; M:OwedSoon(); return end
+          M:AnswerGame()
+        end, "comm: statistics, the next pass"))
+      end
+      return
+    end
+    M.passAt = C.Now()
+    if M.wire then M.wire.passAt = M.passAt end
+  end
+  M:FullGame(true, officers, not guild)
+  if guild then answered("pass", "pass", nil, C.Roster:InGuild()) end
+end
+-- the statistics pass for the asks, a minute or so on, once for all that come while it waits
+function M:GameSoon()
+  if M.answeringGame then return end
+  M.answeringGame = true
+  local wait = GAME_AFTER - 30 + (math.random and (29 * math.random()) or 5)
+  C_Timer.After(wait, C.Safe(function()
+    M.answeringGame = false
+    if not C.Policy:Settled() or M:Locked() then M.gameOwed = true; M:OwedSoon(); return end
+    M:AnswerGame()
+  end, "comm: answer statistics"))
+end
+-- (this character has statistics, discoveries or kill claims to pass)
+local function hasPass() return #C.Stats.byCat.game > 0 or #C.Stats.byCat.found > 0 or next(C.Rules.OwnClaims()) ~= nil end
+-- an answer to the asks, once for all that come while it waits: two to forty seconds on, so a login heard by a guild
+-- online is answered over forty seconds, not twenty
+function M:AnswerSoon()
+  if M.answering then return end
+  M.answering = true
+  local wait = 2 + (math.random and (38 * math.random()) or 10)
+  C_Timer.After(wait, C.Safe(function()
+    M.answering = false
+    -- (while this client waits for the line, P.doubt, or the game holds addon chat back, or its own record waits for the
+    -- policy, the answer waits too: what it would queue could not leave. Paid as that ends, M:PayOwed; a first
+    -- build dropped one whose time came while the record waited, and a /reload's release sends only what changed)
+    if M.holding or not C.Policy:Settled() or M:Locked() then M.answerOwed = true; M:OwedSoon(); return end
+    M:Answer()
+  end, "comm: answer"))
+end
+-- what an ask's since is worth here: the since, where this client's own record went whole on GUILD this login before
+-- it (M.base: the asker heard it, or asked after it and had it answered), else nil, the whole record
+local function sinceOf(since)
+  if type(since) ~= "number" or not M.base or since < M.base then return nil end
+  return math.min(since, C.ServerNow())
+end
+-- a member who holds no record of yours asks for it whole (1Q: after a since answer or a delta from a sender it holds
+-- none of), answered as a fresh ask wanting the whole record, the guild's part alone, once in ASK_AGAIN seconds, and
+-- the whole statistics pass with it (the ten-minute pass bounds it): its later asks, since its hold, would never bring
+-- what the pass said before (a first build sent the record alone)
+M.wholeAsked, M.wholeAskedOf = {}, {}
+function M:AskedWhole(sender)
+  local who = C.Roster:GuidOf(sender) or sender
+  local t = C.Now()
+  if M.wholeAsked[who] and t - M.wholeAsked[who] < 180 then return end
+  M.wholeAsked[who] = t
+  local e = self:Entry(who)
+  e.rec, e.nr, e.pass = true, 0, C.ServerNow()
+  await("rec", e)
+  M.answerGuild, M.answerFull = true, true
+  self:AnswerSoon()
+  if hasPass() then
+    e.pass, e.np = true, 0
+    await("pass", e)
+    M.answerGameGuild, M.gameFull = true, true
+    self:GameSoon()
+  end
+end
+-- the record of a sender this client holds none of came in part (a delta, or an answer since its since: partial):
+-- its whole record asked for (1Q), of the member the roster names by the sender string (by GUID: no name on the
+-- wire), once a session, unless a whole one came meanwhile (any record chunk not marked "s"). Not before this client's
+-- own ask left and a minute on, whose answers bring most (after a /reload, which asks nothing, at once)
+M.partialOf, M.wholeOf = {}, {}
+local WHOLE_MAX = 10
+function M:WantWhole(sender, had, partial)
+  if not partial then self.wholeOf[sender] = true return end
+  if had or self.wholeOf[sender] then return end
+  self.partialOf[sender] = true
+  self:AskWholesSoon()
+end
+-- (the senders gathered five seconds, a burst of parts asked for together; a minute after this login's ask left at
+-- the soonest, AskLeft calling it then)
+function M:AskWholesSoon()
+  if self.wholesDue or next(self.partialOf) == nil then return end
+  local wait = 5
+  if not self.reloaded then
+    if not self.syncedAt then return end
+    wait = math.max(5, 61 - (C.Now() - self.syncedAt))
+  end
+  self.wholesDue = true
+  C_Timer.After(wait, C.Safe(function() M.wholesDue = false; M:AskWholes() end, "comm: whole records"))
+end
+function M:AskWholes()
+  if not self.hello or next(self.partialOf) == nil then return end
+  local list = {}
+  for sender in pairs(self.partialOf) do
+    local m = C.Roster:SenderMember(sender)
+    if not (self.wholeOf[sender] or self.wholeAskedOf[sender]) and m and type(m.guid) == "string" and not m.self then list[#list + 1] = sender end
+  end
+  table.sort(list)
+  self.partialOf = {}
+  -- (many records missing, as 0.7.0's partial roster left some files: one ask without since, every record whole, in
+  -- place of a 1Q each)
+  if #list > WHOLE_MAX then
+    for _, sender in ipairs(list) do self.wholeAskedOf[sender] = true end
+    self:Ask()
+    return
+  end
+  for _, sender in ipairs(list) do
+    local m = C.Roster:SenderMember(sender)
+    if not (self.wholeOf[sender] or self.wholeAskedOf[sender]) and m and type(m.guid) == "string" and not m.self then
+      self.wholeAskedOf[sender] = true
+      queue({ msg = "1Q|" .. m.guid:gsub("[|;=]", ""), first = true })
+    end
+  end
+end
 -- the hold, ended (this client holds the policy Guild Info names: Policy.lua P:Settled): the record goes, routed by
 -- the policy as it stands now, its Only-you part to every officer online and to the officers who asked meanwhile; then
 -- what changed while it waited, and the kills claimed meanwhile; an officer's client says the officers' word it holds,
@@ -955,13 +1580,31 @@ function M:Release()
   for t in pairs(self.askers) do if not seen[t] and C.Roster:OfficerSender(t) then seen[t] = true; told[#told + 1] = t end end
   self.askers = {}
   table.sort(told)
-  self:Full(told)
+  self:ReleaseRecord(told)
   self:Changed()
   local claims = self.waitingClaims
   self.waitingClaims = {}
   if #claims > 0 then claimsOut(claims) end
   -- (an officer's client: the guild's knowledge, now that the policy is known)
   self:WordSoon()
+  -- (and the answers that waited for it)
+  self:PayOwed()
+end
+-- the record at the release: whole at a login; after a /reload only what changed since the last send before it, as
+-- deltas, to the guild and to each officer (the guild holds the rest: M:Wire)
+function M:ReleaseRecord(told)
+  if not self.reloaded then
+    self:Full(told)
+    -- (it answers the asks heard before it went)
+    self.helloQueued = true
+    answered("helloRec", "rec", nil, C.Roster:InGuild())
+    return
+  end
+  local head = "1D|" .. C.REGVER .. "|"
+  local guild, mine = partsFor(recordIds(), false, told)
+  for _, e in ipairs(pack(head, guild, nil, "v")) do queue(e) end
+  whisper(mine, packer(head, "v"))
+  for _, t in ipairs(told) do self.toldTo[t] = true end
 end
 -- the policy Guild Info names is held now (or the guild has no line): the record waiting at login goes, and the queue
 -- moves again (Policy.lua P:Settle)
@@ -970,25 +1613,58 @@ function M:PolicySettled(settled)
   if self.holding then self:Release() end
   -- (an officer's change made while it waited: sent now)
   if self.policyOwed and C.Roster:MeOfficer() then self:SendPolicy() end
-  -- (the answers that waited for it, once each, by the policy now)
+  self:PayOwed()
+  M.Kick()
+end
+-- an answer owed is looked at again every LOCK_POLL seconds until it is paid: a lockdown no event ends (one only
+-- InChatMessagingLockdown or a result 11 said, or a client the event never reaches) pays it within seconds of its end,
+-- the queue empty or not (a first build paid it only at the event, a loading screen or the policy settling)
+function M:OwedSoon()
+  if self.owedDue or not (self.answerOwed or self.gameOwed) then return end
+  self.owedDue = true
+  C_Timer.After(LOCK_POLL, C.Safe(function()
+    M.owedDue = false
+    if not (M.answerOwed or M.gameOwed) then return end
+    M:PayOwed()
+    M:OwedSoon()
+  end, "comm: answers owed"))
+end
+-- the answers that waited (for the policy Guild Info names, or for the lockdown to end), once each, by the policy now
+function M:PayOwed()
+  if not C.Policy:Settled() or self:Locked() then return end
   if self.answerOwed and not self.holding then
     self.answerOwed = nil
-    local guild = M.answerGuild
-    M.answerGuild = false
-    self:Full(takeAskers("askers"), not guild)
+    self:Answer()
   end
   if self.gameOwed then
     self.gameOwed = nil
-    local guild = M.answerGameGuild
-    M.answerGameGuild = false
-    self:FullGame(true, takeAskers("gameAskers"), not guild)
+    self:AnswerGame()
   end
-  M.Kick()
+end
+-- ADDON_RESTRICTION_STATE_CHANGED (type, state: RestrictedActionsDocumentation.lua:97): for the chat restriction,
+-- Activating (1) and Active (2) hold the queue, Inactive (0) lets it go. The lockdown over: the answers owed go, an
+-- ask that never left goes again, the queue at once
+function M:Restriction(kind, state)
+  kind, state = C.Plain(kind), C.Plain(state)
+  if kind == nil or kind ~= restrictionKind() then return end
+  local states = Enum and Enum.AddOnRestrictionState
+  local inactive = type(states) == "table" and C.Plain(states.Inactive) or 0
+  if state ~= nil and state ~= inactive then self.lockEvent = C.Now() return end
+  self.lockEvent, self.lockSeen = nil, nil
+  if self:Locked() then return end
+  self:PayOwed()
+  if self.askOwed and self.hello then self:Ask(self.askOwed == "hello") end
+  M.Resume()
 end
 -- out of the guild: the hello is owed again, said on the next refresh in one (Roster.lua), and the hold with it
 function M:Left()
   self.hello, self.holding, self.policyOwed = false, false, nil
   self.holdGen = (self.holdGen or 0) + 1
+  -- (another guild, or this one again: its hello asks, and its record goes whole, and no ask of this one is owed)
+  self.reloaded, self.base, self.fullOut, self.helloQueued, self.helloPassQueued = nil, nil, nil, nil, nil
+  M.owe, oweN, M.pendingClaims = {}, 0, {}
+  if self.wire then self.wire.owe, self.wire.claimsOwed = M.owe, M.pendingClaims end
+  for k in pairs(waits) do waits[k] = {} end
 end
 
 ----------------------------------------------------------------------------
@@ -1024,7 +1700,9 @@ local WHISPERED = { ["1D"] = true, ["1F"] = true, ["1L"] = true, ["1K"] = true }
 -- and deltas from the guild channel too: a record made before the roster listed anyone would decide whose guild the
 -- saved variables of 0.5.x are (Policy.lua P:Adopt), by what this session heard rather than what was saved
 M.early, M.waiting = {}, {}
-local EARLY_CAP, EARLY_EACH = 400, 32 -- (of one sender: a copy's burst pushes no officer's or member's whispers out)
+-- (a guild of hundreds answers a login with hundreds of records: 2000 hold them while C_Club is slow after a restart;
+-- one dropped is a loss this login's hold does not move past, M:Logout)
+local EARLY_CAP, EARLY_EACH = 2000, 32 -- (of one sender: a copy's burst pushes no officer's or member's whispers out)
 function M:ReplayEarly()
   local list = self.early
   self.early = {}
@@ -1034,7 +1712,7 @@ end
 -- pass last answered each member's (once in GAME_AGAIN seconds a member; an officer's always): a copy that asks every
 -- few seconds makes nobody resend
 local ASK_AGAIN, GAME_AGAIN, POLICY_AGAIN, UNTRUSTED_AGAIN = 180, 1800, 30, 300
-M.answered, M.gameAnswered, M.policyAsked = {}, {}, {}
+M.answered, M.answeredSince, M.gameAnswered, M.policyAsked = {}, {}, {}, {}
 
 function M:Receive(text, channel, sender)
   text, channel, sender = C.Plain(text), C.Plain(channel), C.Plain(sender)
@@ -1047,7 +1725,7 @@ function M:Receive(text, channel, sender)
   if not R.trusted and (whispered or kind == "1F" or kind == "1D") then
     local n = 0
     for _, m in ipairs(self.early) do if m[3] == sender then n = n + 1 end end
-    if #self.early < EARLY_CAP and n < EARLY_EACH then self.early[#self.early + 1] = { text, channel, sender } end
+    if #self.early < EARLY_CAP and n < EARLY_EACH then self.early[#self.early + 1] = { text, channel, sender } else self.lost = true end
     return
   end
   -- the GUID a full record or an ask carries decides whether the message is yours, handed back by the game; a delta
@@ -1055,14 +1733,19 @@ function M:Receive(text, channel, sender)
   -- bears it out (R:Vet): an edited copy can put any member's GUID in its messages, an officer's included, and one the
   -- roster gives a member the sender string does not name is dropped, the sender marked suspect. Who is an officer
   -- goes by the member the sender string names, never by a GUID (R:OfficerSender)
-  local kv, guid, forged, stamp, wstamp, fp
+  local kv, guid, forged, stamp, wstamp, fp, since
   if kind == "1F" then kv = decodeBody(text:match("^1F|%d+|%d+|[^|]*|(.*)$")); guid = kv.guid
   elseif kind == "1R" then
     local rest = text:match("^1R|(.*)$")
     if rest then
       guid = rest:match("^([^|]*)")
       local s1, s2, s3 = rest:match("^[^|]*|(%d+)|?(%d*)|?(%x*)$")
-      stamp, wstamp, fp = tonumber(s1 or ""), tonumber(s2 or ""), (s3 and #s3 == 16) and s3:lower() or nil
+      stamp, wstamp = tonumber(s1 or ""), tonumber(s2 or "")
+      -- (the fingerprint's 16 hex digits, then the since in hex where the asker holds the guild from a time: M:Ask)
+      if s3 and #s3 >= 16 then
+        fp = s3:sub(1, 16):lower()
+        if #s3 > 16 and #s3 <= 24 then since = tonumber(s3:sub(17), 16) end
+      end
       if guid == "" then guid = nil end
     end
   end
@@ -1094,10 +1777,15 @@ function M:Receive(text, channel, sender)
   if guid or forged then R:NotMe(sender) end
   if kind == "1D" then
     local body = text:match("^1D|[^|]*|(.*)$")
+    local had = CuteDB.roster[sender] ~= nil
     R:Apply(sender, decodeBody(body), whispered)
+    if not whispered then self:WantWhole(sender, had, true) end
   elseif kind == "1F" then
-    -- (the record as it came: Apply vets its GUID again and marks the sender)
+    -- (the record as it came: Apply vets its GUID again and marks the sender; a part since an ask's since, its version
+    -- field marked "s", from a sender this client held no record of, asks for the whole one)
+    local had = CuteDB.roster[sender] ~= nil
     R:Apply(sender, kv, whispered)
+    if not whispered then self:WantWhole(sender, had, (text:match("^1F|%d+|%d+|([^|]*)|") or ""):sub(-1) == "s") end
     -- (whispers that waited for this sender's record to carry its GUID are taken now)
     local w = not whispered and M.waiting[sender]
     if w then
@@ -1135,38 +1823,55 @@ function M:Receive(text, channel, sender)
     if bad then return end
     local t, who = C.Now(), g or sender
     local fresh = not (M.answered[who] and t - M.answered[who] < ASK_AGAIN)
+    -- (an ask whole after a since-ask of the asker answered lately (its /cute resend, the officers' button, many records
+    -- missing: M:AskWholes) is answered once more, record and pass: the first's answer was a part. A first build
+    -- passed it by, and a file missing many records, which marks each one asked, never had them that session)
+    local wider = not fresh and since == nil and stamp ~= nil and M.answeredSince[who] ~= nil
+    if wider then fresh = true end
+    -- (since: an asker that holds the guild from a time is sent what changed since, M:Answer, where this client's answer
+    -- to its ask before that time bears it out, each part on its own (M:Borne); the earliest of the asks an answer
+    -- covers, the whole record where one wants it. Each ask kept with how it was answered, M.owe: one passed by bears
+    -- out no since)
+    local s = sinceOf(since)
+    local sRec, sPass = M:Borne(who, s, "rec"), M:Borne(who, s, "pass")
+    local ent = M:Entry(who)
+    ent.rec, ent.pass = false, false
     if not (fresh or officer) then return end
-    if fresh then M.answered[who] = t; M.answerGuild = true end
+    -- (an ask heard before this login's own record started out is answered by that record, and by its own statistics
+    -- pass after it: everyone online hears both. A login wave's asks no longer make each client send its record twice)
+    local covered = self.hello and not self.reloaded and not self.fullOut
+    if fresh then
+      M.answered[who], M.answeredSince[who] = t, since ~= nil or nil
+      ent.rec, ent.nr = true, sRec or 0
+      if covered then await(self.helloQueued and "sentRec" or "helloRec", ent)
+      else
+        M.answerGuild = true
+        if sRec == nil then M.answerFull = true elseif not M.answerFull then M.answerSince = math.min(M.answerSince or sRec, sRec) end
+        await("rec", ent)
+      end
+    end
     -- (an officer has what the word is made of)
     if fresh and not R:OfficerVoice(sender) then self:AskedWord(wstamp, who) end
-    if not M.answering then
-      M.answering = true
-      local wait = 1 + (math.random and (19 * math.random()) or 5)
-      C_Timer.After(wait, C.Safe(function()
-        M.answering = false
-        if M.holding then return end
-        -- (while this client waits for the line, P.doubt, the answer waits too: what it would queue could not leave)
-        if not C.Policy:Settled() then M.answerOwed = true; return end
-        local guild = M.answerGuild
-        M.answerGuild = false
-        M:Full(takeAskers("askers"), not guild)
-      end, "comm: answer"))
-    end
-    if #C.Stats.byCat.game > 0 or #C.Stats.byCat.found > 0 or next(C.Rules.OwnClaims()) ~= nil then
-      -- (an ask while a pass waits is answered by it: counted only where it makes that pass the guild's too)
-      local gameFresh = not (M.gameAnswered[who] and t - M.gameAnswered[who] < GAME_AGAIN)
-      if gameFresh and (not M.answeringGame or not M.answerGameGuild) then M.gameAnswered[who] = t; M.answerGameGuild = true end
-      if (gameFresh or officer) and not M.answeringGame then
-        M.answeringGame = true
-        local wait = GAME_AFTER - 30 + (math.random and (29 * math.random()) or 5)
-        C_Timer.After(wait, C.Safe(function()
-          M.answeringGame = false
-          if not C.Policy:Settled() then M.gameOwed = true; return end
-          local guild = M.answerGameGuild
-          M.answerGameGuild = false
-          M:FullGame(true, takeAskers("gameAskers"), not guild)
-        end, "comm: answer statistics"))
+    self:AnswerSoon()
+    -- the statistics pass, never for a bare ask (0.3.x, 0.5.x: the record alone)
+    if stamp ~= nil and hasPass() then
+      -- (an ask while a pass waits is answered by it: counted only where it makes that pass the guild's too. A since this
+      -- client's last pass to the asker does not bear out gets the whole pass whatever GAME_AGAIN says: the ten-minute
+      -- pass bounds what that costs)
+      local gameFresh = not (M.gameAnswered[who] and t - M.gameAnswered[who] < GAME_AGAIN) or (s ~= nil and sPass == nil) or wider
+      if gameFresh then
+        ent.pass, ent.np = true, sPass or 0
+        if covered then await(self.helloPassQueued and "sentPass" or "helloPass", ent)
+        else
+          if sPass == nil then M.gameFull = true elseif not M.gameFull then M.gameSince = math.min(M.gameSince or sPass, sPass) end
+          await("pass", ent)
+        end
       end
+      if gameFresh and (not M.answeringGame or not M.answerGameGuild) then M.gameAnswered[who] = t; if not covered then M.answerGameGuild = true end end
+      if gameFresh or officer then M:GameSoon() end
+    elseif stamp ~= nil then
+      -- (no statistics, discoveries or claims: no pass owed)
+      ent.pass = C.ServerNow()
     end
   elseif kind == "1P" then
     -- (a part of how many: 0.6.0's. 0.5.x's says none, and names stats by id: passed by)
@@ -1187,6 +1892,10 @@ function M:Receive(text, channel, sender)
       heardWord(sender, at, body)
       C.Rules.ReceiveWord(sender, at, body, part, parts)
     end
+  elseif kind == "1Q" then
+    -- (a member asking for this client's record whole, by its GUID: another's is passed by)
+    local g = text:match("^1Q|([^|;=]+)$")
+    if g and g == C.MyGUID() then self:AskedWhole(sender) end
   elseif kind == "1L" then
     self:ReceiveLabels(text:match("^1L|(.*)$"), sender)
   elseif kind == "1K" then
@@ -1292,25 +2001,56 @@ function M:Hello()
   if self.hello or not self.helloDue or not self.started or not C.Roster:InGuild() then return end
   self.hello, self.holding, self.helloAt = true, true, C.Now()
   self.holdGen = (self.holdGen or 0) + 1
-  self:Ask()
+  -- (a /reload asks nothing: the saved records are the guild as it was a moment ago, M:Wire; an ask of this login that
+  -- never left goes now. The ask waits for the roster to read: answers that came before it would crowd the early
+  -- buffer)
+  if not self.reloaded or self.askOwed then
+    if C.Roster.trusted then self:Ask(true) else self.askDue = true end
+  end
   if C.Policy:Settled() then self:Release() end
   C_Timer.After(GAME_AFTER, C.Safe(function() M:FullGame(false) end, "comm: statistics"))
 end
 
-function M:Start()
-  if self.started then return end
+-- the roster read for the first time (Roster.lua): the hello's ask, where it waited for it
+function M:RosterTrusted()
+  if self.askDue then self.askDue = nil; self:Ask(true) end
+end
+-- every loading screen (Core.lua): the lockdown may have ended with it (a dungeon left), so what waited goes.
+-- reloading: PLAYER_ENTERING_WORLD's isReloadingUi, at the first (M:Wire)
+function M:Start(reloading)
+  if self.started then
+    if not self:Locked() then self:PayOwed(); if self.askOwed and self.hello then self:Ask(self.askOwed == "hello") end; M.Resume() end
+    return
+  end
   if not (C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix) then return end
-  pcall(C_ChatInfo.RegisterAddonMessagePrefix, PREFIX)
+  -- (RegisterAddonMessagePrefixResult, ChatConstantsDocumentation.lua: 0 Success, 1 DuplicatePrefix; 2 InvalidPrefix
+  -- and 3 MaxPrefixes leave Cute deaf and mute, which is said once in chat and kept for /cute diag)
+  local ok, res = pcall(C_ChatInfo.RegisterAddonMessagePrefix, PREFIX)
+  res = ok and C.Plain(res) or "threw"
+  self.prefixResult = res
+  if not (res == nil or res == true or res == 0 or res == 1) then
+    C.Err.Record("the game did not register Cute's addon channel (result " .. tostring(res) .. "): nothing is heard or said until it does", "", "comm: prefix")
+  end
   self.started = true
+  self:Wire(reloading)
   local f = CreateFrame("Frame")
   self.frame = f
-  f:SetScript("OnEvent", C.Safe(function(_, event, prefix, text, channel, sender)
-    if event ~= "CHAT_MSG_ADDON" then return end
-    prefix = C.Plain(prefix)
-    if #M.senders < 3 then M:Saw(sender, prefix) end
-    if prefix == PREFIX then M:Receive(text, channel, sender) end
-  end, "comm: receiving"))
+  -- (every addon's messages come here, DBM's and WeakAuras' in a raid too: Cute's prefix is picked out before anything
+  -- else runs, and only Cute's go through C.Safe; ADDON_RESTRICTION_STATE_CHANGED is the lockdown, M:Restriction)
+  local saw = C.Safe(function(sender, prefix) M:Saw(sender, prefix) end, "comm: senders")
+  local timed = C.Perf.Timed("receive", function(text, channel, sender) C.Perf.Count("cute"); M:Receive(text, channel, sender) end)
+  local receive = C.Safe(timed, "comm: receiving")
+  local restriction = C.Safe(function(kind, state) M:Restriction(kind, state) end, "comm: chat lockdown")
+  f:SetScript("OnEvent", function(_, event, a1, a2, a3, a4)
+    if event == "CHAT_MSG_ADDON" then
+      if C.Perf then C.Perf.Count("addon") end
+      local prefix = C.Plain(a1)
+      if #M.senders < 3 then saw(a4, prefix) end
+      if prefix == PREFIX then receive(a2, a3, a4) end
+    elseif event == "ADDON_RESTRICTION_STATE_CHANGED" then restriction(a1, a2) end
+  end)
   f:RegisterEvent("CHAT_MSG_ADDON")
+  pcall(f.RegisterEvent, f, "ADDON_RESTRICTION_STATE_CHANGED") -- (a client without the event says no)
   -- the hello, eight seconds in (or when you join a guild)
   C_Timer.After(8, C.Safe(function() M.helloDue = true; M:Hello() end, "comm: hello"))
   -- the slow stats, every two minutes

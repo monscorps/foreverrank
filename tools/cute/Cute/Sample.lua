@@ -118,7 +118,7 @@ local function slice()
   local list = C.Stats.list
   for i = beatIndex + 1, math.min(#list, beatIndex + SLICE) do
     local def = list[i]
-    if not (def.count or def.track) then S:Read(def.id) end
+    if not (def.count or def.track or def.beat == false) then S:Read(def.id) end
   end
   beatIndex = math.min(#list, beatIndex + SLICE)
   if beatIndex >= #list then beatIndex = 0 end
@@ -315,7 +315,7 @@ on("PLAYER_LEVEL_UP", function() S:Set("played_lvl", 0); S:Schedule("unenchanted
 -- clears the Legacy walk (the lc_ stats re-read through their own events); it and CRITERIA_UPDATE, which fires on
 -- every kill and loot, start the statistics pass, which runs at most once in thirty seconds however many come, so a
 -- storm of criteria never re-reads hundreds of statistics per event
-local GAME_PASS = 30
+local GAME_PASS, GAME_SLICE = 30, 100
 function S:GamePass()
   if #C.Stats.byCat.game == 0 then return end
   local t = gtime()
@@ -328,7 +328,18 @@ function S:GamePass()
   end
   self.gamePassAt = t
   self.gamePasses = (self.gamePasses or 0) + 1
-  for _, def in ipairs(C.Stats.byCat.game) do self:Read(def.id) end
+  -- (GAME_SLICE a frame: a client that reports a thousand statistics reads them over a few frames, not in one)
+  local list, i = C.Stats.byCat.game, 0
+  local function step()
+    for _ = 1, GAME_SLICE do
+      i = i + 1
+      local def = list[i]
+      if not def then return end
+      S:Read(def.id)
+    end
+    C_Timer.After(0, C.Safe(step, "sample: statistics"))
+  end
+  step()
 end
 on("ACHIEVEMENT_EARNED", function(id)
   C.Stats.LegacyClear()
@@ -440,7 +451,8 @@ on("TIME_PLAYED_MSG", function(total, level)
   if type(level) == "number" then S:Set("played_lvl", level) end
 end)
 -- consumables that leave your bags in a raid: the potions, elixirs, flasks and food the bag scan counts by class
-on("BAG_UPDATE_DELAYED", function()
+-- (in a raid the bags change at every loot and every potion: scanned a second after the last change, not at each)
+local function consumedScan()
   if not T.inRaid then T.consumables = nil; return end
   C.Stats.BagClear()
   local total = 0
@@ -451,6 +463,12 @@ on("BAG_UPDATE_DELAYED", function()
   end
   if T.consumables and total < T.consumables then S:Bump("consumed", T.consumables - total) end
   T.consumables = total
+end
+on("BAG_UPDATE_DELAYED", function()
+  if not T.inRaid then T.consumables = nil; return end
+  if T.bagsDue then return end
+  T.bagsDue = true
+  C_Timer.After(1, C.Safe(function() T.bagsDue = false; consumedScan() end, "sample: consumables"))
 end)
 
 ----------------------------------------------------------------------------
@@ -531,7 +549,7 @@ local function killed(encounter, name, here)
   T.lastKill = { enc = encounter, inst = here.id, at = gtime() }
   S:Summaries()
   C.Rules:Killed(encounter)
-  C.Rules:Dirty()
+  C.Rules:Dirty(true)
 end
 -- ENCOUNTER_END (encounterID, encounterName, difficultyID, groupSize, success): a kill when success is 1. BOSS_KILL
 -- (encounterID, encounterName) counts only where no ENCOUNTER_END for the same encounter came within five seconds
@@ -604,14 +622,22 @@ on("UPDATE_FACTION", function() S:FactionSoon() end)
 local function isMe(who, guid) return C.Roster:IsMe(who, guid) end
 local function hooks()
   if not hooksecurefunc then return end
-  if DoEmote then
-    hooksecurefunc("DoEmote", C.Safe(function(token)
-      token = C.Plain(token)
-      if type(token) ~= "string" then return end
-      token = token:upper()
-      S:Bump("emotes")
-      if token == "DANCE" then S:Bump("dance") elseif token == "SIT" then S:Bump("sit") end
-    end, "emote hook"))
+  -- the emotes: C_ChatInfo.PerformEmote (ChatInfoDocumentation.lua:451) is what typed /dance, the chat menu and the
+  -- gamepad radial call (Blizzard_ChatFrameBase/Shared/ChatFrameEditBox.lua:273, GamepadRadial.lua:434), its token the
+  -- same in every language ("DANCE", "Dance"); DoEmote is a deprecated wrapper over it
+  -- (Blizzard_DeprecatedChatInfo/Deprecated_ChatInfo.lua:14), hooked only where PerformEmote is missing (a call
+  -- through both would count twice). 0.7.0 hooked DoEmote alone, which typed emotes never call
+  local function emote(token)
+    token = C.Plain(token)
+    if type(token) ~= "string" then return end
+    token = token:upper()
+    S:Bump("emotes")
+    if token == "DANCE" then S:Bump("dance") elseif token == "SIT" then S:Bump("sit") end
+  end
+  if C_ChatInfo and C_ChatInfo.PerformEmote then
+    hooksecurefunc(C_ChatInfo, "PerformEmote", C.Safe(emote, "emote hook"))
+  elseif DoEmote then
+    hooksecurefunc("DoEmote", C.Safe(emote, "emote hook"))
   else
     -- no function to hook: count your own lines of the emote chat instead (the texts are English's). That chat is
     -- secret in dungeons and raids, so emotes there go uncounted; the three tooltips say so rather than count wrong
@@ -684,7 +710,14 @@ function S:Start(initial, reloading)
     -- the client has an item's data now: the gear and bag stats again only when it is one you wear or carry (a chat
     -- link, another addon or the Legacy window asks about items all the time; Stats.lua keeps the scans' ids)
     if event == "GET_ITEM_INFO_RECEIVED" and not C.Stats.ItemWanted(C.Plain((...))) then return end
-    for _, fn in ipairs(EVENTS[event] or {}) do fn(...) end
+    -- (each handler on its own: one that raises leaves the others of the event to run, and says where)
+    for _, fn in ipairs(EVENTS[event] or {}) do
+      local ok, err = pcall(fn, ...)
+      if not ok then
+        if CUTE_DEV then error(err, 0) end
+        C.Err.Record(tostring(err), "", "sample: " .. event)
+      end
+    end
   end, "sample: event"))
   for event in pairs(EVENTS) do
     if event == "COMBAT_LOG_EVENT_UNFILTERED" then

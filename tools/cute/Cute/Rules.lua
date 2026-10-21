@@ -108,7 +108,7 @@ function R.WhoName(guid)
 end
 -- a threshold retuned (here or by the policy): the model follows a few seconds on, your own Missing enchants in one
 function R:Retuned()
-  self:Dirty()
+  self:Dirty(true)
   if C.Sample and C.Sample.started then C.Sample:Schedule("unenchanted"); C.Sample:Schedule("ready") end
   -- (a member marked untrusted or trusted again changes what an officer's client says the guild learned: at once)
   if C.Comm and C.Comm.WordSoon then C.Comm:WordSoon(true) end
@@ -358,6 +358,10 @@ end
 -- a member's level is the roster's where it lists them (the server's word over their addon's)
 ----------------------------------------------------------------------------
 local DYN = "^[eik]%d+$"
+-- (the first byte first: e, i, k. A record holds a hundred stats and a hundred statistics besides its discoveries,
+-- and every rebuild walks every record)
+local byte = string.byte
+local function dynamic(id) local c = byte(id, 1); return (c == 101 or c == 105 or c == 107) and id:match(DYN) ~= nil end
 local function witnessed(id, guid)
   if id:sub(1, 1) == "i" then return true end
   return R.Corroborated(tonumber(id:sub(2)), guid)
@@ -367,10 +371,11 @@ function R.Members()
   local me = C.MyGUID() or "me"
   local v = C.Sample and C.Sample.values or {}
   local dyn = {}
-  for id, x in pairs(C.Char().counters) do if type(id) == "string" and id:match(DYN) and type(x) == "number" and x > 0 and witnessed(id, me) then dyn[id] = x end end
+  for id, x in pairs(C.Char().counters) do if type(id) == "string" and dynamic(id) and type(x) == "number" and x > 0 and witnessed(id, me) then dyn[id] = x end end
   out[1] = { guid = me, me = true, level = num(v.level), dyn = dyn, stats = v }
   seen[me] = true
   local byGuid = C.Roster.byGuid or {}
+  local walked = 0
   for key, e in pairs(CuteDB and CuteDB.roster or {}) do
     local st = type(e) == "table" and type(e.stats) == "table" and e.stats or nil
     -- (the GUID the roster lets the record speak for: none before the roster is known, Roster.lua R:VoiceOf)
@@ -378,11 +383,15 @@ function R.Members()
     if type(g) == "string" and g ~= "" and not seen[g] and not untrusted(g) and not C.Roster:IsSelfRecord(key, e) then
       seen[g] = true
       local d = {}
-      for id, x in pairs(st) do if type(id) == "string" and type(x) == "number" and x > 0 and id:match(DYN) and witnessed(id, g) then d[id] = x end end
+      for id, x in pairs(st) do
+        walked = walked + 1
+        if type(x) == "number" and x > 0 and type(id) == "string" and dynamic(id) and witnessed(id, g) then d[id] = x end
+      end
       local m = byGuid[g]
       out[#out + 1] = { guid = g, level = (m and num(m.level)) or num(st.level), dyn = d, stats = st, key = key }
     end
   end
+  C.Perf.Count("walk", walked)
   return out
 end
 
@@ -638,7 +647,9 @@ function R.LearnXP(level, who, max)
   if t[who] == max then return end
   if t[who] == nil and count(t) >= WHO_CAP then return end
   t[who] = max
-  R:Dirty()
+  -- (the curve read afresh, R.XPCurve; the model's own copy of it, which only the officers' list of what changed
+  -- reads, at its next build: 0.7.0 built the whole model again for every member's ding)
+  R.version = R.version + 1
 end
 -- "38:66200" from a record, and back
 function R.ParseXP(text)
@@ -832,7 +843,7 @@ function R.LearnLoot(enc, ids, own, who)
       end
     end
   end
-  if new then R:Dirty() end
+  if new then R:Dirty(true) end
   return new
 end
 -- what this character saw drop from a boss, for the labels message: item ids in base 36 joined by dots
@@ -1027,7 +1038,7 @@ function R.StripTraces(closed, only)
       if type(d) == "table" and (closed.bosses or closed[d.kind]) then fact(d) end
     end
   end
-  if n > 0 then R:Dirty() end
+  if n > 0 then R:Dirty(true) end
   return n
 end
 
@@ -1170,7 +1181,7 @@ function R.ReceiveWord(sender, at, body, part, parts)
     local _, changed = takeParts(e, count(e.parts), body)
     if changed then
       wordVersion = wordVersion + 1
-      R:Dirty()
+      R:Dirty(true)
     end
     return true
   end
@@ -1194,7 +1205,8 @@ function R.ReceiveWord(sender, at, body, part, parts)
   end
   k.word[sender] = { at = at, parts = w.parts }
   wordVersion = wordVersion + 1
-  R:Dirty()
+  -- (the officers' word: once a minute at most, and it changes what a member's own Missing enchants count)
+  R:Dirty(true)
   return true
 end
 -- what the officers say the guild learned, from every officer's word this client holds (a sender the roster names an
@@ -1296,6 +1308,8 @@ function R.WordDoubted(slot) local w = R.Word(); return w ~= nil and w.doubted[s
 function R:Rebuild()
   local k = known()
   if not k then return end
+  self.builtAt = C.Now()
+  C.Perf.Count("rebuilds")
   local s = R.Seed()
   local now = C.Now()
   local old = type(k.model) == "table" and k.model or {}
@@ -1454,28 +1468,49 @@ function R:Rebuild()
   return m
 end
 
+R.Rebuild = C.Perf.Timed("rebuild", R.Rebuild)
+
 -- the guild's play changed something the rules weigh: built again three seconds on (a burst of records builds once);
 -- the Guide draws again only when it is the page open
-function R:Dirty()
+-- (each build a few seconds after the change, as many as a storm of records brings at once; and after a build, the
+-- next not before REBUILD_EVERY seconds on, so a login wave or a guild levelling builds twice a minute at most where
+-- 0.7.0 built every three seconds. urgent: what this character did or an officer chose, built a few seconds on
+-- whatever)
+local REBUILD_EVERY = 30
+function R:Dirty(urgent)
   self.version = self.version + 1
-  if self.due or not self.started then return end
-  self.due = true
-  C_Timer.After(3, C.Safe(function()
+  if not self.started then return end
+  local t = C.Now()
+  local wait = 3
+  if not urgent and self.builtAt then wait = math.max(3, self.builtAt + REBUILD_EVERY - t) end
+  if self.due and self.dueAt and self.dueAt <= t + wait then return end
+  self.due, self.dueAt = true, t + wait
+  self.dueGen = (self.dueGen or 0) + 1
+  local gen = self.dueGen
+  C_Timer.After(wait, C.Safe(function()
+    if R.dueGen ~= gen then return end
     R.due = false
     R:Rebuild()
     if C.UI and C.UI.page == "guide" and C.UI.Refresh then C.UI:Refresh() end
   end, "rules: rebuild"))
 end
 -- a member's values arrived (Roster.lua): their XP sample learned at once, by the GUID the record speaks for (g: none
--- before the roster is known, Roster.lua R:VoiceOf), the model built again when it weighs them
-local WEIGH = { level = true, empty_slots = true, ench_kinds = true, xpmax = true }
-function R:Observe(stats, kv, g)
-  if kv.xpmax ~= nil and type(stats) == "table" and type(g) == "string" and g ~= "" and not untrusted(g) then
+-- before the roster is known, Roster.lua R:VoiceOf), the model built again when it weighs them. prev: the values held
+-- before for the ids that changed (false for none), from R:Apply; an id whose value came again unchanged weighs
+-- nothing (0.7.0 built the model again for every record's first chunk, which carries the level and xpmax). The level
+-- weighs only across the enchant level (rule 5's clock starts there); xpmax teaches the curve alone
+local WEIGH = { empty_slots = true, ench_kinds = true }
+function R:Observe(stats, kv, g, prev)
+  prev = prev or kv
+  if prev.xpmax ~= nil and kv.xpmax ~= nil and type(stats) == "table" and type(g) == "string" and g ~= "" and not untrusted(g) then
     local l, mx = R.ParseXP(stats.xpmax)
     if l then R.LearnXP(l, g, mx) end
   end
-  for id in pairs(kv) do
-    if WEIGH[id] or (type(id) == "string" and id:match(DYN)) then return self:Dirty() end
+  for id, was in pairs(prev) do
+    if id == "level" then
+      local lvl = R.Get("enchantDoubtLevel")
+      if ((num(was) or 0) >= lvl) ~= ((num(kv.level) or 0) >= lvl) then return self:Dirty() end
+    elseif WEIGH[id] or (type(id) == "string" and dynamic(id)) then return self:Dirty() end
   end
 end
 

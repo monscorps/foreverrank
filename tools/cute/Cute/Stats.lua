@@ -342,7 +342,8 @@ function S.LearnEnchants(kinds, who, enchs)
       end
     end
   end
-  if new and C.Rules then C.Rules:Dirty() end
+  -- (a slot or a kind learned: a few a season, built at once)
+  if new and C.Rules then C.Rules:Dirty(true) end
   if new then
     -- your own Missing enchants (and the verdict) are asked again, and the window learns of it; an officer's client
     -- tells the members, who hear no member's enchants with the defaults (Comm.lua's 1N)
@@ -825,7 +826,8 @@ D("subzone", "Subzone", "leveling", { read = function() local z = Get("GetSubZon
   on = { "ZONE_CHANGED", "ZONE_CHANGED_INDOORS", "ZONE_CHANGED_NEW_AREA" } })
 D("group", "Grouped with", "leveling", { kind = "text", on = "GROUP_ROSTER_UPDATE", read = function()
   local names = {}
-  for i = 1, 4 do local n = Get("UnitName", "party" .. i); if type(n) == "string" then names[#names + 1] = n end end
+  -- (a Kstring is no name to send: the font draws it, its text is an escape, Core.lua C.IsKstring)
+  for i = 1, 4 do local n = Get("UnitName", "party" .. i); if type(n) == "string" and n ~= "" and not C.IsKstring(n) then names[#names + 1] = n end end
   return #names > 0 and table.concat(names, ", ") or ""
 end })
 D("logins", "Logins this week", "leveling", { track = true, hint = "logins, not reloads; the week starts on Monday" })
@@ -862,7 +864,10 @@ D("ghost_time", "Time as a ghost", "leveling", { track = true, slow = true, fmt 
 D("gold_earned", "Gold earned", "leveling", { track = true, slow = true, fmt = goldOf, hint = "every rise of your purse, summed" })
 D("gold_quests", "Gold from quests", "leveling", { track = true, fmt = goldOf })
 D("vendor_sales", "Sold to vendors", "leveling", { track = true, fmt = goldOf, hint = "while a merchant was open" })
-D("mount", "Mount", "leveling", { kind = "flag", read = function()
+-- (read at login, at each loading screen and on its events, never by the heartbeat: until a character owns a mount it
+-- walks every mount id, and 0.7.0 did that every minute for most of the guild in the first weeks.
+-- MountJournalDocumentation.lua: NEW_MOUNT_ADDED; PetJournalInfoDocumentation.lua: COMPANION_LEARNED)
+D("mount", "Mount", "leveling", { kind = "flag", beat = false, on = { "NEW_MOUNT_ADDED", "COMPANION_LEARNED", "PLAYER_LEVEL_UP" }, read = function()
   local ids = Get(api("C_MountJournal", "GetMountIDs"))
   if type(ids) ~= "table" then return nil end
   local info = api("C_MountJournal", "GetMountInfoByID")
@@ -1221,7 +1226,8 @@ function S.Implausible(id, v, old, ctx)
   end
   if type(v) ~= "number" then return nil end
   local p = id:match("^([gefik])%d+$")
-  local lo, hi = (def and def.lo) or (p == "f" and -INT_MAX) or 0, (def and def.hi) or INT_MAX
+  -- (a statistic is the game's own count, money in copper among them: up to what the wire carries, Comm.lua)
+  local lo, hi = (def and def.lo) or (p == "f" and -INT_MAX) or 0, (def and def.hi) or (p == "g" and 2 ^ 40) or INT_MAX
   if v < lo or v > hi then return string.format("%s %s, out of bounds (%s to %s)", label, tostring(v), tostring(lo), tostring(hi)) end
   if id == "level" or p == "k" then local why = levelWhy(id, label, ctx, v); if why then return why end end
   if ((def and def.grows) or p == "e" or p == "i") and type(old) == "number" and v < old then
@@ -1246,16 +1252,44 @@ S.gameNote = nil
 S.gamePending = nil -- true while the probe is to be asked again (Sample.lua: an empty list at login)
 S.GAME_CAP = 1000 -- statistics defined at most, so a client cannot fill the registry or the channel past reason
 
--- the quantity string as a number: separators of any locale dropped ("1,234", "1 234", "1.234"); "--" is the game's
--- "never recorded", which reads as 0 here (a count that never happened is nought, and a nil would send nothing, so
--- the guild would see "?" where the game shows a dash)
+-- the quantity string as a number. "--" is the game's "never recorded": nothing, never sent (0.7.0 read it as 0, and
+-- every client sent and kept a 0 for every statistic of every member). Colours go first. Money comes as amounts each
+-- before its coin's icon (GlobalStrings.csv: GOLD_AMOUNT_TEXTURE "%d|TInterface\\MoneyFrame\\UI-GoldIcon:%d:%d:2:0|t",
+-- the silver and copper ones the same), read as copper (0.7.0 joined every digit, the icons' sizes too, into nonsense
+-- past 2^31, and every receiver marked the sender suspect); any other icon is dropped. Separators of any locale go
+-- where they group thousands ("1,234", "1 234", "1.234", a no-break space), and a decimal ("1,5") reads as its whole
+-- part
+local COIN = { Gold = 10000, Silver = 100, Copper = 1 }
+local function amount(s)
+  s = s:gsub("[%s']", ""):gsub("\194\160", ""):gsub("\226\128\175", ""):gsub("%%$", "")
+  if s:match("^%d+$") then return tonumber(s) end
+  if not s:match("^%d[%d%.,]*%d$") then return nil end
+  local last = s:match(".*([%.,])")
+  -- (both kinds: the last is the decimal point, "1,234.5"; one kind: groups of three after a head of three digits at
+  -- most are thousands, "1.234.567", else it is the decimal point, "1,5")
+  if s:find(last == "." and "," or ".", 1, true) then
+    return tonumber((s:match("^(.*)%" .. last .. "%d*$"):gsub("[^%d]", "")))
+  end
+  local head, rest = s:match("^(%d+)(.*)$")
+  if #head <= 3 and (rest:gsub("%" .. last .. "%d%d%d", "")) == "" then return tonumber((s:gsub("[^%d]", ""))) end
+  local whole = s:match("^(%d+)%" .. last .. "%d+$")
+  return whole and tonumber(whole) or nil
+end
 function S.Quantity(s)
   if type(s) == "number" then return math.floor(s) end
   if type(s) ~= "string" then return nil end
-  if s:match("^%s*%-+%s*$") then return 0 end
-  local digits = s:gsub("[^%d]", "")
-  if digits == "" then return nil end
-  return tonumber(digits)
+  s = s:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+  if s:match("^%s*%-+%s*$") then return nil end
+  if s:find("|T", 1, true) then
+    local total, any = 0, false
+    for n, coin in s:gmatch("([%d%s%.,'\194\160]+)|T[^|]-UI%-(%a+)Icon[^|]*|t") do
+      local v, k = amount(n), COIN[coin]
+      if v and k then total, any = total + v * k, true end
+    end
+    if any then return total end
+    s = s:gsub("|T.-|t", "")
+  end
+  return amount(s)
 end
 
 -- the probe: true and the count when statistics were defined; false, the reason and whether asking again could help
@@ -1691,7 +1725,7 @@ function S.ValueCame(id, key)
   if not S.LabelOf(id) then return end
   local e = CuteDB.roster[key]
   local voice = C.Roster and type(e) == "table" and C.Roster:VoiceOf(key, e) or nil
-  if S.Found(id, false, voice, true) and C.Rules and C.Rules.Dirty then C.Rules:Dirty() end
+  if S.Found(id, false, voice, true) and C.Rules and C.Rules.Dirty then C.Rules:Dirty(true) end
 end
 
 -- at login: every label saved defines its stat again, your own first, then the ones two members agree on, then the
