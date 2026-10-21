@@ -12164,6 +12164,46 @@ do
   end)
 end
 
+-- W12 (sub-project D): the default places of the windows: each opens centred; Settings, opened by a window's cog, opens
+-- beside that window where the screen has room (its right, else its left), until it is moved; no room, centred. Under
+-- Cute the engine's on-screen pieces take Cute's places (the step frame where the game's tracker stands, the arrow at
+-- the top's middle: QuestBank's harness weighs them, windows D5)
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    assert(c.addons[2].private.cornerPlace == true, "the engine's pieces in Cute's places")
+    local UI = c.C.UI
+    UI:Open("quests")
+    local L, S = qwin(c), UI.Window("settings")
+    assert(L.frame.__points[1].point == "CENTER", "L opens centred")
+    -- L at the screen's left, small: Settings on its right
+    sizeAll(c, 760, 420)
+    L.frame.__left, L.frame.__top = 20, 900
+    S.frame:Hide()
+    press(L.cog)
+    local p = S.frame.__points[1]
+    assert(S.frame:IsShown() and p.point == "TOPLEFT" and p.rel == c.env.UIParent and p.relPoint == "BOTTOMLEFT" and p.x == 20 + 760 + 8 and p.y == 900, "Settings beside L, on its right: " .. tostring(p.point) .. " " .. tostring(p.x))
+    -- at the screen's right: on its left
+    S.frame:Hide()
+    L.frame.__left = 1600 - 760 - 20
+    press(L.cog)
+    p = S.frame.__points[1]
+    assert(p.point == "TOPLEFT" and p.x == 1600 - 760 - 20 - 8 - 760, "on its left: " .. tostring(p.x))
+    -- moved, Settings keeps its own place
+    S.frame.__left, S.frame.__top = 300, 800
+    S.head.__scripts.OnDragStart(S.head); S.head.__scripts.OnDragStop(S.head)
+    S.frame:Hide()
+    L.frame.__left = 20
+    press(L.cog)
+    p = S.frame.__points[1]
+    assert(p.x == 300 and p.y == 800, "its own place once moved: " .. tostring(p.x))
+    leave(c)
+    print("windows W12: windows open centred; Settings beside the window whose cog opened it, where the screen has room, until moved; the engine's pieces in Cute's places")
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

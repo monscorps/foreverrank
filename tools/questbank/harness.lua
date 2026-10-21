@@ -20777,6 +20777,7 @@ local function lookChar(name, o)
   if o.ui then c.env.UIParent:SetSize(o.ui[1], o.ui[2]) end
   if o.saved then c.env.QuestBankDB = o.saved end
   if o.skin then c.QB.Skin = o.skin end
+  for k, v in pairs(o.host or {}) do c.QB[k] = v end
   if o.objectives then c.objectives = o.objectives end
   login(c)
   -- (the harness's older blocks log in with the Guide off: on, as a fresh install has it, its welcome answered)
@@ -20978,6 +20979,69 @@ do
   for _, pr in ipairs(checkLayout(qf, "Step frame, QuestBank's look, 3 quests")) do STAGE_PROBLEMS[#STAGE_PROBLEMS + 1] = pr end
   STAGE_LAYOUTS[#STAGE_LAYOUTS + 1] = dumpLayout(qf, "Step frame, QuestBank's look, 3 quests")
   print(string.format("windows D4: the step frame as a stop of the route (no backdrop, outlined, a 24 px icon, the count apart); the quests under it, %d shown of %d, the steps' own left out, the route's first; their items secure and still in a fight; 0, 3 and 10 quests at three scales", #shown, total))
+end
+
+-- D5. The default places under a host that asks for them (Cute's QB.cornerPlace), for the pieces never moved: the step
+-- frame stands where the game's quest tracker stands, its top right corner on the tracker's (read at the tracker's own
+-- size, the scale step of D3 left out), 8 px left of the tracker while it is kept; the arrow at the top's middle, TOP
+-- 0 -96; the camp bar and its banner where the engine puts them. At 1920 x 1080 and 1366 x 768 none overlaps another.
+-- A dragged step frame stays where it was put; QuestBank alone keeps its own places (the engine's cases)
+do
+  local cuteSkin = { font = "Fonts\\ARIALN.TTF", INK = { 0.86, 0.86, 0.86 }, SOFT = { 0.58, 0.58, 0.58 }, ACCENT = { 0.96, 0.96, 0.96 }, stop = true, outline = true, Backdrop = function() end }
+  local function boxOf(f)
+    GEN = GEN + 1
+    local p = f.__points[1]
+    local sc = f:GetScale() or 1
+    local rr = rectOf(p.rel or f.__parent)
+    local ax = p.relPoint:find("LEFT") and rr.l or (p.relPoint:find("RIGHT") and rr.r or (rr.l + rr.r) / 2)
+    local ay = p.relPoint:find("TOP") and rr.t or (p.relPoint:find("BOTTOM") and rr.b or (rr.t + rr.b) / 2)
+    ax, ay = ax + (p.x or 0) * sc, ay + (p.y or 0) * sc
+    local w, h = (f:GetWidth() or 0) * sc, (f:GetHeight() or 0) * sc
+    local l = p.point:find("LEFT") and ax or (p.point:find("RIGHT") and ax - w or ax - w / 2)
+    local t = p.point:find("TOP") and ay or (p.point:find("BOTTOM") and ay + h or ay + h / 2)
+    return { l = l, r = l + w, t = t, b = t - h }
+  end
+  local function apart(a, b) return a.r <= b.l or b.r <= a.l or a.b >= b.t or b.b >= a.t end
+  local function say(r) return string.format("%d..%d x %d..%d", r.l, r.r, r.b, r.t) end
+  local LOG = { { 7, 0 }, { 33, 1 }, { 18, 0 }, { 15, 0 }, { 21, 0 } }
+  for _, ui in ipairs({ { 1920, 1080 }, { 1366, 768 } }) do
+    local c = lookChar("Placed" .. ui[1], { log = LOG, ui = ui, skin = cuteSkin, host = { cornerPlace = true } })
+    local env, QB, SF = c.env, c.QB, c.QB.StepFrame
+    local T = env.ObjectiveTrackerFrame
+    rawset(T.Header, "GetTop", function() return env.UIParent.__h + T.__points[1].y end)
+    QB:Settings().guide.quests = 3
+    QB:Settings().guide.hideTracker = false; SF.Apply() -- (the tracker at its own size first: read there)
+    QB:Settings().guide.hideTracker = true; SF.Apply()
+    QB.Arrow:Set(true)
+    local W, H = ui[1], ui[2]
+    local tr = { r = W + T.__points[1].x, t = H + T.__points[1].y }
+    local sf = boxOf(env.QuestBankStep)
+    assert(math.abs(sf.r - tr.r) < 0.5 and math.abs(sf.t - tr.t) < 0.5, string.format("%dx%d: the step frame on the tracker's corner %d, %d: %s", W, H, tr.r, tr.t, say(sf)))
+    local ar = boxOf(env.QuestBankArrow)
+    assert(math.abs((ar.l + ar.r) / 2 - W / 2) < 0.5 and math.abs(ar.t - (H - 96)) < 0.5, string.format("%dx%d: the arrow at TOP 0 -96: %s", W, H, say(ar)))
+    local pieces = { { "step frame", sf }, { "arrow", ar } }
+    -- (the camp bar where the engine puts it, CENTER 0 -190: its top as Camp.BarTop says, a row of icons under it)
+    local ct = H - QB.Camp.BarTop()
+    pieces[#pieces + 1] = { "camp bar", { l = W / 2 - 100, r = W / 2 + 100, t = ct, b = ct - 40 } }
+    for i = 1, #pieces do
+      for j = i + 1, #pieces do
+        assert(apart(pieces[i][2], pieces[j][2]), string.format("%dx%d: the %s and the %s apart: %s, %s", W, H, pieces[i][1], pieces[j][1], say(pieces[i][2]), say(pieces[j][2])))
+      end
+      local b = pieces[i][2]
+      assert(b.l >= 0 and b.r <= W and b.b >= 0 and b.t <= H, string.format("%dx%d: the %s on the screen: %s", W, H, pieces[i][1], say(b)))
+    end
+    -- the tracker kept: the frame 8 px left of it
+    QB:Settings().guide.hideTracker = false; SF.Apply()
+    local kept = boxOf(env.QuestBankStep)
+    local hl = T.Header.GetLeft()
+    assert(math.abs(kept.r - (hl - 8)) < 0.5 and apart(kept, { l = hl, r = hl + 260, t = tr.t, b = tr.t - 32 }), string.format("%dx%d: the tracker kept, the frame 8 px left of it: %s", W, H, say(kept)))
+    -- a dragged frame stays
+    local g = QB:Settings().guide
+    g.x, g.y = 100, 50; SF.Apply()
+    local p = env.QuestBankStep.__points[1]
+    assert(p.point == "CENTER" and p.x == 100 and p.y == 50, "a dragged place kept")
+  end
+  print("windows D5: Cute's default places: the step frame on the hidden tracker's corner (8 px left of it while kept), the arrow at TOP 0 -96, the camp bar the engine's; apart at 1920 x 1080 and 1366 x 768")
 end
 
 local seen = {}

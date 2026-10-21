@@ -715,7 +715,7 @@ function UI.BuildWindow(win, key)
     cog.t:SetSize(14, 14)
     cog.t:SetPoint("CENTER")
     art(cog.t, "questlog-icon-setting", "Interface\\Buttons\\UI-OptionsButton")
-    cog:SetScript("OnClick", C.Safe(function() UI.OpenSettings(spec.cog) end, "window: cog"))
+    cog:SetScript("OnClick", C.Safe(function() UI.OpenSettings(spec.cog, win) end, "window: cog"))
     tooltip(cog, function(tip) tip:AddLine("Settings", 1, 1, 1) end)
     win.cog = cog
     right = right + 24
@@ -870,10 +870,22 @@ function UI.ToggleWindow(key)
   if win.frame:IsShown() then win.frame:Hide() else win:Open(win.page or win.home) end
 end
 -- Settings at a section (general, keys, modules, columns, vis, rules, or a module's): its own window
-function UI.OpenSettings(section)
+-- Opened by a window's cog (from): beside that window, on its right where the screen has room, else on its left, until
+-- Settings is moved (it keeps its own place then: posOf); no room either side, centred
+function UI.OpenSettings(section, from)
   local win = UI.Window("settings")
   win:Build()
   if section and section ~= win.section then win.section = section; win.scrollTo = 0 end
+  if from and from ~= win and rawget(from, "frame") and from.frame:IsShown() and not win.frame:IsShown() and posOf(win) == nil then
+    local f, o = win.frame, from.frame
+    local l, t, w, sw, uw = o:GetLeft(), o:GetTop(), o:GetWidth(), f:GetWidth(), UIParent:GetWidth()
+    f:ClearAllPoints()
+    if l and t and w and sw and uw and l + w + 8 + sw <= uw then f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", l + w + 8, t)
+    elseif l and t and sw and l - 8 - sw >= 0 then f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", l - 8 - sw, t)
+    else f:SetPoint("CENTER") end
+  elseif not win.frame:IsShown() and posOf(win) ~= nil then
+    win:RestorePos()
+  end
   if not win.frame:IsShown() then win.frame:Show() else win:Draw() end
 end
 -- a page by its module's id, in the window that page is in, or "settings" (at a section). A page whose module is off, or

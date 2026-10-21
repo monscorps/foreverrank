@@ -381,12 +381,33 @@ local function trackerLeft(W)
 end
 SF.TrackerLeft = trackerLeft
 
+-- (the windows round) the tracker's top right corner, in UIParent's units: across from the screen's left, down from its
+-- top. Read at the tracker's own size and kept as it goes out of sight (SF.Tracker: at a hundredth of its size it stands
+-- elsewhere); nil where the client has no tracker to read
+local trackerCut -- { from the screen's right, down from its top }, at its own size
+local function trackerCorner(W)
+  if trackerOut and trackerCut then return W - trackerCut[1], trackerCut[2] end
+  local t = ObjectiveTrackerFrame
+  local h = type(t) == "table" and t.Header or nil
+  if not (type(h) == "table" and type(h.GetTop) == "function" and type(h.GetWidth) == "function") then return nil end
+  local ok, top = pcall(h.GetTop, h)
+  local ok2, w = pcall(h.GetWidth, h)
+  local ok3, k = pcall(h.GetEffectiveScale, h)
+  top, w, k = ok and QB.Plain(top), ok2 and QB.Plain(w), ok3 and QB.Plain(k) or 1
+  if type(top) ~= "number" or type(w) ~= "number" or type(k) ~= "number" then return nil end
+  local u = UIParent:GetEffectiveScale() or 1
+  return trackerLeft(W) + w * k / u, (UIParent:GetHeight() or 768) - top * k / u
+end
+
 -- where the frame stands: where it was dragged to, else the top's middle, TOP_Y down whatever its scale, moved left as
 -- far as it takes to stay 16 px clear of the tracker's header (6.1.1: "it won't let me minimise my quest list": on a
 -- narrow screen of UI or with right action bars, the frame there, in a strata above the tracker's, reached over the
 -- minimise button). TOP_Y: the game's error text (UIErrorsFrame, Blizzard_UIErrorsFrame: TOP 0 -122, 512 x 60) ends
 -- 182 px down, so "Not enough rage" never lands on the steps; 6.1 stood at 140 (at its scale), under that text and under
 -- the arrow. The arrow stands under the frame (Arrow.lua, A.Place: SF.Below)
+-- (the windows round) a host that asks (QB.cornerPlace: Cute) has it where the game's quest tracker stands, its top right
+-- corner on the tracker's while the tracker is out of sight, 8 px left of the tracker while it is kept; the arrow goes
+-- to the top's middle then (Arrow.lua, A.Place)
 local TOP_Y = 190
 SF.TOP_Y = TOP_Y
 function place(f)
@@ -394,8 +415,18 @@ function place(f)
   local sc = s.scale or 1
   f:ClearAllPoints()
   f:SetScale(sc)
+  f.qbTop = nil
   if type(s.x) == "number" and type(s.y) == "number" then f:SetPoint("CENTER", UIParent, "CENTER", s.x, s.y) return end
   local W = UIParent:GetWidth() or 1920
+  if QB.cornerPlace then
+    local right, top = trackerCorner(W)
+    if right then
+      if s.hideTracker == false then right = trackerLeft(W) - 8 end
+      f.qbX, f.qbTop = right - W / 2 - WIDTH * sc / 2, top -- (its middle across, its top down: SF.Box)
+      f:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", (right - W) / sc, -top / sc)
+      return
+    end
+  end
   local over = W / 2 + WIDTH * sc / 2 - (trackerLeft(W) - 16)
   f.qbX = over > 0 and -over or 0 -- (its middle across from the screen's, in UIParent's units: SF.Box)
   f:SetPoint("TOP", UIParent, "TOP", f.qbX / sc, -TOP_Y / sc)
@@ -415,7 +446,8 @@ function SF.Box()
     local mid = (UIParent:GetHeight() or 768) / 2 - s.y * sc
     return s.x * sc, mid - h / 2, mid + h / 2, WIDTH * sc / 2
   end
-  return f.qbX or 0, TOP_Y, TOP_Y + h, WIDTH * sc / 2
+  local top = f.qbTop or TOP_Y
+  return f.qbX or 0, top, top + h, WIDTH * sc / 2
 end
 -- its middle across and its bottom (SF.Box)
 function SF.Below()
@@ -1158,6 +1190,12 @@ function SF.Tracker()
       end)
     end
     if not trackerOut and not settings().trackerTold then SF.notePending = true end
+    if not trackerOut then
+      -- (its corner at its own size, before it shrinks: the step frame's default place stays on it)
+      local W = UIParent:GetWidth() or 1920
+      local right, top = trackerCorner(W)
+      if right then trackerCut = { W - right, top } end
+    end
     trackerOut = true
     if t:GetAlpha() ~= 0 then t:SetAlpha(0) end
     local sc = scales and scaleOf(t)

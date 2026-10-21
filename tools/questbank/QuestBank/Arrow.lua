@@ -594,6 +594,7 @@ local GAP_Y, GAP_X, TALL = 6, 8, 143
 local function onFrame(x, y, bx, top, bottom, half)
   return bx ~= nil and x - WIDTH / 2 < bx + half and bx - half < x + WIDTH / 2 and y < bottom and top < y + TALL
 end
+local CORNER_Y = 96
 function A.Place()
   local f = A.frame
   if not f or f.qbDragging then return end -- (in a drag: left where the cursor has it)
@@ -610,6 +611,15 @@ function A.Place()
       f:ClearAllPoints()
       f:SetPoint(pos[1], UIParent, pos[1], pos[2], pos[3])
     end
+    return
+  end
+  -- (the windows round) a host's default place (QB.cornerPlace: Cute, whose step frame stands where the game's tracker
+  -- does): the top's middle, TOP 0 -96, unless the step frame stands there now; then under it, as by default
+  if QB.cornerPlace and not onFrame(0, CORNER_Y, bx, top, bottom, half) then
+    if f.qbX == 0 and f.qbY == CORNER_Y and not f.qbPos then return end
+    f.qbPos, f.qbX, f.qbY = nil, 0, CORNER_Y
+    f:ClearAllPoints()
+    f:SetPoint("TOP", UIParent, "TOP", 0, -CORNER_Y)
     return
   end
   local x, y = bx or 0, bottom and (bottom + GAP_Y) or (SF and SF.TOP_Y or 190)

@@ -30,6 +30,9 @@ E.quiet = true
 -- the party sync never on RAID (Sync.lua groupChannel): a guild raid would reach members the officers routed level, XP
 -- and the quest log away from; in a raid the party sync is silent. Cute's own channel carries what the guild sees
 E.noRaidSync = true
+-- (the windows round) the on-screen pieces' default places, for the ones never moved: the step frame where the game's
+-- quest tracker stands (it takes that job: StepFrame.lua place), the arrow at the top's middle (Arrow.lua A.Place)
+E.cornerPlace = true
 -- the engine's words name the host: "Choose a reward: X is Cute's pick", "Nothing to do: /cute quests", the minimap
 -- menu's "Cute settings"; and they leave out the /qb commands a Cute player is never told of (host: Settings alone)
 E.NAME, E.CMD, E.host = "Cute", "/cute quests", true
