@@ -547,15 +547,28 @@ local function build(page, pw, ph)
   return f
 end
 
--- a dungeon's cover on a texture w x h: the journal's art whole; a loading screen (Forever's own dungeons: 2992 x 1684,
--- the picture the middle 68% of its height, transparent above and below) cut to the band across its middle that fills
--- the texture without squeezing it
+-- a dungeon's cover on a texture w x h: a loading screen (Forever's own dungeons: 2992 x 1684, the picture the middle
+-- 68% of its height, transparent above and below) cut to the band across its middle that fills the texture without
+-- squeezing it; the Encounter Journal's own art (UI-EJ-DUNGEONBUTTON-*) as the journal cuts it: 175 x 95 of its
+-- 256 x 128 file, at texcoords 0-0.684 by 0-0.742 (Blizzard_EncounterJournal.xml:320-328; the whole file left an empty
+-- strip on the right), filling the texture unsqueezed from its middle, and never past 1.5 times its size (wider than
+-- that, the art takes 1.5x from the texture's left). Returns the width the art takes; the LFG background is whole
 local LOADING_ASPECT, LOADING_ART = 2992 / 1684, 0.68
+local EJ_W, EJ_H, EJ_U, EJ_V, EJ_MAX = 175, 95, 0.68359375, 0.7421875, 1.5
 local function setCover(t, d, cat, w, h)
   t:SetTexture(d.cover or cat.bg)
+  if d.cover and d.coverKind == "DUNGEONBUTTON" then
+    local s = math.min(EJ_MAX, math.max(w / EJ_W, h / EJ_H))
+    local aw, ah = math.min(EJ_W, w / s), math.min(EJ_H, h / s) -- (the art's own pixels shown, across and down)
+    local u0, v0 = (EJ_W - aw) / 2 / EJ_W * EJ_U, (EJ_H - ah) / 2 / EJ_H * EJ_V
+    t:SetTexCoord(u0, u0 + aw / EJ_W * EJ_U, v0, v0 + ah / EJ_H * EJ_V)
+    return math.floor(aw * s + 1e-6)
+  end
   local band = d.coverKind == "LOADING" and math.min(LOADING_ART, LOADING_ASPECT * h / w) or 1
   t:SetTexCoord(0, 1, 0.5 - band / 2, 0.5 + band / 2)
+  return w
 end
+DM.SetCover = setCover
 
 ----------------------------------------------------------------------------
 -- the list
@@ -996,7 +1009,12 @@ function DM.Fill(cat, tab)
   local lv = DM.Levels(cat.key)
   f.level:SetText(lv[1] > 0 and string.format("LV %d-%d", lv[1], lv[2]) or "")
   f.where:SetText(cat.where and cat.where ~= "" and cat.where or "")
-  setCover(f.cover, d, cat, W - LIST_W - 8 - 6, COVER_H)
+  -- (the art narrower than the band, at 1.5x: from the band's left, the rest the panel's)
+  local coverW = W - LIST_W - 8 - 6
+  local artW = setCover(f.cover, d, cat, coverW, COVER_H)
+  f.cover:ClearAllPoints()
+  f.cover:SetPoint("TOPLEFT", 3, -3)
+  if artW < coverW then f.cover:SetSize(artW, COVER_H) else f.cover:SetPoint("TOPRIGHT", -3, -3); f.cover:SetHeight(COVER_H) end
   f.tabs[1]:SetShown(#d.floors > 0)
   -- floors
   for i = 1, math.max(#d.floors, #f.floors) do

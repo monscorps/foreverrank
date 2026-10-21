@@ -6859,7 +6859,8 @@ do
   local row = {}
   for _, r in ipairs(f.rows) do if r:IsShown() then row[r.cat.key] = r end end
   assert(row.d16544.art.__tex == D.d16544.cover and fits(row.d16544.art), "the list row's cover: its own band")
-  assert(row.d1581.art.__tex == D.d1581.cover and row.d1581.art.__tc[3] == 0 and row.d1581.art.__tc[4] == 1, "the journal's own art whole")
+  -- (the windows round: the Encounter Journal's art as the EJ cuts it, its 174 x 96 inside the file; windows D1)
+  assert(row.d1581.art.__tex == D.d1581.cover and row.d1581.art.__tc[1] == 0 and math.abs(row.d1581.art.__tc[2] - 0.68359375) < 1e-6, "the journal's own art, the EJ's cut")
   -- a face for every boss (the old journal's art, a model or an achievement's icon), never more without one than
   -- gen_data.py's ratchet allows
   local faceless, cap = 0, tonumber(io.open(HERE .. "/gen_data.py"):read("*a"):match("\nFACELESS_BOSS_MAX = (%d+)"))
@@ -20756,6 +20757,48 @@ do
   assert(raidSends() == 0, "a host's noRaidSync: nothing on RAID")
   QB.noRaidSync, c.raid = nil, false
   print("windows: guild sharing off takes nothing from GUILD (no 1L correction, no 1S member); a host's noRaidSync keeps the party sync off RAID")
+end
+
+-- (the windows round, sub-project D) a character for the look's cases: in Elwynn Forest at level 5, nothing in the log
+local function lookChar(name, o)
+  o = o or {}
+  local c = newClient({ name = name, level = o.level or 5, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1,
+    race = "Human", log = o.log or {}, done = o.done or {}, world = o.world or { 0, -8914, -133 }, map = o.map or 1429, bagSlots = {},
+    bind = "Goldshire", trackerX = o.trackerX })
+  if o.ui then c.env.UIParent:SetSize(o.ui[1], o.ui[2]) end
+  if o.saved then c.env.QuestBankDB = o.saved end
+  login(c)
+  return c
+end
+
+-- D1. The journal's covers as the game's Encounter Journal cuts them: the UI-EJ-DUNGEONBUTTON art is 175 x 95 of its
+-- 256 x 128 file, which the EJ draws at texcoords 0-0.684 by 0-0.742 (Blizzard_EncounterJournal.xml:320-328); the
+-- whole file left an empty strip on the right of every cover. And never past 1.5 times the art's size: the header's
+-- wide band takes the art at 1.5x from its left edge, the art's middle band; a list tile is filled (1.2x)
+do
+  local c = lookChar("Covers")
+  local DM = c.QB.DMap
+  DM.Open(DM.Find("deadmines"), "map")
+  local f = c.env.QuestBankDungeonMap
+  local D = c.QB.Data.DMAP
+  assert(D.d1581.coverKind == "DUNGEONBUTTON" and f.cover.__tex == D.d1581.cover, "the Deadmines' cover is the EJ's art")
+  GEN = GEN + 1
+  local function art(t)
+    local r, tc = rectOf(t), t.__tc
+    local w, h = r.r - r.l, r.t - r.b
+    -- the scale the art is drawn at, across and down: the same (nothing squeezed), and the art's own corners kept
+    local sx, sy = w / ((tc[2] - tc[1]) * 256), h / ((tc[4] - tc[3]) * 128)
+    return tc, w, h, sx, sy
+  end
+  local tc, w, h, sx, sy = art(f.cover)
+  assert(tc[1] == 0 and tc[2] <= 0.68359375 + 1e-9 and tc[3] >= 0 and tc[4] <= 0.7421875 + 1e-9, "the header's cover inside the EJ's 175 x 95: " .. table.concat(tc, ", "))
+  assert(math.abs(sx - sy) < 0.02 and sx <= 1.5 + 1e-6 and w <= 262.5 and h == 70, string.format("the header's cover at the art's own shape, 1.5x at most: %.0f x %.0f at %.2f / %.2f", w, h, sx, sy))
+  assert(math.abs(tc[3] + tc[4] - 0.7421875) < 1e-6, "its middle band: " .. tc[3] .. " to " .. tc[4])
+  local row
+  for _, r in ipairs(f.rows) do if r:IsShown() and r.cat.key == "d1581" then row = r end end
+  tc, w, h, sx, sy = art(row.art)
+  assert(tc[1] == 0 and math.abs(tc[2] - 0.68359375) < 1e-6 and math.abs(sx - sy) < 0.02 and sx <= 1.5, string.format("a list tile: the art across its width, unsqueezed: u %.3f, %.2f / %.2f", tc[2], sx, sy))
+  print(string.format("windows D1: the journal's covers cut as the Encounter Journal cuts them (u to 0.684, v to 0.742), the header's at %.1fx at most, a tile filled", 1.5))
 end
 
 local seen = {}
