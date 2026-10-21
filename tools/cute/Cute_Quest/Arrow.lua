@@ -1040,7 +1040,7 @@ function A:Update()
   end
   -- the label: "Showing X" while a click is shown for now (the arrow up), "Hand in X here" at a hand-in in reach
   -- (Target.lua), else the target's name
-  self:Draw((t.temp and t.on) and ("Showing " .. t.name) or t.label or t.name, g, me, t.labelShort)
+  self:Draw((t.temp and t.on) and ("Showing " .. t.name) or t.label or t.shown or t.name, g, me, t.labelShort) -- (shown: a stop's place, Target.lua)
 end
 
 -- QuestTrail's first line, laid out as one centred line: the step's icon, the step (blue) and what to do at the
