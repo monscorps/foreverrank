@@ -12036,6 +12036,83 @@ do
   end)
 end
 
+-- W10 (sub-project C): the step frame's click on a quest reads it in the quest window (the engine names the quest,
+-- UI.scrollToQuest, and opens tab 1; the Bridge reads it), Ctrl-click puts it on the arrow without opening anything; the
+-- tracker's row greyed while the step frame is off; a guild window's redraw with nothing new sorts nothing (the sorted
+-- members kept until the roster, the sort or the offline switch changes), and a module's refresh leaves the guild's own
+-- pages alone
+do
+  local function member(name, rank, level) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = level or 5, online = true } end
+  isolated({ member("Rone", 1), member("Pim", 3, 9), member("Tova", 3, 3) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    local QB = c.addons[2].private
+    local L = qwin(c)
+    local step = c.env.QuestBankStep
+    local s1 = QB.Guide.Steps()[1]
+    assert(step and step.rows and s1 and s1.qid, "the step frame and a quest step")
+    assert(not (L.frame and L.frame:IsShown()), "the quest window closed")
+    press(step.rows[1])
+    assert(L.frame:IsShown() and L.page == "quests" and L.reading and L.reading.id == s1.qid, "the step frame's click reads its quest in the quest window")
+    assert(QB.UI.scrollToQuest == nil, "the quest named once")
+    check(L.frame, "W10 the step frame's quest, read")
+    L.frame:Hide()
+    L.reading = nil
+    c.ctrl = true
+    press(step.rows[1])
+    c.ctrl = false
+    assert(not L.frame:IsShown() and not L.reading, "Ctrl-click: on the arrow, no window")
+    -- the tracker's row follows the step frame's
+    c.C.UI.OpenSettings("quests")
+    local function trackerRow()
+      for _, f in ipairs(c.frames) do
+        if f:IsVisible() and f.label and f.label.GetText and (f.label:GetText() or ""):find("^Hide the game's quest tracker") and f.Set then return f end
+      end
+    end
+    local s = c.env.CuteQuestDB.settings
+    assert(s.guide.frame == true and trackerRow() and trackerRow():IsEnabled(), "the frame on: the tracker's row to tick")
+    s.guide.frame = false
+    sdraw(c)
+    assert(trackerRow() and not trackerRow():IsEnabled(), "the frame off: the tracker's row greyed")
+    s.guide.frame = true
+    hideAll(c)
+    -- J's Race: a redraw with nothing new sorts nothing; a roster change, a sort, the offline switch sort again
+    local UI = c.C.UI
+    UI:Open("race")
+    local sorts, realSort = 0, table.sort
+    local function counted(fn)
+      sorts = 0
+      table.sort = function(t, f) if type(t[1]) == "table" and t[1].tier ~= nil then sorts = sorts + 1 end; return realSort(t, f) end
+      local ok, err = pcall(fn)
+      table.sort = realSort
+      assert(ok, err)
+      return sorts
+    end
+    local function order()
+      local out = {}
+      for _, w in ipairs(UI.rows.items) do if w:IsShown() and w.row then out[w.idx] = w.row.name end end
+      return table.concat(out, " ")
+    end
+    assert(counted(function() UI:Draw() end) == 0, "a redraw with nothing new sorts nothing")
+    local before = order()
+    assert(counted(function() c.C.Roster:Changed(); UI:Draw() end) == 1, "a roster change sorts again")
+    local header
+    for _, h in ipairs(UI.headerCells.items) do if h:IsShown() and h.id == "level" then header = h end end
+    assert(counted(function() press(header) end) == 1, "a new sort sorts again")
+    assert(order() ~= before, "and the order follows it: " .. before .. " / " .. order())
+    assert(counted(function() UI:Draw() end) == 0, "and keeps it")
+    -- a module's refresh: the quest window draws again, the guild's own page waits for the guild's news
+    UI:Open("quests")
+    UI.refreshing, L.refreshing = false, false
+    c.env.Cute.Refresh()
+    assert(L.refreshing and not UI.refreshing, "Cute.Refresh: the quest window again, not Race")
+    tick(c, 2)
+    assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    leave(c)
+    print("windows W10: the step frame's quest read in the quest window (Ctrl: the arrow, no window); the tracker's row greyed with the frame off; a guild redraw with nothing new sorts nothing; a module's refresh leaves the guild's own pages alone")
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

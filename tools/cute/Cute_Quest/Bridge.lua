@@ -129,7 +129,17 @@ local function pageOf(tab)
   if page ~= "quests" and page ~= "settings" and not Cute.ModuleOn(page) then page = "quests" end
   return page
 end
-function UI:Open(tab) Cute.Open(pageOf(tab), tab == 5 and "quests" or nil) end
+-- (the step frame's click on a quest's step names the quest, UI.scrollToQuest, and opens tab 1: in Cute the quest window
+-- reads that quest, as a click on a quest reads it everywhere; with Ctrl it goes on the arrow instead)
+function UI:Open(tab)
+  local qid = UI.scrollToQuest
+  UI.scrollToQuest = nil
+  local q = qid and tab == 1 and E.Quest.Get(qid)
+  if q and IsControlKeyDown and IsControlKeyDown() then UI.QuestClick(q, E:Status(q), "LeftButton") return end
+  Cute.Open(pageOf(tab), tab == 5 and "quests" or nil)
+  local win = q and QB.Reader and Cute.Window and Cute.Window("quests")
+  if win and win.frame and win.frame:IsShown() then QB.Reader.Read(win, q) end
+end
 -- the page a click opens, by name, for the engine's words ("Click: the Quests page.": Arrow.lua)
 local TITLE = { quests = "Quests", route = "Route", settings = "Settings", journal = "Dungeons", gear = "Gear" }
 function UI.PageName(tab) return TITLE[pageOf(tab)] or "Quests" end

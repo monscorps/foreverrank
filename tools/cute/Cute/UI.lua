@@ -903,7 +903,13 @@ function UI:Refresh()
 end
 -- every window that is open draws again (a module addon's Cute.Refresh: its page may be in any of them); DrawAll at once,
 -- for a click
-function UI.RefreshAll() for _, win in pairs(UI.windows) do win:Refresh() end end
+function UI.RefreshAll()
+  for key, win in pairs(UI.windows) do
+    -- (the guild window only where a module's page is open in it: its own pages draw on the guild's news)
+    local def = key == "guild" and C.Modules.byId[UI.page]
+    if key ~= "guild" or (def and not def.core) then win:Refresh() end
+  end
+end
 function UI.DrawAll() for _, win in pairs(UI.windows) do if rawget(win, "frame") and win.frame:IsShown() then win:Draw() end end end
 -- one of your own values changed (Sample.lua): nothing to do unless the open page shows it and its text changed. On a
 -- table page your row is the first and moves nowhere, so only it is filled again, once a second at most
@@ -1241,8 +1247,21 @@ local function sortRows(rows, page)
 end
 
 -- the members a page lists: everyone, or the online ones and you when offline members are hidden (a copy: the page
--- sorts it)
-local function rowsShown()
+-- sorts it). sortedRows keeps a page's sorted list until the roster changes (R.version), the sort or the offline
+-- switch does: a draw with nothing new sorts nothing (a guild of hundreds sorted every draw, once a second)
+local sortCache = {}
+local rowsShown
+local function sortedRows(page)
+  local s = UI.sort[page]
+  local key = string.format("%s:%s:%s:%s", tostring(C.Roster.version), tostring(s and s.id), tostring(s and s.desc), tostring(C.Settings().offline))
+  local hit = sortCache[page]
+  if hit and hit.key == key then return hit.rows end
+  local rows = rowsShown()
+  sortRows(rows, page)
+  sortCache[page] = { key = key, rows = rows }
+  return rows
+end
+function rowsShown()
   local all, out = C.Roster:Rows(), {}
   local offline = C.Settings().offline
   for _, r in ipairs(all) do if offline or r.online or r.me then out[#out + 1] = r end end
@@ -1258,8 +1277,7 @@ function UI:DrawTable(page, y0)
   local room = width - NAME_W - 8
   local cols, hidden = columnsFor(page, room)
   local officer = C.Roster:MeOfficer()
-  local rows = rowsShown()
-  sortRows(rows, page)
+  local rows = sortedRows(page)
   -- header: grey labels, the sorted one white, a hairline under the row
   self.header:Show()
   self.header:ClearAllPoints()

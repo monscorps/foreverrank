@@ -274,9 +274,9 @@ function Col:Edit(text, get, set)
   e:SetPoint("TOPLEFT", self.x + LABEL_W + 6, -self.y - 1)
   e:SetWidth(math.min(160, self.w - LABEL_W - 10))
   if not e:HasFocus() then e:SetText(get() or "") end
-  e:SetScript("OnEnterPressed", function(b) set(b:GetText() or ""); b:ClearFocus() end)
-  e:SetScript("OnEscapePressed", function(b) b:SetText(get() or ""); b:ClearFocus() end)
-  e:SetScript("OnEditFocusLost", function(b) set(b:GetText() or "") end)
+  e:SetScript("OnEnterPressed", C.Safe(function(b) set(b:GetText() or ""); b:ClearFocus() end, "settings: a text box"))
+  e:SetScript("OnEscapePressed", C.Safe(function(b) b:SetText(get() or ""); b:ClearFocus() end, "settings: a text box"))
+  e:SetScript("OnEditFocusLost", C.Safe(function(b) set(b:GetText() or "") end, "settings: a text box"))
   self.y = self.y + math.max(STEP, lh + 7)
 end
 -- a value with a step down and up: the label in the rest of the width (wrapping), the stepper on the right, 74 px (20 px
