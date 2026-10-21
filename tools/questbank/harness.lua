@@ -18583,6 +18583,40 @@ end)()
     QB.host = nil
     assert(sentTo("Friend-Forever") == 0, "inside a host: never answered")
   end }
+
+  -- 22. (the review round) The step frame grew a line for each member of the group with a step: a raid of ten QuestBank
+  -- players at 120% on a 668 px screen ran the frame past the camp bar's place and the arrow off the screen's bottom.
+  -- Now a party's four lines show, and past four, three and a line for the rest
+  ENGCASES[#ENGCASES + 1] = { "the group's steps: a party's four lines, a raid's three and a line for the rest", function()
+    local c = char("Raider", "WARRIOR", "Warrior", 1, {}, { level = 5 })
+    local env, QB = c.env, c.QB
+    local SF, A, G = QB.StepFrame, QB.Arrow, QB.Guide
+    QB:Settings().welcome = nil; SF.Apply(); A:Set(true); A:Update()
+    local raid = {}
+    for i = 1, 9 do raid[i] = { name = "Member" .. string.char(64 + i), class = "MAGE", text = "Kill Kobold Vermin " .. i .. "/8" } end
+    local party = { raid[1], raid[2], raid[3], raid[4] }
+    local real, list = G.MemberSteps, party
+    G.MemberSteps = function() return list end
+    local f = env.QuestBankStep
+    local function shown() local n, last = 0, nil; for _, t in ipairs(f.members) do if t:IsShown() then n, last = n + 1, t:GetText() end end; return n, last end
+    G.memberVer = G.memberVer + 1; SF.Refresh()
+    local n, last = shown()
+    assert(n == 4 and last:find("MemberD", 1, true), "a party of five: the four others: " .. n .. ", " .. tostring(last))
+    list = raid
+    G.memberVer = G.memberVer + 1; SF.Refresh()
+    n, last = shown()
+    assert(n == 4 and last == "and 6 more in your group", "a raid of ten: three and the rest in a line: " .. n .. ", " .. tostring(last))
+    -- 668 px of screen at 120% with the trainer's line: the frame and the arrow on the screen, clear of each other
+    env.UIParent:SetSize(1024, 668)
+    SF.SetScale(1.2)
+    G.reminder = env.GetTime() + 600
+    G.memberVer = G.memberVer + 1; SF.Apply(); SF.Refresh()
+    local sr, ar = placed(f), placed(env.QuestBankArrow, 143)
+    assert(apart(sr, ar) and sr.b >= 0 and ar.b >= 0, "a short screen: both on it, apart: " .. box(sr) .. ", " .. box(ar))
+    for _, pr in ipairs(checkLayout(f, "step frame, a raid's steps at 1.2")) do STAGE_PROBLEMS[#STAGE_PROBLEMS + 1] = pr end
+    G.reminder = nil
+    env.UIParent:SetSize(1600, 1000); SF.SetScale(1)
+    G.MemberSteps = real
   end }
 
   for _, case in ipairs(ENGCASES) do

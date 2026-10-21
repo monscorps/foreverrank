@@ -40,6 +40,7 @@ local trackerOut, trackerHooked, trackerWait = false, false, false -- (the game'
 -- (guide.trackerTold, set as the note shows: a /reload under the welcome card still has it to tell); its menu brings
 -- the tracker back
 local NOTE_S, NOTE_H = 60, 24
+local MEMBER_LINES = 4 -- (the group's steps: SF.Refresh)
 local TRACKER_NOTE = "The game's quest tracker is hidden while this frame shows. Right-click here to show it."
 SF.noteUntil, SF.notePending = nil, nil -- (pending: told when the steps next show, not under a welcome card)
 
@@ -610,17 +611,25 @@ function SF.Refresh()
     f.note:SetPoint("TOPLEFT", PAD, -y)
     y = y + NOTE_H + 4
   end
-  for i, m in ipairs(members) do
+  -- the group's steps, MEMBER_LINES at most: a party's four, else three and a line for the rest (the review round: a
+  -- raid of QuestBank players grew the frame a line each, past the camp bar's place and off a short screen)
+  local lines = #members > MEMBER_LINES and MEMBER_LINES or #members
+  for i = 1, lines do
+    local m = members[i]
     local t = f.members[i]
     if not t then t = fs(f, 10, "SOFT", WIDTH - PAD * 2); f.members[i] = t end
     t:ClearAllPoints()
     t:SetPoint("TOPLEFT", PAD, -y)
-    local name = (QB.Sync and QB.Sync.ColorName) and QB.Sync.ColorName(m.name, m.class) or m.name
-    t:SetText(name .. ": " .. m.text)
+    if i == MEMBER_LINES and #members > MEMBER_LINES then
+      t:SetText(string.format("and %d more in your group", #members - MEMBER_LINES + 1))
+    else
+      local name = (QB.Sync and QB.Sync.ColorName) and QB.Sync.ColorName(m.name, m.class) or m.name
+      t:SetText(name .. ": " .. m.text)
+    end
     t:Show()
     y = y + ROW
   end
-  for i = #members + 1, #f.members do f.members[i]:Hide() end
+  for i = lines + 1, #f.members do f.members[i]:Hide() end
   if f:GetHeight() ~= y + PAD then f:SetHeight(y + PAD); arrowFollows() end
   SF.RefreshItem(steps[1])
   SF.MarkReward()
