@@ -126,15 +126,37 @@ local function stepIcon(tex, s)
   tex:Show()
 end
 
--- the minutes to the step now: the arrow's own count while it leads to the same place (from where you stand, as you
--- go), else the plan's for the step's leg (G.Mins)
+-- the minutes to the step now, as you go: the arrow's own count while it leads there (to the same place, or to the stop
+-- the step is at: the route's target is its stop's first NPC, and the step may be at another); else, on your continent
+-- and on foot (a leg the plan walks, or an objective's spot), the yards from where you stand at the planner's pace
+-- (Model.lua's M.Between: DETOUR, RUN, M.Factor mounted or not), read again once you have moved 20 yards; else the
+-- plan's for the step's leg (G.Mins). (The launch round kept the plan's figure whenever the arrow led elsewhere, off,
+-- or away in a dungeon: "11 min" as you walked.) A number, no table and no string a tick
+local hereBuf, walkX, walkY, walkSX, walkSY, walkMins = {}, nil, nil, nil, nil, nil
+local function leadsThere(s, t)
+  if s.wx and t.wx and t.c == s.c and (t.wx - s.wx) ^ 2 + (t.wy - s.wy) ^ 2 < 900 then return true end
+  if not (s.leg and s.npc and t.stop and not t.obj) then return false end
+  local r = QB.Target and QB.Target.Route and QB.Target.Route()
+  local leg = r and r.legs and r.legs[s.leg]
+  local stop = leg and leg.stop
+  return stop ~= nil and stop.name == t.stop and stop.seen ~= nil and stop.seen[s.npc] == true
+end
+local function onFoot(s)
+  if not (s.wx and (s.way == "foot" or not s.leg)) then return nil end
+  local me = QB.API.WorldPosition(nil, hereBuf)
+  if not (me and me.c == s.c) then return nil end
+  if walkSX == s.wx and walkSY == s.wy and walkX and (me.wx - walkX) ^ 2 + (me.wy - walkY) ^ 2 < 400 then return walkMins end
+  local M = QB.Model
+  local yards = math.sqrt((s.wx - me.wx) ^ 2 + (s.wy - me.wy) ^ 2)
+  local mins = yards * (M.DETOUR or 1.3) / (M.RUN or 7) / 60 * (M.Factor and M.Factor((QB:Mounted())) or 1)
+  walkX, walkY, walkSX, walkSY, walkMins = me.wx, me.wy, s.wx, s.wy, math.floor(mins + 0.5)
+  return walkMins
+end
 local function minsNow(s)
   local A = QB.Arrow
   local g, t, f = A and A.g, A and A.t, A and A.frame
-  if g and g.eta and t and f and f:IsShown() and s.wx and t.wx and t.c == s.c and (t.wx - s.wx) ^ 2 + (t.wy - s.wy) ^ 2 < 900 then
-    return math.floor(g.eta + 0.5)
-  end
-  return G.Mins(s)
+  if g and g.eta and t and f and f:IsShown() and leadsThere(s, t) then return math.floor(g.eta + 0.5) end
+  return onFoot(s) or G.Mins(s)
 end
 SF.MinsNow = minsNow
 
@@ -517,7 +539,7 @@ function SF.Refresh()
     if i == 1 then
       rowText(r.text, s and G.Title(s) or ("Nothing to do: " .. (QB.CMD or "/qb")), nil)
       rowText(r.where, s and G.Where(s) or "", nil)
-      r.mins:SetText(mins and (mins .. " min") or "")
+      r.mins:SetText((mins and mins > 0) and (mins .. " min") or "")
     elseif s then
       -- (the place once a trip: a step at the place of the one before it, or on its leg, gives its name alone)
       local place, prev = G.Place(s), steps[i - 1]

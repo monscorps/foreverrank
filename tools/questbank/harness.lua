@@ -18209,7 +18209,7 @@ end)()
     local D = QB.Data
     local i = assert(npcIdx(D, who), who)
     local n = D.NPC[i]
-    return { kind = "handin", qid = qid, n = 1, npc = i, m = n[2], x = n[3], y = n[4], c = n[5], wx = n[6], wy = n[7], stop = stop, mins = mins, leg = leg, way = way or "walk" }
+    return { kind = "handin", qid = qid, n = 1, npc = i, m = n[2], x = n[3], y = n[4], c = n[5], wx = n[6], wy = n[7], stop = stop, mins = mins, leg = leg, way = way or "foot" }
   end
   local function rowTip(r) lines = {}; r.__scripts.OnEnter(r); r.__scripts.OnLeave(r); return table.concat(lines, " | ") end
   local function planned(c)
@@ -18286,6 +18286,41 @@ end)()
     local r1, r2 = c.env.QuestBankStep.rows[1], c.env.QuestBankStep.rows[2]
     assert(not r1.where:GetText():find("Lakeshire", 1, true), "the objective now: not Lakeshire: " .. r1.where:GetText())
     assert(r2.text:GetText():find(" %- Lakeshire$"), "the hand-in after an objective keeps its place: " .. r2.text:GetText())
+    G.steps = keep; G.ver = G.ver + 1; SF.Refresh()
+  end }
+
+  -- 20. (the review round) The step now's minutes stood at the plan's figure for its leg whenever the arrow led elsewhere
+  -- (off, away in a dungeon, or at the stop's first NPC while the step is at its second): "11 min" as you walked. Now the
+  -- arrow's count where it leads to that stop, else on your continent on a walk the yards from where you stand at the
+  -- planner's pace, read again as you move; else the plan's
+  ENGCASES[#ENGCASES + 1] = { "the step now's minutes as you go: the arrow's at its stop, else from where you stand, else the plan's", function()
+    local c = char("Strider", "WARRIOR", "Warrior", 1, {}, { level = 10, world = { 0, -9460, 60 }, map = 1429 })
+    local QB = c.QB
+    local G, SF, A = QB.Guide, QB.StepFrame, QB.Arrow
+    QB:Settings().welcome = nil; SF.Apply()
+    A:Set(false)
+    local keep = G.steps
+    G.steps = { handStep(QB, 20, "Marshal Marris", "Lakeshire", 30, 1, "foot") }
+    local r1 = c.env.QuestBankStep.rows[1]
+    local function mins() G.ver = G.ver + 1; SF.Refresh(); return tonumber((r1.mins:GetText() or ""):match("^(%d+) min$")), r1.mins:GetText() end
+    local m1, t1 = mins()
+    assert(m1 and m1 < 30 and m1 >= 5, "the arrow off: from where you stand, not the plan's 30: " .. tostring(t1))
+    standAt(c, 0, -9370, -1100)
+    local m2, t2 = mins()
+    assert(m2 and m2 < m1, "halfway there: fewer: " .. m1 .. " then " .. tostring(t2))
+    -- over the sea: the plan's
+    G.steps = { handStep(QB, 3370, "Mathrengyl Bearwalker", "Darnassus", 11.2, 1, "boat") }
+    local m3, t3 = mins()
+    assert(m3 == 11, "on another continent: the plan's 11: " .. tostring(t3))
+    -- the arrow at the stop's first NPC, the step at another of its NPCs: the arrow's count all the same
+    G.steps = { handStep(QB, 20, "Marshal Marris", "Lakeshire", 30, 1, "foot") }
+    A:Set(true)
+    local route, sv = QB.Target.Route, { A.g, A.t }
+    QB.Target.Route = function() return { legs = { { stop = { name = "Lakeshire", seen = { [G.steps[1].npc] = true } } } } } end
+    A.g, A.t = { eta = 2.6, trail = {} }, { kind = "route", stop = "Lakeshire", c = 0, wx = -9282 + 200, wy = -2296 }
+    local m4, t4 = mins()
+    QB.Target.Route, A.g, A.t = route, sv[1], sv[2]
+    assert(m4 == 3, "the arrow leads to that stop: its 3: " .. tostring(t4))
     G.steps = keep; G.ver = G.ver + 1; SF.Refresh()
   end }
 
