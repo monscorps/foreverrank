@@ -425,9 +425,10 @@ function R:PurgeCheck()
   if officer then self.lostUnsettled = nil end
   -- (merge4) an officer at this login who was none at its last (promoted while offline): its client kept none of the
   -- halls' weekly store then (Halls.lua H:Seen), and an ask with a since brings only what changed, so a member idle
-  -- since would be missing from This week and Last week. Every record asked whole (Comm.lua M:AskWhole)
-  if officer and was == nil and not wasOne and C.Comm and C.Comm.AskWhole then C.Comm:AskWhole()
-  elseif officer and (was == false or lost) then ask() end
+  -- since would be missing from This week and Last week. Every record asked whole (Comm.lua M:AskWhole); a client that
+  -- dropped values meanwhile asks as well (an ask already waiting is the one answered)
+  if officer and was == nil and not wasOne and C.Comm and C.Comm.AskWhole then C.Comm:AskWhole() end
+  if officer and (was == false or lost) then ask() end
   return not officer and C.Policy:Purge(wasOne) > 0
 end
 -- another character of this account is an officer of this guild: the saved variables are an officer's, which hold the
