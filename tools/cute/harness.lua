@@ -21310,6 +21310,34 @@ do
     said[#said + 1] = "an older QuestBank's guild share held off before 6.1.0 as after, its group share in a raid before 6.3.0"
   end }
 
+  -- I1 (look, should). Under Cute the minimap's menu named the far view "Far zoom" (Settings > Route says "Minimap far
+  -- view"), split Route and Lines (Cute's one row, "Route on the minimap", reads both), and its last line opened
+  -- Settings > Quests, which holds none of its switches
+  CASES[#CASES + 1] = { "I1 the minimap's menu under Cute: Settings > Route's names and one route row; its settings line opens Route", function()
+    inGuild({ member("Rone", 1) }, function()
+      local c = questChar()
+      local s, mini = c.env.CuteQuestDB.settings, c.env.Minimap
+      c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+      mini.__scripts.OnMouseUp(mini, "RightButton"); tick(c, 1)
+      local byText, names = {}, {}
+      for _, e in ipairs(c.contextMenus[#c.contextMenus]) do if e.text then byText[e.text] = e; names[#names + 1] = e.text end end
+      local list = table.concat(names, ", ")
+      assert(byText["Minimap far view"] and byText["Route on the minimap"], "Settings > Route's names: " .. list)
+      assert(not byText["Far zoom"] and not byText["Route"] and not byText["Lines"], "none of QuestBank's: " .. list)
+      local route = byText["Route on the minimap"]
+      assert(route.get() == true, "the route on: ticked")
+      route.set()
+      assert(s.minimapPins == false and s.minimapLines == false and route.get() == false, "unticked: the route's pins and lines off, as Settings' row")
+      route.set()
+      assert(s.minimapPins ~= false and s.minimapLines ~= false, "ticked again: both on")
+      byText["Cute settings"].set()
+      local S = c.C.UI.Window("settings")
+      assert(S.frame:IsShown() and S.section == "route", "its settings line: Settings > Route: " .. tostring(S.section))
+      leave(c)
+    end)
+    said[#said + 1] = "the minimap's menu says Settings > Route's names and opens it"
+  end }
+
   for _, case in ipairs(CASES) do
     local ok, err = pcall(case[2])
     if not ok then failed[#failed + 1] = case[1] .. ": " .. tostring(err) end

@@ -220,6 +220,8 @@ function UI.PageName(tab) return TITLE[pageOf(tab)] or "Quests" end
 function UI:ShowTab(tab) self:Open(tab) end
 -- (the hud round) Settings from a reminder's menu: Cute's Reminders section
 function UI.OpenReminders() Cute.Open("settings", "camp") end
+-- (the final audit) Settings from the minimap's menu: the Route section, where the minimap's rows are (MinimapView.lua)
+function UI.OpenMinimapSettings() Cute.Open("settings", "route") end
 function UI:TogglePage(tab) self:Open(tab) end
 function UI:Toggle() Cute.Open("quests") end
 function UI:Refresh() Cute.Refresh() end
