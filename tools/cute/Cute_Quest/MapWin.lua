@@ -323,15 +323,17 @@ end
 -- the header's button to the game's own map: QuestBank's tested path (the Bridge's UI.OpenMap: OpenWorldMap, HideUIPanel),
 -- out of combat; Cute's window steps aside for the game's
 ----------------------------------------------------------------------------
+local function gameMap()
+  if inCombat() or not (E and E.UI and E.UI.OpenMap) then return end
+  local w = Cute.Window and Cute.Window("map")
+  if E.UI.OpenMap() and w and w.frame then w.frame:Hide() end
+end
 local function gameButton(ui)
   local b = ui.Button(ui.head, "Game's map", 90, 20)
   local w = math.ceil(((b.label.GetUnboundedStringWidth or b.label.GetStringWidth)(b.label) or 0) + 20)
   b:SetWidth(w)
   b:SetPoint("RIGHT", -(ui.headRight or 30), 0)
-  b:SetScript("OnClick", Cute.Safe(function()
-    if inCombat() or not (E and E.UI and E.UI.OpenMap) then return end
-    if E.UI.OpenMap() then ui.frame:Hide() end
-  end, "map window: the game's map"))
+  b:SetScript("OnClick", Cute.Safe(gameMap, "map window: the game's map"))
   b:SetScript("OnEnter", Cute.Safe(function(self)
     tip(self, "Game's map", inCombat() and "After combat." or "The game's own world map on your zone, with Cute's icons while \"Our icons on the game's map\" is on.")
   end, "map window: the game's map"))
@@ -993,12 +995,7 @@ do
 end
 
 -- (sub-project F) the menu's Map entry (Cute/Windows.lua W.Menu): your zone, the last three zones M showed but yours, its
--- Finds list, the game's own map (out of combat, as the header's button: Cute's window steps aside)
-local function gameMap()
-  if inCombat() or not (E and E.UI and E.UI.OpenMap) then return end
-  local w = Cute.Window and Cute.Window("map")
-  if E.UI.OpenMap() and w and w.frame then w.frame:Hide() end
-end
+-- Finds list, the game's own map (gameMap, as the header's button)
 local function openOn(m)
   Cute.Open("map")
   local MP = engineMap()
