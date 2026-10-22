@@ -19133,6 +19133,57 @@ do
     print("merge3: " .. table.concat(said, "; "))
   end)
 end
+----------------------------------------------------------------------------
+-- The merge3 review's findings, Cute's side.
+-- P5. Your own Ready and its tooltip agree while Before the pull shows something: from no gap (durability 80%, potions
+--     in the bags) the cell reads "gaps" and the tooltip names the pull in place of "No gaps."; drawn again when Before
+--     the pull starts and when it ends (Reminders' refresh tells Band.lua), with no other draw
+----------------------------------------------------------------------------
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local said = {}
+    local state = {}
+    local function client(card, extra)
+      local o = { modules = { "Cute_Quest" }, addonState = state, quest = true, card = card }
+      for k, v in pairs(extra or {}) do o[k] = v end
+      return newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, o))
+    end
+    local function button(c, label) for _, b in ipairs(c.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == label then return b end end end
+    local function row(c, label) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == label end) end
+    -- P5
+    local h = client(false)
+    login(h); tickAll(6)
+    local Sh = h.C.Sample
+    Sh:Read("ready")
+    assert(Sh:Value("ready") == 2, "no gap: durability 80%, potions in the bags: " .. tostring(Sh:Value("ready")))
+    local QBh = h.addons[2].private
+    h.C.UI:Open("prog")
+    local function own() return cellOf(rowOf(h, "Rone"), "ready") end
+    assert(own() and own().label:GetText() == "ready", "your Ready: ready")
+    local flask = false
+    local pull = QBh.Remind.Pull
+    QBh.Remind.Pull = function() if flask then return { { name = "Flask of the Titans" } }, true end return {}, false end
+    -- a ready check: Before the pull shows a flask, and Reminders' refresh tells the step frame (Remind.lua flushNow)
+    flask = true
+    QBh.Remind.Refresh()
+    tick(h, 1.5)
+    assert(own().label:GetText() == "gaps", "Before the pull shows a flask: your Ready gaps, drawn again with no other draw: " .. tostring(own().label:GetText()))
+    local tip = tipOf(own())
+    assert(not tip:find("No gaps.", 1, true) and tip:find("Before the pull: Flask of the Titans.", 1, true), "its tooltip agrees with the cell:\n" .. tip)
+    check(h.C.UI.frame, "merge3 Prog, your own Ready gaps before the pull")
+    -- the pull over (10 s after the ready check ends, R.PullEnd): ready again, drawn again
+    flask = false
+    QBh.Remind.Refresh()
+    tick(h, 1.5)
+    tip = tipOf(own())
+    assert(own().label:GetText() == "ready" and tip:find("No gaps.", 1, true) and not tip:find("Before the pull", 1, true), "the pull over: ready and No gaps.:\n" .. tip)
+    QBh.Remind.Pull = pull
+    leave(h)
+    said[#said + 1] = "your own Ready and its tooltip agree before the pull, drawn again as it starts and ends"
+    print("merge3 review: " .. table.concat(said, "; "))
+  end)
+end
 
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end

@@ -975,6 +975,18 @@ function S.ReadyOwn(v)
   if pull and v == 2 then return 1, pull end
   return v, pull
 end
+-- (merge3) whether Before the pull showed something at the last look. Reminders tell Cute after each of their refreshes
+-- (Band.lua, Cute.QuestReadsChanged): where it starts or stops showing something, your own Ready cell is filled again
+-- (UI:ValueChanged, your row alone), so the cell follows a ready check and the pull's end with no other draw. (The old
+-- value is nil: the cell's word is not the value's alone, so it is filled whatever the value)
+local pullShown = false
+function S.PullChanged()
+  local shown = S.ReadyPull() ~= nil
+  if shown == pullShown then return end
+  pullShown = shown
+  local v = C.Sample and C.Sample:Value("ready")
+  if type(v) == "number" and C.UI and C.UI.ValueChanged then C.UI:ValueChanged("ready", nil, v) end
+end
 local GEAR_ON = { "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "GET_ITEM_INFO_RECEIVED" }
 local BAG_ON = { "BAG_UPDATE_DELAYED", "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "GET_ITEM_INFO_RECEIVED" }
 D("ready", "Ready", "prog", { fmt = readyOf, gear = true, bag = true, on = { "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "GET_ITEM_INFO_RECEIVED", "UPDATE_INVENTORY_DURABILITY", "BAG_UPDATE_DELAYED" },

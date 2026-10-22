@@ -1209,9 +1209,14 @@ function UI:Cell(r, i)
         local counts = row.me and C.Stats.ReadyCounts() or C.Policy:LineReadyCounts()
         local n = 0
         for _ in pairs(counts) do n = n + 1 end
+        -- (merge3) your own row: what Reminders' Before the pull shows now, which your cell waits on (fillCell: "gaps" at
+        -- best). It takes the place of "No gaps.", so the cell and its tooltip never say two things
+        local pull = row.me and C.Stats.ReadyPull() or nil
         if row.me or C.Policy.CurrentReady(row.stats.addon_ver) then
           local gaps = C.Stats.ReadyGaps(row.stats, counts) or {}
-          tip:AddLine(#gaps == 0 and "No gaps." or table.concat(gaps, ", "), 0.9, 0.9, 0.9, true)
+          if #gaps > 0 then tip:AddLine(table.concat(gaps, ", "), 0.9, 0.9, 0.9, true)
+          elseif not pull then tip:AddLine("No gaps.", 0.9, 0.9, 0.9, true) end
+          if pull then tip:AddLine("Before the pull: " .. table.concat(pull, ", ") .. ".", 0.9, 0.9, 0.9, true) end
           tip:AddLine("Counts " .. C.Stats.ReadyCountsText(counts) .. ".", 0.7, 0.7, 0.7, true)
           if not row.me and v ~= (#gaps == 0 and 2 or (#gaps * 2 <= n and 1 or 0)) then
             tip:AddLine("Counted before the officers' last change: the member's next report counts it again.", 0.6, 0.6, 0.6, true)
@@ -1220,9 +1225,6 @@ function UI:Cell(r, i)
         if C.Roster:MeOfficer() and n < #C.Stats.READY_INPUTS then
           tip:AddLine("The gaps the officers keep are in their own columns, not counted here.", 0.6, 0.6, 0.6, true)
         end
-        -- (merge3) your own row: what Reminders' Before the pull shows now, which your verdict here waits on
-        local pull = row.me and C.Stats.ReadyPull() or nil
-        if pull then tip:AddLine("Before the pull: " .. table.concat(pull, ", ") .. ".", 0.9, 0.9, 0.9, true) end
       else
         tip:AddLine(UI.Format(def, v), 0.9, 0.9, 0.9)
       end

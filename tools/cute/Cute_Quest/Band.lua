@@ -229,13 +229,15 @@ Cute.QuestBand = {
   ReminderMenu = function(owner) local R = E.Remind; if owner and owner.rec and R and R.Menu then R.Menu(owner) end end,
   ReminderTip = function(owner, rec) local R = E.Remind; if rec and R and R.Tip then R.Tip(owner, rec) end end,
 }
--- (merge3) Cute's band drawn again when the step frame's line changes (Remind.lua tells the step frame after each refresh;
--- the copy's alone: QuestBank's own step frame is its own)
+-- (merge3) Cute's band drawn again when the step frame's line changes, and the dashboard told that Reminders laid their
+-- pieces out (your own Ready follows Before the pull: Cute.QuestReadsChanged). Remind.lua tells the step frame after
+-- each refresh; the copy's alone: QuestBank's own step frame is its own
 if not QB.dormant and E.StepFrame and type(E.StepFrame.RemindChanged) == "function" then
   local changed = E.StepFrame.RemindChanged
   local was, wasText, wasWord
   E.StepFrame.RemindChanged = function(rec)
     changed(rec)
+    if Cute.QuestReadsChanged then Cute.QuestReadsChanged() end
     local text, word = rec and rec.text, rec and rec.word
     if rec == was and text == wasText and word == wasWord then return end
     was, wasText, wasWord = rec, text, word

@@ -116,6 +116,9 @@ function Cute:RegisterModule(def)
 end
 function Cute.Open(page, section) C.UI:Open(page, section) end
 function Cute.Refresh() if C.UI and C.UI.RefreshAll then C.UI.RefreshAll() end end
+-- (merge3) Cute_Quest's reminders laid out again (Band.lua, after each refresh of Reminders): what the dashboard reads of
+-- them may have changed (Stats.lua S.PullChanged: your own Ready while Before the pull shows something)
+function Cute.QuestReadsChanged() if C.Stats and C.Stats.PullChanged then C.Stats.PullChanged() end end
 -- a Settings section of a module addon's own, without a module (Settings.lua ST.Add)
 function Cute.AddSection(def) return C.SettingsPage.Add(def) end
 function Cute.Print(msg) C.Print(msg) end
