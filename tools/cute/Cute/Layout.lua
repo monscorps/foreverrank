@@ -341,12 +341,15 @@ end
 ----------------------------------------------------------------------------
 -- in and out
 ----------------------------------------------------------------------------
--- layout mode on (from: "edit" when the game's Edit Mode opened it); false, and a line, where it cannot be
+-- layout mode on (from: "edit" when the game's Edit Mode opened it); false, and a line, where it cannot be (none for
+-- Edit Mode's: it opens for the game's own frames, nothing of Cute's asked)
 function L.Enter(from)
   if L.on then return true end
-  local why = L.Why()
-  if why then C.Print("Move frames: " .. why) return false end
-  if inCombat() then C.Print("Move frames: after combat.") return false end
+  local why = L.Why() or (inCombat() and "after combat.") or nil
+  if why then
+    if from ~= "edit" then C.Print("Move frames: " .. why) end
+    return false
+  end
   L.on, L.from = true, from
   bar = bar or makeBar()
   bar.snap:Set(L.Get().snap ~= false)

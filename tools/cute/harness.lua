@@ -15220,7 +15220,14 @@ do
     assert(RL.on and RL.from == "edit" and RL.movers.step:IsShown() and r2.env.CuteLayoutBar.__keyboard == false, "the game's Edit Mode: the movers, no key taken")
     r2.env.EventRegistry:TriggerEvent("EditMode.Exit")
     assert(not RL.on and not RL.movers.step:IsShown(), "its exit: done")
-    said[#said + 1] = "the game's Edit Mode opens and closes it"
+    -- the Move frames key (Bindings.xml, the game's Key Bindings under Cute)
+    local bindings = assert(io.open(HERE .. "/Cute/Bindings.xml")):read("*a")
+    assert(bindings:find('<Binding name="CUTE_LAYOUT" category="BINDING_HEADER_CUTE">Cute.Layout.Toggle()</Binding>', 1, true) and r2.env.BINDING_NAME_CUTE_LAYOUT == "Move frames", "the Move frames key")
+    r2.env.Cute.Layout.Toggle()
+    assert(RL.on and RL.from == nil and r2.env.CuteLayoutBar.__keyboard == true, "the key: layout mode, the bar taking keys")
+    r2.env.Cute.Layout.Toggle()
+    assert(not RL.on, "again: done")
+    said[#said + 1] = "the game's Edit Mode opens and closes it; so does the Move frames key"
     -- E12
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
       sizeAll(r2, size[1], size[2])
@@ -15262,6 +15269,10 @@ do
     n0 = #q.chat
     q.env.SlashCmdList.CUTE("layout")
     assert(not QL.on and table.concat(q.chat, "\n", n0 + 1):find("QuestBank is loaded", 1, true), "/cute layout says why")
+    n0 = #q.chat
+    q.env.EventRegistry:TriggerEvent("EditMode.Enter")
+    assert(not QL.on and #q.chat == n0, "the game's Edit Mode: nothing to move, nothing said")
+    q.env.EventRegistry:TriggerEvent("EditMode.Exit")
     q.C.UI.mini.__scripts.OnClick(q.C.UI.mini, "RightButton")
     assert(entry(lastMenu(q), "Move frames...").off, "the menu's Move frames... greyed")
     q.C.UI:Open("settings", "layout")
