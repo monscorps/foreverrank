@@ -24881,6 +24881,8 @@ end)()
     line = said(c, n0)
     c.raid = nil
     assert(line == "Shared your quests with your raid.", "a raid: " .. line)
+    -- (merge5 N2: the tooltip names the guild only where the status goes there, so the guild box ticked again)
+    QB:Settings().share.guild = true
     local UI = QB.UI
     UI:Open(4); UI:Refresh()
     local btn = UI.views[4].syncBtn
@@ -25054,19 +25056,20 @@ end)()
     UI:Open(4); UI:Refresh()
     local btn = UI.views[4].syncBtn
     local BOTH, GROUP = "Share now: your quests with your group, your level with your guild", "Share now: your quests with your group"
+    local function head(t) return t:match("^[^\n]*") end
     local tip = tipOf(btn)
-    assert(tip:find(BOTH, 1, true), "a party and a guild, both shared:\n" .. tip)
+    assert(head(tip) == BOTH, "a party and a guild, both shared:\n" .. tip)
     QB.noGuildSync = true
     tip = tipOf(btn)
-    assert(tip:find(GROUP, 1, true) and not tip:find("with your guild", 1, true), "Cute beside it (noGuildSync): the group alone:\n" .. tip)
+    assert(head(tip) == GROUP and tip:find("Cute is loaded and shares with your guild itself.", 1, true), "Cute beside it (noGuildSync): the group alone, Cute's guild share said:\n" .. tip)
     QB.noGuildSync = nil
     QB:Settings().share.guild = false
     tip = tipOf(btn)
-    assert(tip:find(GROUP, 1, true) and not tip:find("with your guild", 1, true), "the guild box off: the group alone:\n" .. tip)
+    assert(head(tip) == GROUP, "the guild box off: the group alone:\n" .. tip)
     QB:Settings().share.guild = true
     c.o.guild = false
     tip = tipOf(btn)
-    assert(tip:find(GROUP, 1, true) and not tip:find("with your guild", 1, true), "in no guild: the group alone:\n" .. tip)
+    assert(head(tip) == GROUP, "in no guild: the group alone:\n" .. tip)
     UI.frame:Hide()
   end }
 
