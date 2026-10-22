@@ -46,7 +46,7 @@ ENGINE_KNOWN = {
     "Target.lua", "Sync.lua", "Auto.lua", "Guide.lua", "MapPage.lua", "Gear.lua", "StepFrame.lua", "Tips.lua",
 }
 # Cute_Quest's own files, in the toc's order after the engine
-OWN = ["Bridge.lua", "Band.lua", "Reader.lua", "PageQuests.lua", "PageRoute.lua", "PageMap.lua", "PageJournal.lua", "PageGear.lua", "PageCamp.lua"]
+OWN = ["Bridge.lua", "Band.lua", "Reader.lua", "PageQuests.lua", "PageRoute.lua", "MapWin.lua", "PageMap.lua", "PageJournal.lua", "PageGear.lua", "PageCamp.lua"]
 
 problems = []
 

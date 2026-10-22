@@ -3474,8 +3474,8 @@ do
       check(rona.C.UI.frame, string.format("member statistics, discovered, %dx%d", size[1], size[2]))
     end
     sizeAll(wynn, 1040, 640); sizeAll(rona, 1040, 640)
-    -- the policy per discovered category: Bosses only-you; Settings has the five pairs (Fastest clears the fifth,
-    -- Records.lua's)
+    -- the policy per discovered category: Bosses only-you; Settings has the six pairs (Fastest clears, Records.lua's, and
+    -- Finds', sub-project G)
     wynn.C.Policy:Set("gc_bosses", "self")
     wynn.C.Comm:SendPolicy()
     tickAll(3)
@@ -3488,7 +3488,7 @@ do
     wynn.C.UI:Open("settings", "vis")
     local pairs4 = 0
     for _, fr in ipairs(wynn.frames) do if fr.__kind == "CheckButton" and fr:IsVisible() and fr.vis == "self" and type(fr.statId) == "string" and fr.statId:match("^gc_%l+$") then pairs4 = pairs4 + 1 end end
-    assert(pairs4 == 5, "five discovered pairs in Settings: " .. pairs4)
+    assert(pairs4 == 6, "six discovered pairs in Settings: " .. pairs4)
     check(sframe(wynn), "officer settings, discovered categories")
     -- the Me page counts what you discovered; the Officers page what the guild learned
     xavi.C.UI:Open("me")
@@ -3602,7 +3602,8 @@ do
     local petra = newClient(charOf({ "Petra", 3, "Raider", "MAGE", 50 }, { withStats = true, manyStats = 300, factions = factions }))
     local quinn = newClient(charOf({ "Quinn", 3, "Raider", "PRIEST", 50 }, { withStats = true, manyStats = 300, factions = {} }))
     login(petra, db); login(quinn)
-    assert(#petra.C.Stats.byCat.found == 40 + 18 + 60, "Petra's discoveries defined at login: " .. #petra.C.Stats.byCat.found)
+    -- (and the Finds category's four counts, defined at load: sub-project G)
+    assert(#petra.C.Stats.byCat.found == 40 + 18 + 60 + 4, "Petra's discoveries defined at login: " .. #petra.C.Stats.byCat.found)
     tickAll(60)
     local first = #petra.sent
     assert(first < 20 and #quinn.sent < 20, "under twenty messages in the first minute: " .. first .. ", " .. #quinn.sent)
@@ -3615,7 +3616,7 @@ do
     local lootN = 0
     for enc in pairs(quinn.env.CuteDB.known.loot) do if enc > 7000 and enc <= 7012 then lootN = lootN + 1 end end
     assert(lootN == 12 and quinn.env.CuteDB.known.loot[7001].items[60001], "and the loot of the twelve bosses: " .. lootN)
-    assert(#quinn.C.Stats.byCat.found == 40 + 18 + 60, "and every label: Quinn defined them all: " .. #quinn.C.Stats.byCat.found)
+    assert(#quinn.C.Stats.byCat.found == 40 + 18 + 60 + 4, "and every label: Quinn defined them all: " .. #quinn.C.Stats.byCat.found)
     local labelMsgs = msgs(petra, "1L")
     assert(#petra.oversize == 0 and labelMsgs >= 1 and #petra.sent < 80, "the whole login: " .. #petra.sent .. " messages, " .. labelMsgs .. " of labels")
     print(string.format("budget: 300 statistics, 40 bosses in 18 instances and 60 factions: %d messages in the first minute, %d in all (%d of labels), everything across", first, #petra.sent, labelMsgs))
@@ -13748,7 +13749,7 @@ do
     card = c.env.CuteSetupFrame
     assert(card and card:IsShown(), "the card, 3 s after the loading screen")
     local function row(label) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == label end) end
-    assert(row("Dungeons tab"):GetChecked() and not row("Gear tab"):GetChecked() and row("Quest icons on the game's map"):GetChecked(), "the tabs as 0.7 left them: Gear off")
+    assert(row("Dungeons tab"):GetChecked() and not row("Gear tab"):GetChecked() and row("Map"):GetChecked(), "the tabs as 0.7 left them: Gear off (the map's row Map, its window's from sub-project F)")
     assert(not row("Camp bar and missing buffs"):GetChecked() and not row("Interact light"):GetChecked() and row("Step frame and arrow"):GetChecked(), "Camp off, the step frame on")
     assert(row("On my route"):GetChecked() and not row("Off"):GetChecked() and not row("Hand finished quests in for me"):GetChecked(), "Accept for me: On my route")
     local keys = {}
@@ -13781,7 +13782,7 @@ do
     assert(ch.modules["Cute_Quest:gear"] == false and ch.modules["Cute_Quest:journal"] == true and ch.modules["Cute_Quest:map"] == true and ch.modules["Cute_Quest:camp"] == false, "the modules as shown")
     assert(s.autoAccept == "route" and s.autoTurnIn == false and s.guide.frame == true, "the engine's choices as shown")
     assert(ch.keys.guild == "follow" and ch.keys.quests == "5", "the keys: J follows the game's, the quests' 5")
-    for _, id in ipairs({ "guild", "quests", "dungeons", "gear", "mapicons", "step", "camp", "light", "accept", "handin" }) do assert(ch.setup[id] == true, "answered: " .. id) end
+    for _, id in ipairs({ "guild", "quests", "dungeons", "gear", "mapwin", "step", "camp", "light", "accept", "handin" }) do assert(ch.setup[id] == true, "answered: " .. id) end
     assert(ch.openAfter == "quests", "the quest window to open after the reload")
     local db2, qdb = c.env.CuteDB, c.env.CuteQuestDB
     leave(c)
@@ -16876,6 +16877,1484 @@ do local function cardsStage()
 
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end
+
+-- [stage: map] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The map round (sub-project F): Cute's Map window, M (MapWin.lua, the Map module's page).
+-- C1. The window from the core's builder (CuteMapFrame, 1120 x 640, down to 860 x 500): the title, "Game's map", the cog
+--     on Settings > Map with its Finds row; the row under the header the crumbs, Here and the layers with their counts
+--     (the module's own tab hidden); the canvas in its box on the left at the window's strata and the box's size, the
+--     list on the right (320 px, 260 at the smallest); laid out with no problem at both sizes; the Bridge's map flags;
+--     tab 8 and the engine's Map page are the window; the Map module off, M opens nothing and /qb map the Quests tab.
+-- C2. Our list: the zone's head (its name, levels, how many quests), Ready to hand in, In your log, To pick up, each
+--     quest two lines (its objectives, or whom it comes from), then Finds here; a row hovered lights its pins, a pin
+--     hovered lights its row and scrolls it into view; a click reads the quest with its pins focused, Back the list.
+-- C3. The finds: one of your own in Finds here, "new"; All finds the Finds list by zone with its words; a row's click
+--     takes the map to it; Back; /cute finds opens it.
+-- C4. The game's four providers: added once; in a fight none draws (a new map's hide), each draws after it; the area
+--     points from the client, never the world map's cache, with no widget sets; a map link to a map without art left out.
+--     Opened in a fight, the window opens; "Game's map" greyed then, and out of combat opens the game's map, Cute's
+--     window stepping aside.
+-- C5. Memory with the window open: what the quest module keeps (the gate's budget).
+----------------------------------------------------------------------------
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  local said = {}
+  -- the game's four providers as the world map has them, recorded: each draws its pins in RefreshAllData (AcquirePin,
+  -- blocked in a fight), clears them in RemoveAllData
+  local function providers(c)
+    local env = c.env
+    c.drawn, c.cleared, c.acquired = {}, {}, {}
+    local function provider(name, template)
+      return { __blizzard = name,
+        GetMap = function(self) return self.owningMap end, OnAdded = function(self, map) self.owningMap = map end, OnRemoved = function() end,
+        OnShow = function() end, OnHide = function() end, OnMapChanged = function(self) self:RefreshAllData() end,
+        OnCanvasScaleChanged = function() end, OnCanvasSizeChanged = function() end,
+        GetPinTemplate = function() return template end,
+        RemoveAllData = function() c.cleared[#c.cleared + 1] = name end,
+        RefreshAllData = function() if c.combat then error("ADDON_ACTION_BLOCKED: " .. name .. " acquired its pins in a fight", 2) end; c.drawn[#c.drawn + 1] = name end }
+    end
+    env.DeathMapDataProviderMixin = provider("corpse", "CorpsePinTemplate")
+    env.AreaPOIDataProviderMixin = provider("areapoi", "AreaPOIPinTemplate")
+    env.MapLinkDataProviderMixin = provider("maplink", "MapLinkPinTemplate")
+    env.SelectableGraveyardDataProviderMixin = provider("graveyard", "SelectableGraveyardPinTemplate")
+    env.GetAreaPOIsForPlayerByMapIDCached = function() error("the world map's area point cache read from the addon", 2) end
+    env.C_AreaPoiInfo = {
+      GetAreaPOIForMap = function() return { 101 } end,
+      GetAreaPOIInfo = function(_, id) return { areaPoiID = id, name = "A Point", iconWidgetSet = 5, tooltipWidgetSet = 6 } end,
+    }
+    env.C_Map.GetMapLinksForMap = function() return { { linkedUiMapID = 1436 }, { linkedUiMapID = 9999 } } end
+  end
+  local function onCanvas(c, canvas)
+    canvas.AcquirePin = function(_, template, info)
+      if c.combat then error("ADDON_ACTION_BLOCKED: a pin acquired in a fight", 2) end
+      c.acquired[#c.acquired + 1] = { template, info }
+    end
+  end
+  local function rows(ui)
+    local out = {}
+    for _, p in ipairs(ui.mapList and { ui.mapList.pool, ui.mapList.roundPool } or {}) do
+      for _, r in ipairs(p.items) do if r:IsShown() then out[#out + 1] = r end end
+    end
+    return out
+  end
+  local function rowNamed(ui, name) for _, r in ipairs(rows(ui)) do if r.name:GetText() == name then return r end end end
+  local function bandButton(ui, label)
+    for _, b in ipairs(ui.bandButtons.items) do if b:IsShown() and b.label:GetText() == label then return b end end
+    -- (the Finds list's Back: the map's own band kit)
+    local k = ui.kits and ui.kits.map
+    if k and k:IsShown() and k.back:IsShown() and k.back.label:GetText() == label then return k.back end
+  end
+  isolated({ member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, log = { [7] = 2 } }))
+    providers(c)
+    login(c); tickAll(6)
+    local QB, env = c.addons[2].private, c.env
+    local MP, QM = QB.MapPage, QB.QuestMap
+    assert(MP.canvas, "the map canvas built at login")
+    onCanvas(c, MP.canvas)
+    -- C1
+    assert(QB.mapWindow == true and QB.kindMarks == true, "the Bridge's map flags")
+    c.C.UI:Open("map")
+    local ui = c.C.UI.Window("map")
+    assert(not (ui.frame and ui.frame:IsShown()), "the Map module off: M opens nothing")
+    env.SlashCmdList.QUESTBANK("map")
+    assert(qwin(c).frame:IsShown() and qwin(c).page == "quests", "the Map module off: /qb map the Quests tab")
+    qwin(c).frame:Hide()
+    c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+    assert(QB:Settings().mapPage == true and MP.On(), "the Map module on: the engine's Map page is on, and Cute's window")
+    QB.UI:Open(8)
+    assert(ui.frame and ui.frame:IsShown() and ui.frame == env.CuteMapFrame, "the engine's tab 8 opens the Map window")
+    assert(ui.frame:GetWidth() == 1120 and ui.frame:GetHeight() == 640 and ui.title:GetText() == "Map", "1120 x 640, titled Map")
+    local canvas = MP.canvas
+    assert(canvas and canvas:GetParent() == ui.mapBox.inner and canvas.__strata == "HIGH", "the canvas in the window's box, at its strata: " .. tostring(canvas) .. " " .. tostring(canvas and canvas:GetParent() == ui.mapBox.inner) .. " " .. tostring(canvas and canvas.__strata) .. " " .. tostring(MP.Available()) .. " " .. tostring(QB.QuestMap.Available()) .. " " .. tostring(MP.waiting) .. " login " .. tostring(QB.loginDone) .. " pins " .. tostring(QB.Pins.provider) .. " qm " .. tostring(QB.QuestMap.provider) .. " qmw " .. tostring(QB.QuestMap.waiting) .. " errors " .. tostring(env.CuteQuestDB.errors and env.CuteQuestDB.errors[1] and env.CuteQuestDB.errors[1].msg) .. " / " .. tostring(env.CuteDB.errors and env.CuteDB.errors[1] and env.CuteDB.errors[1].msg))
+    assert(canvas:GetWidth() == ui.mapBox.inner:GetWidth() and canvas:GetHeight() == ui.mapBox.inner:GetHeight() and canvas:GetWidth() > 600, "the canvas the box's size: " .. tostring(canvas:GetWidth()))
+    assert(ui.scroll:Width() == 320, "the list 320 px: " .. tostring(ui.scroll:Width()))
+    for id, b in pairs(ui.tabs) do assert(not b:IsShown(), "no tab in the map's row: " .. id) end
+    local crumbs = {}
+    for _, b in ipairs(ui.mapCrumbs) do if b:IsShown() then crumbs[#crumbs + 1] = b.label:GetText() end end
+    local here = MP.canvas:GetMapID()
+    assert(#crumbs == 3 and crumbs[1] == "Azeroth" and crumbs[2] == "Eastern Kingdoms" and ui.mapHere:IsShown(), "the crumbs and Here: " .. table.concat(crumbs, " > "))
+    local layersShown = 0
+    for _, b in ipairs(ui.mapLayers) do if b:IsShown() then layersShown = layersShown + 1; assert(tonumber(b.count:GetText()) > 0, "a layer with something here") end end
+    assert(layersShown > 0, "the layers with their counts")
+    assert(ui.mapGame and ui.mapGame:IsShown() and ui.mapGame.label:GetText() == "Game's map", "the game's map button")
+    check(ui.frame, "map window at 1120x640")
+    -- the cog: Settings > Map, with its Finds row
+    press(ui.cog)
+    assert(c.C.UI.Window("settings").frame:IsShown() and checkBox(c, function(cb) return cb.label and cb.label:GetText() == "Finds on the map" end), "the cog: Settings > Map, Finds on the map")
+    c.C.UI.Window("settings").frame:Hide()
+    -- the smallest
+    ui.frame:SetSize(860, 500)
+    ui:Draw()
+    assert(ui.scroll:Width() == 260 and canvas:GetWidth() == ui.mapBox.inner:GetWidth(), "at 860 x 500 the list 260 px, the canvas the rest: " .. tostring(ui.scroll:Width()))
+    check(ui.frame, "map window at 860x500")
+    ui.frame:SetSize(1120, 640)
+    ui:Draw()
+    -- /cute map: the window; the module's tab id is its page
+    ui.frame:Hide()
+    env.SlashCmdList.CUTE("map")
+    assert(ui.frame:IsShown(), "/cute map opens it")
+    said[#said + 1] = "the window from the builder (1120 x 640 and 860 x 500, laid out clean), the canvas in its box at the window's strata, the list 320 and 260 px, the crumbs, Here and the layers in the row, the cog on Settings > Map; tab 8, /qb map and /cute map open it; the module off, M nothing and /qb map the Quests tab"
+    -- C2: the list
+    MP.Go(1429, "user")
+    local t = texts(c)
+    assert(t:find("Elwynn Forest", 1, true), "the zone's head:\n" .. t)
+    local heads, quests = {}, 0
+    for _, it in ipairs(ui.mapList.items) do
+      if it.spec.kind == "two" and it.spec.lvl then quests = quests + 1 end
+      if it.spec.kind == "head" then heads[#heads + 1] = it.spec.name end
+    end
+    local hs = table.concat(heads, ", ")
+    assert(hs:find("To pick up", 1, true) and hs:find("Finds here", 1, true) and quests > 0, "the sections: " .. hs .. ", " .. quests .. " quests")
+    local row
+    for _, r in ipairs(rows(ui)) do if r.mapKey and type(r.mapKey) == "number" and r.line2:IsShown() then row = row or r end end
+    assert(row and (row.line2:GetText():find("^from ") or row.line2:GetText():find("^to ") or row.line2:GetText():find("|A:Crosshair_", 1, true)), "a quest's second line: its objectives with their cursors, or whom it comes from: " .. tostring(row and row.line2:GetText()))
+    hover(row)
+    assert(MP.hover == row.mapKey, "a row hovered: its quest's pins lit")
+    local lit = 0
+    for _, f in ipairs(QM.pageProvider.active) do if MP.Lit(f.data) then lit = lit + 1 end end
+    row.__scripts.OnLeave(row)
+    assert(MP.hover == nil, "and let go")
+    -- a pin hovered: its row lit
+    local pin
+    for _, f in ipairs(QM.pageProvider.active) do
+      local d = f.data
+      if d.kind ~= "dungeon" then
+        local id = d.quests and d.quests[1] and d.quests[1].id or d.id
+        for _, it in ipairs(ui.mapList.items) do if it.key == id then pin = pin or f end end
+      end
+    end
+    assert(pin, "a pin of a quest in the list")
+    pin:OnMouseEnter()
+    local lid = ui.mapLit
+    assert(lid ~= nil, "a pin hovered: its row lit")
+    local litRow
+    for _, r in ipairs(rows(ui)) do if r.mapKey == lid then litRow = r end end
+    assert(litRow and math.abs((litRow.bg.__color or {})[4] - 0.06) < 0.001, "the row lit by its background, in view")
+    pin:OnMouseLeave()
+    assert(ui.mapLit == nil, "and back")
+    -- a click reads the quest, its pins focused; Back: the list
+    press(row)
+    assert(ui.reading and ui.reading.id == row.mapKey and MP.focus == row.mapKey and bandButton(ui, "Back"), "a row's click reads it, its pins focused")
+    check(ui.frame, "map window, a quest to read")
+    press(bandButton(ui, "Back"))
+    assert(not ui.reading and MP.focus == nil and #rows(ui) > 0, "Back: the list, the focus let go")
+    -- a quest in your log reads the game's own text for it
+    local held
+    for i, it in ipairs(ui.mapList.items) do if it.key == 7 then ui.scroll.bar:SetValue(ui.mapList.tops[i]) end end
+    for _, r in ipairs(rows(ui)) do if r.mapKey == 7 then held = r end end
+    assert(held, "the quest in your log in the list")
+    press(held)
+    assert(ui.reading and ui.reading.id == 7 and texts(c):find("The words of quest 7.", 1, true) and texts(c):find("Abandon", 1, true), "a quest in your log: the game's text, Abandon")
+    press(bandButton(ui, "Back"))
+    -- a zone with nothing found
+    MP.Go(1433, "user")
+    local nothing = false
+    for _, it in ipairs(ui.mapList.items) do if it.spec.name == "Nothing found here yet." then nothing = true end end
+    assert(nothing, "a zone with nothing found: one line says so")
+    MP.Go(1429, "user")
+    said[#said + 1] = "the list: the zone's head, the sections, a quest's second line; a row hovered lights its pins, a pin hovered its row; a click reads it with its pins focused, Back"
+    -- C3: the finds
+    local disc = QB.Discover.DB()
+    disc.find = { o9001 = { p = { { 1429, 400, 400, 1 } }, b = "A Diary of Your Own", n = 1 } }
+    disc.findN = (disc.findN or 0) + 1
+    ui:Draw()
+    for i, it in ipairs(ui.mapList.items) do if it.spec.name == "Finds here" then ui.scroll.bar:SetValue(ui.mapList.tops[i]) end end
+    local diary = rowNamed(ui, "A Diary of Your Own")
+    assert(diary and diary.val:IsShown() and diary.val:GetText() == "new", "your own find in Finds here: new")
+    for i, it in ipairs(ui.mapList.items) do if it.spec.name == "Finds here" then ui.scroll.bar:SetValue(ui.mapList.tops[i]) end end
+    local all
+    for _, r in ipairs(rows(ui)) do if r.name:GetText() == "Finds here" then all = r end end
+    assert(all and all.who:GetText() == "All finds", "Finds here, with All finds on its right")
+    press(all)
+    t = texts(c)
+    assert(ui.mapFinds and t:find("Never a book's text or where a key leads.", 1, true) and bandButton(ui, "Back"), "the Finds list and its words:\n" .. t)
+    check(ui.frame, "map window, the Finds list")
+    MP.Go(1415, "user")
+    -- (on the continent the list starts from the zones nearest; the diary's row found again where it is)
+    for i, it in ipairs(ui.mapList.items) do if it.spec.name == "A Diary of Your Own" then ui.scroll.bar:SetValue(ui.mapList.tops[i]) end end
+    local first = rowNamed(ui, "A Diary of Your Own")
+    assert(first, "the diary in the Finds list")
+    local key = first.mapKey
+    press(first)
+    assert(MP.canvas:GetMapID() == 1429 and MP.hover == key and key == "find:1429:b:9001", "a find's click: the map on its zone, its pins lit: " .. tostring(MP.canvas:GetMapID()) .. " " .. tostring(MP.hover) .. " " .. tostring(first.mapKey))
+    press(bandButton(ui, "Back"))
+    assert(not ui.mapFinds, "Back: the zone's list")
+    ui.frame:Hide()
+    env.SlashCmdList.CUTE("finds")
+    assert(ui.frame:IsShown() and ui.mapFinds, "/cute finds: the Finds list")
+    press(bandButton(ui, "Back"))
+    said[#said + 1] = "the finds: yours new in Finds here, All finds by zone with its words, a click takes the map there, Back, /cute finds"
+    -- C4: the four providers
+    local added = {}
+    for dp in pairs(canvas.dataProviders) do if dp.cuteName then added[#added + 1] = dp.cuteName end end
+    table.sort(added)
+    assert(table.concat(added, " ") == "AreaPOIDataProviderMixin DeathMapDataProviderMixin MapLinkDataProviderMixin SelectableGraveyardDataProviderMixin", "the four, once: " .. table.concat(added, " "))
+    c.acquired = {}
+    MP.Go(1436, "user")
+    local links, poi = 0, nil
+    for _, a in ipairs(c.acquired) do
+      if a[1] == "MapLinkPinTemplate" then links = links + 1 end
+      if a[1] == "AreaPOIPinTemplate" then poi = a[2] end
+    end
+    assert(links == 2, "both links while both maps have art: " .. links)
+    c.noArt = { [9999] = true }
+    c.acquired = {}
+    MP.Go(1429, "user")
+    links = 0
+    for _, a in ipairs(c.acquired) do
+      if a[1] == "MapLinkPinTemplate" then links = links + 1 end
+      if a[1] == "AreaPOIPinTemplate" then poi = a[2] end
+    end
+    assert(links == 1, "a map link to a map without art left out: " .. links)
+    assert(poi and poi.iconWidgetSet == nil and poi.tooltipWidgetSet == nil and poi.name == "A Point", "an area point from the client, no widget sets")
+    c.noArt = nil
+    -- a fight: nothing drawn, a new map's pins hidden; after it, drawn
+    c.combat = true
+    fire(c, "PLAYER_REGEN_DISABLED")
+    local d0, x0 = #c.drawn, #c.cleared
+    c.acquired = {}
+    MP.Go(1436, "user")
+    assert(#c.drawn == d0 and #c.acquired == 0 and #c.cleared > x0, "in a fight: nothing drawn, the other map's pins hidden")
+    assert(ui.mapGame.__disabled, "Game's map greyed in a fight")
+    ui.frame:Hide()
+    c.C.UI:Open("map")
+    assert(ui.frame:IsShown(), "M opens in a fight")
+    c.combat = false
+    fire(c, "PLAYER_REGEN_ENABLED")
+    assert(#c.drawn > d0 or #c.acquired > 0, "after the fight: the four drawn")
+    -- Game's map: the game's own, Cute's window steps aside
+    ui:Draw()
+    press(ui.mapGame)
+    assert(c.map.shown and not ui.frame:IsShown(), "Game's map: the game's world map, Cute's window aside")
+    c.map:Close()
+    said[#said + 1] = "the game's four providers added once, none drawn in a fight and each after it, area points from the client with no widget sets, a link to a map without art left out; M opens in a fight; Game's map opens the game's and steps aside"
+    assert(#(env.CuteQuestDB.errors or {}) == 0, "no engine error recorded: " .. tostring(env.CuteQuestDB.errors and env.CuteQuestDB.errors[1] and env.CuteQuestDB.errors[1].msg))
+    leave(c)
+  end)
+  print("map C: " .. table.concat(said, "; "))
+end
+-- C5: memory with the Map window open: what the quest module keeps, weighed as 36d weighs it (everything reachable from
+-- its private table and its saved variables; a widget a small table; the module's own upvalues followed), with every
+-- quest page opened and the map window drawn on a zone and on its Finds list. The budget is QuestBank's, 11 MB
+if SEEDED then
+  local function pow2(n) local p = 1; while p < n do p = p * 2 end; return p end
+  local function kept(c, roots)
+    collectgarbage("collect"); collectgarbage("collect")
+    local seen = { [c] = true, [c.env] = true, [BASE] = true, [_G] = true, [ALL] = true, [clients] = true, [c.frames] = true, [c.timers] = true }
+    seen[c.C] = true
+    local total, queue, qi = 0, roots, 1
+    local function push(v)
+      local tv = type(v)
+      if tv == "string" then
+        if not seen[v] then seen[v] = true; total = total + 17 + #v end
+      elseif (tv == "table" or tv == "function") and not seen[v] then
+        queue[#queue + 1] = v
+      end
+    end
+    while qi <= #queue do
+      local v = queue[qi]
+      queue[qi], qi = false, qi + 1
+      if v and not seen[v] then
+        seen[v] = true
+        if type(v) == "table" then
+          if rawget(v, "__kind") and rawget(v, "__scripts") then
+            total = total + 150
+            for k, x in pairs(v) do if type(k) ~= "string" or not k:find("^__") then push(k); push(x) end end
+            for _, sc in pairs(rawget(v, "__scripts")) do push(sc) end
+          else
+            local n, h = #v, 0
+            for k in pairs(v) do if not (type(k) == "number" and k >= 1 and k <= n and k % 1 == 0) then h = h + 1 end end
+            total = total + 64 + (n > 0 and pow2(n) * 8 or 0) + (h > 0 and pow2(h) * 24 or 0)
+            local mt = debug.getmetatable(v)
+            if type(mt) == "table" then push(mt) end
+            for k, x in pairs(v) do push(k); push(x) end
+          end
+        else
+          local info = debug.getinfo(v, "Su")
+          total = total + 40 + 8 * (info.nups or 0)
+          if info.source:find("Cute_Quest/", 1, true) then
+            for i = 1, info.nups or 0 do local _, x = debug.getupvalue(v, i); push(x) end
+          end
+        end
+      end
+    end
+    return total / 1024
+  end
+  isolated({ { name = "Memo-Forever", guid = guidOf("Memo"), rank = 1, rankName = "Officer", class = "PALADIN", level = 20, online = true } }, function()
+    local mc = newClient(charOf({ "Memo", 1, "Officer", "PALADIN", 20 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(mc)
+    tickAll(5)
+    for _, key in ipairs({ "Cute_Quest", "Cute_Quest:route", "Cute_Quest:map", "Cute_Quest:journal", "Cute_Quest:gear", "Cute_Quest:camp" }) do mc.C.Modules.Set(key, true) end
+    tick(mc, 6)
+    local QB = mc.addons[2].private
+    QB.Model.Finish()
+    for _, page in ipairs({ "quests", "route", "journal", "gear", "map" }) do mc.C.UI:Open(page) end
+    local ui = mc.C.UI.Window("map")
+    QB.MapPage.Go(1429, "user")
+    QB.MapWin.ShowFinds(ui)
+    ui.mapFinds = nil; ui:Draw()
+    local KEEP_BUDGET = 11 * 1024
+    local keptKB = kept(mc, { QB, mc.env.QuestBankDB })
+    print(string.format("map C5: the quest module keeps %.0f KB with the Map window open on a zone and its Finds list (budget %d KB)", keptKB, KEEP_BUDGET))
+    assert(keptKB < KEEP_BUDGET, string.format("the quest module keeps %.0f KB with the map open, over its budget of %d KB", keptKB, KEEP_BUDGET))
+    leave(mc)
+  end)
+end
+
+
+-- C6. The M key by override (Keys.lua): while the Map module is on, the map window's keys are held for CuteMapKey,
+--     following the game's World map key (TOGGLEWORLDMAP); the key's click toggles the window; off, no key is held and M
+--     is the game's; Settings > Keys has the Map window's row; the binding is named.
+-- C7. The setup card's Map row (mapwin, with its key): a character that answered the card before it sees the row alone,
+--     its tick from the earlier Map answer; Start writes the module and the key and reloads, and M opens once after;
+--     a fresh character's card has Map with M, and the quest window opens after Start as before.
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  local said = {}
+  isolated({ member("Rone", 1), member("Pim", 3) }, function()
+    -- C6
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    local K = c.C.Keys
+    K.Set("guild", "follow"); K.Set("quests", "follow"); K.Set("map", "follow")
+    assert(not c.overrides.M, "the Map module off: M is the game's")
+    local ids = {}
+    for _, w in ipairs(K.Windows()) do ids[#ids + 1] = w.id end
+    assert(table.concat(ids, " ") == "guild quests", "the windows a key opens, the Map module off: " .. table.concat(ids, " "))
+    c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+    K.Apply()
+    assert(c.overrides.M and c.overrides.M.button == "CuteMapKey" and c.overrides.M.owner == c.env.CuteKeyOwner, "the Map module on: M clicks CuteMapKey, held by CuteKeyOwner")
+    local ui = c.C.UI.Window("map")
+    c.env.CuteMapKey.__scripts.OnClick(c.env.CuteMapKey, "LeftButton")
+    assert(ui.frame and ui.frame:IsShown(), "M opens the Map window")
+    c.env.CuteMapKey.__scripts.OnClick(c.env.CuteMapKey, "LeftButton")
+    assert(not ui.frame:IsShown(), "and closes it")
+    -- the game's map key moved to N: Cute's follows
+    c.bindings.TOGGLEWORLDMAP = { "N" }
+    fire(c, "UPDATE_BINDINGS")
+    assert(c.overrides.N and c.overrides.N.button == "CuteMapKey" and not c.overrides.M, "following the game's World map key: N now")
+    c.bindings.TOGGLEWORLDMAP = { "M" }
+    fire(c, "UPDATE_BINDINGS")
+    -- Settings > Keys: the Map window's row
+    c.C.UI:Open("settings", "keys")
+    assert(texts(c):find("Map window", 1, true) and checkBox(c, function(cb) return cb.label and cb.label:GetText() == "Follow the game's World map key" end), "Settings > Keys: the Map window, following the game's World map key")
+    check(c.C.UI.Window("settings").frame, "map C6 Settings > Keys with the Map window")
+    assert(c.env.BINDING_NAME_CUTE_MAP == "Map window", "the binding's name")
+    -- the module off: no key
+    c.C.Modules.Set("Cute_Quest:map", false); tick(c, 1)
+    K.Apply()
+    assert(not c.overrides.M and c.overrides.J and c.overrides.L, "the Map module off: M the game's again, J and L kept")
+    leave(c)
+    -- QuestBank loaded beside Cute: the copy sleeps, QuestBank's own Map page is its map: no Map window, M the game's
+    local q = newClient(charOf({ "Pim", 3, "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    local isLoaded = q.env.C_AddOns.IsAddOnLoaded
+    q.env.C_AddOns.IsAddOnLoaded = function(x) if x == "QuestBank" then return true, true end return isLoaded(x) end
+    q.env.QuestBankAPI = { version = "6.1.0", logReady = true, state = { level = 5, log = {} }, Settings = function() return { guide = {} } end, MarkDirty = function() end }
+    login(q); tickAll(6)
+    q.C.Modules.Set("Cute_Quest:map", true); tick(q, 1)
+    q.C.Keys.Set("map", "follow")
+    q.C.UI:Open("map")
+    local qw = q.C.UI.Window("map")
+    assert(q.addons[2].private.dormant and not q.overrides.M and not (qw.frame and qw.frame:IsShown()), "QuestBank loaded: no Map window, M the game's")
+    leave(q)
+    said[#said + 1] = "the M key: held for CuteMapKey while the Map module is on, following the game's World map key (moved to N), its click toggling the window; off, M the game's; Settings > Keys' Map window row; with QuestBank loaded no Map window and M the game's"
+    -- C7: a character that answered the card before the Map window: the Map row alone, its tick from the old answer
+    local state = {}
+    local function client(name, rank) return newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true, card = true })) end
+    local p = client("Pim", 3)
+    local answered = { guild = true, quests = true, dungeons = true, gear = true, mapicons = true, step = true, camp = true, light = true, accept = true, handin = true }
+    local db = { version = "0.8.0", chars = { ["Pim-Forever"] = { counters = {}, setup = answered, keys = { guild = "follow", quests = "follow" },
+      modules = { ["Cute_Quest:map"] = false, ["Cute_Quest:journal"] = true } } } }
+    login(p, db); tick(p, 3)
+    local card = p.env.CuteSetupFrame
+    assert(card and card:IsShown(), "the card comes back for the Map row")
+    local function row(label) return checkBox(p, function(cb) return cb.label and cb.label:GetText() == label end) end
+    local map = row("Map")
+    assert(map and not map:GetChecked() and not row("Dungeons tab") and not row("Step frame and arrow"), "the Map row alone, unticked as the old answer left it")
+    local box
+    for _, b in ipairs(p.frames) do if rawget(b, "Bind") and b:IsVisible() and b.id == "map" then box = b end end
+    assert(box and box.label:GetText() == "M", "its key box: M, the game's World map key")
+    assert(texts(p):find("J and L open Cute's windows", 1, true), "unticked, the card's words name J and L")
+    check(card, "map C7 the setup card, the Map row alone")
+    press(map)
+    assert(texts(p):find("J, L and M open Cute's windows", 1, true), "ticked, J, L and M")
+    local start
+    for _, b in ipairs(p.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == "Start" then start = b end end
+    press(start)
+    local ch = p.env.CuteDB.chars["Pim-Forever"]
+    assert(p.reloads == 1 and ch.modules["Cute_Quest:map"] == true and ch.keys.map == "follow" and ch.setup.mapwin == true and ch.openAfter == "map",
+      "Start: the Map module, its key, the row answered, the map to open after the reload")
+    local db2, qdb = p.env.CuteDB, p.env.CuteQuestDB
+    leave(p)
+    local p2 = client("Pim", 3)
+    p2.env.CuteQuestDB = qdb
+    login(p2, db2, true); tickAll(6)
+    local mw = p2.C.UI.Window("map")
+    assert(mw.frame and mw.frame:IsShown() and p2.env.CuteDB.chars["Pim-Forever"].openAfter == nil, "the Map window opened once after Start")
+    assert(p2.overrides.M and p2.overrides.M.button == "CuteMapKey" and not p2.C.Setup.Pending(), "M taken; nothing left to answer")
+    leave(p2)
+    -- a fresh character: Map with M, ticked; the quest window after Start as before
+    local f = client("Rone", 1)
+    login(f); tick(f, 3)
+    local fm = checkBox(f, function(cb) return cb.label and cb.label:GetText() == "Map" end)
+    assert(fm and fm:GetChecked() and texts(f):find("J, L and M open Cute's windows", 1, true), "a fresh character: Map ticked, J, L and M")
+    for _, b in ipairs(f.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == "Start" then start = b end end
+    press(start)
+    local fch = f.env.CuteDB.chars["Rone-Forever"]
+    assert(fch.modules["Cute_Quest:map"] == true and fch.keys.map == "follow" and fch.openAfter == "quests", "Start: the map on with M, the quest window to open after")
+    leave(f)
+    said[#said + 1] = "the card's Map row with M: alone for a character who answered before, from its old answer, J, L and M once ticked; Start the module, the key and M opening once; a fresh character's Map ticked and the quest window after Start"
+  end)
+  print("map C6, C7: " .. table.concat(said, "; "))
+end
+-- C8. On the map window QuestBank's pins are the game's size (Cute's first run: mapIconPct 100; the offer's ! 32 px of
+--     art on its 22 px pin), and a death draws your corpse and the graveyards again while the window shows
+do
+  isolated({ { name = "Rone-Forever", guid = guidOf("Rone"), rank = 1, rankName = "Officer", class = "WARRIOR", level = 5, online = true } }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    local drawn = {}
+    local function provider(name)
+      return { GetMap = function(self) return self.owningMap end, OnAdded = function(self, map) self.owningMap = map end, OnRemoved = function() end,
+        OnShow = function() end, OnHide = function() end, OnMapChanged = function(self) self:RefreshAllData() end,
+        OnCanvasScaleChanged = function() end, OnCanvasSizeChanged = function() end, GetPinTemplate = function() return name end,
+        RemoveAllData = function() end, RefreshAllData = function() drawn[#drawn + 1] = name end }
+    end
+    c.env.DeathMapDataProviderMixin, c.env.SelectableGraveyardDataProviderMixin = provider("corpse"), provider("graveyard")
+    login(c); tickAll(6)
+    local QB = c.addons[2].private
+    c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+    c.C.UI:Open("map")
+    QB.MapPage.Go(1429, "user")
+    assert(QB:Settings().mapIconPct == 100, "Cute's first run: the game's size")
+    local give
+    for _, f in ipairs(QB.QuestMap.pageProvider.active) do if f.data.kind == "give" and not f.data.trivial then give = give or f end end
+    assert(give and give.Texture:GetWidth() == 32 and give:GetWidth() == 22, "an offer on Cute's map: the game's 32 px art on its 22 px pin: " .. tostring(give and give.Texture:GetWidth()))
+    local n = #drawn
+    c.ghost = true
+    fire(c, "PLAYER_DEAD")
+    local corpse, grave = false, false
+    for i = n + 1, #drawn do if drawn[i] == "corpse" then corpse = true elseif drawn[i] == "graveyard" then grave = true end end
+    assert(corpse and grave, "a death: the corpse and the graveyards drawn again")
+    c.ghost = false
+    -- /cute diag's look line: the map window's state, no name
+    local look
+    for _, l in ipairs(c.C.Diag()) do if l:find("^diag look:") then look = l end end
+    assert(look and look:find("map window: canvas", 1, true) and look:find("providers 2", 1, true) and not look:find("Rone", 1, true), "/cute diag's look line ends with the map window's state:\n" .. tostring(look))
+    leave(c)
+    print("map C8: QuestBank's pins on Cute's map at the game's size; a death draws the corpse and the graveyards again; /cute diag says the map window's state")
+  end)
+end
+
+----------------------------------------------------------------------------
+-- (map, part 2: sub-project G, finds in the guild: Cute/Finds.lua, its 1X on Comm's channel, the Finds category)
+-- G1. The wire: each kind packed and parsed back; a title cleaned to 60 bytes; a message at most 10 entries in 255
+--     bytes; refused: a map the client lacks, a spot past the map, an id or level out of range, a kind it does not know.
+-- G2. The pace: nothing in the first two minutes after the hello; a questing hour's finds in 30 messages at most, a
+--     minute apart; a rare's ping first in the next message, one a creature in five minutes; nothing from inside an
+--     instance, all of it after; nothing with "Share finds with the guild" off; a /reload keeps what waited.
+-- G3. Two voices: one guild mate's chest is dim (one voice); a second member's at a spot near it makes it sure, its place
+--     the mean; a rare's ping shows ten minutes and goes.
+-- G4. The bounds: an unknown map, a spot past the map, a sender the roster lacks, an untrusted one, past ten entries and
+--     past 40 messages an hour from one sender; four voices a find; 300 of one member's alone; 2,000 in all; 100
+--     crossings.
+-- G5. The officers keep Finds (and with Zone): each 1X whispered to the officers online, none on GUILD; an officer's
+--     client confirms with two voices and says it in the officers' word, which the members take (no GUID in it); a
+--     member's 1X on GUILD then and a member's word are refused; closed later, a member's client keeps no other
+--     member's voice.
+-- G6. On Cute_Quest: the engine's host is Cute's door; your book counted and kept as one voice, a guild mate's the same
+--     book confirming it; the footers of L and M ("1 new find, 1 confirmed by the guild"), a click on the Finds list;
+--     one guild mate's chest dim on the map at half alpha; Settings > Data you share's line and row; Statistics' Finds
+--     category with your counts; the quest engine's file holds nothing of the guild's; a find QuestBank's data carries
+--     now dropped; /cute diag's finds line, no name.
+----------------------------------------------------------------------------
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 20, online = true } end
+  local function maps(c)
+    c.env.C_Map = c.env.C_Map or {}
+    local was = c.env.C_Map.GetMapInfo
+    c.env.C_Map.GetMapInfo = function(m) if type(m) ~= "number" or m >= 99000 then return nil end return was and was(m) or { mapID = m, name = "Map " .. m, mapType = 3 } end
+  end
+  local function char(name, rank, extra)
+    local c = newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", "WARRIOR", 20 }, extra))
+    maps(c)
+    return c
+  end
+  local function noted(c, ...) c.C.Finds.door.Noted(...) end
+  local function sent1X(c, from, channel)
+    local out = {}
+    for i = from or 1, #c.sent do local m = c.sent[i]; if m.msg:sub(1, 3) == "1X|" and (channel == nil or m.channel == channel) then out[#out + 1] = m end end
+    return out
+  end
+  local function finds(c) return c.env.CuteDB.known.finds and c.env.CuteDB.known.finds.list or {} end
+  local function rowsOf(c, m) return c.C.Finds.door.Rows(m) end
+  local said = {}
+
+  -- G1: the wire
+  isolated({ member("Wira", 3) }, function()
+    local c = char("Wira", 3)
+    login(c); tick(c, 2)
+    local F, b36 = c.C.Finds, c.C.Comm.b36
+    local cases = {
+      { k = "b", id = 9101, m = 1429, x = 401, y = 402, t = "Raven Hill Tome" },
+      { k = "k", id = 424080, m = 1429, x = 610, y = 220 },
+      { k = "h", id = 2843, m = 1436, x = 0, y = 1000 },
+      { k = "r", id = 7001, m = 1431, x = 200, y = 250, lv = 31 },
+      { k = "x", id = 0, m = 1429, x = 310, y = 690, m2 = 1453, x2 = 500, y2 = 500, s = 12 },
+    }
+    for _, en in ipairs(cases) do
+      local kv = F.Pack(en)
+      local back = F.Parse(kv)
+      assert(back and back.k == en.k and back.id == en.id and back.m == en.m and back.x == en.x and back.y == en.y and back.t == en.t and back.lv == en.lv
+        and back.m2 == en.m2 and back.x2 == en.x2 and back.y2 == en.y2 and back.s == en.s, "packed and parsed back: " .. tostring(kv))
+    end
+    assert(F.Pack(cases[1]) == "b" .. b36(9101) .. "@" .. b36(1429) .. ":" .. b36(401) .. "," .. b36(402) .. "=Raven Hill Tome" and F.Pack(cases[2]) == "k" .. b36(424080) .. "@" .. b36(1429) .. ":" .. b36(610) .. "," .. b36(220)
+      and F.Pack(cases[5]) == "x" .. b36(1429) .. ":" .. b36(310) .. "," .. b36(690) .. ">" .. b36(1453) .. ":" .. b36(500) .. "," .. b36(500) .. "=" .. b36(12), "the wire's form: " .. F.Pack(cases[1]))
+    local skull = F.Parse(F.Pack({ k = "r", id = 7002, m = 1429, x = 5, y = 5 }))
+    assert(skull and skull.k == "r" and skull.lv == nil, "a rare whose plate gave no level (a skull's) still goes, its level unknown")
+    local long = F.Pack({ k = "b", id = 1, m = 1429, x = 1, y = 1, t = ("Tome;of=Ages|" ):rep(10) })
+    local t = long:match("=(.*)$")
+    assert(#t <= 60 and not t:find("[;=|]"), "a title cleaned, 60 bytes at most: " .. t)
+    -- a message: ten entries at most in 255 bytes, its parts routed by the Finds category with Zone
+    local many = {}
+    for i = 1, 14 do many[i] = { k = "b", id = 100000 + i, m = 1429, x = 999, y = 999, t = ("Long Book Title " .. i):rep(3) } end
+    local e, took = F.Message({}, many)
+    local n = select(2, e.msg:gsub(";", ";")) + 1
+    assert(#e.msg <= 255 and n <= 10 and n == took.out and e.parts[1].id == "gc_finds" and e.parts[1].also == "zone" and e.kind == "f", "a message: " .. #e.msg .. " bytes, " .. n .. " entries")
+    local short = {}
+    for i = 1, 14 do short[i] = { k = "h", id = i, m = 1429, x = 1, y = 1 } end
+    local e2 = F.Message({}, short)
+    assert(select(2, e2.msg:gsub(";", ";")) + 1 == 10, "ten short entries a message at most")
+    -- refused
+    for _, bad in ipairs({ "b" .. b36(1) .. "@" .. b36(99500) .. ":1,1=T", "h" .. b36(1) .. "@" .. b36(1429) .. ":" .. b36(1001) .. ",1", "h0@" .. b36(1429) .. ":1,1",
+      "r" .. b36(5) .. "@" .. b36(1429) .. ":1,1=" .. b36(100), "x" .. b36(1429) .. ":1,1>" .. b36(1453) .. ":1,1=0", "b" .. b36(1) .. "@" .. b36(1429) .. ":1,1=", "zz@1:1,1", "h" .. b36(1) .. "@" .. b36(1429) .. ":1.5,1" }) do
+      assert(F.Parse(bad) == nil, "refused: " .. bad)
+    end
+    leave(c)
+    said[#said + 1] = "the wire: each kind and back, a title cleaned to 60 bytes, ten entries in 255 bytes, routed by Finds with Zone; an unknown map, a spot past the map, ids and levels out of range refused"
+  end)
+
+  -- G2: the pace
+  isolated({ member("Pace", 3), member("Hark", 3) }, function()
+    local c, h = char("Pace", 3), char("Hark", 3)
+    login(c); login(h)
+    tickAll(20)
+    noted(c, "h", 501, 1429, 300, 300)
+    tickAll(60)
+    assert(#sent1X(c) == 0, "nothing in the first two minutes after the hello")
+    tickAll(60)
+    local first = sent1X(c)
+    assert(#first == 1 and first[1].channel == "GUILD" and first[1].msg == "1X|h" .. c.C.Comm.b36(501) .. "@" .. c.C.Comm.b36(1429) .. ":" .. c.C.Comm.b36(300) .. "," .. c.C.Comm.b36(300),
+      "then the chest, on GUILD: " .. tostring(first[1] and first[1].msg))
+    assert(#rowsOf(h, 1429) == 1 and rowsOf(h, 1429)[1].mates == 1 and not rowsOf(h, 1429)[1].sure, "Hark has it, one voice")
+    -- a questing hour: a chest every minute and a half, a rare every ten minutes
+    local n0 = #c.sent
+    local t0 = c.clock
+    for i = 1, 40 do
+      noted(c, "h", 1000 + i, 1429, 10 + i * 20, 500)
+      if i % 7 == 0 then noted(c, "r", 7000 + i, 1429, 600, 600, 30) end
+      tickAll(90)
+    end
+    local hour = sent1X(c, n0 + 1)
+    local gap = math.huge
+    for i = 2, #hour do gap = math.min(gap, hour[i].at - hour[i - 1].at) end
+    local inHour = 0
+    for _, m in ipairs(hour) do if m.at - t0 <= 3600 then inHour = inHour + 1 end end
+    assert(inHour <= 30 and gap >= 60, "a questing hour: " .. inHour .. " messages in the hour, a minute apart at least (" .. gap .. " s)")
+    tickAll(900)
+    assert(#c.env.CuteDB.chars["Pace-Forever"].findsOut == 0, "every find gone in the end")
+    local got = 0
+    for _, r in ipairs(rowsOf(h, 1429)) do if not r.ping then got = got + 1 end end
+    assert(got == 41, "Hark has the forty-one chests: " .. got)
+    -- the rare first in the next message; one a creature in five minutes
+    local n1 = #c.sent
+    for i = 1, 12 do noted(c, "k", 3000 + i, 1436, 100 + i * 30, 100) end
+    tickAll(30)
+    noted(c, "r", 8001, 1436, 500, 500, 33)
+    noted(c, "r", 8001, 1436, 505, 500, 33)
+    tickAll(70)
+    local after = sent1X(c, n1 + 1)
+    assert(#after >= 2 and after[2].msg:sub(1, 4) == "1X|r", "the rare's ping first in the next message: " .. tostring(after[2] and after[2].msg))
+    local pings = 0
+    for _, m in ipairs(sent1X(c, n1 + 1)) do for _ in m.msg:gmatch("r" .. c.C.Comm.b36(8001) .. "@") do pings = pings + 1 end end
+    assert(pings == 1, "one ping a creature in five minutes: " .. pings)
+    tickAll(120)
+    -- inside an instance: nothing, all of it after
+    c.o.instance = "party"
+    local n2 = #c.sent
+    noted(c, "h", 4001, 1436, 700, 700)
+    tickAll(200)
+    assert(#sent1X(c, n2 + 1) == 0, "nothing from inside an instance")
+    c.o.instance = nil
+    tickAll(30)
+    assert(#sent1X(c, n2 + 1) == 1, "after it, what waited")
+    -- sharing off: nothing queued, nothing sent
+    c.C.Settings().shareFinds = false
+    local n3 = #c.sent
+    noted(c, "h", 4002, 1436, 800, 700)
+    tickAll(130)
+    assert(#sent1X(c, n3 + 1) == 0 and #c.env.CuteDB.chars["Pace-Forever"].findsOut == 0, "Share finds with the guild off: nothing goes")
+    c.C.Settings().shareFinds = nil
+    -- a /reload keeps what waited, and sends it after the hello
+    noted(c, "h", 4003, 1436, 900, 700)
+    local db = c.env.CuteDB
+    leave(c)
+    local c2 = char("Pace", 3)
+    login(c2, db, true)
+    tickAll(200)
+    local back = false
+    for _, m in ipairs(sent1X(c2)) do if m.msg:find("h" .. c2.C.Comm.b36(4003) .. "@", 1, true) then back = true end end
+    assert(back, "a /reload: the find that waited goes")
+    leave(c2); leave(h)
+    said[#said + 1] = "the pace: nothing in two minutes after the hello; a questing hour in " .. inHour .. " messages a minute apart; a rare's ping first, one a creature in five minutes; nothing inside an instance, all of it after; nothing with sharing off; a /reload keeps the queue"
+  end)
+
+  -- G3: two voices, a rare's ping
+  isolated({ member("Ann", 3), member("Ben", 3), member("Cy", 3) }, function()
+    local ann, ben, cy = char("Ann", 3), char("Ben", 3), char("Cy", 3)
+    for _, c in ipairs({ ann, ben, cy }) do login(c) end
+    tickAll(130)
+    noted(ann, "h", 9201, 1429, 500, 500)
+    tickAll(65)
+    local r = rowsOf(ben, 1429)[1]
+    assert(r and r.kind == "h" and r.id == 9201 and r.mates == 1 and not r.sure, "one guild mate's chest: one voice, not sure (dim on the map)")
+    assert(not ben.C.Finds.Sure(finds(ben)[1]), "and so in Ben's store")
+    noted(ben, "h", 9201, 1429, 508, 496)
+    tickAll(65)
+    local rb = rowsOf(ben, 1429)[1]
+    assert(rb.mates == 1 and rb.sure, "Ben found it too: sure on his client, Ann's voice with his")
+    local rc = rowsOf(cy, 1429)[1]
+    assert(rc and rc.mates == 2 and rc.sure and rc.x == 504 and rc.y == 498, "Cy heard two: sure, at their mean: " .. tostring(rc and rc.x) .. "," .. tostring(rc and rc.y))
+    -- a chest at another spot is another find
+    noted(ann, "h", 9201, 1429, 800, 200)
+    tickAll(65)
+    assert(#rowsOf(cy, 1429) == 2, "the same chest at another spot: a find of its own")
+    -- a rare's ping: ten minutes, then gone
+    noted(ann, "r", 7001, 1429, 200, 250, 31)
+    tickAll(65)
+    local ping
+    for _, x in ipairs(rowsOf(ben, 1429)) do if x.ping then ping = x end end
+    assert(ping and ping.id == 7001 and ping.level == 31, "a rare up now: a ping on Ben's map")
+    tickAll(620)
+    ping = nil
+    for _, x in ipairs(rowsOf(ben, 1429)) do if x.ping then ping = x end end
+    assert(not ping, "ten minutes on, gone")
+    for _, c in ipairs({ ann, ben, cy }) do leave(c) end
+    said[#said + 1] = "two voices: one guild mate's chest dim, a second member's near it sure at their mean, another spot another find; a rare's ping ten minutes"
+  end)
+
+  -- G4: the bounds and the caps
+  isolated({ member("Ann", 3), member("Ben", 3), member("Cy", 3) }, function()
+    local ann, ben, cy = char("Ann", 3), char("Ben", 3), char("Cy", 3)
+    for _, c in ipairs({ ann, ben, cy }) do login(c) end
+    tickAll(30)
+    local F, b36 = ben.C.Finds, ben.C.Comm.b36
+    local function spot(m, x, y) return b36(m) .. ":" .. b36(x) .. "," .. b36(y) end
+    local function body(list) return table.concat(list, ";") end
+    -- an unknown map, a spot past the map: nothing
+    assert(F:Receive(body({ "h" .. b36(1) .. "@" .. spot(99500, 1, 1), "h" .. b36(2) .. "@" .. b36(1429) .. ":" .. b36(2000) .. ",1" }), ann.sender, false) == 0 and #finds(ben) == 0, "an unknown map, a spot past the map: refused")
+    -- a sender the roster lacks, an untrusted one
+    assert(F:Receive("h" .. b36(3) .. "@" .. spot(1429, 1, 1), "Zed-Forever", false) == 0, "a sender the roster lacks")
+    ben.env.CuteDB.policy = ben.env.CuteDB.policy or {}
+    ben.env.CuteDB.policy.untrusted = { [guidOf("Cy")] = true }
+    assert(F:Receive("h" .. b36(3) .. "@" .. spot(1429, 1, 1), cy.sender, false) == 0, "an untrusted member")
+    ben.env.CuteDB.policy.untrusted = nil
+    -- ten entries a message
+    local twelve = {}
+    for i = 1, 12 do twelve[i] = "h" .. b36(100 + i) .. "@" .. spot(1429, i * 50, 10) end
+    assert(F:Receive(body(twelve), ann.sender, false) == 10, "ten entries a message at most")
+    -- 40 messages an hour from one sender
+    local took = 0
+    for i = 1, 45 do took = took + F:Receive("h" .. b36(5000 + i) .. "@" .. spot(1436, i * 10, 10), cy.sender, false) end
+    assert(took == 40 and F.capped >= 5, "forty messages an hour from one sender: " .. took)
+    tick(ben, 3601)
+    assert(F:Receive("h" .. b36(6000) .. "@" .. spot(1436, 999, 999), cy.sender, false) == 1, "the next hour, again")
+    -- four voices a find
+    local en = { k = "h", id = 777, m = 1440, x = 500, y = 500 }
+    for i = 1, 6 do F.Voice("Player-4242-0B0000" .. i, en) end
+    local e = F.Voice("Player-4242-0B000099", en)
+    local n = 0
+    for _ in pairs(e.v) do n = n + 1 end
+    assert(n == 4, "four voices a find: " .. n)
+    -- 300 of one member's alone
+    for i = 1, 310 do F.Voice("Player-4242-0C000001", { k = "k", id = 20000 + i, m = 1441, x = 1, y = 1 }) end
+    local lone = 0
+    for _, x in ipairs(finds(ben)) do if x.v["Player-4242-0C000001"] then lone = lone + 1 end end
+    assert(lone == 300 and ben.C.Finds.capped > 0, "300 of one member's alone, the oldest out: " .. lone)
+    -- 100 crossings, 2,000 in all
+    for i = 1, 110 do F.Voice("Player-4242-0D0000" .. (i % 9), { k = "x", id = 0, m = 1442, x = (i % 50) * 20, y = math.floor(i / 50) * 20 + 1, m2 = 1453, x2 = 1, y2 = 1, s = 5 }) end
+    local cross = 0
+    for _, x in ipairs(finds(ben)) do if x.k == "x" then cross = cross + 1 end end
+    assert(cross == 100, "100 crossings: " .. cross)
+    for i = 1, 2100 do F.Voice("Player-4242-0E" .. string.format("%06d", i % 60), { k = "h", id = 30000 + i, m = 1443, x = i % 1000, y = 2 }) end
+    assert(#finds(ben) == 2000, "2,000 in all: " .. #finds(ben))
+    for _, c in ipairs({ ann, ben, cy }) do leave(c) end
+    said[#said + 1] = "the bounds: an unknown map, a spot past it, a sender the roster lacks and an untrusted one refused; ten entries a message, forty messages an hour a sender; four voices a find, 300 of one member's alone, 100 crossings, 2,000 in all"
+  end)
+
+  -- G5: the officers keep Finds
+  local function pol(mine, vis) return { policy = { vis = vis or {}, by = "Ofa-Forever", mine = mine or nil, rank = 0, at = EPOCH, threshold = 1 } } end
+  isolated({ member("Ofa", 0), member("Mia", 3), member("Ann", 3), member("Mal", 3) }, function()
+    local ofa, mia, ann, mal = char("Ofa", 0), char("Mia", 3), char("Ann", 3), char("Mal", 3)
+    local closed = { gc_finds = "self" }
+    login(ofa, pol(true, closed)); login(mia, pol(nil, closed)); login(ann, pol(nil, closed)); login(mal, pol(nil, closed))
+    tickAll(130)
+    assert(mia.C.Policy:FindsRoute() == "self" and mia.C.Policy:Route("books_read") == "self" and not mia.C.Policy:CanSee(false, false, "books_read"),
+      "Finds closed: finds and the Finds statistics the officers'")
+    local m0, a0 = #mia.sent, #ann.sent
+    noted(mia, "h", 9201, 1429, 500, 500)
+    tickAll(65)
+    local w = sent1X(mia, m0 + 1)
+    assert(#w == 1 and w[1].channel == "WHISPER" and w[1].target == ofa.sender and #sent1X(mia, m0 + 1, "GUILD") == 0, "Mia's chest whispered to Ofa, never on GUILD")
+    assert(#rowsOf(ann, 1429) == 0, "Ann, a member, has none of it")
+    noted(ann, "h", 9201, 1429, 506, 500)
+    tickAll(65)
+    assert(#sent1X(ann, a0 + 1, "GUILD") == 0, "Ann's too")
+    local ro = rowsOf(ofa, 1429)[1]
+    assert(ro and ro.sure and ro.mates == 2, "Ofa's client: two voices, sure")
+    -- the officers' word says it half an hour on (the review of G: never where two members stood a minute ago), a GUID
+    -- nowhere in it
+    tickAll(1900)
+    local word
+    for _, m in ipairs(ofa.sent) do if m.msg:sub(1, 3) == "1N|" and m.msg:find(";fh", 1, true) or (m.msg:sub(1, 3) == "1N|" and m.msg:find("|fh", 1, true)) then word = m.msg end end
+    assert(word and not word:find("Player-", 1, true), "the officers' word says the sure chest: " .. tostring(word))
+    tickAll(5)
+    local ra = rowsOf(ann, 1429)[1]
+    assert(ra and ra.sure and ra.mates == 0, "the members have it from the word: sure, no guild mate counted")
+    local seen = 0
+    for _, e in ipairs(finds(ann)) do for g in pairs(e.v) do if g ~= ann.o.guid then seen = seen + 1 end end end
+    assert(seen == 0, "Ann's store: no other member's voice")
+    -- a member's 1X on GUILD and a member's word refused
+    local before = ann.C.Finds.refused
+    mal.C.Comm.Queue({ msg = "1X|h" .. ann.C.Comm.b36(9301) .. "@" .. ann.C.Comm.b36(1429) .. ":" .. ann.C.Comm.b36(100) .. "," .. ann.C.Comm.b36(100) })
+    tickAll(3)
+    assert(ann.C.Finds.refused == before + 1 and #rowsOf(ann, 1429) == 1, "a member's 1X on GUILD while Finds is closed: refused")
+    mal.C.Comm.Queue({ msg = string.format("1N|%d|1/1|fh%s@%s:1,1=1", EPOCH + mal.clock, ann.C.Comm.b36(9401), ann.C.Comm.b36(1436)) })
+    tickAll(5)
+    assert(#rowsOf(ann, 1436) == 0, "a member's word: never taken")
+    for _, c in ipairs({ ofa, mia, ann, mal }) do leave(c) end
+  end)
+  isolated({ member("Ofa", 0), member("Mia", 3), member("Ann", 3) }, function()
+    local ofa, mia, ann = char("Ofa", 0), char("Mia", 3), char("Ann", 3)
+    login(ofa, pol(true, {})); login(mia, pol(nil, {})); login(ann, pol(nil, {}))
+    tickAll(130)
+    noted(mia, "h", 9201, 1429, 500, 500)
+    noted(ann, "h", 9202, 1429, 700, 700)
+    tickAll(65)
+    assert(#rowsOf(ann, 1429) == 1, "open: Ann has Mia's chest")
+    -- Zone closed: the finds go to the officers, and Ann keeps none of Mia's
+    ofa.C.Policy:Set("zone", "self")
+    ofa.C.Comm:SendPolicy()
+    tickAll(10)
+    assert(ann.C.Policy:FindsRoute() == "self", "Zone closed: finds the officers'")
+    local others = 0
+    for _, e in ipairs(finds(ann)) do for g in pairs(e.v) do if g ~= ann.o.guid then others = others + 1 end end end
+    assert(others == 0 and #rowsOf(ann, 1429) == 0 and #finds(ann) == 1, "closed: Ann's client keeps no other member's voice, her own find kept")
+    local m0 = #mia.sent
+    noted(mia, "k", 9203, 1429, 300, 300)
+    tickAll(65)
+    local w = sent1X(mia, m0 + 1)
+    assert(#w == 1 and w[1].channel == "WHISPER" and w[1].target == ofa.sender, "Zone closed: Mia's lock whispered to Ofa")
+    for _, c in ipairs({ ofa, mia, ann }) do leave(c) end
+    said[#said + 1] = "the officers keep Finds: whispered to them, none on GUILD; two voices on the officer's client, said in the officers' word with no GUID, the members sure from it; a member's 1X and word refused; Zone closed later: whispered, and a member's client keeps no other member's voice"
+  end)
+  print("finds G1-G5: " .. table.concat(said, "; "))
+end
+-- G6: on Cute_Quest, the map, the footers, Settings and Statistics
+do
+  local said = {}
+  local function noted(c, ...) c.C.Finds.door.Noted(...) end
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1), member("Pim", 3) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    local p = newClient(charOf({ "Pim", 3, "Raider", "WARRIOR", 5 }))
+    p.env.C_Map = { GetMapInfo = function(m) return { mapID = m, name = "Map " .. m, mapType = 3 } end }
+    login(c); login(p)
+    tickAll(10)
+    local QB = c.addons[2].private
+    c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+    assert(QB.Finds.host == c.env.Cute.Finds and c.C.Finds.engine, "the engine's host: Cute's door, attached")
+    -- your book, read where it stands: the engine's note, told to the host, counted, one voice
+    local disc = QB.Discover.DB()
+    disc.find = disc.find or {}
+    disc.find.o9101 = { p = { { 1429, 401, 402, 1 } }, b = "Raven Hill Tome", n = 1 }
+    disc.findN = (tonumber(disc.findN) or 0) + 1
+    QB.Finds.Tell("b", 9101, 1429, 401, 402, "Raven Hill Tome", false)
+    local ch = c.env.CuteDB.chars["Rone-Forever"]
+    assert(ch.counters.books_read == 1 and ch.counters.finds_first == 1, "counted: a book read, a find first in the guild")
+    QB.Finds.Tell("b", 9101, 1429, 402, 402, "Raven Hill Tome", false)
+    assert(ch.counters.books_read == 1, "the same book again: counted once")
+    -- a guide's book (the data's) counted, never shared
+    QB.Finds.Tell("b", 9102, 1429, 654, 701, "Archmage Theocritus' Research Journal", true)
+    assert(ch.counters.books_read == 2 and #ch.findsOut == 1, "the data's book: counted, never queued")
+    -- Pim found the same book, and a chest alone
+    tickAll(130)
+    noted(p, "b", 9101, 1429, 404, 400, "Raven Hill Tome")
+    noted(p, "h", 9301, 1429, 250, 250)
+    tickAll(70)
+    local by = {}
+    for _, r in ipairs(c.C.Finds.door.Rows(1429)) do by[r.kind] = r end
+    assert(by.b and by.b.sure and by.b.mates == 1 and by.h and not by.h.sure and by.h.mates == 1, "Rone's client: the book sure with Pim's voice, Pim's chest one voice")
+    local MP = QB.MapPage
+    local new, sure = MP.FindTally()
+    assert(new >= 1 and sure == 1, "the footers' counts: " .. new .. " new, " .. sure .. " confirmed")
+    -- the footers: L and M
+    local L = c.C.UI.Window("quests")
+    c.C.UI:Open("quests")
+    local fq = L.findsFoot
+    assert(fq and fq:IsShown() and fq.text:GetText():find("confirmed by the guild", 1, true) and L.foot == 24, "L's footer: " .. tostring(fq and fq.text:GetText()))
+    for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+      L.frame:SetSize(size[1], size[2]); L:Draw()
+      check(L.frame, "finds G6 the quest window's footer at " .. size[1] .. " x " .. size[2])
+    end
+    local tip = tipOf(fq)
+    assert(tip:find("never a name or anything about your guild", 1, true), "its tooltip: the privacy sentence:\n" .. tip)
+    c.C.UI:Open("map")
+    local mw = c.C.UI.Window("map")
+    assert(mw.findsFoot and mw.findsFoot:IsShown(), "M has the same footer")
+    QB.MapPage.Go(1429, "user")
+    local dim
+    for _, f in ipairs(MP.finds.active) do if f.data.find.dim then dim = f end end
+    assert(dim and dim:GetAlpha() == 0.5 and dim.data.find.kind == "h", "Pim's chest alone: dim on the map, half its alpha")
+    for _, size in ipairs({ { 1120, 640 }, { 860, 500 } }) do
+      mw.frame:SetSize(size[1], size[2]); mw:Draw()
+      check(mw.frame, "finds G6 the Map window's footer at " .. size[1] .. " x " .. size[2])
+    end
+    press(mw.findsFoot)
+    assert(mw.mapFinds, "the footer's click: the Finds list")
+    local t = texts(c)
+    assert(t:find("Raven Hill Tome", 1, true) and not t:find("looted \194\183 a guild mate", 1, true), "the Finds list: the sure book, not the dim chest:\n" .. t)
+    -- Settings > Data you share: the line and the row
+    c.C.UI:Open("settings", "share")
+    local st = texts(c)
+    assert(st:find("QuestBank does not have yet", 1, true) and st:find("1 confirmed by the guild", 1, true) and st:find("Share finds with the guild", 1, true)
+      and st:find("A guild mate's find counts once two of you agree", 1, true), "Data you share: the line and the row:\n" .. st)
+    local sw = c.C.UI.Window("settings")
+    for _, size in ipairs({ { 800, 560 }, { 760, 420 } }) do
+      sw.frame:SetSize(size[1], size[2]); sw:Draw()
+      check(sw.frame, "finds G6 Data you share at " .. size[1] .. " x " .. size[2])
+    end
+    local row = checkBox(c, function(cb) return cb.label and cb.label:GetText() == "Share finds with the guild" end)
+    click(row)
+    assert(c.env.CuteDB.settings.shareFinds == false and #ch.findsOut == 0, "unticked: off, and nothing waits")
+    click(checkBox(c, function(cb) return cb.label and cb.label:GetText() == "Share finds with the guild" end))
+    assert(c.env.CuteDB.settings.shareFinds == true, "ticked again")
+    -- Who sees what: Finds under the discovered
+    c.C.UI:Open("settings", "vis")
+    assert(texts(c):find("Finds", 1, true), "Who sees what: Finds")
+    -- Statistics' Finds category: your counts
+    local board = c.C.Stats.Board()
+    local cat = board.byCat.finds
+    local ids = {}
+    for _, d in ipairs(cat or {}) do ids[#ids + 1] = d.id end
+    table.sort(ids)
+    assert(table.concat(ids, ",") == "books_read,chests_looted,finds_first,rares_seen", "Statistics: the Finds category: " .. table.concat(ids, ","))
+    -- the quest engine's file holds nothing of the guild's
+    local function strings(t, out, seen)
+      out, seen = out or {}, seen or {}
+      if seen[t] then return out end
+      seen[t] = true
+      for k, v in pairs(t) do for _, x in ipairs({ k, v }) do if type(x) == "string" then out[#out + 1] = x elseif type(x) == "table" then strings(x, out, seen) end end end
+      return out
+    end
+    for _, s in ipairs(strings(c.env.CuteQuestDB)) do assert(not s:find(p.o.guid, 1, true), "CuteQuestDB holds a guild mate's GUID") end
+    assert(not disc.find.o9301 and c.env.CuteDB.known.finds, "Pim's chest is CuteDB's alone")
+    -- a find QuestBank's data carries now: dropped as the engine comes up
+    QB.Data.FIND[1429] = QB.Data.FIND[1429] or {}
+    table.insert(QB.Data.FIND[1429], { "h", 9301, "250,250", 2, "0.1", "f" })
+    c.env.Cute.Finds.Attach(c.C.Finds.engine)
+    for _, e in ipairs(c.env.CuteDB.known.finds.list) do assert(e.id ~= 9301, "the data's chest dropped from the guild's") end
+    -- /cute diag: the finds line, no name
+    local line
+    for _, l in ipairs(c.C.Diag()) do if l:find("^diag finds:") then line = l end end
+    assert(line and line:find("engine attached", 1, true) and not line:find("Pim", 1, true) and not line:find("Rone", 1, true), "/cute diag's finds line:\n" .. tostring(line))
+    local errs = {}
+    for _, e in ipairs(c.env.CuteQuestDB.errors or {}) do errs[#errs + 1] = tostring(e.where) .. ": " .. tostring(e.msg) end
+    -- (the client's own quiet notes aside: a call this mock lacks)
+    for _, e in ipairs(c.env.CuteDB.errors or {}) do if tostring(e.where):find("find") or tostring(e.msg):find("[Ff]inds") then errs[#errs + 1] = tostring(e.where) .. ": " .. tostring(e.msg) end end
+    assert(#errs == 0, "no error recorded:\n" .. table.concat(errs, "\n"))
+    leave(c); leave(p)
+    said[#said + 1] = "on Cute_Quest: the host Cute's door; your book counted once and kept, the data's counted never shared; a guild mate's same book confirming it, a chest alone dim at half alpha; L and M's footers with the privacy sentence, laid out at both sizes, a click the Finds list; Data you share's line and row; Finds in Who sees what; Statistics' Finds category; nothing of the guild's in CuteQuestDB; the data's find dropped; /cute diag's line"
+  end)
+  print("finds G6: " .. table.concat(said, "; "))
+end
+
+----------------------------------------------------------------------------
+-- (map, part 3: the review of F and G) Cute's side
+-- K1. M's legend: under the kind marks the In your log switch and its section's head show an objective's cursor, as its
+--     pins do; with "Our icons on the game's map" unticked, M keeps its pins and its switches lit.
+-- K2. The reader's buttons inside M's narrow list (Share in a group: the third on a line of its own).
+-- K3. While a quest is read in M: a pin hovered or clicked leaves the reader's scroll alone; M closed ends the reader;
+--     the Finds list opened over it shows.
+-- K4. M's finds footer under the list alone: the canvas keeps its size and zoom as it comes and goes.
+-- K5. A find on a map without art: the map above it with art, never a chat line; a continent's zone without art no click.
+-- K6. The menu's Map (M): your zone, the last three zones, Finds, the game's map greyed in a fight; none with it off.
+-- K7. QuestBank loaded: the setup card asks nothing of the Map window and names J and L.
+-- K8. Data you share's Show finds only while the Map window is on.
+-- K9. The voices that count are the roster's members' (another guild's GUIDs, a member who left: none).
+-- K10. The officers' word's finds sure by that officer's voice while it is one; each officer says what it heard.
+-- K11. The word's finds: half an hour after sure where the officers keep them, one officer past the newest 48, five
+--      minutes apart, keys a third voice leaves; with Finds open no word for them.
+-- K12. The officers keep Finds and none is online: the finds wait, then go to the first one online.
+-- K13. Sharing off: your own finds are no voice. K14. The store at its cap keeps its index (the garbage measured).
+-- K15. An officer's /reload while a find waits out its half hour: the word says it all the same.
+----------------------------------------------------------------------------
+do
+  local said = {}
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  local function mapClient(name, rank, o)
+    local c = newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, log = o and o.log or { [7] = 2 } }))
+    login(c); tickAll(6)
+    c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+    return c, c.addons[2].private
+  end
+  -- K1
+  isolated({ member("Rone", 1) }, function()
+    local c, QB = mapClient("Rone", 1)
+    local MP, QM = QB.MapPage, QB.QuestMap
+    c.C.UI:Open("map")
+    local ui = c.C.UI.Window("map")
+    MP.Go(1429, "user")
+    ui:Draw()
+    local logSwitch
+    for _, b in ipairs(ui.mapLayers) do if b:IsShown() and b.t and b.t.key == "mapObj" then logSwitch = b end end
+    assert(logSwitch and (logSwitch.icon.__atlas == "Crosshair_Attack_32" or logSwitch.icon.__tex == 131013), "In your log's switch: an objective's cursor: " .. tostring(logSwitch and (logSwitch.icon.__atlas or logSwitch.icon.__tex)))
+    local head
+    for _, it in ipairs(ui.mapList.items) do if it.spec.kind == "head" and it.spec.name == "In your log" then head = it.spec end end
+    assert(head and head.icon.art and head.icon.art[1] == "Crosshair_Attack_32" and not head.icon.poi, "the In your log section's head: the cursor, not the quest disc")
+    -- "Our icons on the game's map" unticked: M keeps its pins and its switches
+    local pins = #QM.pageProvider.active
+    assert(pins > 0, "M's pins")
+    QB:Settings().mapIcons = false; QB:Settings().pins = false
+    QM:Update(); ui:Draw()
+    assert(#QM.pageProvider.active == pins, "our icons on the game's map off: M keeps its pins: " .. #QM.pageProvider.active .. " of " .. pins)
+    for _, b in ipairs(ui.mapLayers) do if b:IsShown() and b.t and b.t.icons then assert(b:GetAlpha() == 1, "its switch lit: " .. b.t.name) end end
+    QB:Settings().mapIcons = nil; QB:Settings().pins = nil
+    leave(c)
+    said[#said + 1] = "M's legend: In your log's switch and head an objective's cursor; with our icons on the game's map off, M's pins and switches kept"
+  end)
+  -- K2: the reader's buttons in M's narrow list, a quest you can share in a group: Show on arrow, Share and Abandon all
+  -- inside the list, the third on a line of its own where the list is too narrow for three
+  isolated({ member("Rone", 1) }, function()
+    local c, QB = mapClient("Rone", 1)
+    c.env.IsInGroup = function() return true end
+    c.env.C_QuestLog.IsPushableQuest = function() return true end
+    c.C.UI:Open("map")
+    local ui = c.C.UI.Window("map")
+    for _, size in ipairs({ { 860, 500 }, { 1120, 640 } }) do
+      ui.frame:SetSize(size[1], size[2])
+      QB.MapPage.Go(1429, "user")
+      ui:Draw()
+      QB.Reader.Read(ui, QB.Quest.Get(7))
+      local w = ui.scroll:Width()
+      local got = {}
+      for _, b in ipairs(ui.buttons.items) do
+        if b:IsShown() then
+          local _, _, _, x, y = b:GetPoint()
+          got[b.label:GetText()] = { x = x, y = y, w = b:GetWidth() }
+        end
+      end
+      assert(got["Show on arrow"] and got.Share and got.Abandon, "the reader's three buttons")
+      for label, g in pairs(got) do
+        assert(g.x >= 0 and g.x + g.w <= w - 6, label .. " inside the list at " .. size[1] .. ": " .. g.x .. " + " .. g.w .. " of " .. w)
+      end
+      check(ui.frame, "map window at " .. size[1] .. "x" .. size[2] .. ", a quest to share in the reader")
+      QB.Reader.Back(ui)
+    end
+    leave(c)
+    said[#said + 1] = "the reader's Show on arrow, Share and Abandon inside M's list at both sizes"
+  end)
+  -- K3: the quest to read in M: a pin hovered or clicked meanwhile lights its row for later and leaves the reader's scroll
+  -- alone; M closed ends it (the next open is on your zone's list), and the Finds list opened over it (the footer, /cute
+  -- finds, Show finds) shows
+  isolated({ member("Rone", 1) }, function()
+    local c, QB = mapClient("Rone", 1)
+    local MP = QB.MapPage
+    c.C.UI:Open("map")
+    local ui = c.C.UI.Window("map")
+    MP.Go(1429, "user")
+    ui:Draw()
+    local last = ui.mapList.items[#ui.mapList.items]
+    local lastQuest
+    for _, it in ipairs(ui.mapList.items) do if type(it.key) == "number" then lastQuest = it.key end end
+    assert(lastQuest and last, "the zone's list with its quests")
+    QB.Reader.Read(ui, QB.Quest.Get(7))
+    assert(ui.reading and MP.focus == 7, "reading quest 7, its pins focused")
+    local bar = ui.scroll.bar
+    local set = bar.SetValue
+    local moved = 0
+    bar.SetValue = function(self, v) moved = moved + 1; return set(self, v) end
+    MP.Hover(lastQuest, true)
+    assert(moved == 0 and ui.reading, "a pin hovered while reading: the reader's scroll left alone")
+    MP.Hover(nil, true)
+    MP.Reveal({ lastQuest })
+    assert(moved == 0, "a pin clicked while reading: the same")
+    bar.SetValue = set
+    -- closed: the reader ends, the focus let go; opened again, your zone's list
+    ui.frame:Hide()
+    assert(ui.reading == nil and MP.focus == nil, "M closed: the reader ends, its pins let go")
+    c.C.UI:Open("map")
+    assert(not ui.reading and ui.mapList.host:IsShown() and #ui.mapList.items > 0, "opened again: the zone's list")
+    -- the Finds list over a quest being read
+    QB.Reader.Read(ui, QB.Quest.Get(7))
+    QB.MapWin.OpenFinds()
+    assert(ui.mapFinds and not ui.reading and MP.focus == nil and texts(c):find("Never a book's text or where a key leads.", 1, true), "the Finds list opened while reading: it shows")
+    leave(c)
+    said[#said + 1] = "a pin hovered or clicked while reading leaves the reader's scroll alone; M closed ends the reader; the Finds list opened over it shows"
+  end)
+  -- K4: M's finds footer stands under the list alone: the canvas keeps its size (and with it the zoom the player chose)
+  -- as the footer comes and goes; the list ends above it; laid out clean at both sizes
+  isolated({ member("Rone", 1) }, function()
+    local c, QB = mapClient("Rone", 1)
+    local MP = QB.MapPage
+    c.C.UI:Open("map")
+    local ui = c.C.UI.Window("map")
+    MP.Go(1429, "user")
+    ui:Draw()
+    local canvas = MP.canvas
+    local sized = 0
+    local fit = canvas.OnFrameSizeChanged
+    canvas.OnFrameSizeChanged = function(...) sized = sized + 1; return fit(...) end
+    local h0, w0 = canvas:GetHeight(), canvas:GetWidth()
+    assert(not (ui.findsFoot and ui.findsFoot:IsShown()), "no footer while nothing is new")
+    local disc = QB.Discover.DB()
+    disc.find = { o9001 = { p = { { 1429, 400, 400, 1 } }, b = "A Diary of Your Own", n = 1 } }
+    disc.findN = (tonumber(disc.findN) or 0) + 1
+    ui:Draw()
+    assert(ui.findsFoot and ui.findsFoot:IsShown(), "your find QuestBank lacks: the footer")
+    assert(canvas:GetHeight() == h0 and canvas:GetWidth() == w0 and sized == 0, "the canvas keeps its size, its zoom untouched: " .. canvas:GetHeight() .. " of " .. h0 .. ", resized " .. sized)
+    local _, _, _, fx = ui.findsFoot:GetPoint()
+    assert(fx >= (ui.insetX or 0), "the footer under the list alone: " .. tostring(fx) .. " from " .. tostring(ui.insetX))
+    check(ui.frame, "map window at 1120x640 with the finds footer")
+    ui.frame:SetSize(860, 500); ui:Draw()
+    check(ui.frame, "map window at 860x500 with the finds footer")
+    local h1 = canvas:GetHeight()
+    disc.find = {}
+    disc.findN = disc.findN + 1
+    sized = 0
+    ui:Draw()
+    assert(not ui.findsFoot:IsShown() and canvas:GetHeight() == h1 and sized == 0, "the footer gone: the canvas as it was")
+    canvas.OnFrameSizeChanged = fit
+    leave(c)
+    said[#said + 1] = "M's finds footer under the list alone, the canvas's size and zoom kept as it comes and goes, laid out clean at both sizes"
+  end)
+  -- K5: a find on a map without art, clicked in the Finds list: the map goes to the nearest map above it with art, never
+  -- a chat line, and pans only to where the find's spot lies on that map; a continent's zone without art is a row that
+  -- says so and goes nowhere
+  isolated({ member("Rone", 1) }, function()
+    local c, QB = mapClient("Rone", 1)
+    local MP = QB.MapPage
+    c.C.UI:Open("map")
+    local ui = c.C.UI.Window("map")
+    MP.Go(1429, "user")
+    local disc = QB.Discover.DB()
+    disc.find = { o9010 = { p = { { 1453, 500, 500, 1 } }, b = "A Tome Under the Keep", n = 1 } }
+    disc.findN = (tonumber(disc.findN) or 0) + 1
+    c.noArt = { [1453] = true }
+    QB.MapWin.ShowFinds(ui)
+    local row
+    for _, it in ipairs(ui.mapList.items) do if it.spec.name == "A Tome Under the Keep" then row = it end end
+    assert(row, "the find in the Finds list")
+    local panned
+    local pan = MP.canvas.PanTo
+    MP.canvas.PanTo = function(_, x, y) panned = { x, y } end
+    local n0 = #c.chat
+    row.spec.fn()
+    MP.canvas.PanTo = pan
+    local said2 = table.concat(c.chat, "\n", n0 + 1)
+    assert(not said2:find("no map art", 1, true), "never a chat line: " .. said2)
+    local ex, ey = QB.Pins.Project({ m = 1453, x = 50, y = 50 }, 1415)
+    assert(MP.canvas:GetMapID() == 1415 and ((ex == nil and panned == nil) or (panned and panned[1] == ex and panned[2] == ey)),
+      "the map above it with art, panned to where its spot lies on it: " .. tostring(MP.canvas:GetMapID()) .. " " .. tostring(panned and panned[1]) .. " " .. tostring(ex))
+    -- a continent's zone without art
+    ui.mapFinds = nil
+    MP.Go(1415, "user")
+    c.noArt = { [1429] = true }
+    ui:Draw()
+    local zone
+    for _, it in ipairs(ui.mapList.items) do if it.spec.name == "Elwynn Forest" then zone = it end end
+    assert(zone and zone.spec.fn == nil, "a continent's zone without art: no click")
+    local tip = tipText(zone.spec.tip)
+    assert(tip:find("No map art for it on this client.", 1, true), "its tooltip says so:\n" .. tip)
+    c.noArt = nil
+    leave(c)
+    said[#said + 1] = "a find on a map without art: the map above it with art, no chat line, no wrong pan; a continent's zone without art a row that says so"
+  end)
+  -- K6: the menu's Map (M): opening M when clicked; Your zone, the last three zones opened (the newest first, yours not
+  -- among them), Finds, then the game's map, greyed in a fight; the Map module off, no entry
+  isolated({ member("Rone", 1) }, function()
+    local c, QB = mapClient("Rone", 1)
+    local MP = QB.MapPage
+    c.C.Keys.Set("guild", "follow"); c.C.Keys.Set("quests", "follow"); c.C.Keys.Set("map", "follow")
+    c.C.Keys.Apply()
+    local function menuOf()
+      local n0 = #c.contextMenus
+      c.C.UI.mini.__scripts.OnClick(c.C.UI.mini, "RightButton")
+      assert(#c.contextMenus == n0 + 1, "a menu opened")
+      return c.contextMenus[#c.contextMenus]
+    end
+    local function entry(list, text) for _, e in ipairs(list) do if e.text == text then return e end end end
+    local function names(list) local out = {}; for _, e in ipairs(list) do out[#out + 1] = e.kind == "divider" and "---" or tostring(e.text) end; return table.concat(out, ", ") end
+    c.C.UI:Open("map")
+    local ui = c.C.UI.Window("map")
+    local here = MP.canvas:GetMapID()
+    local function name(m) return c.env.C_Map.GetMapInfo(m).name end
+    for _, m in ipairs({ 1436, 1433, 1431, 1437, 1415 }) do if m ~= here then MP.Go(m, "user"); ui:Draw() end end
+    ui.frame:Hide()
+    local m = menuOf()
+    local map = entry(m, "Map (M)")
+    assert(map and map.responds, "Map (M) in the menu, opening its window when clicked: " .. names(m))
+    local want = "Your zone, " .. name(1437) .. ", " .. name(1431) .. ", " .. name(1433) .. ", Finds, ---, Game's map"
+    assert(names(map.sub) == want, "its entries: " .. names(map.sub) .. "\n  wanted: " .. want)
+    local order = {}
+    for i, e in ipairs(m) do order[e.text or e.kind] = i end
+    assert(order["Map (M)"] > order["Quests (L)"] and order["Map (M)"] < order.Settings, "after Quests, before Settings")
+    map.set()
+    assert(ui.frame:IsShown(), "Map (M) clicked: M")
+    entry(map.sub, name(1433)).set()
+    assert(MP.canvas:GetMapID() == 1433 and ui.frame:IsShown(), "a zone of the last three: M on it")
+    entry(map.sub, "Your zone").set()
+    assert(MP.canvas:GetMapID() == here and MP.follow, "Your zone: M on it, following you")
+    entry(map.sub, "Finds").set()
+    assert(ui.mapFinds, "Finds: M's Finds list")
+    entry(map.sub, "Game's map").set()
+    assert(c.map.shown and not ui.frame:IsShown(), "Game's map: the game's, M aside")
+    c.map:Close()
+    -- in a fight: the game's map greyed
+    c.combat = true
+    local fm = entry(menuOf(), "Map (M)")
+    assert(entry(fm.sub, "Game's map").off == true and not entry(fm.sub, "Finds").off, "in a fight: Game's map greyed, the rest not")
+    c.combat = false
+    -- the Map module off: no entry
+    c.C.Modules.Set("Cute_Quest:map", false); tick(c, 1)
+    assert(not entry(menuOf(), "Map (M)") and not entry(menuOf(), "Map"), "the Map module off: no Map entry")
+    leave(c)
+    said[#said + 1] = "the menu's Map (M): your zone, the last three zones opened, Finds, the game's map greyed in a fight; none with the module off"
+  end)
+  -- K7: with the addon QuestBank loaded M stays the game's: the card asks nothing of the Map window (a character who
+  -- answered the old Map row sees no card for it) and names J and L
+  isolated({ member("Pim", 3), member("Rone", 1) }, function()
+    local state = {}
+    local function client(name, rank)
+      local q = newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true, card = true }))
+      local isLoaded = q.env.C_AddOns.IsAddOnLoaded
+      q.env.C_AddOns.IsAddOnLoaded = function(x) if x == "QuestBank" then return true, true end return isLoaded(x) end
+      q.env.QuestBankAPI = { version = "6.1.0", logReady = true, state = { level = 5, log = {} }, Settings = function() return { guide = {} } end, MarkDirty = function() end }
+      return q
+    end
+    local p = client("Pim", 3)
+    local answered = { guild = true, quests = true, dungeons = true, gear = true, mapicons = true, step = true, camp = true, light = true, accept = true, handin = true }
+    local db = { version = "0.8.0", chars = { ["Pim-Forever"] = { counters = {}, setup = answered, keys = { guild = "follow", quests = "follow" },
+      modules = { ["Cute_Quest:map"] = true, ["Cute_Quest:journal"] = true } } } }
+    login(p, db); tick(p, 3)
+    assert(p.addons[2].private.dormant, "QuestBank loaded: the copy sleeps")
+    assert(not (p.env.CuteSetupFrame and p.env.CuteSetupFrame:IsShown()) and #p.C.Setup.Rows() == 0, "a character who answered the old Map row: no card")
+    leave(p)
+    local f = client("Rone", 1)
+    login(f); tick(f, 3)
+    local card = f.env.CuteSetupFrame
+    assert(card and card:IsShown(), "a fresh character: the card")
+    for _, r in ipairs(f.C.Setup.Rows()) do assert(r.id ~= "mapwin", "no Map row while QuestBank is loaded") end
+    assert(not checkBox(f, function(cb) return cb.label and cb.label:GetText() == "Map" end) and texts(f):find("J and L open Cute's windows", 1, true)
+      and not texts(f):find("J, L and M", 1, true), "no Map row, and the card names J and L")
+    check(card, "map K7 the setup card with QuestBank loaded")
+    leave(f)
+    said[#said + 1] = "with QuestBank loaded the card asks nothing of the Map window and names J and L"
+  end)
+  -- K8: Settings > Data you share's finds line: its Show finds only while the Map window is there to show them
+  isolated({ member("Rone", 1) }, function()
+    local c, QB = mapClient("Rone", 1)
+    local disc = QB.Discover.DB()
+    disc.find = { o9001 = { p = { { 1429, 400, 400, 1 } }, b = "A Diary of Your Own", n = 1 } }
+    disc.findN = (tonumber(disc.findN) or 0) + 1
+    c.C.UI:Open("settings", "share")
+    local st = texts(c)
+    assert(st:find("1 find QuestBank does not have yet", 1, true) and st:find("Show finds", 1, true), "the Map module on: the line and Show finds:\n" .. st)
+    c.C.UI.Window("settings").frame:Hide()
+    c.C.Modules.Set("Cute_Quest:map", false); tick(c, 1)
+    c.C.UI:Open("settings", "share")
+    st = texts(c)
+    assert(st:find("1 find QuestBank does not have yet", 1, true) and not st:find("Show finds", 1, true), "the Map module off: the line, no Show finds:\n" .. st)
+    check(c.C.UI.Window("settings").frame, "map K8 Data you share with the Map module off")
+    leave(c)
+    said[#said + 1] = "Data you share's finds line with Show finds only while the Map window is on"
+  end)
+  -- (the finds in the guild, Cute/Finds.lua: a client with every map known to C_Map.GetMapInfo, as G's)
+  local function fmember(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 20, online = true } end
+  local function fchar(name, rank, extra)
+    local c = newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", "WARRIOR", 20 }, extra))
+    local was = c.env.C_Map and c.env.C_Map.GetMapInfo
+    c.env.C_Map = c.env.C_Map or {}
+    c.env.C_Map.GetMapInfo = function(m) if type(m) ~= "number" or m >= 99000 then return nil end return was and was(m) or { mapID = m, name = "Map " .. m, mapType = 3 } end
+    return c
+  end
+  local function fnoted(c, ...) c.C.Finds.door.Noted(...) end
+  local function frows(c, m) return c.C.Finds.door.Rows(m) end
+  local function fpol(mine, vis) return { policy = { vis = vis or {}, by = "Ofa-Forever", mine = mine or nil, rank = 0, at = EPOCH, threshold = 1 } } end
+  local function rowOf(c, m, id) for _, r in ipairs(frows(c, m)) do if r.id == id and not r.ping then return r end end end
+  local function said1X(c, from, channel)
+    local out = {}
+    for i = from or 1, #c.sent do local m = c.sent[i]; if m.msg:sub(1, 3) == "1X|" and (channel == nil or m.channel == channel) then out[#out + 1] = m end end
+    return out
+  end
+  -- K9: the voices that count are those of members the roster lists now (and yours): GUIDs it does not list (another
+  -- guild's, on an account whose CuteDB.known they share; made up) make nothing sure and show nothing; a member who left
+  -- counts no more, the find one guild mate's again (dim) at the next roster read, and not what a word would say
+  isolated({ fmember("Ann", 3), fmember("Ben", 3), fmember("Cy", 3) }, function()
+    local ann, ben, cy = fchar("Ann", 3), fchar("Ben", 3), fchar("Cy", 3)
+    login(ann, fpol()); login(ben, fpol()); login(cy, fpol())
+    tickAll(130)
+    fnoted(ann, "h", 9201, 1429, 500, 500)
+    tickAll(65)
+    fnoted(ben, "h", 9201, 1429, 506, 500)
+    tickAll(65)
+    local r = rowOf(cy, 1429, 9201)
+    assert(r and r.sure and r.mates == 2, "Ann's and Ben's chest: sure on Cy's client")
+    assert(#cy.C.Finds:WordParts() == 1, "what a word would say: the chest")
+    -- GUIDs the roster does not list
+    local en = { k = "k", id = 9301, m = 1436, x = 300, y = 300 }
+    cy.C.Finds.Voice("Player-4242-0F000001", en)
+    local e = cy.C.Finds.Voice("Player-4242-0F000002", en)
+    assert(not cy.C.Finds.Sure(e) and rowOf(cy, 1436, 9301) == nil, "two GUIDs the roster does not list: nothing sure, nothing shown")
+    assert(#cy.C.Finds:WordParts() == 1, "nor in a word")
+    -- Ben leaves the guild
+    for i = #GUILD, 1, -1 do if GUILD[i].guid == guidOf("Ben") then table.remove(GUILD, i) end end
+    fire(cy, "GUILD_ROSTER_UPDATE")
+    r = rowOf(cy, 1429, 9201)
+    assert(r and not r.sure and r.mates == 1, "Ben gone: one guild mate's again, dim: " .. tostring(r and r.mates))
+    assert(#cy.C.Finds:WordParts() == 0, "and out of a word")
+    for _, c in ipairs({ ann, ben, cy }) do leave(c) end
+    said[#said + 1] = "the voices that count are the roster's members': GUIDs it does not list make nothing sure, a member who left counts no more (dim again, out of the word)"
+  end)
+  -- K10: a find the officers' word says is sure by that officer's voice while it is one: the officer demoted, it is
+  -- sure no more on a member's client (none of its own voices); an officer who heard the voices says the find in its
+  -- own word even after another officer's word said it first
+  isolated({ fmember("Ofa", 0), fmember("Oli", 1), fmember("Mia", 3), fmember("Ann", 3), fmember("Cy", 3) }, function()
+    local closed = { gc_finds = "self" }
+    local ofa, oli, mia, ann, cy = fchar("Ofa", 0), fchar("Oli", 1), fchar("Mia", 3), fchar("Ann", 3), fchar("Cy", 3)
+    login(ofa, fpol(true, closed)); login(oli, fpol(nil, closed)); login(mia, fpol(nil, closed)); login(ann, fpol(nil, closed)); login(cy, fpol(nil, closed))
+    tickAll(130)
+    fnoted(mia, "h", 9201, 1429, 500, 500)
+    tickAll(65)
+    fnoted(ann, "h", 9201, 1429, 506, 500)
+    tickAll(65)
+    tickAll(1900)
+    local r = rowOf(cy, 1429, 9201)
+    assert(r and r.sure and r.mates == 0, "Cy has the chest from the officers' word (half an hour on): sure")
+    assert(#ofa.C.Finds:WordParts() == 1 and #oli.C.Finds:WordParts() == 1, "each officer who heard both voices says it, the other's word taken or not")
+    -- both officers demoted on Cy's client: the word's finds sure no more
+    for _, m in ipairs(GUILD) do if m.guid == guidOf("Ofa") or m.guid == guidOf("Oli") then m.rank, m.rankName = 3, "Raider" end end
+    fire(cy, "GUILD_ROSTER_UPDATE")
+    r = rowOf(cy, 1429, 9201)
+    assert(r == nil or not r.sure, "the officers who said it demoted: sure no more")
+    for _, m in ipairs(GUILD) do if m.guid == guidOf("Ofa") then m.rank, m.rankName = 0, "Officer" end end
+    fire(cy, "GUILD_ROSTER_UPDATE")
+    r = rowOf(cy, 1429, 9201)
+    assert(r and r.sure, "an officer again: sure again from its word")
+    for _, c in ipairs({ ofa, oli, mia, ann, cy }) do leave(c) end
+    said[#said + 1] = "the officers' word's finds sure by an officer's voice while it is one; each officer says what it heard"
+  end)
+  -- K11: the finds in the officers' word. The officers keep Finds: a find sure now is said half an hour on (never where
+  -- two members stood a minute ago), by one officer (the other's copy covered), past the word's newest 48 too (a find
+  -- leaving the word takes nothing back), a word that changed in its finds alone five minutes after the last at the
+  -- soonest, its key the same when a third voice moves the find's mean. Finds open: a find sure now sends no word
+  local function partsOf(c, from)
+    local n, finds = 0, 0
+    for i = from or 1, #c.sent do
+      local m = c.sent[i]
+      if m.msg:sub(1, 3) == "1N|" then n = n + 1; for _ in m.msg:gmatch("[|;]f[bkhx]") do finds = finds + 1 end end
+    end
+    return n, finds
+  end
+  isolated({ fmember("Ofa", 0), fmember("Oli", 1), fmember("Mia", 3), fmember("Ann", 3), fmember("Cy", 3) }, function()
+    local closed = { gc_finds = "self" }
+    local ofa, oli, mia, ann, cy = fchar("Ofa", 0), fchar("Oli", 1), fchar("Mia", 3), fchar("Ann", 3), fchar("Cy", 3)
+    login(ofa, fpol(true, closed)); login(oli, fpol(nil, closed)); login(mia, fpol(nil, closed)); login(ann, fpol(nil, closed)); login(cy, fpol(nil, closed))
+    tickAll(130)
+    local F = ofa.C.Finds
+    -- the officers hear Mia's and Ann's chests whispered, ten a message
+    local function hear(list, from)
+      for _, o in ipairs({ ofa, oli }) do
+        for _, who in ipairs(from) do
+          local parts = {}
+          for _, en in ipairs(list) do parts[#parts + 1] = F.Pack(en) end
+          for i = 1, #parts, 10 do o.C.Finds:Receive(table.concat(parts, ";", i, math.min(#parts, i + 9)), who.sender, true) end
+        end
+      end
+    end
+    local list = {}
+    for i = 1, 50 do list[i] = { k = "h", id = 20000 + i, m = 1429, x = (i % 25) * 40, y = math.floor(i / 25) * 40 + 20 } end
+    local o0, l0 = #ofa.sent, #oli.sent
+    hear(list, { mia, ann })
+    tickAll(600)
+    local _, f1 = partsOf(ofa, o0 + 1)
+    local _, f2 = partsOf(oli, l0 + 1)
+    assert(f1 + f2 == 0, "ten minutes on: no find in the word yet")
+    tickAll(1300)
+    _, f1 = partsOf(ofa, o0 + 1)
+    _, f2 = partsOf(oli, l0 + 1)
+    assert((f1 == 48) ~= (f2 == 48) and f1 + f2 == 48, "half an hour on: the newest 48, said by one officer: " .. f1 .. " and " .. f2)
+    tickAll(10)
+    assert(rowOf(cy, 1429, 20050) and rowOf(cy, 1429, 20050).sure, "Cy has them, sure")
+    -- the 51st: the oldest leaves the word, which takes nothing back: one officer says it, five minutes after the last
+    local o1, l1 = #ofa.sent, #oli.sent
+    local t1 = ofa.clock
+    hear({ { k = "h", id = 20051, m = 1436, x = 500, y = 500 } }, { mia, ann })
+    tickAll(1900)
+    local n1, g1 = partsOf(ofa, o1 + 1)
+    local n2, g2 = partsOf(oli, l1 + 1)
+    assert((g1 > 0) ~= (g2 > 0), "the 51st said by one officer, the other covered: " .. g1 .. " and " .. g2)
+    local first
+    for _, c in ipairs({ ofa, oli }) do for i = (c == ofa and o1 or l1) + 1, #c.sent do if c.sent[i].msg:sub(1, 3) == "1N|" then first = math.min(first or math.huge, c.sent[i].at) end end end
+    assert(first and first - t1 >= 1740, "half an hour after it became sure (kept to the minute): " .. tostring(first and first - t1))
+    assert(rowOf(cy, 1436, 20051) and rowOf(cy, 1436, 20051).sure and rowOf(cy, 1429, 20003) and rowOf(cy, 1429, 20003).sure, "Cy has the 51st, and keeps the one that left the word")
+    -- two words that changed in their finds alone: five minutes apart at the least
+    local o2, l2 = #ofa.sent, #oli.sent
+    hear({ { k = "h", id = 20052, m = 1436, x = 600, y = 500 } }, { mia, ann })
+    tickAll(1830)
+    hear({ { k = "h", id = 20053, m = 1436, x = 700, y = 500 } }, { mia, ann })
+    tickAll(1900)
+    local at = {}
+    for _, c in ipairs({ ofa, oli }) do for i = (c == ofa and o2 or l2) + 1, #c.sent do local m = c.sent[i]; if m.msg:sub(1, 3) == "1N|" then at[#at + 1] = m.at end end end
+    table.sort(at)
+    local words = {}
+    for _, t in ipairs(at) do if #words == 0 or t - words[#words] > 30 then words[#words + 1] = t end end
+    assert(#words >= 2, "two words: " .. #words)
+    for i = 2, #words do assert(words[i] - words[i - 1] >= 300, "a finds-only word five minutes after the last at the soonest: " .. (words[i] - words[i - 1])) end
+    -- a third voice moving the mean: the word's key stays
+    local before = table.concat(F:WordParts(), ";")
+    F:Receive(F.Pack({ k = "h", id = 20051, m = 1436, x = 510, y = 505 }), cy.sender, true)
+    assert(table.concat(F:WordParts(), ";") == before, "a third voice moving the mean leaves the word as it was")
+    for _, c in ipairs({ ofa, oli, mia, ann, cy }) do leave(c) end
+  end)
+  -- Finds open: a find sure now sends no word, nor does anything else asking for one (Rules.lua's), the change being
+  -- the finds' alone; a member who logs in later and asks has it in the answer
+  isolated({ fmember("Ofa", 0), fmember("Mia", 3), fmember("Ann", 3), fmember("Lat", 3) }, function()
+    for _, m in ipairs(GUILD) do if m.guid == guidOf("Lat") then m.online = false end end
+    local ofa, mia, ann = fchar("Ofa", 0), fchar("Mia", 3), fchar("Ann", 3)
+    login(ofa, fpol(true, {})); login(mia, fpol()); login(ann, fpol())
+    tickAll(130)
+    local o0 = #ofa.sent
+    fnoted(mia, "h", 9201, 1429, 500, 500)
+    tickAll(65)
+    fnoted(ann, "h", 9201, 1429, 506, 500)
+    tickAll(400)
+    assert(rowOf(ofa, 1429, 9201).sure and select(1, partsOf(ofa, o0 + 1)) == 0, "Finds open: sure on the officer's client, no word sent for it")
+    ofa.C.Comm:WordSoon()
+    tickAll(400)
+    assert(select(1, partsOf(ofa, o0 + 1)) == 0, "nor when something else asks for a word, the finds alone changed")
+    for _, m in ipairs(GUILD) do if m.guid == guidOf("Lat") then m.online = true end end
+    local lat = fchar("Lat", 3)
+    login(lat, fpol())
+    fire(ofa, "GUILD_ROSTER_UPDATE")
+    tickAll(120)
+    local r = rowOf(lat, 1429, 9201)
+    assert(r and r.sure, "a member who logs in later: the find in the answer to its ask")
+    for _, c in ipairs({ ofa, mia, ann, lat }) do leave(c) end
+    said[#said + 1] = "the finds in the officers' word: half an hour after sure where the officers keep them, by one officer, past the newest 48 nothing taken back, five minutes apart, a key a third voice leaves; open, no word for them"
+  end)
+  -- K12: the officers keep Finds and none is online: a member's finds wait (no whisper to nobody, nothing lost, the
+  -- hour's count untouched), and go to the first officer who comes online
+  isolated({ fmember("Ofa", 0), fmember("Mia", 3) }, function()
+    local closed = { gc_finds = "self" }
+    for _, m in ipairs(GUILD) do if m.guid == guidOf("Ofa") then m.online = false end end
+    local mia = fchar("Mia", 3)
+    login(mia, fpol(nil, closed))
+    tickAll(130)
+    local m0 = #mia.sent
+    fnoted(mia, "h", 9201, 1429, 500, 500)
+    tickAll(300)
+    local out = mia.env.CuteDB.chars["Mia-Forever"].findsOut
+    assert(#said1X(mia, m0 + 1) == 0 and #out == 1 and (mia.C.Finds.sent or 0) == 0, "no officer online: nothing sent, the chest waits")
+    local line
+    for _, l in ipairs(mia.C.Diag()) do if l:find("^diag finds:") then line = l end end
+    assert(line and line:find("no officer online", 1, true), "/cute diag says why: " .. tostring(line))
+    -- Ofa comes online
+    for _, m in ipairs(GUILD) do if m.guid == guidOf("Ofa") then m.online = true end end
+    local ofa = fchar("Ofa", 0)
+    login(ofa, fpol(true, closed))
+    tickAll(10)
+    fire(mia, "GUILD_ROSTER_UPDATE")
+    tickAll(130)
+    local w = said1X(mia, m0 + 1)
+    assert(#w == 1 and w[1].channel == "WHISPER" and w[1].target == ofa.sender and #out == 0, "an officer online: the chest whispered to Ofa")
+    assert(rowOf(ofa, 1429, 9201), "Ofa has it")
+    leave(mia); leave(ofa)
+    said[#said + 1] = "the officers keep Finds and none is online: the finds wait, then go to the first officer online"
+  end)
+  -- K13: "Share finds with the guild" off on an officer's client: its own finds are no voice (one guild mate's find it
+  -- saw too stays one voice, and out of its word), so nothing of where it stood goes out
+  isolated({ fmember("Ofa", 0), fmember("Mia", 3) }, function()
+    local ofa, mia = fchar("Ofa", 0), fchar("Mia", 3)
+    login(ofa, fpol(true, {})); login(mia, fpol())
+    tickAll(130)
+    ofa.C.Settings().shareFinds = false
+    fnoted(ofa, "h", 9201, 1429, 500, 500)
+    fnoted(mia, "h", 9201, 1429, 506, 500)
+    tickAll(65)
+    local e
+    for _, x in ipairs(ofa.env.CuteDB.known.finds.list) do if x.id == 9201 then e = x end end
+    assert(e and e.v[guidOf("Ofa")] == nil and not ofa.C.Finds.Sure(e), "sharing off: the officer's own find no voice, Mia's alone not sure")
+    assert(#ofa.C.Finds:WordParts() == 0, "and nothing of it in the officers' word")
+    ofa.C.Settings().shareFinds = nil
+    leave(ofa); leave(mia)
+    said[#said + 1] = "sharing off: your own finds are no voice, nothing of them in the officers' word"
+  end)
+  -- K14: the store at its cap of 2,000: a find heard puts the oldest out and keeps its index (no rebuild of 2,000
+  -- groups a find): ten new finds make little garbage, and a find heard again is found as it was
+  isolated({ fmember("Ann", 3), fmember("Ben", 3) }, function()
+    local ann, ben = fchar("Ann", 3), fchar("Ben", 3)
+    login(ann, fpol()); login(ben, fpol())
+    tickAll(10)
+    local F = ben.C.Finds
+    local g = guidOf("Ann")
+    -- (two voices each: one member's lone finds stop at 300)
+    for i = 1, 2000 do
+      local en = { k = "h", id = 30000 + i, m = 1443, x = i % 1000, y = 2 + math.floor(i / 1000) * 100 }
+      F.Voice(g, en); F.Voice("Player-4242-0F0000AA", en)
+    end
+    local list = ben.env.CuteDB.known.finds.list
+    assert(#list == 2000, "the store full: " .. #list)
+    collectgarbage("collect"); collectgarbage("collect")
+    collectgarbage("stop")
+    local k0 = collectgarbage("count")
+    for i = 1, 10 do F.Voice(g, { k = "h", id = 50000 + i, m = 1444, x = i * 30, y = 3 }) end
+    local used = collectgarbage("count") - k0
+    collectgarbage("restart")
+    print(string.format("map K14: ten finds heard into a full store of 2,000: %.1f KB of garbage", used))
+    assert(used < 48, string.format("ten finds into a full store: %.1f KB of garbage, the index built again each time", used))
+    assert(#list == 2000, "still 2,000")
+    local e = F.Voice(guidOf("Ben"), { k = "h", id = 50005, m = 1444, x = 152, y = 4 })
+    local n = 0
+    for _ in pairs(e.v) do n = n + 1 end
+    assert(n == 2 and #list == 2000 and F.Sure(e), "a find heard again found as it was: two voices, sure")
+    leave(ann); leave(ben)
+    said[#said + 1] = string.format("the store at its cap: ten finds heard put the oldest out with %.1f KB of garbage, the index kept", used)
+  end)
+  -- K15: an officer's /reload while a find waits out its half hour: the word says it all the same
+  isolated({ fmember("Ofa", 0), fmember("Mia", 3), fmember("Ann", 3), fmember("Cy", 3) }, function()
+    local closed = { gc_finds = "self" }
+    local ofa, mia, ann, cy = fchar("Ofa", 0), fchar("Mia", 3), fchar("Ann", 3), fchar("Cy", 3)
+    login(ofa, fpol(true, closed)); login(mia, fpol(nil, closed)); login(ann, fpol(nil, closed)); login(cy, fpol(nil, closed))
+    tickAll(130)
+    local F = ofa.C.Finds
+    local en = { k = "h", id = 9201, m = 1429, x = 500, y = 500 }
+    F:Receive(F.Pack(en), mia.sender, true); F:Receive(F.Pack(en), ann.sender, true)
+    tickAll(60)
+    local db = ofa.env.CuteDB
+    leave(ofa)
+    local o2 = fchar("Ofa", 0)
+    login(o2, db, true)
+    tickAll(1900)
+    local said2 = false
+    for _, m in ipairs(o2.sent) do if m.msg:sub(1, 3) == "1N|" and m.msg:find("fh", 1, true) then said2 = true end end
+    assert(said2 and rowOf(cy, 1429, 9201) and rowOf(cy, 1429, 9201).sure, "after the officer's /reload the word says it half an hour on")
+    for _, c in ipairs({ o2, mia, ann, cy }) do leave(c) end
+    said[#said + 1] = "an officer's /reload keeps the half-hour word"
+  end)
+  print("map K: " .. table.concat(said, "; "))
+end
 
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end

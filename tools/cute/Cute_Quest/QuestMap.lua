@@ -35,9 +35,11 @@ function QM.Draws(mapID)
   return kind == ((Enum and Enum.UIMapType and Enum.UIMapType.Zone) or 3)
 end
 
--- Forever only (as Game.lua tells it); elsewhere the layer does nothing and Settings greys its rows out
+-- Forever only (as Game.lua tells it); elsewhere the layer does nothing and Settings greys its rows out. The master
+-- switch (mapIcons) is the game's map's; on a host's map window (page, under QB.mapWindow) each layer's own switch
+-- alone decides, so "Our icons on the game's map" off (Cute's row) leaves Cute's own map its pins
 function QM.Available() return QB.Game and QB.Game.Forever() or false end
-local function on() return QM.Available() and QB:Settings().mapIcons ~= false end
+local function on(page) return QM.Available() and ((page and QB.mapWindow) or QB:Settings().mapIcons ~= false) end
 
 ----------------------------------------------------------------------------
 -- art: the client's own cursor atlases for each kind of objective, as the minimap and the Route page draw them (file
@@ -492,11 +494,49 @@ function QM.Entrances(m)
   return out
 end
 
+-- (sub-project F) a continent on a host's map window: its zones' ! and ? and dungeon entrances, each placed on it
+-- (C_Map.GetMapRectOnMap, as Pins.lua P.Project places a zone's spot on a continent), d.m still the zone and d.zx, d.zy
+-- its place there (a click's waypoint, the tooltip's sources); the merge (QM.Merge) makes them few. No objective marks:
+-- a quest's spots are its zone's to show
+local CONTINENT_PINS = 1000
+local CONTINENT = (Enum and Enum.UIMapType and Enum.UIMapType.Continent) or 2
+function QM.IsContinent(m)
+  if type(m) ~= "number" or not (C_Map and C_Map.GetMapInfo) then return false end
+  local ok, info = pcall(C_Map.GetMapInfo, m)
+  return ok and type(info) == "table" and QB.Plain(info.mapType) == CONTINENT or false
+end
+function QM:Continent(m)
+  local out = {}
+  if not (C_Map and C_Map.GetMapChildrenInfo and C_Map.GetMapRectOnMap) then return out end
+  local ok, kids = pcall(C_Map.GetMapChildrenInfo, m)
+  for _, k in ipairs(ok and type(kids) == "table" and kids or {}) do
+    local z = QB.Plain(k.mapID)
+    if QM.Draws(z) then
+      local okR, x0, x1, y0, y1 = pcall(C_Map.GetMapRectOnMap, z, m)
+      x0, x1, y0, y1 = QB.Plain(x0), QB.Plain(x1), QB.Plain(y0), QB.Plain(y1)
+      if okR and type(x0) == "number" and type(x1) == "number" and type(y0) == "number" and type(y1) == "number" and x1 > x0 and y1 > y0 then
+        for _, d in ipairs(self:Build(z, true)) do
+          if #out >= CONTINENT_PINS then break end
+          if d.kind ~= "obj" then
+            d.zx, d.zy = d.x, d.y
+            d.x, d.y = x0 + d.x * (x1 - x0), y0 + d.y * (y1 - y0)
+            out[#out + 1] = d
+          end
+        end
+      end
+    end
+  end
+  return out
+end
+
 -- page: for QuestBank's map page, where the route shows by the page's own switch (Pins.lua, P.RouteOn)
 function QM:Build(m, page)
   local list = {}
   for r in pairs(also) do if r.m == m then also[r] = nil end end
-  if not (on() and QM.Draws(m)) then return list end
+  if not (on(page) and QM.Draws(m)) then
+    if page and QB.mapWindow and on(page) and QM.IsContinent(m) then return self:Continent(m) end
+    return list
+  end
   local set, s = QB:Settings(), QB.state
   local level = s.level or 1
   local range = greyRange(level)
@@ -994,7 +1034,8 @@ local function click(d, button)
   -- a plain click: shown on the arrow for now, and nothing more (it ends there, or as its quest is taken or done)
   local ids = idsOf(d)
   local what = (d.kind == "give" or d.kind == "start") and "give" or (d.kind == "obj" and "obj" or (d.kind == "turn" and "turn" or nil))
-  QB.API.SetWaypoint(d.m, d.x * 100, d.y * 100, d.title, nil, nil, what and ids[1] and { qid = ids[1], what = what } or nil)
+  -- (a continent's pin: its place in its zone, QM:Continent)
+  QB.API.SetWaypoint(d.m, (d.zx or d.x) * 100, (d.zy or d.y) * 100, d.title, nil, nil, what and ids[1] and { qid = ids[1], what = what } or nil)
 end
 
 ----------------------------------------------------------------------------
@@ -1011,6 +1052,8 @@ local READY = "Interface\\RaidFrame\\ReadyCheck-Ready"
 function Icon:Setup(d)
   if d.kind == "give" then P.StyleOffer(self, { family = d.family, trivial = d.trivial })
   elseif d.kind == "start" then P.StyleOffer(self, { family = d.family, drop = true })
+  -- (sub-project F) a host's kind marks: an objective's spot is its kind's cursor, never a quest's disc (P.StyleKind)
+  elseif d.kind == "obj" and QB.kindMarks then P.StyleKind(self, d.spot and d.spot.kind)
   else P.StylePoi(self, { complete = d.kind == "turn", family = d.family }) end
   -- (the windows round) a pin standing for several: their count, 10 px, white, outlined, on its bottom right corner
   if d.count then
@@ -1059,7 +1102,7 @@ end
 -- game's own pins (the page's list row lights, and the pins of that quest glow)
 local function hoverQuest(self, id)
   if self.layer.world or not (QB.MapPage and QB.MapPage.Hover) then return end
-  QB.MapPage.Hover(id)
+  QB.MapPage.Hover(id, true)
 end
 Icon.OnMouseEnter = QB.Safe(function(self)
   local d = self.data
@@ -1187,13 +1230,20 @@ function QM.Thin(list, layer)
   local n = 0
   for _ in pairs(dropped) do n = n + 1 end
   QM.gameDrawn = n
-  -- the merge, at the canvas's size and zoom: a pin's 22 px in map fractions across and down
+  local kept, away = QM.Merge(out, layer)
+  QM.mergedAway = away
+  return kept
+end
+-- the merge, at the canvas's size and zoom: pins closer than a pin's 22 px on screen are one, the hand-in's first, then
+-- in progress, then the offer (the others in its d.merged, d.count all of them); returns what is drawn and how many went
+-- into others. (sub-project F) A host's map window merges its own pins the same way (QM:Draw)
+function QM.Merge(out, layer)
   local map, canvas = layer.GetMap and layer:GetMap(), layer.canvas
   local w, h = canvas and canvas:GetWidth() or 0, canvas and canvas:GetHeight() or 0
   local zoom = map and tonumber(QB.Plain(map.GetCanvasScale and map:GetCanvasScale())) or 1
   layer.qmZoom = math.floor(zoom * 4 + 0.5)
   local px = QM.MERGE_PX
-  if not (w > 0 and h > 0 and zoom > 0 and px > 0) then QM.mergedAway = 0 return out end
+  if not (w > 0 and h > 0 and zoom > 0 and px > 0) then return out, 0 end
   local tx, ty = px / (w * zoom), px / (h * zoom)
   local order = {}
   for i, d in ipairs(out) do if RANK[d.kind] then d.pos = i; order[#order + 1] = d end end
@@ -1216,8 +1266,7 @@ function QM.Thin(list, layer)
   end
   local kept = {}
   for _, d in ipairs(out) do if not d.into then kept[#kept + 1] = d end end
-  QM.mergedAway = #out - #kept
-  return kept
+  return kept, #out - #kept
 end
 -- /cute diag's words for the game's map (no names): what the game drew of ours, what merged, at which zoom
 function QM.DiagLine()
@@ -1229,7 +1278,8 @@ end
 
 function QM:Draw(layer, m)
   local list = self:Build(m, not layer.world)
-  if layer.world and QB.thinMap then list = QM.Thin(list, layer) end
+  if layer.world and QB.thinMap then list = QM.Thin(list, layer)
+  elseif not layer.world and QB.mapWindow then list = QM.Merge(list, layer) end
   for _, d in ipairs(list) do
     layer:Add(KIND[d.kind] or QM.POI, d, d.x, d.y, nil, d.index)
   end
@@ -1258,9 +1308,23 @@ function QM:Init()
   end, "map icons: waiting for the map")
 end
 
--- the same icons on QuestBank's own map page (MapPage.lua), once
+-- the same icons on QuestBank's own map page (MapPage.lua), once. (sub-project F) On a host's map window, where they
+-- merge where they touch (QM.Merge), a zoom step that changes how near two pins may stand draws them again once it
+-- settles, as on the game's map: zoomed in they part
 function QM:AddTo(map)
-  self.pageProvider = self.pageProvider or QB.Pins.NewLayer(function(layer, m) QM:Draw(layer, m) end, "map page icons", map)
+  if self.pageProvider then return self.pageProvider end
+  self.pageProvider = QB.Pins.NewLayer(function(layer, m) QM:Draw(layer, m) end, "map page icons", map)
+  local placed = self.pageProvider.OnCanvasScaleChanged
+  self.pageProvider.OnCanvasScaleChanged = QB.Safe(function(layer, ...)
+    placed(layer, ...)
+    if not QB.mapWindow then return end
+    local m = layer:GetMap()
+    local zoom = m and tonumber(QB.Plain(m.GetCanvasScale and m:GetCanvasScale())) or 1
+    if math.floor(zoom * 4 + 0.5) == layer.qmZoom or layer.qmSoon then return end
+    layer.qmSoon = true
+    C_Timer.After(0.25, QB.Safe(function() layer.qmSoon = nil; if QB.Pins.Shown(layer) then layer:RefreshAllData() end end, "map page icons: zoom"))
+  end, "map page icons: zoom")
+  self.pageProvider.OnCanvasSizeChanged = self.pageProvider.OnCanvasScaleChanged
   return self.pageProvider
 end
 

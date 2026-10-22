@@ -62,6 +62,9 @@
 --   1A|id|time                     an achievement a member earned, for the officers (Achievements.lua): on GUILD, or
 --                                  whispered to each officer where the officers keep Achievements to themselves
 --   1O|at|code.code...             the guild records the officers turned on (Records.lua): on GUILD, from an officer
+--   1X|entry;entry;...             (sub-project G) finds: a book, a lock, a chest, a rare up now, a crossing, by where
+--                                  the sender stood (Finds.lua keeps their pace and takes them), routed by the Finds
+--                                  category and Zone as each leaves: whispered to the officers where either is theirs
 -- Only-you is routing, not hiding (Policy.lua P:Route): a value the officers keep to themselves never goes on GUILD. It
 -- goes in the same messages (1D, 1F, 1L, 1K) whispered to each officer online (Roster.lua R:OfficerTargets: the roster's
 -- ranks, the policy's threshold, the sender strings their own Cute's messages came under, each one the roster names
@@ -165,6 +168,8 @@ local STATE = {
   v = { sent = M.lastSent, queued = M.queued, sentTo = M.lastTold, queuedTo = M.queuedTold },
   l = { sent = {}, queued = {}, sentTo = {}, queuedTo = {} },
   k = { sent = {}, queued = {}, sentTo = {}, queuedTo = {} },
+  -- (sub-project G: the finds, Finds.lua's 1X parts, by their text)
+  f = { sent = {}, queued = {}, sentTo = {}, queuedTo = {} },
 }
 local function state(kind, target)
   local st = STATE[kind]
@@ -1295,7 +1300,17 @@ end
 -- the first one's has all gone by then), and a message whose parts another officer said meanwhile does not leave
 -- (checked as it leaves the queue). heard: each officer's newest word heard, by sender: { at, parts }
 local word = { heard = {} }
+-- (sub-project G) what the word says: Rules.lua's parts, then the guild's sure finds (Finds.lua F:WordParts), last, so a
+-- word past 64 messages is cut there first
+local function wordParts()
+  local parts = C.Rules.WordParts()
+  if C.Finds and C.Finds.WordParts then for _, kv in ipairs(C.Finds:WordParts()) do parts[#parts + 1] = kv end end
+  return parts
+end
+M.WordParts = wordParts
 local WORD_EVERY = 60 -- seconds before a word, unasked, follows the last (ten for each message it takes, if more)
+local FINDS_EVERY = 300 -- (sub-project G) the same for a word that changed in its finds alone (Finds.lua's parts)
+local function findPart(kv) return C.Finds ~= nil and C.Finds.WordPart(kv) end
 local function wordMessages(at, parts) return numbered(string.format("1N|%.0f|", at), parts) end
 -- every part said in another officer's newest word, which the members hold (Rules.lua R.Word: each officer's newest)
 local function wordSaid(parts)
@@ -1319,7 +1334,7 @@ local function quietly(fn, what)
   local function try()
     if #M.out > 0 then C_Timer.After(1, C.Safe(try, what)) return end
     local r = math.random and math.random() or 0.5
-    C_Timer.After(first() and (0.5 + r) or (4 + 4 * r + #wordMessages(0, C.Rules.WordParts())), C.Safe(fn, what))
+    C_Timer.After(first() and (0.5 + r) or (4 + 4 * r + #wordMessages(0, wordParts())), C.Safe(fn, what))
   end
   try()
 end
@@ -1327,7 +1342,7 @@ function M:SendWord(answer, since)
   if not (self.started and self.hello and C.Roster:InGuild() and C.Roster:MeOfficer()) or self.holding then return end
   -- (while an officer's change of who sees what is not saved, the members route by the line: the word said last stays
   -- right, and goes as it was, so a click on an unrelated pair sends nothing)
-  local parts = (C.Policy:EditPending() and word.parts) or C.Rules.WordParts()
+  local parts = (C.Policy:EditPending() and word.parts) or wordParts()
   local text = table.concat(parts, ";")
   -- (a /reload or a relog: what this client said last, by its hash, is what the members hold, under its stamp; said again
   -- only as an answer)
@@ -1346,10 +1361,19 @@ function M:SendWord(answer, since)
   -- time (up to 64 messages where the officers keep Bosses), so a run of kills, or a range moving a level, says it once
   -- and keeps the officer's own deltas moving; it names nobody, and late costs nothing. What the officers did
   -- themselves (a member marked untrusted, a rule retuned, the policy changed: word.urgent) goes at once
-  local now, back = {}, false
+  -- (sub-project G) A find's part leaving the word takes nothing back: the word says the newest sure finds alone, and a
+  -- member keeps what it took. A word that changed in its finds alone waits FINDS_EVERY
+  local now, back, was, findsOnly = {}, false, {}, true
   for _, kv in ipairs(parts) do now[kv] = true end
-  for kv in (word.text or ""):gmatch("[^;]+") do if not now[kv] then back = true end end
-  local every = math.max(WORD_EVERY, 10 * #wordMessages(0, parts))
+  for kv in (word.text or ""):gmatch("[^;]+") do
+    was[kv] = true
+    if not now[kv] and not findPart(kv) then back, findsOnly = true, false end
+  end
+  for _, kv in ipairs(parts) do if not was[kv] and not findPart(kv) then findsOnly = false end end
+  -- (Finds open, the members heard each find's voices: a word that changed in its finds alone goes only as an answer, to
+  -- a member who logs in later and asks; the next word for something else carries them too)
+  if findsOnly and not answer and C.Policy:FindsRoute() ~= "self" then return end
+  local every = math.max(findsOnly and FINDS_EVERY or WORD_EVERY, 10 * #wordMessages(0, parts))
   if not answer and not word.urgent and word.sentAt and clock() - word.sentAt < every then
     if not word.later then
       word.later = true
@@ -1474,7 +1498,12 @@ function M:GameSoon()
   end, "comm: answer statistics"))
 end
 -- (this character has statistics, discoveries or kill claims to pass)
-local function hasPass() return #C.Stats.byCat.game > 0 or #C.Stats.byCat.found > 0 or next(C.Rules.OwnClaims()) ~= nil end
+-- ((sub-project G) a discovered stat defined at load, standing, as Finds.lua's counts, only where this character has a value)
+local function hasPass()
+  if #C.Stats.byCat.game > 0 or next(C.Rules.OwnClaims()) ~= nil then return true end
+  for _, def in ipairs(C.Stats.byCat.found) do if not def.standing or C.Sample.values[def.id] ~= nil then return true end end
+  return false
+end
 -- an answer to the asks, once for all that come while it waits: two to forty seconds on, so a login heard by a guild
 -- online is answered over forty seconds, not twenty
 function M:AnswerSoon()
@@ -1700,9 +1729,9 @@ function M:Saw(sender, prefix)
   self.senders[#self.senders + 1] = { sender = sender, prefix = prefix }
 end
 
--- what a whisper may carry: the values, labels and kill claims the officers alone see, and a run's cards to them (1W,
--- Halls.lua)
-local WHISPERED = { ["1D"] = true, ["1F"] = true, ["1L"] = true, ["1K"] = true, ["1W"] = true, ["1A"] = true }
+-- what a whisper may carry: the values, labels, kill claims and finds the officers alone see, a run's cards to them
+-- (1W, Halls.lua) and a member's earns (1A, Achievements.lua)
+local WHISPERED = { ["1D"] = true, ["1F"] = true, ["1L"] = true, ["1K"] = true, ["1X"] = true, ["1W"] = true, ["1A"] = true }
 -- whispers that come before the roster is known (an officer's client, its roster slow at login): kept in memory and
 -- judged once it is (Roster.lua calls ReplayEarly), not dropped while the members count them as told. And the records
 -- and deltas from the guild channel too: a record made before the roster listed anyone would decide whose guild the
@@ -1912,6 +1941,8 @@ function M:Receive(text, channel, sender)
     if at and R:OfficerVoice(sender) then
       heardWord(sender, at, body)
       C.Rules.ReceiveWord(sender, at, body, part, parts)
+      -- (sub-project G: the guild's sure finds it says)
+      if C.Finds then C.Finds:WordCame() end
     end
   elseif kind == "1Q" then
     -- (a member asking for this client's record whole, by its GUID: another's is passed by)
@@ -1931,6 +1962,9 @@ function M:Receive(text, channel, sender)
   elseif kind == "1O" and C.Records then
     -- the guild records the officers turned on (from an officer, on GUILD): Records.lua
     C.Records:Receive(text, sender, whispered)
+  elseif kind == "1X" then
+    -- (sub-project G) finds: a guild mate's, or a member's whispered to an officer (Finds.lua judges both)
+    if C.Finds then C.Finds:Receive(text:match("^1X|(.*)$"), sender, whispered) end
   end
 end
 

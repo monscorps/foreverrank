@@ -338,6 +338,13 @@ function P:Route(id)
   return "all"
 end
 
+-- (sub-project G) where a find travels (Finds.lua's 1X, Comm.lua routes its parts the same way): the stricter of the
+-- Finds category and Zone, since a find says where you stood
+function P:FindsRoute()
+  if self:Route("gc_finds") == "self" or self:Route("zone") == "self" then return "self" end
+  return "all"
+end
+
 ----------------------------------------------------------------------------
 -- Guild Info's line
 ----------------------------------------------------------------------------
@@ -1292,6 +1299,9 @@ function P:Purge(ready)
       raid = self:Route("gc_raids") == "self", rep = self:Route("gc_rep") == "self", level = self:Route("xpmax") == "self" }, only)
   end
   if self:Route("enchanted") == "self" and C.Stats.StripEnchantTraces then traces = traces + C.Stats.StripEnchantTraces(only) end
+  -- (sub-project G: who saw each find, by GUID, where the officers keep Finds or Zone; a find of yours and the officers'
+  -- word stay)
+  if self:FindsRoute() == "self" and C.Finds and C.Finds.StripTraces then traces = traces + C.Finds.StripTraces(only) end
   if n > 0 then
     R:Changed()
     if C.Rules then C.Rules:Dirty(true) end

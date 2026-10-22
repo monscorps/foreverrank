@@ -10,6 +10,12 @@
 -- map while hovered and shown there when clicked. A right-click on the map is its menu (zoom out, the game's map,
 -- your zone, a waypoint). It opens on your zone and follows you until you go elsewhere. The game's world map is left
 -- as it was, QuestBank's layers on it as before; the game's own map key always opens it, QuestBank's Map key this page.
+-- (sub-project F) A host's own window may hold the canvas instead (Cute's Map window, M: MP.Host), and with the host's
+-- flag QB.mapWindow the canvas is that window's: the game's smooth wheel zoom, and the wheel through zones (out at the
+-- smallest zoom up a map, in over a zone into it); the game's right-click up a map (no menu: the host's header has its
+-- entries); a Ctrl-click's spot on the arrow said in the host's window; the levels of the providers the host adds (your
+-- corpse, area points, map links, graveyards); QuestBank's pins merged where they touch and drawn on a continent too
+-- (QuestMap.lua); and the finds layer: books, locks, chests and rares players learned (MP.Finds). QuestBank alone, none
 local _, QB = ...
 if QB.dormant then return end
 local MP = { follow = true }
@@ -132,17 +138,28 @@ end
 
 -- a click on the map itself (the canvas asks this before it opens a zone or goes up to its parent): Ctrl and a left
 -- click is QuestBank's waypoint there; a right-click is the map's menu (MP.MapMenu), with the zoom out the game's
--- right-click does first on it
+-- right-click does first on it. (sub-project F) In a host's map window the right-click is the game's, up a map (MP.Up:
+-- the game's NavigateToParentMap, MapCanvas.lua, past a map without art), and the spot a Ctrl-click puts on the arrow is
+-- named for its map and said in the host's window (the host's quiet engine says nothing in chat)
 local function canvasClick(canvas, button, x, y)
   local m = QB.Plain(canvas:GetMapID())
   x, y = QB.Plain(x), QB.Plain(y)
   if not (m and type(x) == "number" and type(y) == "number") then return false end
   if button == "RightButton" then
-    MP.MapMenu(canvas, m, x, y)
+    if QB.mapWindow then MP.Up() else MP.MapMenu(canvas, m, x, y) end
     return true
   end
   if button ~= "LeftButton" or not (IsControlKeyDown and IsControlKeyDown()) then return false end
-  QB.Try("map page click", QB.API.SetWaypoint, m, x * 100, y * 100, "Map")
+  if not QB.mapWindow then
+    QB.Try("map page click", QB.API.SetWaypoint, m, x * 100, y * 100, "Map")
+    return true
+  end
+  local i = C_Map and C_Map.GetMapInfo and select(2, pcall(C_Map.GetMapInfo, m))
+  local name = type(i) == "table" and QB.Plain(i.name)
+  local title = string.format("%s %d, %d", type(name) == "string" and name or "Map", floor(x * 100 + 0.5), floor(y * 100 + 0.5))
+  QB.Try("map page click", QB.API.SetWaypoint, m, x * 100, y * 100, title)
+  local said = MP.host and MP.host.hooks.Showing
+  if said then QB.Try("map page: showing", said, title) end
   return true
 end
 
@@ -311,6 +328,8 @@ end
 
 local function drawLines(layer, m)
   if MP.frame then MP.Strip() end -- (the route's count: the route has just changed)
+  local route = not MP.frame and MP.host and MP.host.hooks.Route
+  if route then QB.Try("map page: route", route) end
   if not P.RouteOn(false) then return end
   local stops = {}
   for _, d in ipairs(P.list) do
@@ -430,9 +449,366 @@ local function drawFlights(layer, m)
   for _, d in ipairs(MP.Flights(m)) do layer:Add(FLIGHT, d, d.x, d.y) end
 end
 
--- does a pin's data hold quest id: a ! or ? (its quests, and a ?'s pick-ups), a mark (its quest), a route pin (its ids)
+----------------------------------------------------------------------------
+-- (sub-project F) the finds: what the world holds beyond quests, as players learned it, never a list of Classic's:
+-- QuestBank's data (D.FIND: the guides' places and what two players' files agree on, and the uploader's data file added
+-- at login, Finds.LoadData) and your own notes at once (Finds.lua's disc.find). Spoiler-free: a book by its title alone
+-- (never its text), a locked object as needing a key (never which key, nor where a key leads), a chest as looted, a
+-- rare by its level. Drawn on a host's map window (QB.mapWindow) while "Finds on the map" is on (mapFinds): the thing's
+-- icon round in the game's minimap button ring, a rare with the nameplate's silver elite mark
+----------------------------------------------------------------------------
+-- (INV_Misc_Book_09, INV_Misc_Key_03, INV_Box_01, INV_Misc_Head_Dragon_01: the client manifest's icons)
+local FIND_ICON = { b = 133741, k = 134237, h = 132594, r = 134153 }
+local FIND_NAME = { k = "Locked", h = "Chest", r = "Rare" }
+local FIND_KIND = { b = "Book", k = "Lock", h = "Chest", r = "Rare" }
+local FIND_HOW = { b = "read here", k = "needs a key", h = "looted", r = "seen here" }
+local FIND_WHO = { p = "players' games", f = "players' games", g = "guides" }
+local FIND_SPOTS = 4 -- spots drawn for one find
+local FIND_NEAR = 0.02 -- a spot of yours this close (map fraction) to one of the data's is that spot
+MP.FIND_ICON, MP.FIND_KIND, MP.FIND_HOW = FIND_ICON, FIND_KIND, FIND_HOW
+-- what one of your notes is: a rare (a creature), a book, a lock, a chest, or nothing to draw (an item read from your
+-- bags has no place; an object that gave no chest's kinds: Finds.lua's KindOf, which a host's guild hears by too)
+local function ownKind(key, rec) return QB.Finds.KindOf(key, rec) end
+local FIND_DOT = " \194\183 "
+-- (sub-project G) how many guild mates saw it, in words
+local function mates(n) return n == 1 and "a guild mate" or (n .. " guild mates") end
+local function spotsOf(str)
+  local out = {}
+  for x, y in tostring(str or ""):gmatch("(%d+),(%d+)") do
+    if #out < FIND_SPOTS then out[#out + 1] = { tonumber(x) / 1000, tonumber(y) / 1000 } end
+  end
+  return out
+end
+-- a find of the data and one of yours are one where the object (or creature) is the same, or where the data's is a
+-- guide's place with no object (id 0) of the same book's title or the same lock's key
+local function sameFind(r, kind, id, rec)
+  if r[1] ~= kind then return false end
+  if r[2] ~= 0 then return r[2] == id end
+  if kind == "b" then return r[5] == rec.b end
+  if kind == "k" then for _, k in ipairs(rec.k or {}) do if k == r[5] then return true end end end
+  return false
+end
+local function findOf(m, kind, id, name, src)
+  return { fkey = "find:" .. m .. ":" .. kind .. ":" .. tostring(id ~= 0 and id or name), kind = kind, fid = id, m = m, spots = {},
+           name = kind == "b" and name or FIND_NAME[kind], kindWord = FIND_KIND[kind], how = FIND_HOW[kind], icon = FIND_ICON[kind],
+           rare = kind == "r" or nil, who = FIND_WHO[src] or "players' games", src = src }
+end
+-- the finds on zone m: { fkey, kind, fid, m, spots = { { x, y }, ... } in fractions, name, kindWord, how, who, mine, new
+-- (yours, not in QuestBank's data yet), icon, rare, level, mates (guild mates who saw it), guild (the guild's alone),
+-- sure, dim (one guild mate's alone), ping (a rare a guild mate sees now: the GetTime() it was seen) }, the data's
+-- first. Kept while the data, your notes and a host's guild read the same (disc.findN counts every note, Finds.Ver
+-- every change of the guild's)
+local findMemo, findMemoN = {}, 0
+function MP.Finds(m)
+  local D = QB.Data
+  local disc = type(QuestBankDB) == "table" and type(QuestBankDB.disc) == "table" and QuestBankDB.disc or nil
+  local own = disc and type(disc.find) == "table" and disc.find or nil
+  local n = disc and tonumber(disc.findN) or 0
+  local ver = QB.Finds.Ver()
+  local memo = findMemo[m]
+  if memo and memo.data == D.FIND and memo.own == own and memo.n == n and memo.ver == ver then return memo.list end
+  local list = {}
+  for _, r in ipairs(type(D.FIND) == "table" and D.FIND[m] or {}) do
+    if type(r) == "table" and FIND_ICON[r[1]] then
+      local d = findOf(m, r[1], tonumber(r[2]) or 0, type(r[5]) == "string" and r[5] or nil, r[6])
+      d.row, d.spots = r, spotsOf(r[3])
+      if r[1] == "r" then d.level = tonumber(r[5]) end
+      if #d.spots > 0 then list[#list + 1] = d end
+    end
+  end
+  local data = #list
+  for key, rec in pairs(own or {}) do
+    local kind = type(key) == "string" and ownKind(key, rec)
+    local pts = {}
+    for _, p in ipairs(kind and type(rec.p) == "table" and rec.p or {}) do
+      if type(p) == "table" and p[1] == m and type(p[2]) == "number" and type(p[3]) == "number" then pts[#pts + 1] = { p[2] / 1000, p[3] / 1000 } end
+    end
+    if #pts > 0 then
+      local id = tonumber(key:sub(2)) or 0
+      local d
+      for i = 1, data do if sameFind(list[i].row, kind, id, rec) then d = list[i] break end end
+      if d then
+        -- the data's find: yours too, your spots added where the data's have none near
+        d.mine, d.who = true, "you"
+        for _, p in ipairs(pts) do
+          local near = false
+          for _, s in ipairs(d.spots) do if abs(s[1] - p[1]) + abs(s[2] - p[2]) <= FIND_NEAR then near = true end end
+          if not near and #d.spots < FIND_SPOTS then d.spots[#d.spots + 1] = p end
+        end
+      else
+        d = findOf(m, kind, id, rec.b, nil)
+        d.mine, d.new, d.who, d.level = true, true, "you", kind == "r" and tonumber(rec.r) or nil
+        for i = 1, math.min(FIND_SPOTS, #pts) do d.spots[i] = pts[i] end
+        list[#list + 1] = d
+      end
+    end
+  end
+  -- (sub-project G) the finds a host's guild shared (Finds.lua's GuildRows; none for QuestBank alone): one of the data's
+  -- or yours where it is the same thing at a spot near one of its own, which then says how many guild mates saw it;
+  -- else the guild's own, sure (two members agree, or the officers' word) or dim (one guild mate's alone, which changes
+  -- nothing until a second agrees), and a rare a guild mate sees now as a ping, which goes after ten minutes. Spoiler-free
+  -- as the rest: a name (a book's title) and a spot only for what a guild mate found
+  local before = #list
+  for _, g in ipairs(QB.Finds.GuildRows(m)) do
+    local x, y = type(g) == "table" and tonumber(g.x), type(g) == "table" and tonumber(g.y)
+    if x and y and FIND_ICON[g.kind] then
+      local p, d = { x / 1000, y / 1000 }, nil
+      for i = 1, g.ping and 0 or before do
+        local e = list[i]
+        if e.kind == g.kind and (e.fid == g.id or (g.kind == "b" and e.fid == 0 and e.name == g.name)) then
+          for _, s in ipairs(e.spots) do if abs(s[1] - p[1]) + abs(s[2] - p[2]) <= FIND_NEAR then d = e end end
+        end
+        if d then break end
+      end
+      if d then
+        d.mates = math.max(d.mates or 0, tonumber(g.mates) or 0)
+      else
+        d = findOf(m, g.kind, tonumber(g.id) or 0, type(g.name) == "string" and g.name or nil, nil)
+        -- (one object at two spots is two of the guild's finds: the spot in the key)
+        d.fkey = d.fkey .. "@" .. x .. "," .. y .. (g.ping and ":up" or "")
+        d.spots[1] = p
+        d.guild, d.mates, d.level = true, tonumber(g.mates) or 0, tonumber(g.level)
+        d.sure, d.ping = g.sure and true or nil, tonumber(g.ping)
+        d.dim = not (d.sure or d.ping) or nil
+        list[#list + 1] = d
+      end
+    end
+  end
+  for _, d in ipairs(list) do
+    if d.kind == "r" and d.level then d.name = string.format("Rare, level %d", d.level) end
+    if d.guild then
+      if d.ping then d.how = "up now" end
+      -- (sure by the officers' word alone: no guild mate counted here, the guild's)
+      d.who = (d.ping or d.dim) and "a guild mate" or (d.mates > 0 and mates(d.mates)) or "the guild"
+    elseif (d.mates or 0) > 0 then
+      d.who = d.who .. FIND_DOT .. mates(d.mates)
+    end
+    d.row = nil
+  end
+  table.sort(list, function(a, b) if (a.new or false) ~= (b.new or false) then return not a.new end return a.fkey < b.fkey end)
+  findMemoN = findMemoN + 1
+  if findMemoN > 24 then findMemo, findMemoN = {}, 1 end
+  findMemo[m] = { data = D.FIND, own = own, n = n, ver = ver, list = list }
+  return list
+end
+-- the maps with finds on them: the data's, your notes' and a host's guild's, each once
+function MP.FindMaps()
+  local seen, out = {}, {}
+  for m in pairs(type(QB.Data.FIND) == "table" and QB.Data.FIND or {}) do
+    if type(m) == "number" and not seen[m] then seen[m] = true; out[#out + 1] = m end
+  end
+  local disc = type(QuestBankDB) == "table" and type(QuestBankDB.disc) == "table" and QuestBankDB.disc or nil
+  for _, rec in pairs(disc and type(disc.find) == "table" and disc.find or {}) do
+    for _, p in ipairs(type(rec) == "table" and type(rec.p) == "table" and rec.p or {}) do
+      local m = type(p) == "table" and p[1]
+      if type(m) == "number" and not seen[m] then seen[m] = true; out[#out + 1] = m end
+    end
+  end
+  for _, m in ipairs(QB.Finds.GuildMaps()) do
+    if type(m) == "number" and not seen[m] then seen[m] = true; out[#out + 1] = m end
+  end
+  table.sort(out)
+  return out
+end
+-- (sub-project G) the footers' counts: the finds of yours QuestBank's data lacks (new), and how many of them a guild
+-- mate's find agrees with (confirmed). Counted again only when the data, your notes or the guild's changed (a window's
+-- footer asks at every draw, and the maps outnumber MP.Finds' memo)
+local tally = {}
+function MP.FindTally()
+  local disc = type(QuestBankDB) == "table" and type(QuestBankDB.disc) == "table" and QuestBankDB.disc or nil
+  local own, n, ver = disc and disc.find, disc and tonumber(disc.findN) or 0, QB.Finds.Ver()
+  if tally.data == QB.Data.FIND and tally.own == own and tally.n == n and tally.ver == ver then return tally.new, tally.sure end
+  local new, sure = 0, 0
+  for _, m in ipairs(MP.FindMaps()) do
+    for _, d in ipairs(MP.Finds(m)) do
+      if d.new then
+        new = new + 1
+        if (d.mates or 0) > 0 then sure = sure + 1 end
+      end
+    end
+  end
+  tally = { data = QB.Data.FIND, own = own, n = n, ver = ver, new = new, sure = sure }
+  return new, sure
+end
+
+-- a find's pin: its icon at 18 px, cut round, in the game's minimap button ring (MiniMap-TrackingBorder: the ring's art
+-- sits in the top left of its 64 px file, round a 20 px hole at 7, 5 when drawn at 54, as the minimap's buttons draw
+-- it), a rare with the nameplate's silver elite mark on its corner (Blizzard_NamePlateClassificationFrame.lua:125)
+local Find = {}
+local RING_K = 18 / 20
+function Find:Setup(d)
+  local f = d.find
+  local icon = self.Texture
+  self:SetSize(24, 24)
+  icon:ClearAllPoints()
+  icon:SetPoint("CENTER")
+  icon:SetSize(18, 18)
+  icon:SetTexture(f.icon)
+  icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+  if not self.qbRing then
+    if self.CreateMaskTexture and icon.AddMaskTexture then
+      local mask = self:CreateMaskTexture()
+      mask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+      mask:SetAllPoints(icon)
+      pcall(icon.AddMaskTexture, icon, mask)
+    end
+    self.qbRing = self:CreateTexture(nil, "OVERLAY")
+    self.qbRing:SetTexture(QB.Data.TEX.ring)
+    self.qbRing:SetSize(54 * RING_K, 54 * RING_K)
+    self.qbRing:SetPoint("TOPLEFT", icon, "TOPLEFT", -7 * RING_K, 5 * RING_K)
+    self.qbHi = self:CreateTexture(nil, "HIGHLIGHT")
+    self.qbHi:SetAllPoints(icon)
+    self.qbHi:SetTexture(f.icon)
+    self.qbHi:SetBlendMode("ADD")
+    self.qbHi:SetAlpha(0.35)
+    self.qbElite = self:CreateTexture(nil, "OVERLAY", nil, 1)
+    self.qbElite:SetSize(14, 14)
+    self.qbElite:SetPoint("CENTER", icon, "BOTTOMRIGHT", -1, 1)
+  end
+  self.qbHi:SetTexture(f.icon)
+  self.qbHi:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+  if f.rare and QB.Art(self.qbElite, "nameplates-icon-elite-silver", nil) then self.qbElite:Show() else self.qbElite:Hide() end
+  -- (a find of yours QuestBank's data lacks is drawn the same: its tooltip says so. One guild mate's alone is dim, at
+  -- half its alpha, until a second agrees: sub-project G)
+  icon:SetDesaturated(false)
+  self:SetAlpha(f.dim and 0.5 or 1)
+  self.Badge:Hide()
+  self.Count:Hide()
+  -- (a pin standing for several finds: their count, 10 px, white, outlined, on its bottom right corner, as the quests')
+  if d.count then
+    if not self.qbCount then
+      self.qbCount = self:CreateFontString(nil, "OVERLAY")
+      local font = GameFontNormal and GameFontNormal:GetFont() or "Fonts\\FRIZQT__.TTF"
+      self.qbCount:SetFont(font, 10, "OUTLINE")
+      self.qbCount:SetTextColor(1, 1, 1)
+      self.qbCount:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", 4, -3)
+    end
+    self.qbCount:SetText(tostring(d.count))
+    self.qbCount:Show()
+  elseif self.qbCount then
+    self.qbCount:Hide()
+  end
+end
+local DOT = " \194\183 "
+Find.OnMouseEnter = QB.Safe(function(self)
+  local d = self.data
+  local f = d and d.find
+  if not f then return end
+  GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+  GameTooltip:AddLine(f.name or f.kindWord, 1, 1, 1)
+  if f.dim then
+    GameTooltip:AddLine(f.how .. DOT .. "A guild mate saw this", 0.8, 0.8, 0.8)
+    GameTooltip:AddLine("It counts once a second one agrees.", 0.5, 0.5, 0.5, true)
+  elseif f.ping then
+    local ago = math.max(0, ((GetTime and GetTime()) or f.ping) - f.ping) / 60
+    GameTooltip:AddLine(f.how .. DOT .. f.who .. DOT .. (ago < 1 and "just now" or (math.floor(ago) .. " min ago")), 0.8, 0.8, 0.8)
+  else
+    GameTooltip:AddLine(f.how .. DOT .. f.who, 0.8, 0.8, 0.8)
+  end
+  if f.new then GameTooltip:AddLine("Seen in play by you", 0.47, 0.69, 1) end
+  -- (the finds merged into this pin, each its name and how and who)
+  for _, o in ipairs(d.merged or {}) do
+    local of = o.find
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine(of.name or of.kindWord, 1, 1, 1)
+    GameTooltip:AddLine(of.how .. DOT .. (of.dim and "A guild mate saw this" or of.who), 0.8, 0.8, 0.8)
+  end
+  P.Instruct(GameTooltip, "Click to show it on the arrow for now")
+  GameTooltip:Show()
+  MP.Hover(f.fkey, true)
+end, "map page find")
+function Find:OnMouseLeave()
+  GameTooltip:Hide()
+  MP.Hover(nil, true)
+end
+function Find:OnMouseClickAction(button)
+  local d = self.data
+  if not d or button == "RightButton" then return end
+  QB.Try("map page find click", QB.API.SetWaypoint, d.m, d.x * 100, d.y * 100, d.find.name or d.find.kindWord)
+end
+local FIND = { template = "QuestBankMarkTemplate", level = "PIN_FRAME_LEVEL_VIGNETTE", scale = { 1, 1.0, 1.2 }, mouse = true, methods = Find, size = 24, glow = 54 }
+MP.FIND = FIND
+
+-- the zones of a continent that get QuestBank's pins (QuestMap.lua QM.Draws), by id
+function MP.ZonesOf(m)
+  local out = {}
+  if not (C_Map and C_Map.GetMapChildrenInfo) then return out end
+  local ok, kids = pcall(C_Map.GetMapChildrenInfo, m)
+  for _, k in ipairs(ok and type(kids) == "table" and kids or {}) do
+    local id = QB.Plain(k.mapID)
+    if QB.QuestMap.Draws(id) then out[#out + 1] = id end
+  end
+  table.sort(out)
+  return out
+end
+local function isContinent(m)
+  local i = info(m)
+  return i ~= nil and QB.Plain(i.mapType) == CONTINENT
+end
+MP.IsContinent = isContinent
+
+-- every spot of every find on map m (a continent: its zones', placed on it). (The review of sub-project F) Spots that
+-- would touch at the canvas's zoom (closer than a find's 24 px pin on screen) are one pin, as the quests' are
+-- (QuestMap.lua QM.Merge): the first drawn stands for the others, their finds in its d.merged and how many finds it
+-- holds in d.count (a find's own spots close together count once), its tooltip naming each; zoomed in they part (the
+-- layer drawn again once the zoom settles: MP.finds' OnCanvasScaleChanged). A rare up now stands for the others first,
+-- then a find drawn whole, a single guild mate's dim one last
+local FIND_PX = 24
+local function findRank(f) return f.ping and 1 or (f.dim and 3 or 2) end
+local function drawFinds(layer, m)
+  if not (QB.mapWindow and QB:Settings().mapFinds ~= false) then return end
+  local zones = isContinent(m) and MP.ZonesOf(m) or { m }
+  local map, canvas = layer:GetMap(), layer.canvas
+  local w, h = canvas and canvas:GetWidth() or 0, canvas and canvas:GetHeight() or 0
+  local zoom = map and canvasScale(map) or 1
+  layer.qmZoom = floor(zoom * 4 + 0.5)
+  local tx, ty = FIND_PX / max(1, w * zoom), FIND_PX / max(1, h * zoom)
+  local heads = {}
+  local function place(z, f)
+    for _, sp in ipairs(f.spots) do
+      local x, y = sp[1], sp[2]
+      if z ~= m then x, y = P.Project({ m = z, x = sp[1] * 100, y = sp[2] * 100 }, m) end
+      if x then
+        local head
+        for _, hd in ipairs(heads) do
+          local dx, dy = (hd.px - x) / tx, (hd.py - y) / ty
+          if dx * dx + dy * dy < 1 then head = hd break end
+        end
+        if not head then
+          heads[#heads + 1] = { fkey = f.fkey, find = f, m = z, x = sp[1], y = sp[2], px = x, py = y }
+        elseif head.find ~= f then
+          local had = false
+          for _, o in ipairs(head.merged or {}) do if o.find == f then had = true end end
+          if not had then
+            head.merged = head.merged or {}
+            head.merged[#head.merged + 1] = { fkey = f.fkey, find = f, m = z, x = sp[1], y = sp[2] }
+            head.count = #head.merged + 1
+          end
+        end
+      end
+    end
+  end
+  for rank = 1, 3 do
+    for _, z in ipairs(zones) do
+      for _, f in ipairs(MP.Finds(z)) do if findRank(f) == rank then place(z, f) end end
+    end
+  end
+  for _, d in ipairs(heads) do layer:Add(FIND, d, d.px, d.py) end
+end
+-- how many finds there are on map m (a continent: in its zones), for the layer's switch
+function MP.FindCount(m)
+  local n = 0
+  for _, z in ipairs(isContinent(m) and MP.ZonesOf(m) or { m }) do n = n + #MP.Finds(z) end
+  return n
+end
+
+-- does a pin's data hold quest id: a ! or ? (its quests, and a ?'s pick-ups), a mark (its quest), a route pin (its ids),
+-- and a pin merged with others (QM.Merge's d.merged, the finds' too) each of theirs
 local function holds(d, id)
   if not (d and id) then return false end
+  for _, o in ipairs(d.merged or {}) do if holds(o, id) then return true end end
+  -- (a find: by its key, "find:..."; never a quest's id)
+  if d.fkey then return d.fkey == id end
   if d.id == id or (d.ids and d.ids[id]) then return true end
   for _, q in ipairs(d.quests or {}) do if q.id == id then return true end end
   for _, q in ipairs(d.offers or {}) do if q.id == id then return true end end
@@ -447,7 +823,7 @@ end
 
 -- every pin lit again (the quest hovered or picked changed)
 function MP.Glow()
-  for _, layer in ipairs({ QB.QuestMap.pageProvider, P.pageProvider }) do
+  for _, layer in ipairs({ QB.QuestMap.pageProvider, P.pageProvider, MP.finds or false }) do
     for _, f in ipairs(layer and layer.active or {}) do P.Glow(f, MP.Lit(f.data)) end
   end
 end
@@ -462,10 +838,19 @@ local LEVELS = { { "PIN_FRAME_LEVEL_MAP_EXPLORATION" }, { "PIN_FRAME_LEVEL_QUEST
   { "PIN_FRAME_LEVEL_QUEST_OFFER", 200 }, { "PIN_FRAME_LEVEL_ACTIVE_QUEST", 60 }, { "PIN_FRAME_LEVEL_SUPER_TRACKED_QUEST" },
   { "PIN_FRAME_LEVEL_GROUP_MEMBER" } }
 MP.LEVELS = LEVELS
+-- (sub-project F) a host's map window adds the game's own pins of four providers (MP.Host's) and the finds: each on the
+-- level the world map gives it (Blizzard_WorldMap.lua:270-316): the graveyards under the area points, the map links over
+-- them, the finds where the world map's vignettes stand (under the offers), your corpse over your group
+local WINDOW_LEVELS = { { "PIN_FRAME_LEVEL_MAP_EXPLORATION" }, { "PIN_FRAME_LEVEL_QUEST_BLOB" }, { "PIN_FRAME_LEVEL_MAP_HIGHLIGHT" },
+  { "PIN_FRAME_LEVEL_DUNGEON_ENTRANCE" }, { "PIN_FRAME_LEVEL_FLIGHT_POINT" }, { "PIN_FRAME_LEVEL_SELECTABLE_GRAVEYARD" },
+  { "PIN_FRAME_LEVEL_AREA_POI" }, { "PIN_FRAME_LEVEL_MAP_LINK" }, { "PIN_FRAME_LEVEL_VIGNETTE", 50 }, { "PIN_FRAME_LEVEL_QUEST_OFFER", 200 },
+  { "PIN_FRAME_LEVEL_ACTIVE_QUEST", 60 }, { "PIN_FRAME_LEVEL_SUPER_TRACKED_QUEST" }, { "PIN_FRAME_LEVEL_GROUP_MEMBER" },
+  { "PIN_FRAME_LEVEL_CORPSE" } }
+MP.WINDOW_LEVELS = WINDOW_LEVELS
 function MP.Levels(canvas)
   local mgr = canvas.GetPinFrameLevelsManager and canvas:GetPinFrameLevelsManager()
   if type(mgr) ~= "table" or type(mgr.AddFrameLevel) ~= "function" then return false end
-  for _, l in ipairs(LEVELS) do pcall(mgr.AddFrameLevel, mgr, l[1], l[2]) end
+  for _, l in ipairs(QB.mapWindow and WINDOW_LEVELS or LEVELS) do pcall(mgr.AddFrameLevel, mgr, l[1], l[2]) end
   return true
 end
 
@@ -511,12 +896,36 @@ local function build()
   P.pageLayers[#P.pageLayers + 1] = MP.step
   QM.pageProvider.lit, P.pageProvider.lit, MP.step.lit = MP.Lit, MP.Lit, function() return STEP_LIT end
   MP.layers = { QM.pageProvider, P.pageProvider, MP.lines, MP.step, MP.flight }
+  if QB.mapWindow then
+    -- (sub-project F) a host's map window: the finds, and the game's smooth wheel through zones (MP.Wheel)
+    MP.finds = P.NewLayer(drawFinds, "map page finds", canvas)
+    MP.finds.lit = MP.Lit
+    MP.layers[#MP.layers + 1] = MP.finds
+    -- (the finds that touch merged at this zoom: a zoom step that changes how near two may stand draws them again once
+    -- it settles, as QuestMap.lua's layer does)
+    local placed = MP.finds.OnCanvasScaleChanged
+    MP.finds.OnCanvasScaleChanged = QB.Safe(function(layer, ...)
+      placed(layer, ...)
+      local zoom = canvasScale(layer:GetMap())
+      if floor(zoom * 4 + 0.5) == layer.qmZoom or layer.qmSoon then return end
+      layer.qmSoon = true
+      C_Timer.After(0.25, QB.Safe(function() layer.qmSoon = nil; if P.Shown(layer) then layer:RefreshAllData() end end, "map page finds: zoom"))
+    end, "map page finds: zoom")
+    MP.finds.OnCanvasSizeChanged = MP.finds.OnCanvasScaleChanged
+    -- (MAP_CANVAS_MOUSE_WHEEL_ZOOM_BEHAVIOR_SMOOTH: MapCanvas_ScrollContainerMixin.lua:3, the zoom target eased toward)
+    if MapCanvasMixin.SetMouseWheelZoomMode and MAP_CANVAS_MOUSE_WHEEL_ZOOM_BEHAVIOR_SMOOTH then
+      canvas:SetMouseWheelZoomMode(MAP_CANVAS_MOUSE_WHEEL_ZOOM_BEHAVIOR_SMOOTH)
+    end
+    local sc = canvas.ScrollContainer
+    sc.OnMouseWheel = MP.Wheel
+    sc:SetScript("OnMouseWheel", QB.Safe(function(self, delta) self:OnMouseWheel(delta) end, "map page wheel"))
+  end
   canvas:AddCanvasClickHandler(canvasClick)
   MP.canvas = canvas
   -- your zone now, hidden: its art loads and QuestBank's layers make their frames (they make none in a fight), so a
   -- first open in one shows them
   MP.Go(playerMap(), "here")
-  if MP.frame then MP.Place() end -- the page was opened first (in the fight): the map goes in now
+  if MP.frame or MP.host then MP.Place() end -- the page was opened first (in the fight): the map goes in now
 end
 
 -- the zone you are in, while the map follows you; the end of the fight the canvas waited for
@@ -556,6 +965,65 @@ function MP.Go(mapID, why)
   return true
 end
 MP.HasArt = hasArt
+
+-- (sub-project F) up a map: the parent with art (the game's NavigateToParentMap, MapCanvas.lua, goes to the parent
+-- whatever it has, and its scroll container reads that map's first art layer unchecked); a parent without art is
+-- passed for its own. False where there is none
+function MP.Up()
+  local i = info(shownMap())
+  for _ = 1, 4 do
+    local p = i and QB.Plain(i.parentMapID)
+    if type(p) ~= "number" or p <= 0 then return false end
+    if hasArt(p) then return MP.Go(p, "user") end
+    i = info(p)
+  end
+  return false
+end
+
+-- the zone of map m under the canvas's cursor, with art (a continent's zone, a zone's city), as the scroll container
+-- finds where a click lands (C_Map.GetMapInfoAtPosition, MapCanvas_ScrollContainerMixin.lua:66-91); nil elsewhere
+function MP.ChildAtCursor()
+  local canvas = MP.canvas
+  local m = shownMap()
+  if not (canvas and m and MapCanvasMixin.GetNormalizedCursorPosition and C_Map and C_Map.GetMapInfoAtPosition) then return nil end
+  local okC, x, y = pcall(canvas.GetNormalizedCursorPosition, canvas)
+  x, y = okC and QB.Plain(x), okC and QB.Plain(y)
+  if type(x) ~= "number" or type(y) ~= "number" then return nil end
+  local ok, i = pcall(C_Map.GetMapInfoAtPosition, m, x, y)
+  local id = ok and type(i) == "table" and QB.Plain(i.mapID) or nil
+  if type(id) ~= "number" or id == m or not hasArt(id) then return nil end
+  local kind = QB.Plain(i.mapType)
+  if kind ~= CONTINENT and not QB.QuestMap.Draws(id) then return nil end
+  return id
+end
+
+-- the scroll container at its smallest zoom (and not on its way elsewhere)
+local function atMinZoom(sc)
+  local S = MapCanvasScrollControllerMixin
+  if not (S and S.GetScaleForMinZoom and S.GetCanvasScale) then return false end
+  local ok, lo = pcall(sc.GetScaleForMinZoom, sc)
+  local ok2, now = pcall(sc.GetCanvasScale, sc)
+  lo, now = ok and tonumber(QB.Plain(lo)), ok2 and tonumber(QB.Plain(now))
+  if not (lo and now) then return false end
+  local target = tonumber(sc.targetScale) or now
+  return now <= lo * 1.02 and target <= lo * 1.0001
+end
+-- (sub-project F) the wheel on a host's map window: out at the smallest zoom goes up a map, in at the smallest zoom over a
+-- zone of this map goes into it and the wheel goes on zooming there; otherwise the game's own wheel (the smooth zoom)
+function MP.Wheel(sc, delta)
+  local base = MapCanvasScrollControllerMixin and MapCanvasScrollControllerMixin.OnMouseWheel
+  delta = tonumber(QB.Plain(delta)) or 0
+  if QB.mapWindow and MP.canvas and delta ~= 0 and atMinZoom(sc) then
+    if delta < 0 then
+      MP.Up()
+      return
+    end
+    local child = MP.ChildAtCursor()
+    if child and MP.Go(child, "user") and base then base(sc, delta) end
+    if child then return end
+  end
+  if base then base(sc, delta) end
+end
 
 -- your zone, and the map follows you again
 function MP.Here()
@@ -693,10 +1161,22 @@ local function separator(f, i)
 end
 
 -- a layer's switch under the map: the game's icon (the route's the super-tracked disc) and how many there are
--- on this map; off, greyed. Its tooltip gives the word
+-- on this map; off, greyed. Its tooltip gives the word. (The review of sub-project F) On a host's map window the master
+-- switch is the game's map's alone (QuestMap.lua's on): each layer is its own switch there
 local function layerOn(t)
   local set = QB:Settings()
-  return not (t.icons and set.mapIcons == false) and set[t.key] ~= false
+  return not (t.icons and set.mapIcons == false and not QB.mapWindow) and set[t.key] ~= false
+end
+MP.TOGGLES, MP.LayerOn = TOGGLES, layerOn
+-- a layer's art for its switch (and a host's list's section): its own, but In your log's under a host's kind marks, where
+-- an objective's spot is its kind's cursor and no pin is the quest disc (QB.kindMarks, Pins.lua P.StyleKind): the
+-- attack cursor, the commonest of them. Returns the atlas and the file for it
+function MP.ToggleArt(t)
+  if QB.kindMarks and t.key == "mapObj" then
+    local k = QB.QuestMap.ART.k
+    return k.atlas, k.file
+  end
+  return t.atlas, t.file
 end
 
 local function toggle(f, t, i)
@@ -707,7 +1187,7 @@ local function toggle(f, t, i)
   b.icon = b:CreateTexture(nil, "ARTWORK")
   b.icon:SetSize(20, 20)
   b.icon:SetPoint("LEFT", 0, 0)
-  QB.Art(b.icon, t.atlas, t.file)
+  QB.Art(b.icon, MP.ToggleArt(t))
   if t.num then
     b.num = b:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
     b.num:SetPoint("CENTER", b.icon, "CENTER", 0, 0)
@@ -955,9 +1435,56 @@ local function buildPage(page)
   return f
 end
 
--- the canvas into the page's map frame (once it exists), over its border
+-- (sub-project F) a host's window holds the canvas in place of this page (Cute's Map window, M): MP.Host(box, hooks) puts
+-- it in box, filling it at box's strata, and returns it (nil until it is built: then it goes in as it is). hooks =
+-- { strata = the box's frame strata, Changed = fn(mapID) the map shown or its quests changed (MP.lists, MP.zone are the
+-- zone's), Reveal = fn(ids) a pin clicked, Hovered = fn(id) a pin hovered (a quest's id, a find's key, nil as it is
+-- left), Route = fn() the route drawn again, Showing = fn(text) a spot put on the arrow }. The host's frame calls MP.Tick(dt) while it shows, and MP.Fit()
+-- when its box changes size. MP.Host(nil) gives the canvas back to its holder
+function MP.Host(box, hooks)
+  local canvas = MP.canvas
+  if not box then
+    MP.host = nil
+    if canvas and MP.holder then canvas:SetParent(MP.holder); canvas:ClearAllPoints(); canvas:SetPoint("TOPLEFT") end
+    return nil
+  end
+  MP.host = { frame = box, hooks = hooks or {} }
+  MP.Place()
+  return MP.canvas
+end
+function MP.Fit()
+  local host, canvas = MP.host, MP.canvas
+  if not (host and canvas and canvas:GetParent() == host.frame) then return end
+  local w, h = host.frame:GetWidth() or 0, host.frame:GetHeight() or 0
+  if w < 50 or h < 50 then return end
+  if canvas:GetWidth() == w and canvas:GetHeight() == h then return end
+  canvas:SetSize(w, h)
+  QB.Try("map page: fit", canvas.OnFrameSizeChanged, canvas)
+end
+
+-- the canvas into the page's map frame (once it exists), over its border; or into the host's box
 function MP.Place()
+  if MP.host then
+    local box, canvas = MP.host.frame, MP.canvas
+    if not canvas then return end
+    if canvas:GetParent() ~= box then
+      -- (hidden, moved and shown: the canvas's OnShow draws every layer on the box's map, as the world map's opening does)
+      MP.holder = MP.holder or canvas:GetParent()
+      canvas:Hide()
+      canvas:SetParent(box)
+      canvas:ClearAllPoints()
+      canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 0, 0)
+      canvas:SetFrameStrata(MP.host.hooks.strata or "HIGH")
+      canvas:SetFrameLevel((box:GetFrameLevel() or 1) + 1)
+      canvas:SetSize(1, 1) -- (MP.Fit sizes it to the box and tells the canvas)
+      MP.Fit()
+      canvas:Show()
+    end
+    MP.Fit()
+    return
+  end
   local f, canvas = MP.frame, MP.canvas
+  if not f then return end
   f.later:SetShown(canvas == nil)
   f.later:SetText(QB.Pins.InCombat() and "Map after the fight" or "No map on this client")
   if not canvas or canvas:GetParent() == f.map then return end
@@ -1028,6 +1555,22 @@ local function routeCount(m)
   return n
 end
 
+-- how many of each layer's pins there are on map m: the zone's quests by kind (lists, MP.ZoneQuests'), the route's pins,
+-- the dungeons, the flight paths, the finds. (sub-project F) On a host's map window a continent counts its zones' quests,
+-- which it draws (QuestMap.lua)
+function MP.Counts(m, lists)
+  lists = lists or MP.lists or NONE
+  local ready, log, pickup = #lists.ready, #lists.log, #lists.pickup
+  if QB.mapWindow and isContinent(m) then
+    for _, z in ipairs(MP.ZonesOf(m)) do
+      local zl = MP.ZoneQuests(z)
+      ready, log, pickup = ready + #zl.ready, log + #zl.log, pickup + #zl.pickup
+    end
+  end
+  return { ready = ready, log = log, pickup = pickup, route = routeCount(m), dungeons = #MP.Dungeons(m), flights = #MP.Flights(m),
+           finds = QB.mapWindow and MP.FindCount(m) or 0 }
+end
+
 -- under the map: the zone's name and the levels the game gives it, and each layer's switch with its count
 function MP.Strip()
   local f, m = MP.frame, shownMap()
@@ -1049,13 +1592,14 @@ function MP.Strip()
   end
 end
 
--- a switch flipped: one of QuestMap.lua's while its master switch is off turns that one on alone
+-- a switch flipped: one of QuestMap.lua's while its master switch is off turns that one on alone (QuestBank's page; a
+-- host's map window flips its own layer and never the game's map's master switch)
 function MP.ToggleLayer(key)
   local set = QB:Settings()
   for _, t in ipairs(TOGGLES) do
     if t.key == key then
       local on = not layerOn(t)
-      if on and t.icons and set.mapIcons == false then
+      if on and t.icons and set.mapIcons == false and not QB.mapWindow then
         set.mapIcons = true
         for _, o in ipairs(TOGGLES) do if o.icons then set[o.key] = false end end
       end
@@ -1132,14 +1676,18 @@ function MP.Select(id)
   MP.FillPanel(true)
 end
 
--- a row hovered: its quest's pins lit, and its areas shown by the game's quest blob (QuestBlobDataProvider); nil: none
-function MP.Hover(id)
+-- a row hovered: its quest's pins lit, and its areas shown by the game's quest blob (QuestBlobDataProvider); nil: none.
+-- (sub-project F) id may be a find's key ("find:..."), which lights its pins alone; fromPin: hovered on the map, which a
+-- host's list is told of (its row lit and scrolled into view)
+function MP.Hover(id, fromPin)
   if MP.hover == id then return end
   MP.hover = id
   local canvas = MP.canvas
-  if canvas and id then QB.Try("map page", canvas.TriggerEvent, canvas, "SetHighlightedQuestID", id)
+  if canvas and type(id) == "number" then QB.Try("map page", canvas.TriggerEvent, canvas, "SetHighlightedQuestID", id)
   elseif canvas then QB.Try("map page", canvas.TriggerEvent, canvas, "ClearHighlightedQuestID") end
   MP.Glow()
+  local told = fromPin and MP.host and MP.host.hooks.Hovered
+  if told then QB.Try("map page: hovered", told, id) end
 end
 
 -- where a quest is on map m, in fractions: its hand-in when it is ready, its objectives (and its hand-in) while it is
@@ -1180,12 +1728,14 @@ function MP.Focus(id)
     if canvas then QB.Try("map page", canvas.TriggerEvent, canvas, "SetFocusedQuestID", id) end
   end
   MP.Glow()
-  MP.FillPanel(true)
+  if MP.frame then MP.FillPanel(true) end
 end
 
 -- an icon clicked on the map: the first of its quests' rows scrolled to and lit for a moment (its section opened)
 function MP.Reveal(ids)
   local f = MP.frame
+  local told = not f and MP.host and MP.host.hooks.Reveal
+  if told then return told(ids) end
   if not (f and MP.lists) then return nil end
   local want = {}
   for _, id in ipairs(ids or {}) do want[id] = true end
@@ -1246,7 +1796,16 @@ end
 -- everything about the map shown
 function MP.Update()
   local f = MP.frame
-  if not f then return end
+  if not f then
+    -- (a host's window: the zone's quests for its list, and the host told)
+    local told = MP.host and MP.host.hooks.Changed
+    if told then
+      local m = shownMap()
+      MP.lists, MP.zone = MP.ZoneQuests(m)
+      QB.Try("map page: changed", told, m)
+    end
+    return
+  end
   local m = shownMap()
   MP.lists, MP.zone = MP.ZoneQuests(m)
   MP.Crumbs()
@@ -1267,7 +1826,7 @@ end
 
 -- the page's refresh: back to your zone while the map follows you, then the bar, the strip and the panel
 function MP.Refresh()
-  if not MP.frame then return end
+  if not (MP.frame or MP.host) then return end
   MP.Place()
   if MP.follow then MP.Go(playerMap(), "follow") end
   MP.Update()

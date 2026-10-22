@@ -6,8 +6,9 @@
 --   click toggles their window. For each window that is on, out of combat:
 --     SetOverrideBindingClick(CuteKeyOwner, false, key, "CuteGuildKey")
 --   (the game's own gamepad bindings make overrides the same way, InputButtonBinding.lua:28)
---   The setting, per character: CuteDB.chars[me].keys = { guild = "follow", quests = "follow" }. "follow" takes every
---   key the game has for its own window's action (TOGGLEGUILDTAB, TOGGLEQUESTLOG: Bindings_Camelot.xml:1229, 1248),
+--   The setting, per character: CuteDB.chars[me].keys = { guild = "follow", quests = "follow", map = "follow" }. "follow"
+--   takes every key the game has for its own window's action (TOGGLEGUILDTAB, TOGGLEQUESTLOG, TOGGLEWORLDMAP:
+--   Bindings_Camelot.xml),
 --   so rebinding the game's key moves Cute's with it; a key string takes that key; false takes none; nil (a character
 --   that never answered the setup card) takes none either.
 --   Applied at the first loading screen, on UPDATE_BINDINGS and PLAYER_GUILD_UPDATE, and on a change, always after
@@ -24,22 +25,28 @@ local WHITE = { 0.96, 0.96, 0.96 }
 local WARN = { 0.93, 0.74, 0.35 }
 local MUTE = { 0.52, 0.52, 0.52 }
 
--- the windows a key opens: the guild's always; the quests' while a module addon draws in it (Cute_Quest)
+-- the windows a key opens: the guild's always; the quests' while a module addon draws in it (Cute_Quest); the map's while
+-- the Map module is on (sub-project F: Cute_Quest's MapWin.lua; off, M is the game's)
 local WINDOWS = {
   { id = "guild", label = "Guild window", game = "Guild & Communities", action = "TOGGLEGUILDTAB", button = "CuteGuildKey", binding = "CUTE_TOGGLE" },
   { id = "quests", label = "Quests window", game = "Quest log", action = "TOGGLEQUESTLOG", button = "CuteQuestsKey", binding = "CUTE_QUESTS" },
+  { id = "map", label = "Map window", game = "World map", action = "TOGGLEWORLDMAP", button = "CuteMapKey", binding = "CUTE_MAP" },
 }
 K.ALL = WINDOWS
 function K.Windows()
   local out = {}
   for _, w in ipairs(WINDOWS) do
-    if w.id == "guild" or C.Modules.byId[C.UI.SPEC[w.id] and C.UI.SPEC[w.id].home or ""] or K.Expected(w.id) then out[#out + 1] = w end
+    -- (a window whose page shows: its module on and drawing one; the Map module beside a loaded QuestBank draws none)
+    local spec = C.UI.SPEC[w.id]
+    if w.id == "guild" or (spec and C.Modules.Page(spec.home)) or K.Expected(w.id) then out[#out + 1] = w end
   end
   return out
 end
 -- a window whose module addon is on its way: it loads once a fight at the login ends, and registers its pages then
--- (Modules.lua M.BaseComing; one that did not load is no window, so no key is held for it)
+-- (Modules.lua M.BaseComing; one that did not load is no window, so no key is held for it). The map's comes with it
+-- where this character has the Map module on
 function K.Expected(id)
+  if id == "map" then return C.Modules.BaseComing() and C.Modules.OnKey("Cute_Quest:map") end
   if id ~= "quests" then return false end
   return C.Modules.BaseComing()
 end
@@ -263,3 +270,4 @@ end
 -- the key bindings Cute adds to the game's (Bindings.xml): the windows' own, and Settings
 BINDING_NAME_CUTE_TOGGLE = "Guild window"
 BINDING_NAME_CUTE_QUESTS = "Quests window"
+BINDING_NAME_CUTE_MAP = "Map window"

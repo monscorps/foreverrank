@@ -596,6 +596,10 @@ function P.StylePoi(f, look)
   local k = P.IconScale()
   f.look, f.pressed, f.iconK = look, nil, k
   if not f.anchored then f.anchored = true; centre(f.Disc); centre(f.Hi) end
+  -- (a frame a kind mark or a numbered stop used before: P.StyleKind, P.StyleStop)
+  f.Disc:Show()
+  f.Glyph:Show()
+  if rawget(f, "qbNum") then f.qbNum:Hide() end
   atlasScaled(f.Disc, fam.disc .. (look.tracked and "-SuperTracked" or ""), DISC_FILE, DISC.normal, k)
   if look.complete then atlasScaled(f.Glyph, fam.turn, T.questActive, nil, k)
   else atlasScaled(f.Glyph, look.tracked and "Quest-In-Progress-Icon-Brown" or "Quest-In-Progress-Icon-yellow", T.questActive, nil, k) end
@@ -603,9 +607,58 @@ function P.StylePoi(f, look)
   f.Glyph:SetPoint("CENTER", 0, 0)
   atlasScaled(f.Hi, fam.hi, DISC_FILE, DISC.hi, k)
   f.Hi:SetBlendMode("ADD")
+  f.Hi:SetAlpha(1)
   f.Hi:Hide()
   f.Disc:SetDesaturated(look.late or false)
   f.Glyph:SetDesaturated(look.late or false)
+end
+
+-- (sub-project F) a host's kind marks (QB.kindMarks, Cute's Bridge): where QuestBank drew the game's quest disc for three
+-- things (the game's own pin for a quest, an objective's spot, a stop of the route), each has a look of its own, as the
+-- minimap's pins have (Minimap.lua styleGame). An objective's spot is the game's cursor for its work at 20 px, no disc
+-- (QuestMap.lua QM.PaintKind: a sword to kill, a bag to loot, a cog to use), lit by the mouse as a pin is
+local KIND_PX = 20
+function P.StyleKind(f, kind)
+  f.look, f.pressed, f.iconK = nil, nil, KIND_PX / 32
+  if not f.anchored then f.anchored = true; centre(f.Disc); centre(f.Hi) end
+  f.Disc:Hide()
+  if rawget(f, "qbNum") then f.qbNum:Hide() end
+  QB.QuestMap.PaintKind(f.Glyph, kind)
+  f.Glyph:SetSize(KIND_PX, KIND_PX)
+  f.Glyph:ClearAllPoints()
+  f.Glyph:SetPoint("CENTER", 0, 0)
+  f.Glyph:SetDesaturated(false)
+  f.Glyph:Show()
+  QB.QuestMap.PaintKind(f.Hi, kind)
+  f.Hi:SetSize(KIND_PX, KIND_PX)
+  f.Hi:SetBlendMode("ADD")
+  f.Hi:SetAlpha(0.5)
+  f.Hi:Hide()
+end
+-- a stop of the route: the game's quest disc with its number on it (white, outlined, the windows' numbers on pins), stop
+-- 1 on the gold disc the game gives the quest it super-tracks; a stop whose quests are all done the hand-in's ? (StylePoi)
+function P.StyleStop(f, d)
+  local fam = FAMILY[d.family or "basic"] or FAMILY.basic
+  local k = P.IconScale()
+  f.look, f.pressed, f.iconK = { tracked = d.num == 1, family = d.family }, nil, k
+  if not f.anchored then f.anchored = true; centre(f.Disc); centre(f.Hi) end
+  f.Disc:Show()
+  atlasScaled(f.Disc, fam.disc .. (d.num == 1 and "-SuperTracked" or ""), DISC_FILE, DISC.normal, k)
+  f.Disc:SetDesaturated(d.late or false)
+  f.Glyph:Hide()
+  if not rawget(f, "qbNum") then
+    f.qbNum = f:CreateFontString(nil, "OVERLAY")
+    local font = GameFontNormal and GameFontNormal:GetFont() or "Fonts\\FRIZQT__.TTF"
+    f.qbNum:SetFont(font, 10, "OUTLINE")
+    f.qbNum:SetPoint("CENTER", 0, 0)
+  end
+  f.qbNum:SetTextColor(1, 1, 1)
+  f.qbNum:SetText(tostring(d.num or ""))
+  f.qbNum:Show()
+  atlasScaled(f.Hi, fam.hi, DISC_FILE, DISC.hi, k)
+  f.Hi:SetBlendMode("ADD")
+  f.Hi:SetAlpha(1)
+  f.Hi:Hide()
 end
 
 -- the button held (POIButtonMixin:OnMouseDown, UpdatePoint): the pressed disc, the glyph a pixel right and down
@@ -672,7 +725,8 @@ P.Pin = Pin
 -- a stop: the game's quest POI, with the turn-in glyph once every quest it takes is done, and stop 1 as the quest the
 -- game super-tracks (the gold disc, the brown glyph); a planned pick-up: the game's !
 function Pin:Setup(data)
-  if data.num then P.StylePoi(self, { complete = data.ready, tracked = data.num == 1, late = data.late, family = data.family })
+  if data.num and QB.kindMarks and not data.ready then P.StyleStop(self, data)
+  elseif data.num then P.StylePoi(self, { complete = data.ready, tracked = data.num == 1, late = data.late, family = data.family })
   else P.StyleOffer(self, { family = data.family }) end
 end
 
