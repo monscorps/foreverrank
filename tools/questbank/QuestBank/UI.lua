@@ -4189,8 +4189,7 @@ function UI:CreateSettingsView(parent)
       if row.note then tooltip(r, function(tip) tip:AddLine(row.label, GOLD[1], GOLD[2], GOLD[3]); tip:AddLine(row.note, 1, 1, 1, true) end) end
       v.remindRows[#v.remindRows + 1] = { row = row, w = r, x = RIGHT + 20 }
       -- (its line of reminders hidden for good, under the row's words, and its Show)
-      local hid = { text = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 200), show = button(p, "Show", 56) }
-      hid.text:SetWordWrap(false)
+      local hid = { text = para(p, "GameFontNormalSmall", 11, INK_SOFT, 204), show = button(p, "Show", 56) }
       hid.show:SetHeight(20)
       hid.show:SetScript("OnClick", QB.Safe(function()
         for _, h in ipairs(RM.Hidden(row.key)) do RM.SetNever(h[1], nil, false) end
@@ -4495,24 +4494,30 @@ function UI.SetStatusText(value)
   return true
 end
 
--- (the hud review) "Hidden: Eat, Sit" on one line of width px: the names that fit, "and 2 more" for the rest; a first
--- name too long alone is cut
+-- (the hud review) the lines a text takes at width px, wrapped at its spaces as the game wraps it (at least what its
+-- whole width needs), measured on fs
+local function linesOf(fs, s, width)
+  local n, line = 1, nil
+  for word in s:gmatch("%S+") do
+    local try = line and (line .. " " .. word) or word
+    fs:SetText(try)
+    if line and (fs:GetStringWidth() or 0) > width then n, line = n + 1, word else line = try end
+  end
+  fs:SetText(s)
+  local whole = (fs.GetUnboundedStringWidth or fs.GetStringWidth)(fs) or 0
+  return math.max(n, math.ceil(whole / width))
+end
+-- "Hidden: Eat, Sit" on fs, wrapping to two lines at most of width px: every name that fits, "and 2 more" for the
+-- rest. The lines it takes
 local function hiddenWords(fs, list, width)
   local names = {}
-  local function words(more) return "Hidden: " .. table.concat(names, ", ") .. (more > 0 and string.format(" and %d more", more) or "") end
-  for i, h in ipairs(list) do
-    names[i] = h[2]
-    fs:SetText(words(#list - i))
-    if i > 1 and (fs:GetStringWidth() or 0) > width then
-      names[i] = nil
-      fs:SetText(words(#list - i + 1))
-      break
-    end
-  end
-  if (fs:GetStringWidth() or 0) > width and QB.Arrow and QB.Arrow.Fit then
-    local whole = fs:GetText()
-    fs.qbText, fs.qbShort = nil, nil
-    QB.Arrow.Fit(fs, whole, nil, width)
+  for i, h in ipairs(list) do names[i] = h[2] end
+  local shown = #names
+  while true do
+    local words = "Hidden: " .. table.concat(names, ", ", 1, shown) .. (shown < #names and string.format(" and %d more", #names - shown) or "")
+    local lines = linesOf(fs, words, width)
+    if lines <= 2 or shown <= 1 then return math.min(lines, 2) end
+    shown = shown - 1
   end
 end
 
@@ -4713,13 +4718,15 @@ function UI:RefreshSettingsView(v)
       local hid = v.remindHid[e.row.key]
       local list = hid and RM.Hidden(e.row.key) or nil
       if list and #list > 0 then
-        hiddenWords(hid.text, list, 200)
+        local lines = hiddenWords(hid.text, list, 204)
+        hid.text:SetHeight(lines * 13)
         hid.text:ClearAllPoints()
         hid.text:SetPoint("TOPLEFT", e.x + 26, y - 2)
         hid.show:ClearAllPoints()
         hid.show:SetPoint("TOPLEFT", v.remindShowX, y + 1)
         hid.text:Show(); hid.show:Show()
-        y, extra = y - 22, extra + 22
+        local h = math.max(22, lines * 13 + 9)
+        y, extra = y - h, extra + h
       elseif hid then
         hid.text:Hide(); hid.show:Hide()
       end
