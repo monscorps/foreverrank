@@ -23075,6 +23075,33 @@ do
       and rs.camp == true and rs.food == nil, "6.1.1: the bar off, the switches left off as Nevers, quietInstance false as Everything")
   end }
 
+  -- 16b. QuestBank's Settings: under a row, while it keeps reminders hidden for good, one DIM line naming them with its
+  -- own Show, which brings back that row's alone; the rows and the sections under them move down, nothing overlaps
+  CASES[#CASES + 1] = { "Settings > Reminders: Hidden under each row, its own Show; nothing overlaps", function()
+    local c = hud("Settler", "MAGE", "Mage", 8, { [1459] = true, [168] = true }, { level = 20 })
+    local R, UI = c.QB.Remind, c.QB.UI
+    R.SetNever("eat", "Eat"); R.SetNever("sit", "Sit"); R.SetNever("buff:168", "Frost Armor"); R.SetNever("use:9002", "Small Barnacled Clam")
+    R.SetNever("flask:9187", "Elixir of the Mongoose")
+    c.env.SlashCmdList.QUESTBANK(""); UI:ShowTab(5); UI:Refresh()
+    local v5 = UI.views[5]
+    local hid = v5.remindHid
+    assert(hid and hid.camp.text:IsShown() and hid.camp.text:GetText() == "Hidden: Eat, Sit" and hid.camp.show:IsShown(), "under Camp: Hidden: Eat, Sit [Show]: " .. tostring(hid and hid.camp.text:GetText()))
+    assert(hid.buffs.text:GetText() == "Hidden: Elixir of the Mongoose, Frost Armor" and hid.upkeep.text:GetText() == "Hidden: Small Barnacled Clam"
+      and not hid.class.text:IsShown() and not hid.party.text:IsShown(), "each row its own: " .. tostring(hid.buffs.text:GetText()))
+    local sf = v5.scroll
+    local _, hi = sf.bar:GetMinMaxValues()
+    sf.bar:SetValue(math.min(hi, math.max(0, v5.remindAt - 10))); UI:Refresh()
+    local lay = checkLayout(UI.frame, "settings, Reminders with three rows' Hidden lines")
+    assert(#lay == 0, "the lines and the sections under them: nothing overlaps: " .. table.concat(lay, "; "))
+    hid.camp.show.__scripts.OnClick(hid.camp.show, "LeftButton")
+    local nv = R.Settings().never
+    assert(nv.eat == nil and nv.sit == nil and nv["buff:168"] and nv["use:9002"] and nv["flask:9187"], "its own Show: that row's alone back")
+    assert(not hid.camp.text:IsShown() and not hid.camp.show:IsShown(), "the line gone with them")
+    lay = checkLayout(UI.frame, "settings, Reminders after a Show")
+    assert(#lay == 0, "laid out again: " .. table.concat(lay, "; "))
+    sf.bar:SetValue(0); UI:ShowTab(1); UI:Refresh(); UI.frame:Hide()
+  end }
+
   -- 18. layout: Reminders with six icons and Buffs with six and four members, apart and within the screen; Reminders
   -- grows both ways from its middle, Buffs upward from its bottom; a moved Buffs keeps its own point; past six, the last
   -- wait, a BAD status takes the last camp icon's place; a step frame holding a secure button keeps its size in a fight

@@ -4148,9 +4148,12 @@ function UI:CreateSettingsView(parent)
   yl = y0 - 502
 
   -- (the hud round) Reminders (Remind.lua): Reminders and Buffs on screen, then one row a kind of reminder, drawn from
-  -- Remind.ROWS, the rows Cute's section draws too; the sixth a choice (the button cycles). A reminder hidden for good
-  -- (Never) is named on one line under the rows, with Show
+  -- Remind.ROWS, the rows Cute's section draws too; the sixth a choice (the button cycles). (The hud review) under a
+  -- row, while it keeps reminders hidden for good (Never), one DIM line names them with its own Show, which brings that
+  -- row's back; the rows under it and the right column's sections after Reminders move down by the lines shown
+  -- (RefreshSettingsView lays them out)
   y0 = yr
+  v.remindAt = -y0
   head(RIGHT, y0, "Reminders")
   local RM = QB.Remind
   v.remind = {}
@@ -4161,6 +4164,7 @@ function UI:CreateSettingsView(parent)
     tip:AddLine(RM.ON_LABEL, GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine(RM.ON_NOTE, 1, 1, 1, true)
   end)
+  v.remindRows, v.remindHid, v.remindY, v.remindShowX = {}, {}, ry - 26, RIGHT + 256
   for _, row in ipairs(RM.ROWS) do
     ry = ry - 26
     if row.choice then
@@ -4177,25 +4181,37 @@ function UI:CreateSettingsView(parent)
         tip:AddLine(row.label, GOLD[1], GOLD[2], GOLD[3])
         if row.note then tip:AddLine(row.note, 1, 1, 1, true) end
       end)
+      v.remindRows[#v.remindRows + 1] = { row = row, w = v.remindChoice, x = RIGHT + 4 }
     else
       local r = checkRow(p, RIGHT + 20, ry, row.label, 280)
       r.key = row.key
       v.remind[row.key] = r
       if row.note then tooltip(r, function(tip) tip:AddLine(row.label, GOLD[1], GOLD[2], GOLD[3]); tip:AddLine(row.note, 1, 1, 1, true) end) end
+      v.remindRows[#v.remindRows + 1] = { row = row, w = r, x = RIGHT + 20 }
+      -- (its line of reminders hidden for good, under the row's words, and its Show)
+      local hid = { text = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 200), show = button(p, "Show", 56) }
+      hid.text:SetWordWrap(false)
+      hid.show:SetHeight(20)
+      hid.show:SetScript("OnClick", QB.Safe(function()
+        for _, h in ipairs(RM.Hidden(row.key)) do RM.SetNever(h[1], nil, false) end
+        UI:Refresh()
+      end, "settings: reminders shown again"))
+      hid.text:Hide(); hid.show:Hide()
+      v.remindHid[row.key] = hid
     end
   end
   for _, r in pairs(v.remind) do
     r:SetScript("OnClick", function(self) RM.SetRow(self.key, self:GetChecked() and true or false); UI:Refresh() end)
   end
-  v.remindHidden = para(p, "GameFontNormalSmall", 11, INK_SOFT, 230)
-  v.remindHidden:SetPoint("TOPLEFT", RIGHT + 20, ry - 30)
-  v.remindShow = button(p, "Show", 64)
-  v.remindShow:SetPoint("TOPLEFT", RIGHT + 256, ry - 26)
-  v.remindShow:SetScript("OnClick", QB.Safe(function()
-    for key in pairs(RM.Settings().never) do RM.SetNever(key, nil, false) end
-    UI:Refresh()
-  end, "settings: reminders shown again"))
-  yr = ry - 26 - 34
+  yr = ry - 26 - 8
+
+  -- (the hud review) the right column's sections after Reminders in a frame of their own, which RefreshSettingsView
+  -- moves down by Reminders' hidden lines; the left column stays on the page itself
+  local page = p
+  v.remindBelow = CreateFrame("Frame", nil, page)
+  v.remindBelow:SetPoint("TOPLEFT", page, "TOPLEFT", 0, 0)
+  v.remindBelow:SetPoint("BOTTOMRIGHT", page, "BOTTOMRIGHT", 0, 0)
+  p = v.remindBelow
 
   -- timers (Timer.lua)
   y0 = yr
@@ -4353,6 +4369,8 @@ function UI:CreateSettingsView(parent)
   v.link:SetScript("OnClick", function() UI:CopyLink("QuestBank download page", QB.DOWNLOAD) end)
   yr = y0 - 460
 
+  p = page -- (the left column again)
+
   ----------------------------------------------------------------------------------------------------------------
   -- Banking, last: the mode (found for you, or set by you), the next cap, and how far the suggestions look
   ----------------------------------------------------------------------------------------------------------------
@@ -4436,7 +4454,8 @@ function UI:CreateSettingsView(parent)
   v.skipText:SetHeight(44)
   yl = y0 - 324
 
-  v.contentH = math.max(-yl, -yr) + 20
+  v.colL, v.colR = -yl, -yr
+  v.contentH = math.max(v.colL, v.colR) + 20
   v.Refresh = function() UI:RefreshSettingsView(v) end
   return v
 end
@@ -4474,6 +4493,27 @@ function UI.SetStatusText(value)
   if ok and QB.Plain(was) == "1" then pcall(set, "statusText", "0") end
   pcall(set, "statusText", "1")
   return true
+end
+
+-- (the hud review) "Hidden: Eat, Sit" on one line of width px: the names that fit, "and 2 more" for the rest; a first
+-- name too long alone is cut
+local function hiddenWords(fs, list, width)
+  local names = {}
+  local function words(more) return "Hidden: " .. table.concat(names, ", ") .. (more > 0 and string.format(" and %d more", more) or "") end
+  for i, h in ipairs(list) do
+    names[i] = h[2]
+    fs:SetText(words(#list - i))
+    if i > 1 and (fs:GetStringWidth() or 0) > width then
+      names[i] = nil
+      fs:SetText(words(#list - i + 1))
+      break
+    end
+  end
+  if (fs:GetStringWidth() or 0) > width and QB.Arrow and QB.Arrow.Fit then
+    local whole = fs:GetText()
+    fs.qbText, fs.qbShort = nil, nil
+    QB.Arrow.Fit(fs, whole, nil, width)
+  end
 end
 
 function UI:RefreshSettingsView(v)
@@ -4663,12 +4703,31 @@ function UI:RefreshSettingsView(v)
     local row, word = v.remindChoice.row, nil
     for _, c in ipairs(row.choice) do if c[2] == rm[row.key] then word = c[1] end end
     v.remindChoice:SetText(row.label .. ": " .. (word or row.choice[1][1]))
-    -- (what is hidden for good, named on one line; Show brings each back)
-    local names = {}
-    for _, name in pairs(rm.never or {}) do names[#names + 1] = type(name) == "string" and name or "?" end
-    table.sort(names)
-    v.remindHidden:SetText(#names > 0 and ("Hidden: " .. table.concat(names, ", ", 1, math.min(4, #names)) .. (#names > 4 and string.format(" and %d more", #names - 4) or "")) or "")
-    v.remindShow:SetShown(#names > 0)
+    -- (the hud review) the rows from the top, each row's reminders hidden for good on one DIM line under it with its
+    -- own Show; the right column's sections after Reminders down by the lines shown, and the page with them
+    local y, extra = v.remindY, 0
+    for _, e in ipairs(v.remindRows) do
+      e.w:ClearAllPoints()
+      e.w:SetPoint("TOPLEFT", e.x, y)
+      y = y - 26
+      local hid = v.remindHid[e.row.key]
+      local list = hid and RM.Hidden(e.row.key) or nil
+      if list and #list > 0 then
+        hiddenWords(hid.text, list, 200)
+        hid.text:ClearAllPoints()
+        hid.text:SetPoint("TOPLEFT", e.x + 26, y - 2)
+        hid.show:ClearAllPoints()
+        hid.show:SetPoint("TOPLEFT", v.remindShowX, y + 1)
+        hid.text:Show(); hid.show:Show()
+        y, extra = y - 22, extra + 22
+      elseif hid then
+        hid.text:Hide(); hid.show:Hide()
+      end
+    end
+    v.remindBelow:ClearAllPoints()
+    v.remindBelow:SetPoint("TOPLEFT", v.scroll.child, "TOPLEFT", 0, -extra)
+    v.remindBelow:SetPoint("BOTTOMRIGHT", v.scroll.child, "BOTTOMRIGHT", 0, -extra)
+    v.contentH = math.max(v.colL, v.colR + extra) + 20
   end
   v.clockLevelMsg:SetChecked(set.clockLevelMsg ~= false)
   -- the ready-check's tick and cross, drawn inline: the game's font has no check or cross of its own
