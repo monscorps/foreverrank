@@ -809,6 +809,16 @@ local function layout(ui)
   return true
 end
 
+-- the zones M showed, the newest first (four at most: the menu leaves your own out and names three; this session's)
+MW.recent = {}
+local function remember(m)
+  if not (E.QuestMap and E.QuestMap.Draws(m)) then return end
+  local r = MW.recent
+  for i = #r, 1, -1 do if r[i] == m then table.remove(r, i) end end
+  table.insert(r, 1, m)
+  while #r > 4 do r[#r] = nil end
+end
+
 function MW.Draw(ui, scroll)
   if not E then return QB.NeedPage(ui, scroll, "map") end
   local K = ui.COLORS
@@ -832,6 +842,7 @@ function MW.Draw(ui, scroll)
     MP.Update()
   end
   local m = shownMap()
+  if m ~= ui.mapFor then remember(m) end
   ui.mapFor = m
   QB.Reader.Left(ui)
   if QB.Reader.Open(ui) then
@@ -978,6 +989,31 @@ do
       return tostring(ok and line or "?") .. "; " .. tostring(okM and map or "map window: ?")
     end
   end
+end
+
+-- (sub-project F) the menu's Map entry (Cute/Windows.lua W.Menu): your zone, the last three zones M showed but yours, its
+-- Finds list, the game's own map (out of combat, as the header's button: Cute's window steps aside)
+local function gameMap()
+  if inCombat() or not (E and E.UI and E.UI.OpenMap) then return end
+  local w = Cute.Window and Cute.Window("map")
+  if E.UI.OpenMap() and w and w.frame then w.frame:Hide() end
+end
+local function openOn(m)
+  Cute.Open("map")
+  local MP = engineMap()
+  if MP then MP.Go(m, "user") end
+end
+Cute.MapMenu = function()
+  local mine = playerMap()
+  local zones = {}
+  for _, m in ipairs(MW.recent) do
+    local i = info(m)
+    if m ~= mine and #zones < 3 and i and plain(i.name) then zones[#zones + 1] = { plain(i.name), function() openOn(m) end } end
+  end
+  return {
+    here = function() Cute.Open("map"); local MP = engineMap(); if MP then MP.Here() end end,
+    zones = zones, finds = function() MW.OpenFinds() end, game = gameMap, fight = inCombat(),
+  }
 end
 
 -- (sub-project F) /cute finds: the Map window on the Finds list (Cute's own words before the core's, as Windows.lua wraps

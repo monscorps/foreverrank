@@ -15917,6 +15917,57 @@ do
     leave(c)
     said[#said + 1] = "a find on a map without art: the map above it with art, no chat line, no wrong pan; a continent's zone without art a row that says so"
   end)
+  -- K6: the menu's Map (M): opening M when clicked; Your zone, the last three zones opened (the newest first, yours not
+  -- among them), Finds, then the game's map, greyed in a fight; the Map module off, no entry
+  isolated({ member("Rone", 1) }, function()
+    local c, QB = mapClient("Rone", 1)
+    local MP = QB.MapPage
+    c.C.Keys.Set("guild", "follow"); c.C.Keys.Set("quests", "follow"); c.C.Keys.Set("map", "follow")
+    c.C.Keys.Apply()
+    local function menuOf()
+      local n0 = #c.contextMenus
+      c.C.UI.mini.__scripts.OnClick(c.C.UI.mini, "RightButton")
+      assert(#c.contextMenus == n0 + 1, "a menu opened")
+      return c.contextMenus[#c.contextMenus]
+    end
+    local function entry(list, text) for _, e in ipairs(list) do if e.text == text then return e end end end
+    local function names(list) local out = {}; for _, e in ipairs(list) do out[#out + 1] = e.kind == "divider" and "---" or tostring(e.text) end; return table.concat(out, ", ") end
+    c.C.UI:Open("map")
+    local ui = c.C.UI.Window("map")
+    local here = MP.canvas:GetMapID()
+    local function name(m) return c.env.C_Map.GetMapInfo(m).name end
+    for _, m in ipairs({ 1436, 1433, 1431, 1437, 1415 }) do if m ~= here then MP.Go(m, "user"); ui:Draw() end end
+    ui.frame:Hide()
+    local m = menuOf()
+    local map = entry(m, "Map (M)")
+    assert(map and map.responds, "Map (M) in the menu, opening its window when clicked: " .. names(m))
+    local want = "Your zone, " .. name(1437) .. ", " .. name(1431) .. ", " .. name(1433) .. ", Finds, ---, Game's map"
+    assert(names(map.sub) == want, "its entries: " .. names(map.sub) .. "\n  wanted: " .. want)
+    local order = {}
+    for i, e in ipairs(m) do order[e.text or e.kind] = i end
+    assert(order["Map (M)"] > order["Quests (L)"] and order["Map (M)"] < order.Settings, "after Quests, before Settings")
+    map.set()
+    assert(ui.frame:IsShown(), "Map (M) clicked: M")
+    entry(map.sub, name(1433)).set()
+    assert(MP.canvas:GetMapID() == 1433 and ui.frame:IsShown(), "a zone of the last three: M on it")
+    entry(map.sub, "Your zone").set()
+    assert(MP.canvas:GetMapID() == here and MP.follow, "Your zone: M on it, following you")
+    entry(map.sub, "Finds").set()
+    assert(ui.mapFinds, "Finds: M's Finds list")
+    entry(map.sub, "Game's map").set()
+    assert(c.map.shown and not ui.frame:IsShown(), "Game's map: the game's, M aside")
+    c.map:Close()
+    -- in a fight: the game's map greyed
+    c.combat = true
+    local fm = entry(menuOf(), "Map (M)")
+    assert(entry(fm.sub, "Game's map").off == true and not entry(fm.sub, "Finds").off, "in a fight: Game's map greyed, the rest not")
+    c.combat = false
+    -- the Map module off: no entry
+    c.C.Modules.Set("Cute_Quest:map", false); tick(c, 1)
+    assert(not entry(menuOf(), "Map (M)") and not entry(menuOf(), "Map"), "the Map module off: no Map entry")
+    leave(c)
+    said[#said + 1] = "the menu's Map (M): your zone, the last three zones opened, Finds, the game's map greyed in a fight; none with the module off"
+  end)
   print("map K: " .. table.concat(said, "; "))
 end
 

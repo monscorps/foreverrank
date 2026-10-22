@@ -309,6 +309,20 @@ function W.Menu(owner)
         for _, sw in ipairs(switches) do q:CreateCheckbox(sw[1], sw[2], C.Safe(sw[3], "menu: " .. sw[1])) end
       end
     end
+    -- (sub-project F) the Map window, while its page shows: your zone, the last three zones opened, its Finds list, then
+    -- the game's own map, greyed in a fight (Cute_Quest's MapWin.lua: Cute.MapMenu)
+    local door = #M.Pages(officer, "map") > 0 and type(C.API.MapMenu) == "function" and C.API.MapMenu() or nil
+    if door then
+      local mp = parent(withKey("Map", "map"), function() UI:Open("map") end)
+      if mp then
+        item(mp, "Your zone", door.here)
+        for _, z in ipairs(door.zones) do item(mp, z[1], z[2]) end
+        item(mp, "Finds", door.finds)
+        mp:CreateDivider()
+        local game = mp:CreateButton("Game's map", C.Safe(door.game, "menu: Game's map"))
+        if game and game.SetEnabled and door.fight then game:SetEnabled(false) end
+      end
+    end
     local s = parent("Settings", function() UI.OpenSettings() end)
     for _, sec in ipairs(C.SettingsPage.Sections(officer)) do item(s, sec.title, function() UI.OpenSettings(sec.id) end) end
     local staged, setup = M.Staged(), C.Setup and C.Setup.Pending()
