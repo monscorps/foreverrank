@@ -16963,6 +16963,64 @@ do local function cardsStage()
       Hc.toastFrame:Hide()
       if c.C.CardFrame.frame then c.C.CardFrame.frame:Hide() end
     end)
+
+    -- the halls' weekly store (CuteDB.halls[club].weeks), which only the officers' hall composer reads (This week and
+    -- Last week): an officer's client alone keeps it, of what goes to Everyone and came on the guild channel under a
+    -- sender string the roster bears out; a member's client keeps none (0.9 kept every member's, closed ones too, for
+    -- good), and deletes what it kept when the officers close a stat; an officer's goes with a demotion and with the
+    -- guild; a GUID the roster no longer lists and a week no hall reads are pruned
+    local wora = gmember("Wora", 1)
+    case("the weekly store, the officers' alone", { wora, gmember("Wim", 3), gmember("Wex", 3, "ROGUE") }, function()
+      local o, m, x = cchar("Wora", 1), cchar("Wim", 3), cchar("Wex", 3, { class = "ROGUE" })
+      login(o); login(m); login(x)
+      tickAll(30)
+      local function weeks(c) return H(c).DB().weeks end
+      fire(x, "PLAYER_DEAD"); fire(x, "PLAYER_DEAD")
+      tickAll(5)
+      assert(weeks(o)[x.o.guid] and weeks(o)[x.o.guid].v.deaths_week == 2, "the officer keeps Wex's week, for the halls")
+      assert(next(weeks(m)) == nil, "a member's client keeps no one's week")
+      -- a sender string the roster cannot name, its message carrying a member's GUID: nothing kept under that GUID
+      H(o):Seen("Stranger-Elsewhere", { guid = m.o.guid, deaths_week = 99 })
+      assert(not (weeks(o)[m.o.guid] and weeks(o)[m.o.guid].v.deaths_week == 99), "a GUID the sender string does not bear out keeps nothing")
+      -- a weekly stat the officers keep to themselves, whispered to them: the roster has it, the weeks none of it
+      o.C.Policy:Set("quests_week", "self")
+      o.C.Comm:SendPolicy()
+      tickAll(5)
+      fire(x, "QUEST_TURNED_IN", 214, 0, 0)
+      tickAll(5)
+      local e = o.env.CuteDB.roster[x.sender]
+      assert(e and e.stats.quests_week == 1, "the officer's roster has Wex's quest this week")
+      assert((weeks(o)[x.o.guid].v.quests_week or 0) == 0, "the weeks keep nothing the officers keep to themselves: " .. tostring(weeks(o)[x.o.guid].v.quests_week))
+      -- the officers close Deaths this week: a member's client that kept weeks (as 0.9 did) deletes them
+      local wk = H(m).WeekNow()
+      weeks(m)[x.o.guid] = { n = wk, v = { deaths_week = 2 } }
+      o.C.Policy:Set("deaths_week", "self")
+      o.C.Comm:SendPolicy()
+      tickAll(5)
+      assert(m.C.Policy:Route("deaths_week") == "self", "Wim's client holds the closed policy")
+      assert(next(weeks(m)) == nil, "the member's weeks gone with the close")
+      o.C.Policy:Set("deaths_week", "all")
+      o.C.Comm:SendPolicy()
+      tickAll(5)
+      -- pruned: a GUID the roster no longer lists, and a week two back that no hall reads
+      local ow = weeks(o)
+      ow[guidOf("Gone")] = { n = wk, v = { deaths_week = 5 } }
+      ow[guidOf("Wim")] = { n = wk - 2, v = { deaths_week = 1 } }
+      H(o).PruneWeeks()
+      ow = weeks(o)
+      assert(ow[guidOf("Gone")] == nil and ow[guidOf("Wim")] == nil and ow[x.o.guid], "a member gone and a week two back pruned, Wex's kept")
+      -- the guild left (Roster.lua R:LeftGuild): an officer's weeks go with it
+      o.C.Roster:LeftGuild()
+      assert(next(weeks(o)) == nil, "the guild left: the weeks gone")
+      fire(x, "PLAYER_DEAD")
+      tickAll(5)
+      assert(weeks(o)[x.o.guid], "an officer again keeps Wex's week")
+      -- an officer no more (Policy.lua P:Purge on the demotion): the weeks go
+      wora.rank, wora.rankName = 3, "Raider"
+      o.C.Roster:Refresh()
+      tickAll(5)
+      assert(not o.C.Roster:MeOfficer() and next(weeks(o)) == nil, "demoted: the weeks gone")
+    end)
     assert(#failed == 0, "fix-cards: " .. #failed .. " case(s) failed:\n  " .. table.concat(failed, "\n  "))
     said[#said + 1] = "the launch audit's cards findings: " .. table.concat(passed, "; ")
   end

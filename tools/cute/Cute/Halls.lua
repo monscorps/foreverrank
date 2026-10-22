@@ -137,28 +137,34 @@ H.Prefs = settings
 -- week moves what was held to p; a value that falls within a week is the member's own Monday (a client's week turns
 -- by its own clock) and moves to p as last week's. Yours are Sample's (CuteDB.chars[me].lastWeek, the week a reset
 -- replaced)
+-- (The launch audit) only the officers' hall composer reads it (H.ThisWeek, H.LastWeek: H.ValueOf), and only what goes
+-- to Everyone (H.Statable), so only an officer's client keeps it, only such values, under the GUID the sender string
+-- bears out (R:GuidOf: never the message's own guid, which an edited copy may make another member's). 0.9 kept every
+-- member's week on every client, closed ones and whispered ones too, for good: a member's client deletes what it holds
+-- when the officers close a stat (Policy.lua P:Purge), an officer's when it is one no more and when it leaves the guild
+-- (Roster.lua R:LeftGuild: H.PurgeWeeks), and a member the roster no longer lists or a week no hall reads goes (hourly,
+-- H.PruneWeeks)
 ----------------------------------------------------------------------------
-local function guidOfSender(sender, kv)
-  local R = C.Roster
-  local g = R and R.GuidOf and R:GuidOf(sender) or nil
-  if not g and type(kv.guid) == "string" and R and R.byGuid and R.byGuid[kv.guid] then g = kv.guid end
-  return g
-end
 function H:Seen(sender, kv)
   if type(kv) ~= "table" then return end
   local weekly = C.Sample.WEEKLY
+  local R, P = C.Roster, C.Policy
   local any = false
   for id, v in pairs(kv) do if weekly[id] and type(v) == "number" then any = true break end end
+  if not (any and R and R:OfficerStill()) then return end
+  any = false
+  for id, v in pairs(kv) do if weekly[id] and type(v) == "number" and P:Route(id) == "all" then any = true break end end
   if not any then return end
-  local g = guidOfSender(sender, kv)
+  local g = R:GuidOf(sender)
   local n = H.WeekNow()
   if not (g and n) then return end
+  if not H.weeksPruned or gtime() - H.weeksPruned >= HOUR then H.weeksPruned = gtime(); H.PruneWeeks() end
   local weeks = H.DB().weeks
   local rec = weeks[g]
-  if type(rec) ~= "table" or type(rec.v) ~= "table" then rec = { n = n, v = {} }; weeks[g] = rec end
-  if rec.n ~= n and rec.n < n then rec.p = { n = rec.n, v = rec.v }; rec.n, rec.v = n, {} end
+  if type(rec) ~= "table" or type(rec.v) ~= "table" or type(rec.n) ~= "number" then rec = { n = n, v = {} }; weeks[g] = rec end
+  if rec.n < n then rec.p = { n = rec.n, v = rec.v }; rec.n, rec.v = n, {} end
   for id, v in pairs(kv) do
-    if weekly[id] and type(v) == "number" then
+    if weekly[id] and type(v) == "number" and P:Route(id) == "all" then
       local cur = rec.v[id]
       if type(cur) == "number" and v < cur then
         if not (type(rec.p) == "table" and rec.p.n == n - 1) then rec.p = { n = n - 1, v = {} } end
@@ -190,6 +196,29 @@ function H.ThisWeek(guid, id)
   local rec = H.DB().weeks[guid]
   if type(rec) == "table" and rec.n == H.WeekNow() and type(rec.v) == "table" then return rec.v[id] end
   return nil
+end
+-- the weeks no hall reads: a member's held from before last week (Last week reads n - 1 at most), and one the roster no
+-- longer lists, where its last read was whole (a member who left: the roster prunes their record too). The number gone
+function H.PruneWeeks()
+  local n = H.WeekNow()
+  if not n then return 0 end
+  local R = C.Roster
+  local whole = R and R.trusted and R.listedWhole and R.byGuid or nil
+  local weeks, gone = H.DB().weeks, 0
+  for g, rec in pairs(weeks) do
+    if type(rec) ~= "table" or type(rec.n) ~= "number" or rec.n < n - 1 or (whole and not whole[g]) then weeks[g] = nil; gone = gone + 1 end
+  end
+  return gone
+end
+-- every week held of a guild (club, else this one's) deleted: a member's client, whose halls read none (Policy.lua
+-- P:Purge), and an officer's that leaves the guild (Roster.lua R:LeftGuild). The number gone
+function H.PurgeWeeks(club)
+  local d
+  if club ~= nil then d = type(CuteDB.halls) == "table" and CuteDB.halls[tostring(club)] or nil else d = H.DB() end
+  if type(d) ~= "table" or type(d.weeks) ~= "table" then return 0 end
+  local gone = 0
+  for g in pairs(d.weeks) do d.weeks[g] = nil; gone = gone + 1 end
+  return gone
 end
 
 ----------------------------------------------------------------------------

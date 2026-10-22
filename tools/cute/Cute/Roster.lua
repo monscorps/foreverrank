@@ -338,6 +338,8 @@ function R:LeftGuild()
     end
   end
   if n > 0 then self:Changed() end
+  -- (and the halls' weekly store of that guild, an officer's alone: Halls.lua)
+  if C.Halls and C.Halls.PurgeWeeks then n = n + C.Halls.PurgeWeeks(club) end
   return n
 end
 

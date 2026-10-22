@@ -1302,6 +1302,8 @@ function P:Purge(ready)
   -- (sub-project G: who saw each find, by GUID, where the officers keep Finds or Zone; a find of yours and the officers'
   -- word stay)
   if self:FindsRoute() == "self" and C.Finds and C.Finds.StripTraces then traces = traces + C.Finds.StripTraces(only) end
+  -- (the halls' weekly store, which only an officer's hall composer reads: a member's client keeps none, Halls.lua)
+  if C.Halls and C.Halls.PurgeWeeks then traces = traces + C.Halls.PurgeWeeks() end
   if n > 0 then
     R:Changed()
     if C.Rules then C.Rules:Dirty(true) end
