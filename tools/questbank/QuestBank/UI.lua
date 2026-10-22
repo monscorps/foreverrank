@@ -3507,7 +3507,7 @@ function UI:CreatePartyView(parent)
       or (group and "Share now: your quests with your group") or (guild and "Share now: your level with your guild") or "Share now",
       GOLD[1], GOLD[2], GOLD[3])
     if QB.noGuildSync then tip:AddLine("Cute is loaded and shares with your guild itself.", 1, 1, 1, true) end
-    tip:AddLine("Party and guild sharing is set in Settings. /qb sync Name whispers one friend.", 1, 1, 1, true)
+    tip:AddLine((QB.noGuildSync and "Party sharing" or "Party and guild sharing") .. " is set in Settings. /qb sync Name whispers one friend.", 1, 1, 1, true)
   end)
 
   v.runTitle = text(v, "GameFontNormalLarge", 15, INK, "LEFT", 330)
@@ -4356,13 +4356,17 @@ function UI:CreateSettingsView(parent)
   subhead(RIGHT, y0 - 182, "Sharing and chat")
   -- (the final audit) the group gets the same status as the guild and the quest list too (Sync.lua S:Broadcast), in a
   -- raid or an instance group as well: said as the guild row says its own. (merge5) Who sees them as Cute's row has it:
-  -- Cute_Quest's copy of the sync takes 1S, 1Q, 1L and 1G on the same prefix from your group (nothing from GUILD)
+  -- Cute_Quest's copy of the sync takes 1S, 1Q, 1L and 1G on the same prefix from your group (nothing from GUILD).
+  -- (the third audit) Each row's tooltip reads the host's flags as it shows, as Sync.lua does when it sends: with Cute
+  -- loaded (QB.noRaidSync, QB.noGuildSync) nothing goes to a raid nor to the guild
   v.shareParty = checkRow(p, RIGHT, y0 - 202, "Share my level, XP and quests with my group", 300)
   v.shareParty:SetScript("OnClick", function(self) QB:Settings().share.party = self:GetChecked() and true or false; UI:Refresh() end)
   v.shareParty:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:SetText("Share my level, XP and quests with my group", 1, 1, 1)
-    GameTooltip:AddLine("Your level, your XP into it, your class, the levels your plan reaches, the quests in it and the XP the game shows for them go to your party, raid or instance group. Group members who run QuestBank or Cute see them.", nil, nil, nil, true)
+    GameTooltip:AddLine("Your level, your XP into it, your class, the levels your plan reaches, the quests in it and the XP the game shows for them go to your "
+      .. (QB.noRaidSync and "party or instance group, never to a raid (Cute is loaded)" or "party, raid or instance group")
+      .. ". Group members who run QuestBank or Cute see them.", nil, nil, nil, true)
     GameTooltip:Show()
   end)
   v.shareParty:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -4372,10 +4376,13 @@ function UI:CreateSettingsView(parent)
   v.shareGuild:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:SetText("Share my level and progress with my guild", 1, 1, 1)
-    GameTooltip:AddLine("Your level, your XP into it, your class and the levels your plan reaches go to guild mates who run QuestBank. Your quests go to your group only.", nil, nil, nil, true)
+    GameTooltip:AddLine(QB.noGuildSync and "Cute is loaded and shares with your guild itself: QuestBank sends nothing to your guild while it is. Cute's own settings decide what your guild sees."
+      or "Your level, your XP into it, your class and the levels your plan reaches go to guild mates who run QuestBank. Your quests go to your group only.", nil, nil, nil, true)
     GameTooltip:Show()
   end)
   v.shareGuild:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  -- (greyed while Cute is loaded, RefreshSettingsView: its tooltip says why)
+  v.shareGuild:SetMotionScriptsWhileDisabled(true)
   v.offers = checkRow(p, RIGHT, y0 - 254, "Offer a post during hand-in runs", 300)
   v.offers:SetScript("OnClick", function(self) QB:Settings().post.auto = self:GetChecked() and true or false end)
   v.shareHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 330)
@@ -4642,8 +4649,12 @@ function UI:RefreshSettingsView(v)
   v.offers:SetChecked(set.post.auto and true or false)
   v.shareParty:SetChecked(set.share.party and true or false)
   v.shareGuild:SetChecked(set.share.guild and true or false)
-  -- (Cute loaded beside QuestBank sets QB.noGuildSync and QB.noRaidSync, Sync.lua: say so where the boxes are)
-  v.shareHint:SetText(QB.noGuildSync and "Cute is loaded and shares with your guild itself: these go to your party alone, never to a raid."
+  -- (Cute loaded beside QuestBank sets QB.noGuildSync and QB.noRaidSync, Sync.lua: say so where the boxes are. The guild
+  -- box greyed then, its saved value shown and never written, so it is as it was once Cute is not loaded)
+  v.shareGuild:SetEnabled(not QB.noGuildSync)
+  local gink = QB.noGuildSync and INK_SOFT or INK
+  v.shareGuild.label:SetTextColor(gink[1], gink[2], gink[3])
+  v.shareHint:SetText(QB.noGuildSync and "Cute is loaded and shares with your guild itself: these go to your party or instance group, never to a raid."
     or "To your group's QuestBank and Cute users and your guild's QuestBank users, never in chat. Posts go only when you press Post.")
   local above, below, autoA, autoB = QB:Range()
   v.rangeAboveLabel:SetText(string.format("Up to %d levels above me%s", above, autoA and " (auto)" or ""))

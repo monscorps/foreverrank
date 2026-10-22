@@ -22,7 +22,7 @@ SetValueStep SetValue GetValue SetTexture SetColorTexture SetTexCoord SetVertexC
 SetFontObject SetFont GetFont SetTextColor GetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetUnboundedStringWidth GetStringHeight
 SetAutoFocus HighlightText SetFocus ClearFocus SetMultiLine SetChecked GetChecked SetMaxLetters HasFocus IsEnabled SetRotation RegisterUnitEvent
 SetAtlas SetPassThroughButtons SetCooldown SetHideCountdownNumbers SetScale GetScale GetLeft GetTop GetChildren GetNumPoints SetUserPlaced GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness GetFrameLevel CreateLine SetTextInsets SetAttribute GetAttribute CreateMaskTexture AddMaskTexture SetGradient
-SetClipsChildren PingLocation SetSnapToPixelGrid SetTexelSnappingBias SetShadowOffset SetShadowColor]])
+SetClipsChildren PingLocation SetSnapToPixelGrid SetTexelSnappingBias SetShadowOffset SetShadowColor SetMotionScriptsWhileDisabled]])
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
 -- a PlayerModel's own: the creature it shows, by display id or by NPC id, its camera, and whether it keeps the model
 -- while hidden
@@ -177,6 +177,8 @@ local function newObj(kind, template, parent)
         elseif k == "Enable" then self.__disabled = false
         elseif k == "Disable" then self.__disabled = true
         elseif k == "IsEnabled" then return not self.__disabled
+        -- (a Button's: its OnEnter and OnLeave still run while it is disabled, SimpleButtonAPIDocumentation)
+        elseif k == "SetMotionScriptsWhileDisabled" then self.__motion = a[1] and true or false
         elseif k == "SetChecked" then self.__checked = a[1] and true or false
         elseif k == "GetChecked" then return self.__checked or false
         elseif k == "SetFocus" then self.__focus = true
@@ -25117,6 +25119,75 @@ end)()
     collectgarbage("collect")
   end
   assert(#failed == 0, "merge5: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
+end)()
+
+-- [stage: fix3-engine] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The third audit's engine findings (launch/fix3-engine), a case each; each failed on 6.4.2's files. Every case runs,
+-- and the block fails at its end naming each one that did not hold
+----------------------------------------------------------------------------
+;(function()
+  local CASES = {}
+  local function tipOf(btn)
+    lines = {}
+    btn.__scripts.OnEnter(btn)
+    local tip = table.concat(lines, "\n")
+    if btn.__scripts.OnLeave then btn.__scripts.OnLeave(btn) end
+    return tip
+  end
+  local function soft(fs)
+    local r, g, b = fs:GetTextColor()
+    return math.abs(r - 0.66) < 1e-6 and math.abs(g - 0.60) < 1e-6 and math.abs(b - 0.50) < 1e-6
+  end
+
+  -- S1 (robust and look, must). With Cute beside QuestBank (the Bridge sets QB.noRaidSync and QB.noGuildSync), the group
+  -- row's tooltip said your share goes to "your party, raid or instance group" and the guild row's, ticked and live,
+  -- that it goes "to guild mates who run QuestBank": Sync.lua sends nothing on RAID nor GUILD then. The hint said "your
+  -- party alone" (INSTANCE_CHAT goes too) and Send now's tooltip "Party and guild sharing is set in Settings"
+  CASES[#CASES + 1] = { "S1: with Cute beside it, the Sharing rows, the hint and Send now say no raid and no guild", function()
+    local c = lookChar("Beside")
+    local QB, UI = c.QB, c.QB.UI
+    local share = QB:Settings().share
+    share.party, share.guild = true, true
+    QB.noRaidSync, QB.noGuildSync = true, true
+    UI:Open(5); UI:Refresh()
+    local v = UI.views[5]
+    local group, guild, hint = tipOf(v.shareParty), tipOf(v.shareGuild), v.shareHint:GetText()
+    assert(not group:find("party, raid or instance group", 1, true) and group:find("party or instance group, never to a raid", 1, true)
+      and group:find("Cute is loaded", 1, true), "the group row's tooltip: no raid, Cute named:\n" .. group)
+    assert(guild:find("QuestBank sends nothing to your guild", 1, true) and not guild:find("go to guild mates who run QuestBank", 1, true),
+      "the guild row's tooltip: nothing to the guild:\n" .. guild)
+    assert(not v.shareGuild:IsEnabled() and soft(v.shareGuild.label), "the guild row greyed while Cute shares with the guild")
+    assert(v.shareGuild.__motion == true, "its tooltip still shows over the greyed box")
+    assert(share.guild == true and v.shareGuild:GetChecked() == true, "the guild box's saved value untouched, shown as saved")
+    assert(v.shareParty:IsEnabled() and not soft(v.shareParty.label), "the group row live")
+    assert(hint:find("party or instance group, never to a raid", 1, true) and not hint:find("party alone", 1, true), "the hint: " .. hint)
+    local lay = checkLayout(UI.frame, "settings with Cute beside")
+    assert(#lay == 0, "the page laid out with Cute's words: " .. table.concat(lay, "; "))
+    UI:Open(4); UI:Refresh()
+    local send = tipOf(UI.views[4].syncBtn)
+    assert(not send:find("and guild sharing", 1, true) and send:find("sharing is set in Settings", 1, true), "Send now's tooltip names no guild setting:\n" .. send)
+    -- QuestBank alone: as it was
+    QB.noRaidSync, QB.noGuildSync = nil, nil
+    UI:Open(5); UI:Refresh()
+    group, guild, hint = tipOf(v.shareParty), tipOf(v.shareGuild), v.shareHint:GetText()
+    assert(group:find("party, raid or instance group", 1, true) and not group:find("Cute is loaded", 1, true), "alone, the group row's tooltip names the raid:\n" .. group)
+    assert(guild:find("go to guild mates who run QuestBank", 1, true), "alone, the guild row's tooltip:\n" .. guild)
+    assert(v.shareGuild:IsEnabled() and not soft(v.shareGuild.label) and v.shareGuild:GetChecked() == true, "alone, the guild row live and ticked")
+    assert(hint:find("your guild's QuestBank users", 1, true), "alone, the hint: " .. hint)
+    UI:Open(4); UI:Refresh()
+    send = tipOf(UI.views[4].syncBtn)
+    assert(send:find("Party and guild sharing is set in Settings", 1, true), "alone, Send now's tooltip:\n" .. send)
+    UI.frame:Hide()
+  end }
+
+  local failed = {}
+  for _, case in ipairs(CASES) do
+    local ok, err = pcall(case[2])
+    if ok then print("fix3-engine: " .. case[1] .. ": ok") else failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
+    collectgarbage("collect")
+  end
+  assert(#failed == 0, "fix3-engine: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
 end)()
 
 local seen = {}
