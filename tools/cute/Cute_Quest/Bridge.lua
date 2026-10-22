@@ -220,19 +220,31 @@ UI.frame, UI.tab, UI.lastTab, UI.postFrame, UI.scrollToQuest = nil, nil, nil, ni
 -- the Map module's keeping: they are the Route tab's rows now (QB.MAP_FLAGS, the Map module's, is the world map's two)
 QB.MAP_FLAGS = { "mapIcons", "pins" }
 local MINI_FLAGS = { "minimapPins", "minimapLines", "minimapGivers", "mmExtended" }
+-- (the hud review) whether this account chose the Camp module on some character (its box saved, Cute's own
+-- CuteDB.chars[*].modules, Cute/Modules.lua): 0.7's module was off by default, so a light 0.7 kept while it was off is
+-- the engine's default unless someone ticked it once
+local function campChosen()
+  local chars = type(CuteDB) == "table" and type(CuteDB.chars) == "table" and CuteDB.chars or nil
+  for _, rec in pairs(chars or {}) do
+    if type(rec) == "table" and type(rec.modules) == "table" and rec.modules[ADDON .. ":camp"] ~= nil then return true end
+  end
+  return false
+end
 local function firstRun()
   local s = E:Settings()
   -- (the hud round) the engine's reminders' settings as they are now (Remind.Settings: 6.1.1's switches become Nevers,
   -- campBar remind.on), before any module's switch reads them; and a kept cuteOff.camp of 0.7 (the Camp module's
   -- switch then followed campBar, the two buffs rows and the light) rewritten: the module follows remind.on alone, and
-  -- the rows it kept go back to them as kept
+  -- the rows it kept go back to them as kept; the light only where the account chose the module once (campChosen),
+  -- else it stays off until the first-run card's Interact light row, as on a fresh install (the light changes the
+  -- game's soft-target settings, Glow.lua)
   local fresh = not s.cuteDefaults
   if E.Remind and E.Remind.Settings then E.Remind.Settings() end
   local kept = type(s.cuteOff) == "table" and s.cuteOff.camp or nil
   if type(kept) == "table" and kept["remind.on"] == nil and (kept.campBar ~= nil or kept["remind.buffs"] ~= nil or kept["glow.on"] ~= nil) then
     if kept["remind.buffs"] ~= nil then s.remind.buffs = kept["remind.buffs"] end
     if kept["remind.party"] ~= nil then s.remind.party = kept["remind.party"] end
-    if kept["glow.on"] ~= nil and type(s.glow) == "table" then s.glow.on = kept["glow.on"] end
+    if kept["glow.on"] ~= nil and type(s.glow) == "table" and campChosen() then s.glow.on = kept["glow.on"] end
     s.cuteOff.camp = { ["remind.on"] = kept.campBar ~= false }
   end
   -- (a fresh install: the interact light off until the first-run card's row says, since the engine's default is on and

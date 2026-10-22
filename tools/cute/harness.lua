@@ -14884,16 +14884,27 @@ do
     o.env.CuteQuestDB = { settings = { cuteDefaults = 2, v544 = true, v600 = true, campBar = false, guide = { on = true, frame = true },
       remind = { camp = true, food = false, bag = true, fire = true, quietInstance = true, buffs = false, sit = true, wood = true, bagChain = true, party = false },
       glow = { on = false, style = "sparkle" }, cuteOff = { camp = { campBar = true, ["remind.buffs"] = true, ["remind.party"] = true, ["glow.on"] = true } } } }
+    -- (0.7's Camp module was off by default: a kept light of an account that never chose the module is the engine's
+    -- default, not a choice, and stays off until the first-run card's Interact light row; one that chose it, on some
+    -- character, gets it back as kept)
+    local save07 = o.env.CuteQuestDB
+    local function copy(t) if type(t) ~= "table" then return t end local out = {}; for k, v in pairs(t) do out[k] = copy(v) end; return out end
+    local fresh07 = copy(save07)
     login(o); tickAll(6)
     local so = o.env.CuteQuestDB.settings
-    assert(so.remind.buffs == true and so.remind.party == true and so.glow.on == true and so.remind.on == false and so.cuteOff.camp["remind.on"] == true
-      and so.cuteOff.camp.campBar == nil and so.remind.never.eat == "Eat", "0.7's kept switch rewritten: the rows back as kept, Reminders off with the module, the food's switch a Never")
+    assert(so.remind.buffs == true and so.remind.party == true and so.glow.on == false and so.remind.on == false and so.cuteOff.camp["remind.on"] == true
+      and so.cuteOff.camp.campBar == nil and so.remind.never.eat == "Eat", "0.7's kept switch rewritten: the rows back as kept, Reminders off with the module, the food's switch a Never, the light off until asked")
     o.C.Modules.Set("Cute_Quest:camp", true); tick(o, 1)
-    assert(so.remind.on == true and so.cuteOff.camp == nil and so.glow.on == true, "the module on: Reminders back, the light its own")
+    assert(so.remind.on == true and so.cuteOff.camp == nil and so.glow.on == false, "the module on: Reminders back, the light its own")
     o.C.Modules.Set("Cute_Quest:camp", false); tick(o, 1)
-    assert(so.remind.on == false and so.remind.buffs == true and so.glow.on == true, "off again: Reminders alone off")
-    said[#said + 1] = "a 0.7 save's kept Camp switch rewritten to remind.on alone, its rows back"
+    assert(so.remind.on == false and so.remind.buffs == true and so.glow.on == false, "off again: Reminders alone off")
     leave(o)
+    local o2 = client()
+    o2.env.CuteQuestDB = fresh07
+    login(o2, { chars = { ["Alt-Forever"] = { modules = { ["Cute_Quest:camp"] = false } } } }); tickAll(6)
+    assert(o2.env.CuteQuestDB.settings.glow.on == true, "a character of the account chose the Camp module once: the light back as kept")
+    said[#said + 1] = "a 0.7 save's kept Camp switch rewritten to remind.on alone, its rows back, the light only where the module was chosen"
+    leave(o2)
     -- H3
     local q = client()
     local isLoaded = q.env.C_AddOns.IsAddOnLoaded
