@@ -116,8 +116,8 @@ end
 
 ----------------------------------------------------------------------------
 -- the store: CuteDB.known.finds = { n, list }, each { k, id, m, x, y (the mean of its voices), t (a book's title), m2,
--- x2, y2, s (a crossing's far end and seconds), v = { [GUID] = its spot packed }, o (the officers' word says it), at (n
--- when last touched), sa (n when it became sure) }
+-- x2, y2, s (a crossing's far end and seconds), v = { [GUID] = its spot packed }, o (the sender string of the officer
+-- whose word said it: sure while that is an officer's voice), at (n when last touched), sa (n when it became sure) }
 ----------------------------------------------------------------------------
 local function store()
   local k = C.Stats.Known()
@@ -184,8 +184,11 @@ local function tally(e)
   end
   return n, others, mine
 end
-local function sure(e) return e.o == true or (tally(e)) >= 2 end
-F.Sure = sure
+-- the officers' word says it: the officer whose word said it is one still (Roster.lua R:OfficerVoice: listed at an
+-- officer's rank, not marked untrusted), as Rules.lua's R.Word reads each officer's word again
+local function said(e) return type(e.o) == "string" and C.Roster:OfficerVoice(e.o) end
+local function sure(e) return said(e) or (tally(e)) >= 2 end
+F.Sure, F.Said = sure, said
 -- the voices that count, counted again when the roster's who is who (Roster.lua R.idVersion) or the policy changed: where
 -- the count moved, the version does (the map and the footers drawn from it again)
 local votersAt, votersPol, voters = nil, nil, nil
@@ -194,9 +197,12 @@ function F:Voters()
   local at, pol = R and R.idVersion, P and P.ver
   if at == votersAt and pol == votersPol then return end
   votersAt, votersPol = at, pol
+  -- (an officer gone or demoted: another officer's word that says the same find holds it)
+  if voters ~= nil and self.TakeWord then self:TakeWord(true) end
   local s, me, n = store(), C.MyGUID(), 0
   for _, e in ipairs(s and s.list or {}) do
     if type(e.v) == "table" then for g in pairs(e.v) do if counts(g, me) then n = n + 1 end end end
+    if said(e) then n = n + 0.5 end
   end
   if voters ~= nil and n ~= voters then self.ver = self.ver + 1 end
   voters = n
@@ -396,8 +402,9 @@ local function build()
   for _, e in ipairs(s and s.list or {}) do
     if e.k ~= "x" then
       local n, others = tally(e)
-      if others > 0 or e.o then
-        add(e.m, { kind = e.k, id = e.id, x = e.x, y = e.y, name = e.t, mates = others, sure = (e.o == true or n >= 2) or nil })
+      local o = said(e)
+      if others > 0 or o then
+        add(e.m, { kind = e.k, id = e.id, x = e.x, y = e.y, name = e.t, mates = others, sure = (o or n >= 2) or nil })
       end
     end
   end
@@ -466,12 +473,12 @@ function F:Noted(kind, id, m, x, y, extra, data)
   -- first in the guild: no guild mate's voice for it yet, nor the officers' word
   local had, others = match(s, en), 0
   if had then local _, o = tally(had); others = o end
-  local first = not (had and (others > 0 or had.o))
+  local first = not (had and (others > 0 or said(had)))
   local e = F.Voice(me, en)
   if first and not counted("F" .. groupOf(en) .. ":" .. cell(en)) then bump("finds_first") end
   self:Bump()
   -- the guild's: unless sharing is off, or two others agree on it already
-  if not shareOn() or (e and e.o) then return end
+  if not shareOn() or (e and said(e)) then return end
   if e then local _, o2 = tally(e); if o2 >= 2 then return end end
   self:Queue(en)
 end
@@ -655,7 +662,9 @@ function F:WordParts()
   local s = store()
   if not s then return {} end
   local list = {}
-  for _, e in ipairs(s.list) do if not e.o and (tally(e)) >= 2 then list[#list + 1] = e end end
+  -- (what this client's voices prove: another officer's word may have said it too, and this one says it all the same,
+  -- for the members who ask while that officer is away)
+  for _, e in ipairs(s.list) do if (tally(e)) >= 2 then list[#list + 1] = e end end
   table.sort(list, function(a, b) return (a.sa or 0) > (b.sa or 0) end)
   local out = {}
   for i = 1, math.min(WORD_MAX, #list) do
@@ -682,7 +691,8 @@ function F:WordCame()
   self.wordDue = true
   C_Timer.After(1, C.Safe(function() F.wordDue = false; F:TakeWord() end, "finds: the officers' word"))
 end
-function F:TakeWord()
+-- (quiet: from F:Voters, which moves the version itself)
+function F:TakeWord(quiet)
   local k, s = C.Stats.Known(), store()
   if not (k and s and type(k.word) == "table") then return 0 end
   local n = 0
@@ -693,13 +703,13 @@ function F:TakeWord()
         if en and not dataHas(en) then
           local e = match(s, en)
           if not e then e = make(s, en, nil); s.n = s.n + 1; e.at = s.n end
-          if not e.o then e.o, e.sa, n = true, s.n, n + 1 end
+          if not said(e) then e.o, n = sender, n + 1; e.sa = e.sa or s.n end
           if en.t and not e.t then e.t = en.t end
         end
       end
     end
   end
-  if n > 0 then self:Bump() end
+  if n > 0 and not quiet then self:Bump() end
   return n
 end
 
@@ -765,7 +775,7 @@ function F:Report()
   local all, sure2, lone, word, cross = 0, 0, 0, 0, 0
   for _, e in ipairs(s and s.list or {}) do
     all = all + 1
-    if e.o then word = word + 1 end
+    if said(e) then word = word + 1 end
     if sure(e) then sure2 = sure2 + 1 elseif count(e.v) == 1 then lone = lone + 1 end
     if e.k == "x" then cross = cross + 1 end
   end

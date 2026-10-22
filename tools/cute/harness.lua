@@ -16063,6 +16063,34 @@ do
     for _, c in ipairs({ ann, ben, cy }) do leave(c) end
     said[#said + 1] = "the voices that count are the roster's members': GUIDs it does not list make nothing sure, a member who left counts no more (dim again, out of the word)"
   end)
+  -- K10: a find the officers' word says is sure by that officer's voice while it is one: the officer demoted, it is
+  -- sure no more on a member's client (none of its own voices); an officer who heard the voices says the find in its
+  -- own word even after another officer's word said it first
+  isolated({ fmember("Ofa", 0), fmember("Oli", 1), fmember("Mia", 3), fmember("Ann", 3), fmember("Cy", 3) }, function()
+    local closed = { gc_finds = "self" }
+    local ofa, oli, mia, ann, cy = fchar("Ofa", 0), fchar("Oli", 1), fchar("Mia", 3), fchar("Ann", 3), fchar("Cy", 3)
+    login(ofa, fpol(true, closed)); login(oli, fpol(nil, closed)); login(mia, fpol(nil, closed)); login(ann, fpol(nil, closed)); login(cy, fpol(nil, closed))
+    tickAll(130)
+    fnoted(mia, "h", 9201, 1429, 500, 500)
+    tickAll(65)
+    fnoted(ann, "h", 9201, 1429, 506, 500)
+    tickAll(65)
+    tickAll(120)
+    local r = rowOf(cy, 1429, 9201)
+    assert(r and r.sure and r.mates == 0, "Cy has the chest from the officers' word: sure")
+    assert(#ofa.C.Finds:WordParts() == 1 and #oli.C.Finds:WordParts() == 1, "each officer who heard both voices says it, the other's word taken or not")
+    -- both officers demoted on Cy's client: the word's finds sure no more
+    for _, m in ipairs(GUILD) do if m.guid == guidOf("Ofa") or m.guid == guidOf("Oli") then m.rank, m.rankName = 3, "Raider" end end
+    fire(cy, "GUILD_ROSTER_UPDATE")
+    r = rowOf(cy, 1429, 9201)
+    assert(r == nil or not r.sure, "the officers who said it demoted: sure no more")
+    for _, m in ipairs(GUILD) do if m.guid == guidOf("Ofa") then m.rank, m.rankName = 0, "Officer" end end
+    fire(cy, "GUILD_ROSTER_UPDATE")
+    r = rowOf(cy, 1429, 9201)
+    assert(r and r.sure, "an officer again: sure again from its word")
+    for _, c in ipairs({ ofa, oli, mia, ann, cy }) do leave(c) end
+    said[#said + 1] = "the officers' word's finds sure by an officer's voice while it is one; each officer says what it heard"
+  end)
   print("map K: " .. table.concat(said, "; "))
 end
 
