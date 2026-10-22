@@ -14471,6 +14471,36 @@ do local function cardsStage()
   end)
   said[#said + 1] = "a NEW RECORD only where its voices came together; two runs' agreeing times two hours apart quiet"
 
+  -- a withdrawal reaches who was away: 1G says the newest withdrawal the asker knows, and an officer who knows a newer
+  -- one answers with it, so an officer who held the set prunes it and serves it to nobody later
+  isolated({ gmember("Qat", 1, "MAGE"), gmember("Qin", 1, "PRIEST"), gmember("Qum", 3, "ROGUE") }, function()
+    local qat, qin = cchar("Qat", 1), cchar("Qin", 1, { class = "PRIEST" })
+    login(qat); login(qin)
+    tickAll(200)
+    local function held(c, title) for _, x in ipairs(H(c).Sets()) do if x.title == title then return x end end end
+    assert(H(qat):Publish({ kind = "n", title = "Oops", cards = { { guid = qin.o.guid, name = "Qin", class = "PRIEST", kind = "shout", title = "T", line = "L", source = "" } } }), "a set published")
+    tickAll(65)
+    assert(H(qat):Publish({ kind = "n", title = "Keep", cards = { { guid = qin.o.guid, name = "Qin", class = "PRIEST", kind = "shout", title = "T", line = "L", source = "" } } }), "and one kept")
+    tickAll(5)
+    assert(held(qin, "Oops") and held(qin, "Keep"), "Qin holds both")
+    -- Qin logs out; Qat withdraws the first; Qin logs back in
+    local db = qin.env.CuteDB
+    leave(qin)
+    assert(H(qat):Withdraw(held(qat, "Oops").at), "withdrawn")
+    tickAll(30)
+    local qin2 = cchar("Qin", 1, { class = "PRIEST" })
+    login(qin2, db)
+    tickAll(120)
+    assert(not held(qin2, "Oops") and held(qin2, "Keep"), "back in, Qin learns the withdrawal from Qat's answer")
+    -- Qat logs out; a member who was away asks, and Qin, alone online, serves no withdrawn set
+    leave(qat)
+    local qum = cchar("Qum", 3, { class = "ROGUE" })
+    login(qum)
+    tickAll(120)
+    assert(held(qum, "Keep") and not held(qum, "Oops"), "the late member holds the set kept, not the one withdrawn")
+  end)
+  said[#said + 1] = "a withdrawal reaches an officer who was away by the answer to their 1G"
+
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end
 

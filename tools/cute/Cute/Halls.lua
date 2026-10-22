@@ -18,10 +18,11 @@
 --            source the policy routes Only you now is dropped, and one the officers close later shows no more (News,
 --            the toasts, the announcement and the answers to 1G go by H.Visible). Cute's own guild line from an officer
 --            is hidden (H.LineFilter), so a member with Cute sees a set once
---   1G       every client once, a minute after its hello: the newest set it holds and the stamp of the records the
---            officers turned on (Records.lua). An officer holding newer ones answers with them (the last five, newest
---            first, and 1O): the lowest GUID among the officers online with Cute at once, the others a few seconds on
---            with what no answer begun meanwhile covers; once in half an hour an asker
+--   1G       every client once, a minute after its hello: the newest set it holds, the stamp of the records the
+--            officers turned on (Records.lua) and the newest withdrawal it knows. An officer holding newer ones answers
+--            with them (the withdrawals the asker may have missed, the last five sets newest first, and 1O): the
+--            lowest GUID among the officers online with Cute at once, the others a few seconds on with what no answer
+--            begun meanwhile covers; once in half an hour an asker
 --   1W       a run's cards to the officers (9.3): the run's guild member with the smallest GUID among those with Runs on
 --            whispers them to each officer online, held while inside an instance; an officer takes 4 a sender an hour,
 --            one per run, and queues them
@@ -36,7 +37,7 @@
 --            as a set is, once a day an instance; no 1G asks for it or answers with it
 -- And the two weekly stats the halls read beside the runs' own: Deaths this week and Quests this week (section 10).
 local _, C = ...
-local H = { parts = {}, toasts = {}, ticked = {}, open = {}, answered = {}, waiting = {}, senders = {}, runsHeard = {}, answerParts = {} }
+local H = { parts = {}, toasts = {}, ticked = {}, open = {}, answered = {}, waiting = {}, senders = {}, runsHeard = {}, answerParts = {}, goneHeard = {} }
 C.Halls = H
 
 local QUEUE_MAX, PER_SENDER, QUEUE_DAYS, DRAFTS, DIGEST_MAX = 100, 10, 30, 6, 60
@@ -445,6 +446,7 @@ end
 -- <class>,<race>,<sex>,<label>,<icon>,<source>,<title>,<line>,<value>,<value label>, a comma within a text a tilde
 -- (the text cut and cleaned as Preview shows it, sendable below). Parts packed into messages of
 -- 255 bytes, i of n under one stamp: 1C|<at>|<i>/<n>|... (an answer to 1G: 1C|<at>|a|<i>/<n>|...); 1C|<at>|x withdraws
+-- (in an answer to 1G, 1C|<at>|x|<when>: a withdrawal the asker may have missed, at its own time)
 ----------------------------------------------------------------------------
 local LIMIT, PARTS_MAX = 255, 8
 function H.Messages(set, answer)
@@ -626,11 +628,13 @@ function H:Withdraw(at)
   H:Withdrawn(at)
   return true
 end
-function H:Withdrawn(at)
+-- (when: the withdrawal's own time, where an answer to 1G tells one this client missed)
+function H:Withdrawn(at, when)
   local d = H.DB()
   local sets = d.sets
   for i = #sets, 1, -1 do if tonumber(sets[i].at) == at then table.remove(sets, i) end end
-  d.gone[tostring(at)] = now()
+  local t = now()
+  d.gone[tostring(at)] = d.gone[tostring(at)] or ((type(when) == "number" and when > 0 and when <= t + 60) and when or t)
   -- (the last 30 withdrawals kept, so an answer to 1G brings none back)
   local n, oldest, ok = 0, nil, nil
   for k, t in pairs(d.gone) do n = n + 1; if not oldest or t < oldest then oldest, ok = t, k end end
@@ -657,7 +661,13 @@ function H:ReceiveSet(text, sender)
   if not at then return end
   -- (from an officer by the roster, not marked untrusted: a member's or an untrusted officer's set is nobody's)
   if not C.Roster:OfficerVoice(sender) then H.refused = (H.refused or 0) + 1; return end
-  if rest == "x" then return self:Withdrawn(at) end
+  -- (a withdrawal: x, or x|<when> in an answer to 1G for a client that missed it)
+  local xw = rest:match("^x|?(%d*)$")
+  if xw then
+    if xw ~= "" then H.answerHeard = true end
+    H.goneHeard[tostring(at)] = gtime()
+    return self:Withdrawn(at, tonumber(xw))
+  end
   local answer = rest:sub(1, 2) == "a|"
   if answer then rest = rest:sub(3) end
   local i, n, body = rest:match("^(%d+)/(%d+)|(.*)$")
@@ -756,10 +766,16 @@ end
 
 -- 1G: the newest set this client holds, asked once a minute after its hello (not at a /reload: the saved sets are the
 -- guild's as it was a moment ago). An officer holding newer sets answers (13.2)
+-- the newest withdrawal this client knows, by its time (1G's third field: an officer knowing a newer one tells it)
+local function goneNewest()
+  local m = 0
+  for _, t in pairs(H.DB().gone) do if type(t) == "number" and t > m then m = t end end
+  return m
+end
 function H:Ask()
   if H.asked or not (C.Roster and C.Roster:InGuild()) then return end
   H.asked = true
-  C.Comm.Queue({ msg = "1G|" .. string.format("%.0f", H.Newest()) .. "|" .. string.format("%.0f", C.Records and C.Records.Stamp() or 0) })
+  C.Comm.Queue({ msg = "1G|" .. string.format("%.0f", H.Newest()) .. "|" .. string.format("%.0f", C.Records and C.Records.Stamp() or 0) .. "|" .. string.format("%.0f", goneNewest()) })
 end
 -- the lowest GUID among this officer and the officers online with Cute answers first: an officer whose record says they
 -- run Cute (the roster's row.addon), not marked untrusted; one online without Cute would answer nothing, and every
@@ -776,15 +792,18 @@ end
 -- (the records' stamp beside the sets': an officer whose list of the records on is newer answers with 1O too)
 local function recStamp() return C.Records and C.Records.Stamp() or 0 end
 function H:Asked(text, sender)
-  local a, ra = text:match("^1G|(%d+)|(%d*)$")
+  local a, ra, rest = text:match("^1G|(%d+)|(%d*)(.*)$")
+  local ga = tonumber(rest and rest:match("^|(%d+)$") or "")
   a, ra = tonumber(a or ""), tonumber(ra or "") or 0
   -- (an officer marked untrusted answers nothing: nobody takes it, and the next officer by GUID answers at once)
-  if not a or not officer() or C.Policy:Untrusted(C.MyGUID()) or (H.Newest() <= a and recStamp() <= ra) then return end
+  if not a or not officer() or C.Policy:Untrusted(C.MyGUID()) then return end
+  if H.Newest() <= a and recStamp() <= ra and not (ga and goneNewest() > ga) then return end
   local who = C.Roster:GuidOf(sender) or sender
   for k, t in pairs(H.answered) do if now() - t >= ANSWER_AGAIN then H.answered[k] = nil end end
   if H.answered[who] then return end
   H.waiting[who] = math.min(H.waiting[who] or a, a)
   H.waitingRec = math.min(H.waitingRec or ra, ra)
+  if ga then H.waitingGone = math.min(H.waitingGone or ga, ga) end
   if H.answering then return end
   H.answering = true
   local askedAt, recHeard0 = gtime(), C.Records and C.Records.heardAt or 0
@@ -796,8 +815,8 @@ end
 -- a rule: both hold the guild's sets), so a second officer online costs the channel nothing
 function H:Answer(askedAt, recHeard0)
   H.answering = false
-  local waiting, recSince = H.waiting, H.waitingRec
-  H.waiting, H.waitingRec = {}, nil
+  local waiting, recSince, goneSince = H.waiting, H.waitingRec, H.waitingGone
+  H.waiting, H.waitingRec, H.waitingGone = {}, nil, nil
   if not officer() or C.Policy:Untrusted(C.MyGUID()) then return end
   local since
   for who, a in pairs(waiting) do since = since and math.min(since, a) or a; H.answered[who] = now() end
@@ -807,6 +826,18 @@ function H:Answer(askedAt, recHeard0)
   if Rc and recSince and recStamp() > recSince and not ((Rc.heardAt or 0) > (recHeard0 or 0) and (Rc.heardAt or 0) >= recStamp()) then
     C.Comm.Queue({ msg = Rc.Message() })
     Rc.sent = (Rc.sent or 0) + 1
+  end
+  -- (the withdrawals newer than the oldest asker's newest, the five newest, none another officer told since the ask:
+  -- each as 1C|<at>|x|<when>, so a client that missed one, an officer among them, drops the set and serves it no more)
+  if goneSince then
+    local gone = {}
+    for k, t in pairs(H.DB().gone) do
+      if type(t) == "number" and t > goneSince and tonumber(k) and not ((H.goneHeard[k] or -1) >= (askedAt or 0)) then gone[#gone + 1] = { at = tonumber(k), t = t } end
+    end
+    table.sort(gone, function(x, y) return x.t > y.t end)
+    for i = 1, math.min(#gone, ANSWER_SETS) do
+      C.Comm.Queue({ msg = "1C|" .. string.format("%.0f", gone[i].at) .. "|x|" .. string.format("%.0f", gone[i].t) })
+    end
   end
   -- (another officer's answer begun since the ask said what it covers: the askers count as answered all the same)
   local covered = since
