@@ -319,11 +319,20 @@ html.ts-open body { padding-bottom: 40vh; }
 .tip .hint, .tsheet .hint { display: block; margin-top: .35rem; font-size: .72rem; color: #9fb0bb; }
 .tip .hint.lock, .tsheet .hint.lock { color: #ff7a6b; }
 .tsheet .mouse-only, .tip .touch-only { display: none; }
+/* a phone: the menu's words at 13 px and every tap target 44 px tall (the arrows and the gear as tall as their pills);
+   Discord, its label beside its icon, stands at the brand's right, centred on it. The desktop look is the rules above */
 @media (max-width: 480px) {
-  .top-nav { gap: .35rem; }
-  .top-nav .pill, .top-nav .phase { white-space: nowrap; font-size: .68rem; padding: .45rem .7rem; }
-  .top-nav .pill.discord { position: absolute; top: 1.35rem; right: var(--pad, 1rem); padding: .5rem .6rem; }
-  .top-nav .pill.discord span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .top-nav { gap: .375rem; }
+  .top-nav .pill, .top-nav .phase { display: inline-flex; align-items: center; white-space: nowrap; font-size: .8125rem; line-height: 1; min-height: 2.75rem; padding: 0 .65rem; }
+  .top-nav .pill-gear { justify-content: center; min-width: 2.75rem; padding: 0; font-size: 1.15rem; }
+  .top .brand { min-height: 2.75rem; }
+  .top-nav .pill.discord { position: absolute; top: 1.1rem; right: var(--pad, 1rem); padding: 0 .75rem; }
+  /* (the home page's settings, which the gear opens: under the menu's rows in the flow, not behind them at 3.6rem) */
+  .settings { position: relative; top: auto; right: auto; align-self: flex-end; margin: .6rem var(--pad) 0; }
+}
+/* a narrow phone: no room for Discord's word by the brand, its icon alone (the word kept for screen readers) */
+@media (max-width: 359px) {
+  .top-nav .pill.discord svg + span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
 
 /* ---- No pills, no boxed labels: square buttons, plain text tags ---- */
@@ -352,8 +361,9 @@ html.ts-open body { padding-bottom: 40vh; }
 .top-nav .mdd:nth-last-child(-n+2) .mdd-menu { left: auto; right: 0; }
 @media (max-width: 480px) {
   .top-nav { flex-wrap: wrap; row-gap: .35rem; }
-  .mdd-btn { width: 1.3rem; }
-  .mdd-menu { position: fixed; top: auto; left: 1rem; right: 1rem; min-width: 0; }
+  .mdd-btn { width: 1.75rem; }
+  /* (fixed, its top where its pill starts: the margin puts it under the pill rather than over its own row) */
+  .mdd-menu { position: fixed; top: auto; left: 1rem; right: 1rem; min-width: 0; margin-top: calc(2.75rem + .35rem); }
   .top-nav .mdd:nth-last-child(-n+2) .mdd-menu { left: 1rem; right: 1rem; }
 }
 
