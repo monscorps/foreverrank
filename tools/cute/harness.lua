@@ -14555,6 +14555,48 @@ do local function cardsStage()
   end)
   said[#said + 1] = "an undefined clear routes as a defined one; one member's made-up clears spend their own share of definitions"
 
+  -- a first resting on one member's Cute is contested once: the next member's earn is a "Guild first?" with it beside,
+  -- later ones none; the officers' word (a first published, a row removed) goes into the ledger, and no later earn is
+  -- suggested against it
+  isolated({ gmember("Wren", 1, "PRIEST"), gmember("Wix", 3, "MAGE"), gmember("Wad", 3, "SHAMAN"), gmember("Wok", 3, "DRUID"), gmember("Wug", 3, "ROGUE") }, function()
+    local wren = achar("Wren", 1, { class = "PRIEST" })
+    local wix, wad, wok, wug = achar("Wix", 3, { class = "MAGE" }), achar("Wad", 3, { class = "SHAMAN" }), achar("Wok", 3, { class = "DRUID" }), achar("Wug", 3, { class = "ROGUE" })
+    for _, c in ipairs({ wren, wix, wad, wok, wug }) do login(c) end
+    tickAll(200)
+    assert(A(wren).Ready(), "the ledger ready")
+    local function earn(c, id) fire(c, "ACHIEVEMENT_EARNED", id, false); tickAll(5) end
+    -- contested once
+    earn(wix, 150031)
+    assert(firstItem(wren, "a150031", wix.o.guid), "the first earn: Guild first?")
+    earn(wad, 150031)
+    local fw = firstItem(wren, "a150031", wad.o.guid)
+    assert(fw and fw.first.earlier and fw.first.earlier.n == "Wix", "the next: Guild first?, Wix's beside it")
+    earn(wok, 150031)
+    assert(not firstItem(wren, "a150031", wok.o.guid), "a third: no row, the first already contested")
+    -- a first published: the officers' word in the ledger
+    earn(wix, 150032)
+    local f2 = firstItem(wren, "a150032", wix.o.guid)
+    assert(f2, "Wix's first of another")
+    assert(H(wren):Publish(H(wren):Compose({ f2 }), false), "published")
+    tickAll(5)
+    local L = A(wren).Firsts()
+    assert(L.e.a150032 and L.e.a150032.src == "officers" and L.e.a150032.g == sfx(wix), "the ledger takes the officers' word")
+    earn(wad, 150032)
+    assert(not firstItem(wren, "a150032", wad.o.guid), "a later earn is no first against a published one")
+    -- a row removed: the officers' word too
+    earn(wix, 150033)
+    local f3 = firstItem(wren, "a150033", wix.o.guid)
+    H(wren).OpenChip("queue")
+    local row = queueRow(wren, f3)
+    assert(row, "the row in the queue")
+    row.fn(row, "RightButton")
+    menuEntry(wren, "Remove from the queue").fn()
+    assert(not H(wren).Item(f3.id) and A(wren).Firsts().e.a150033.src == "officers", "removed: the ledger takes it as the officers' word")
+    earn(wug, 150033)
+    assert(not firstItem(wren, "a150033", wug.o.guid), "a later earn is no first against a row the officers removed")
+  end)
+  said[#said + 1] = "a first on one member's Cute contested once; a first published or a row removed the officers' word in the ledger"
+
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end
 

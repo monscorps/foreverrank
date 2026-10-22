@@ -388,6 +388,14 @@ function H:Grey(set, by)
     for _, e in ipairs(r.entries or {}) do mark(e) end
   end
 end
+-- a set's GUILD FIRST cards are the officers' word on those firsts: the ledger takes them (Achievements.lua A.Decide)
+function H.Decided(set)
+  local A = C.Achievements
+  if not (A and A.Decide) then return end
+  for _, c in ipairs(set.cards or {}) do
+    if c.kind == "first" and type(c.source) == "string" then A.Decide(c.source, c.sfx or sfxOf(c.guid), c.name) end
+  end
+end
 -- every item, rows and digest entries, by id
 function H.Item(id)
   for _, r in ipairs(H.Rows()) do
@@ -598,6 +606,7 @@ function H:Publish(set, chatLine)
   for i, c in ipairs(set.cards) do if i <= 5 then out.cards[i] = sendable(c) end end
   for _, m in ipairs(H.Messages(out, false)) do C.Comm.Queue({ msg = m }) end
   keep(out)
+  H.Decided(out)
   setHeard()
   table.insert(mine(), now())
   H:Unqueue(set.from)
@@ -722,7 +731,7 @@ function H:Took(set, sender, answer)
   set.cards = kept
   set.answer = answer or nil
   keep(set)
-  if officer() then self:Grey(set, set.by) end
+  if officer() then self:Grey(set, set.by); H.Decided(set) end
   if not answer then
     setHeard()
     local who = g or sender
@@ -1681,7 +1690,11 @@ function H.DrawQueue(ui)
         if type(MenuUtil) == "table" and type(MenuUtil.CreateContextMenu) == "function" then
           MenuUtil.CreateContextMenu(r, function(_, root)
             root:CreateTitle(c.name or "")
-            root:CreateButton("Remove from the queue", function() H:Unqueue({ it.id }); C.UI:Draw() end)
+            root:CreateButton("Remove from the queue", function()
+              -- (a "Guild first?" row removed is the officers' word: the first that stands is no first to suggest again)
+              if it.first and C.Achievements and C.Achievements.Decide then C.Achievements.Decide(it.first.key) end
+              H:Unqueue({ it.id }); C.UI:Draw()
+            end)
           end)
         end
         return

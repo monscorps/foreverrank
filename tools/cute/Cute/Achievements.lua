@@ -482,7 +482,9 @@ end
 ----------------------------------------------------------------------------
 -- the firsts ledger (officers only). e = { g, n, t, src }: src "cute" (one member's Cute: a 1A or ach_recent), "line"
 -- (the server's line), "news" (guild news), "kill" (a kill two members' Cute corroborated, Rules.lua rule 9), "level"
--- (a member's level as their Cute sent it), "roster" (the roster's level), "seed" (what the guild had before)
+-- (a member's level as their Cute sent it), "roster" (the roster's level), "seed" (what the guild had before),
+-- "officers" (the officers' word: a first published or its row removed, A.Decide); contested, an entry on one member's
+-- Cute a later earn was suggested against once
 ----------------------------------------------------------------------------
 function A.Firsts()
   if not (C.Roster and C.Roster:OfficerStill()) then return nil end
@@ -517,6 +519,8 @@ function A:Record(key, e, make, what)
   local t = math.floor(e.t or 0)
   local s = sfxOf(e.g)
   local entry = L.e[key]
+  -- (the officers' word, a first published or its row removed, stands: nothing is suggested against it, A.Decide)
+  if entry and entry.src == "officers" and entry.g ~= s then return end
   if entry and s and entry.g == s then
     -- (the same member again: a time to the second over a day's, else the earlier; a server's word over one Cute's)
     if entry.a and not e.approx then entry.t, entry.a = t, nil
@@ -526,8 +530,9 @@ function A:Record(key, e, make, what)
   end
   -- (an entry dated by its day alone is at or before anything of that day: which came first within it nobody knows)
   local first = entry and ((entry.a or e.approx) and A.Day(entry.t or 0) <= A.Day(t) or (entry.t or 0) <= t)
-  -- (someone earlier on more than one member's Cute, or from the server: no first)
-  if first and entry.src ~= "cute" then return end
+  -- (someone earlier on more than one member's Cute, or from the server: no first; one on one member's Cute is
+  -- contested once, by the next member's earn, and the officers choose)
+  if first and (entry.src ~= "cute" or entry.contested) then return end
   local earlier = first and entry or nil
   if not first then
     if not entry and (L.n or 0) >= LEDGER_MAX then return end
@@ -537,6 +542,7 @@ function A:Record(key, e, make, what)
   if e.quiet or not make or not A.Ready() or not s then return end
   local card = make(earlier)
   if not card then return end
+  if earlier then earlier.contested = true end
   local kind = key:sub(1, 1)
   local rests = earlier and string.format("Earlier: %s, %s, on %s's Cute alone. You choose.", earlier.n or "?", dayText(earlier.t or 0), earlier.n or "?") or RESTS[kind]
   if kind == "a" and not earlier then rests = rests .. (A.NewsWords() and (" " .. A.NewsWords()) or "") end
@@ -545,6 +551,22 @@ function A:Record(key, e, make, what)
   H():Queue({ id = "f:" .. key .. ":" .. s, src = "first", from = "m:" .. s, what = what or card.title, mark = "Guild first?", t = t,
     digest = firstsToday() >= FIRSTS_DAY and "first" or nil, first = { key = key, earlier = earlier and { n = earlier.n, t = earlier.t, src = earlier.src } or nil },
     rests = rests, lock = not H().Open(card.source) or nil, card = card })
+end
+
+-- the officers' word on a first (Halls.lua): a GUILD FIRST card published, by this officer or another (the member it
+-- names is the first: sfx, name), or a "Guild first?" row removed (the entry that stands is: no sfx). Either way no
+-- later earn is suggested against it
+function A.Decide(key, sfx, name)
+  local L = A.Firsts()
+  if not L or type(key) ~= "string" or not key:match("^[abc]%d+$") then return end
+  local entry = L.e[key]
+  if sfx then
+    if not entry then
+      if (L.n or 0) >= LEDGER_MAX then return end
+      L.n = (L.n or 0) + 1
+    end
+    L.e[key] = { g = sfx, n = name, t = entry and entry.g == sfx and entry.t or math.floor(now()), src = "officers" }
+  elseif entry then entry.src = "officers" end
 end
 
 -- a boss's first corroborated kill (Rules.lua rule 9: the claim that made another member's name it back): its claim's
