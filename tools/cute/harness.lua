@@ -4973,7 +4973,8 @@ do
     end
     -- Settings: the Quests group's sections, and Data you share in Cute's
     rone.C.UI:Open("settings", "quests")
-    assert(sectionsShown(rone) == "general keys modules share columns vis rules quests route", "the sections with the base alone: " .. sectionsShown(rone))
+    -- (merge3: Reminders, the Camp module, on by default: its section with them)
+    assert(sectionsShown(rone) == "general keys modules share columns vis rules quests route camp", "the sections with the base alone: " .. sectionsShown(rone))
     local ts = texts(rone)
     assert(ts:find("Accept for me", 1, true) and ts:find("Progress in mob tooltips", 1, true), "the Quests section's rows:\n" .. ts)
     assert(ts:find("Step frame", 1, true) and ts:find("Direction arrow", 1, true), "the step frame's and the arrow's rows are the Quests section's:\n" .. ts)
@@ -5106,8 +5107,11 @@ do
     assert(s.guide.on == true and s.guide.frame == true and stepShown(c), "the base alone: the guide on, the frame up: " .. flags(s))
     assert(s.mapIcons == false and s.pins == false, "Map off: no quest icons, no route pins on the world map: " .. flags(s))
     assert(s.minimapPins ~= false and s.minimapLines ~= false, "the minimap's route is the Route tab's: left on: " .. flags(s))
-    assert(s.remind.on == false and s.remind.buffs == true and s.remind.party == true and s.glow.on == false, "Reminders off: nothing on screen, the rows as they are, no light on a fresh install: " .. flags(s))
-    assert(s.cuteOff.map.mapIcons == true and s.cuteOff.camp["remind.on"] == true and s.cuteOff.map.minimapPins == nil, "what the flags were is kept for the switch on, the world map's alone")
+    -- (merge3: Reminders, the Camp module, on by default: on screen at a fresh install, the light off until its row says)
+    assert(s.remind.on == true and s.remind.buffs == true and s.remind.party == true and s.glow.on == false, "Reminders on by default: on screen, the rows as they are, no light on a fresh install: " .. flags(s))
+    assert(s.cuteOff.map.mapIcons == true and (s.cuteOff.camp == nil or s.cuteOff.camp["remind.on"] == nil) and s.cuteOff.map.minimapPins == nil, "what the flags were is kept for the switch on, the world map's alone")
+    c.C.Modules.Set("Cute_Quest:camp", false); tick(c, 1)
+    assert(s.remind.on == false and s.remind.buffs == true and s.remind.party == true and s.glow.on == false and s.cuteOff.camp["remind.on"] == true, "Reminders off: nothing on screen, the rows as they are, kept for the switch on: " .. flags(s))
     -- Map on: its flags back as they were (the engine's defaults); a row's choice survives off and on
     c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
     assert(s.mapIcons == true and s.pins == true and s.cuteOff.map == nil, "Map on: both back on: " .. flags(s))
@@ -13709,8 +13713,8 @@ do
     -- Shame retitled)
     assert(names(g.sub) == "Race, Prog, Halls, Runs, Statistics, Officers, Me", "the guild's tabs: " .. names(g.sub))
     assert(names(q.sub) == "Quests, Route, ---, Step frame, Direction arrow", "the quests' tabs and the on-screen switches: " .. names(q.sub))
-    -- (merge3: the cards round's Halls before Runs, Achievements and Records after it)
-    assert(names(s.sub) == "General, Keys, Layout, Modules, Data you share, Columns, Who sees what, Rules, Halls, Runs, Achievements, Records, Quests, Route", "every section: " .. names(s.sub))
+    -- (merge3: the cards round's Halls before Runs, Achievements and Records after it; Reminders, on by default, after Route)
+    assert(names(s.sub) == "General, Keys, Layout, Modules, Data you share, Columns, Who sees what, Rules, Halls, Runs, Achievements, Records, Quests, Route, Reminders", "every section: " .. names(s.sub))
     assert(entry(m, "Set up Cute...") and not entry(m, "Reload to apply"), "Set up Cute... before Start; no reload to apply")
     -- a click opens: a tab, the window, a section; a switch flips the engine's setting
     entry(g.sub, "Statistics").set()
@@ -18399,7 +18403,9 @@ do
     login(c); tick(c, 3)
     local s = c.env.CuteQuestDB.settings
     local QB = c.addons[2].private
-    assert(QB.Remind and s.remind.v == 2 and s.glow.on == false and s.remind.on == false, "fresh: the light off, Reminders off with the module (off until Start): " .. tostring(s.remind.on))
+    -- (merge3: the module on by default, so Reminders are on before the card is answered; the light stays off until its
+    -- row says)
+    assert(QB.Remind and s.remind.v == 2 and s.glow.on == false and s.remind.on == true and c.C.Modules.byId.camp.active, "fresh: the light off, Reminders on with the module (on by default): " .. tostring(s.remind.on))
     local card = c.env.CuteSetupFrame
     assert(card and card:IsShown(), "the first-run card")
     local function row(label) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == label end) end
@@ -18431,8 +18437,10 @@ do
     local fresh07 = copy(save07)
     login(o); tickAll(6)
     local so = o.env.CuteQuestDB.settings
-    assert(so.remind.buffs == true and so.remind.party == true and so.glow.on == false and so.remind.on == false and so.cuteOff.camp["remind.on"] == true
-      and so.cuteOff.camp.campBar == nil and so.remind.never.eat == "Eat", "0.7's kept switch rewritten: the rows back as kept, Reminders off with the module, the food's switch a Never, the light off until asked")
+    -- (merge3: the module on by default for a character with nothing saved, as this 0.7 one: Reminders on with it, the
+    -- kept switch given back)
+    assert(so.remind.buffs == true and so.remind.party == true and so.glow.on == false and so.remind.on == true and so.cuteOff.camp == nil
+      and so.remind.never.eat == "Eat", "0.7's kept switch rewritten: the rows back as kept, Reminders on with the module (on by default), the food's switch a Never, the light off until asked")
     o.C.Modules.Set("Cute_Quest:camp", true); tick(o, 1)
     assert(so.remind.on == true and so.cuteOff.camp == nil and so.glow.on == false, "the module on: Reminders back, the light its own")
     o.C.Modules.Set("Cute_Quest:camp", false); tick(o, 1)
@@ -18943,6 +18951,9 @@ end
 -- P1. The first-run card's row is "Reminders" (QuestBank loaded: "its step frame, arrow and Reminders are its own."), and
 --     it alone chooses the Camp module: unticked with the light ticked, the module off and the light on; ticked with
 --     the light unticked, the module on, Reminders on screen and the light off
+-- P2. Cute_Quest's camp module starts on (its default kept, the one module addon's default Cute keeps): a character who
+--     answers the card Not now has Reminders all the same; another module addon's default is dropped; no module takes
+--     the id layout (Settings > Layout's)
 ----------------------------------------------------------------------------
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
@@ -18982,6 +18993,20 @@ do
     assert(ch.modules["Cute_Quest:camp"] == true and s.remind.on == true and s.glow.on == false, "Reminders ticked, the light unticked: the module on, Reminders on screen, the light off")
     leave(d)
     said[#said + 1] = "the card's Reminders row alone chooses the module; the light its own"
+    -- P2
+    local e = client(true)
+    login(e); tick(e, 3)
+    press(button(e, "Not now"))
+    tickAll(2)
+    local es = e.env.CuteQuestDB.settings
+    assert(e.C.Modules.byId.camp.active and e.C.Modules.byId.camp.default == true and es.remind.on == true and (e.env.CuteDB.chars["Rone-Forever"].modules or {})["Cute_Quest:camp"] == nil,
+      "Not now: Reminders on by the module's default, nothing chosen")
+    assert(e.env.Cute:RegisterModule({ id = "probe", addon = "Cute_Probe", title = "Probe", default = true }) and e.C.Modules.byId.probe.default == nil and not e.C.Modules.byId.probe.active,
+      "another module addon's default dropped")
+    assert(e.C:RegisterModule({ id = "layout", title = "Layout", builtin = true }) == false and e.env.Cute:RegisterModule({ id = "layout", addon = "Cute_Probe", title = "Layout" }) == false,
+      "no module takes the id layout")
+    leave(e)
+    said[#said + 1] = "Reminders on for a character who answers Not now; another addon's default dropped; layout reserved"
     print("merge3: " .. table.concat(said, "; "))
   end)
 end

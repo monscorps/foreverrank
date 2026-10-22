@@ -34,7 +34,7 @@ local M = { list = {}, byId = {}, found = {}, failed = {}, pending = {} }
 C.Modules = M
 
 -- Settings' own sections and the Settings tab: no module takes these ids
-local RESERVED = { settings = true, general = true, vis = true, rules = true, modules = true, keys = true, columns = true }
+local RESERVED = { settings = true, general = true, vis = true, rules = true, modules = true, keys = true, columns = true, layout = true }
 local WINDOWS = { guild = true, quests = true, map = true }
 
 local function note(msg) C.Err.Note(msg, "modules") end
@@ -102,9 +102,16 @@ C.API = Cute
 local held = _G.Cute
 if held == nil or (type(held) == "table" and held.isCute) then _G.Cute = Cute
 else C.Err.Note("another addon holds the global Cute: Cute's module addons cannot reach it", "modules") end
+-- the one external module that starts on: Cute_Quest's Reminders (its camp module), so a character who answers the
+-- first-run card "Not now" still gets them (the reminders design's section 6); every other default is dropped
+local KEEPS_DEFAULT = { ["Cute_Quest:camp"] = true }
 function Cute:RegisterModule(def)
   -- (an external module is never core nor built in, and starts off: a fresh install starts with the dashboard)
-  if type(def) == "table" then def.core, def.builtin, def.default = nil, nil, nil end
+  if type(def) == "table" then
+    local addon = type(def.addon) == "string" and def.addon or M.loading
+    local keep = def.default == true and KEEPS_DEFAULT[tostring(addon) .. ":" .. tostring(def.id)] or nil
+    def.core, def.builtin, def.default = nil, nil, keep
+  end
   return C:RegisterModule(def)
 end
 function Cute.Open(page, section) C.UI:Open(page, section) end

@@ -71,5 +71,7 @@ function Cp.Toggle(on)
 end
 QB.Toggles.camp = Cp.Toggle
 
-Cute:RegisterModule({ id = "camp", addon = ADDON, title = TITLE, order = 26, group = "quests",
+-- (on by default, the one module addon's module Cute lets start on, Modules.lua: a character who answers the first-run
+-- card "Not now" still gets Reminders; the light stays its own, off until its row is answered, Bridge.lua)
+Cute:RegisterModule({ id = "camp", addon = ADDON, title = TITLE, order = 26, group = "quests", default = true,
   notes = "Reminders and Buffs on screen: what is worth a click out of a fight.", settings = Cp.Settings, onToggle = Cp.Toggle })
