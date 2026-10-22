@@ -745,7 +745,8 @@ Finds.QTIMES = QTIMES
 function Finds.QuestDone(id)
   id = num(id)
   local T = QB.Timer
-  if not (id and T and T.DB) then return end
+  -- (under the notes' box like every note: the uploader sends disc whole)
+  if not (id and T and T.DB) or not Finds.On() then return end
   local q = T.DB().quests[id]
   local w, k = type(q) == "table" and num(q.w), type(q) == "table" and num(q.k)
   if not (w and k) or k < QSAMPLE_K or w <= 0 or w > QSAMPLE_MAX then return end
@@ -841,12 +842,14 @@ function Finds.LoadData()
 end
 
 ----------------------------------------------------------------------------
--- the Settings box unticked (Game.SetOn): what was noted goes, since the saved file is uploaded whole
+-- the Settings box unticked (Game.SetOn): what was noted goes (the finds, the crossings, the flights, the work each
+-- quest took), since the saved file is uploaded whole
 ----------------------------------------------------------------------------
 function Finds.Clear()
   local d = QuestBankDB and QuestBankDB.disc
   if type(d) ~= "table" then return end
   d.find, d.findAt, d.findN, d.flown = nil, nil, nil, nil
+  d.qtime, d.qtimeAt, d.qtimeN = nil, nil, nil
   if type(d.rides) == "table" then
     for k in pairs(d.rides) do if k:sub(1, 2) == "x:" then d.rides[k] = nil end end
   end

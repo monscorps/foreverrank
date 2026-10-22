@@ -22130,6 +22130,41 @@ do
   assert(tip:find("dropped what you loot (by id), and where you found them, with no names in them", 1, true), "the notes' tooltip names the places too:\n" .. tip)
   print("merge2 M2: Settings' notes box says in its tooltip that where you found things is noted too")
 end
+-- M3. The work each quest took (disc.qtime, Finds.QuestDone) sits under the notes' box like every note (Finds.lua's
+-- header, design 11.1): unticking forgets the samples (and their counter), and a quest completed while it is unticked
+-- leaves none; ticked again, the next completion is noted. The uploader sends disc whole, so this is the box's say
+do
+  local c = lookChar("Untimed", { level = 20 })
+  local QB, DB = c.QB, c.env.QuestBankDB
+  local Disc = QB.Discover
+  -- a quest worked over five looks, 40 s of work: a sample (the finds stage's own measure)
+  local function work(id)
+    c.log = { { id, 0 } }
+    c.objectives = c.objectives or {}
+    c.objectives[id] = { { type = "monster", text = "Ogre slain: 0/3", numFulfilled = 0, numRequired = 3, finished = false } }
+    Disc.Look()
+    c.clock = c.clock + 5
+    Disc.Look()
+    for i = 1, 3 do
+      c.clock = c.clock + 20
+      local o = c.objectives[id][1]
+      o.numFulfilled, o.finished = i, i == 3
+      Disc.Look()
+    end
+  end
+  assert(QB.Finds.On(), "the Forever client with the box ticked")
+  work(500)
+  assert(DB.disc.qtime and DB.disc.qtime[500] and #DB.disc.qtime[500] == 3 and DB.disc.qtimeN == 1 and DB.disc.qtimeAt[500] == 1,
+    "ticked: the sample noted")
+  QB.Game.SetOn(false)
+  assert(DB.disc.qtime == nil and DB.disc.qtimeAt == nil and DB.disc.qtimeN == nil, "unticked: the samples, their stamps and their counter gone")
+  work(501)
+  assert(DB.disc.qtime == nil and DB.disc.qtimeAt == nil and DB.disc.qtimeN == nil, "unticked: a quest completed is no sample")
+  QB.Game.SetOn(true)
+  work(502)
+  assert(DB.disc.qtime and DB.disc.qtime[502] and DB.disc.qtime[501] == nil and DB.disc.qtimeN == 1, "ticked again: the next completion noted, the one done unticked never")
+  print("merge2 M3: the work each quest took is under the notes' box: unticking forgets it, nothing noted while unticked, noted again once ticked")
+end
 
 local seen = {}
 local unique = {}
