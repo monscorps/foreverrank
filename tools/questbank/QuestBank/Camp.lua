@@ -698,6 +698,7 @@ local function onCast(_, unit, _, spell)
   end
   if FEATURE[sp] then campAt = now() end
   if sp == Camp.FIRE_SPELL then litAt = litAt or now() end
+  if InCombatLockdown and InCombatLockdown() then return end -- (no meal in a fight, and never a bag read in one)
   for id in pairs(R.Bags()) do
     if spellOf(id) == sp then
       local okI, _, _, _, _, _, classID, subID = pcall(C_Item.GetItemInfoInstant, id)

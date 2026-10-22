@@ -1753,6 +1753,7 @@ function R.OnCast(unit, _, spell)
   local sp = plain(spell)
   if type(sp) ~= "number" then return end
   lastUse.at, lastUse.spell, lastUse.item = now(), sp, nil
+  if fighting() then return end -- (the hud review: never a bag read in a fight; a cast in one is its spell alone)
   for id in pairs(R.Bags()) do
     if itemAura(id) == sp then
       lastUse.item = id

@@ -22871,6 +22871,31 @@ do
     -- the hunter's own trainer: noted, and what stays to learn is left at it
     visit(0, "Creature-0-4455-0-12-987654-0000A1B2C3", "Hunter Trainer", { { "Serpent Sting", "available", 4 }, { "Arcane Shot", "available", 6 }, { "Hunter's Mark", "available", 6 } })
     assert(disc.trainer and disc.trainer.c987654 and disc.trainer.c987654.cl == 3 and G.Trainable() == 0, "the class trainer's window: noted, and left at it")
+    -- (the spellbook read once for a burst of its events, and never in a fight: once after it)
+    local reads, get = 0, env.C_SpellBook.GetSpellBookItemInfo
+    env.C_SpellBook.GetSpellBookItemInfo = function(...) reads = reads + 1; return get(...) end
+    local once = 2 * (#book - 2)
+    for _ = 1, 5 do ev(c, "SPELLS_CHANGED") end
+    tick(c, 1); G.Trainable()
+    assert(reads > 0 and reads <= once, string.format("five SPELLS_CHANGED: the book read once (%d reads, one read is %d)", reads, once))
+    reads = 0
+    c.combat = true; ev(c, "PLAYER_REGEN_DISABLED")
+    for _ = 1, 5 do ev(c, "SPELLS_CHANGED") end
+    tick(c, 1); G.Trainable()
+    assert(reads == 0, "in a fight: the book not read: " .. reads)
+    c.combat = false; ev(c, "PLAYER_REGEN_ENABLED"); tick(c, 3)
+    assert(reads > 0 and reads <= once, "after the fight: read once: " .. reads)
+    -- (a cast in a fight never walks the bags: their read waits for the fight's end)
+    c.o.bagSlots = { { 2512, 20 } }
+    local bagReads, getID = 0, env.C_Container.GetContainerItemID
+    env.C_Container.GetContainerItemID = function(...) bagReads = bagReads + 1; return getID(...) end
+    c.combat = true; ev(c, "PLAYER_REGEN_DISABLED")
+    ev(c, "BAG_UPDATE_DELAYED"); tick(c, 1)
+    local cf = c.QB.Remind.castFrame
+    cf.__scripts.OnEvent(cf, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-13", 1978)
+    assert(bagReads == 0, "in a fight: a cast reads no bag: " .. bagReads)
+    c.combat = false; ev(c, "PLAYER_REGEN_ENABLED"); tick(c, 3)
+    env.C_Container.GetContainerItemID = getID
   end }
 
   -- 14. Flight path: in Lakeshire and at Sentinel Hill (no rest area) beside a flight master you lack, the line;

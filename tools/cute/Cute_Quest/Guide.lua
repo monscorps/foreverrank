@@ -544,6 +544,8 @@ G.trainVer = 0
 function G.Trainable()
   local level = QB.state and QB.state.level or 1
   if trainFor == level and trainKnown ~= nil then return trainKnown and #trainBuf or nil, trainBuf, skipBuf end
+  -- (the hud review: never read in a fight; the last read stands until after it)
+  if trainKnown ~= nil and InCombatLockdown and InCombatLockdown() then return trainKnown and #trainBuf or nil, trainBuf, skipBuf end
   for k = #trainBuf, 1, -1 do trainBuf[k] = nil end
   for k = #skipBuf, 1, -1 do skipBuf[k] = nil end
   trainFor = level
@@ -584,13 +586,24 @@ function G.Trainable()
   if QB.Remind and QB.Remind.Diag then QB.Remind.Diag("trainFuture", future); QB.Remind.Diag("trainRanks", ranks) end
   return #trainBuf, trainBuf, skipBuf
 end
--- the spellbook changed (a spell learned, a level, the trainer's window shut): read again at the next ask; the plan is
--- made again when the count moved
+-- the spellbook changed (a spell learned, a level, the trainer's window shut): read again at the next ask, which is
+-- never in a fight; the plan made again when the count moved, looked at half a second on (the hud review: once for a
+-- burst, a level bringing three of these events and a login a dozen SPELLS_CHANGED, each a read of the whole book
+-- until now) and after a fight where the look fell in one
+local trainSoon, trainWas, trainAfter = false, nil, false
 function G.TrainDirty()
-  local was = trainKnown and #trainBuf or nil
+  if not trainSoon then trainWas = trainKnown and #trainBuf or nil end
   trainFor = nil
+  if trainSoon then return end
+  trainSoon = true
+  if C_Timer and C_Timer.After then C_Timer.After(0.5, QB.Safe(G.TrainCheck, "guide: train")) else G.TrainCheck() end
+end
+function G.TrainCheck()
+  trainSoon = false
+  if InCombatLockdown and InCombatLockdown() then trainAfter = true return end
+  trainAfter = false
   local now = G.Trainable()
-  if now ~= was then G.trainVer = G.trainVer + 1; QB:MarkDirty() end
+  if now ~= trainWas then G.trainVer = G.trainVer + 1; QB:MarkDirty() end
 end
 
 function G.NeedsTraining(level)
@@ -1322,6 +1335,7 @@ R.Hear("TRAINER_CLOSED", function() if G.atClassTrainer then G.atClassTrainer = 
 for _, e in ipairs({ "SPELLS_CHANGED", "LEARNED_SPELL_IN_SKILL_LINE", "PLAYER_LEVEL_UP", "PLAYER_LEVEL_CHANGED" }) do
   R.Hear(e, function() G.TrainDirty() end)
 end
+R.Hear("PLAYER_REGEN_ENABLED", function() if trainAfter then G.TrainCheck() end end)
 
 -- Flight path: a flight master of Travel's graph (D.HUB, world positions) within 300 yards that this character lacks
 -- (TV.Usable), on a continent whose map the client has read (TV.DB().readC), so an old character on a fresh install is
