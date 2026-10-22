@@ -338,8 +338,14 @@ local FACT_W = 100 -- ("Members ranked" at 11)
 function CF:Announce(set, opts)
   opts = opts or {}
   if type(set) ~= "table" then return end
-  local f = build()
   local U, HL = C.UI, C.Halls
+  -- (a set held, as the policy held now lets it show: a card closed since leaves it, one left with none shows nothing,
+  -- Halls.lua H.Visible; a preview, a test and a look are this client's own, shown as they are)
+  if not (opts.preview or opts.test or opts.look) then
+    set = HL.Visible(set)
+    if not set then if self.frame then self.frame:Hide() end return end
+  end
+  local f = build()
   self.rep, self.test, self.set, self.sendButton, self.publishButton = nil, opts.test, set, nil, nil
   self.preview = opts.preview
   local cards = set.cards or {}

@@ -14167,6 +14167,59 @@ do local function cardsStage()
   end)
   said[#said + 1] = "the guild chat line unticked until the officer ticks it, then remembered"
 
+  -- a set held shows as the policy holds now (12): a card whose source the officers close since leaves News, the
+  -- waiting toast, the announcement and the answer to 1G; a set left with no card is none; a NEW RECORD this client made
+  -- itself goes with Fastest clears
+  isolated({ gmember("Yoda", 1, "MAGE"), gmember("Yuki", 3, "ROGUE"), gmember("Yrsa", 3, "DRUID") }, function()
+    local yoda, yuki = cchar("Yoda", 1), cchar("Yuki", 3, { class = "ROGUE" })
+    login(yoda); login(yuki)
+    tickAll(200)
+    local deathsCard = { guid = yuki.o.guid, name = "Yuki", class = "ROGUE", kind = "blooper", title = "Deaths", line = "l", value = "9", valueLabel = "all time", source = "sdeaths" }
+    local handCard = { guid = yuki.o.guid, name = "Yuki", class = "ROGUE", kind = "shout", title = "By hand", line = "l", source = "" }
+    assert(H(yoda):Publish({ kind = "n", title = "Mixed", cards = { deathsCard, handCard } }), "a set of a Deaths card and one by hand")
+    tickAll(65)
+    yuki.combat = true
+    assert(H(yoda):Publish({ kind = "s", title = "Deaths alone", cards = { deathsCard } }), "a set of a Deaths card alone")
+    tickAll(10)
+    local shown0 = H(yuki).toastsShown or 0
+    assert(#H(yuki).Sets() == 2 and #H(yuki).toasts == 1, "both held, the second's toast waiting out the fight")
+    yoda.C.Policy:Set("deaths", "self")
+    yoda.C.Comm:SendPolicy()
+    tickAll(5)
+    assert(yuki.C.Policy:Route("deaths") == "self", "Deaths closed on Yuki's client")
+    local news = H(yuki).News("all")
+    assert(#news == 1 and #news[1].cards == 1 and news[1].cards[1].title == "By hand" and H(yuki).Unseen() <= 1, "News: the card by hand alone, the Deaths set none")
+    yuki.combat = false
+    fire(yuki, "PLAYER_REGEN_ENABLED")
+    assert((H(yuki).toastsShown or 0) == shown0, "the waiting toast of a set left with no card shows nothing")
+    local CF = yuki.C.CardFrame
+    CF:Announce(H(yuki).Sets()[2])
+    assert(CF.frame:IsShown() and CF.cards[1]:IsShown() and not CF.cards[2]:IsShown(), "the announcement of the mixed set: one card")
+    CF.frame:Hide()
+    CF:Announce(H(yuki).Sets()[1])
+    assert(not CF.frame:IsShown(), "the Deaths set announces nothing")
+    H(yuki).OpenChip("news")
+    local rows = 0
+    for _ in pairs(rowsOf(yuki, "halls.news")) do rows = rows + 1 end
+    assert(rows == 1, "one News row: " .. rows)
+    -- a member away logs in: the answer to 1G carries the card by hand alone
+    local yrsa = cchar("Yrsa", 3, { class = "DRUID" })
+    login(yrsa)
+    tickAll(120)
+    for _, m in ipairs(yoda.sent) do if m.msg:find("^1C|%d+|a%x*|") then assert(not m.msg:find("sdeaths", 1, true), "an answer carries no closed card: " .. m.msg) end end
+    assert(#H(yrsa).Sets() == 1 and #H(yrsa).Sets()[1].cards == 1, "the late member holds the card by hand alone")
+    -- a NEW RECORD this client made itself, and Fastest clears closed since
+    yuki.C.Records.ClearDef(36, true)
+    H(yuki):KeepLocal({ kind = "r", title = "Fastest clear: The Deadmines", cards = { { guid = yuki.o.guid, name = "Yuki", class = "ROGUE", kind = "record", title = "The Deadmines",
+      line = "New guild record.", value = "20:00", valueLabel = "fastest clear", source = "sc36" } } }, "c36")
+    assert(#H(yuki).News("records") == 1, "the record in News")
+    yoda.C.Policy:Set("gc_clears", "self")
+    yoda.C.Comm:SendPolicy()
+    tickAll(5)
+    assert(#H(yuki).News("records") == 0, "Fastest clears closed: the record leaves News")
+  end)
+  said[#said + 1] = "a set held shows as the policy holds now: News, the waiting toast, the announcement and the answer to 1G leave a card closed since, a set left with none is none, a NEW RECORD goes with Fastest clears"
+
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end
 

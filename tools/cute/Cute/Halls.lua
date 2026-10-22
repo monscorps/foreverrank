@@ -14,8 +14,9 @@
 --            30), greys the queue items it published in every officer's queue, and shows once as a toast: one at a
 --            time, three waiting, two an hour, none in combat, an encounter, a loading screen or a dungeon or raid,
 --            nothing from a sender past 10 sets in an hour and nothing for an answer to 1G (News alone). A card whose
---            source the policy routes Only you now is dropped. Cute's own guild line from an officer is hidden
---            (H.LineFilter), so a member with Cute sees a set once
+--            source the policy routes Only you now is dropped, and one the officers close later shows no more (News,
+--            the toasts, the announcement and the answers to 1G go by H.Visible). Cute's own guild line from an officer
+--            is hidden (H.LineFilter), so a member with Cute sees a set once
 --   1G       every client once, a minute after its hello: the newest set it holds and the stamp of the records the
 --            officers turned on (Records.lua). An officer holding newer ones answers with them (the last five, newest
 --            first, and 1O): the lowest GUID among the officers online with Cute at once, the others a few seconds on
@@ -252,6 +253,20 @@ function H.Open(source)
   end
   return false
 end
+-- a set held, as the policy held now lets it show (12): the set itself where every card's source is open, a copy with
+-- the open ones where the officers closed some since it came, nil where none is left. What a client shows or answers
+-- with goes through here (News, the toasts, the announcement, an answer to 1G), as a run's report goes through Runs.lua
+-- R.Visible; what is kept stays as it came, so a source opened again shows its cards again
+function H.Visible(set)
+  if type(set) ~= "table" then return nil end
+  local open, all = {}, true
+  for _, c in ipairs(set.cards or {}) do if H.Open(c.source) then open[#open + 1] = c else all = false end end
+  if #open == 0 then return nil end
+  if all then return set end
+  local o = copy(set)
+  o.cards = open
+  return o
+end
 
 ----------------------------------------------------------------------------
 -- the officers' queue (9.1): newest first. A row is an item { id, src, from, at, day, card, what, lock, pub } or a
@@ -460,7 +475,8 @@ end
 function H.News(filter)
   local out = {}
   for _, s in ipairs(H.Sets()) do
-    if not filter or filter == "all" or (filter == "halls" and (s.kind == "h" or s.kind == "s")) or (filter == "records" and s.kind == "r") then out[#out + 1] = s end
+    local v = H.Visible(s)
+    if v and (not filter or filter == "all" or (filter == "halls" and (s.kind == "h" or s.kind == "s")) or (filter == "records" and s.kind == "r")) then out[#out + 1] = v end
   end
   return out
 end
@@ -760,7 +776,11 @@ function H:Answer(askedAt, recHeard0)
   for _, p in ipairs(H.answerParts) do if p.t >= (askedAt or 0) and p.at > covered then covered = p.at end end
   if H.Newest() <= covered then return end
   local list = {}
-  for _, s in ipairs(H.Sets()) do if not s.rec and tonumber(s.at) > covered and #list < ANSWER_SETS then list[#list + 1] = s end end
+  for _, s in ipairs(H.Sets()) do
+    local v = not s.rec and tonumber(s.at) > covered and #list < ANSWER_SETS and H.Visible(s)
+    if v then list[#list + 1] = v end
+  end
+  if #list == 0 then return end
   for i = 1, #list do for _, m in ipairs(H.Messages(list[i], true)) do C.Comm.Queue({ msg = m }) end end
   H.answers = (H.answers or 0) + 1
 end
@@ -1087,13 +1107,15 @@ local function toastFrame()
 end
 function H:NextToast()
   if H.toastNow then return end
+  -- (a set waiting whose cards the officers closed since shows as it may now, or not at all)
+  while H.toasts[1] and not H.Visible(H.toasts[1]) do table.remove(H.toasts, 1) end
   local set = H.toasts[1]
   if not set then return end
   if not quietNow() then return end
   -- (two an hour: the rest stay in News)
   if recent(H.toastLog, HOUR) >= TOAST_HOUR then H.toasts = {}; return end
   table.remove(H.toasts, 1)
-  self:ShowToast(set)
+  self:ShowToast(H.Visible(set))
 end
 function H:ShowToast(set, test)
   local f = toastFrame()
@@ -1240,7 +1262,7 @@ end
 -- sets come since the News chip was last open
 function H.Unseen()
   local seen, n = tonumber(H.DB().seenAt) or 0, 0
-  for _, s in ipairs(H.Sets()) do if (tonumber(s.at) or 0) > seen then n = n + 1 end end
+  for _, s in ipairs(H.Sets()) do if (tonumber(s.at) or 0) > seen and H.Visible(s) then n = n + 1 end end
   return n
 end
 local NEWS_FILTERS = { { "all", "All" }, { "halls", "Halls" }, { "records", "Records" } }
