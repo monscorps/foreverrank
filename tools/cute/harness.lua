@@ -13730,8 +13730,9 @@ do
     -- Shame retitled)
     assert(names(g.sub) == "Race, Prog, Halls, Runs, Statistics, Officers, Me", "the guild's tabs: " .. names(g.sub))
     assert(names(q.sub) == "Quests, Route, ---, Step frame, Direction arrow", "the quests' tabs and the on-screen switches: " .. names(q.sub))
-    -- (merge3: the cards round's Halls before Runs, Achievements and Records after it; Reminders, on by default, after Route)
-    assert(names(s.sub) == "General, Keys, Layout, Modules, Data you share, Columns, Who sees what, Rules, Halls, Runs, Achievements, Records, Quests, Route, Reminders", "every section: " .. names(s.sub))
+    -- (merge3: the cards round's Halls before Runs; Reminders, on by default, after Route. fix-cute-ui: Achievements' and
+    -- Records' guild switches are rows in Settings > Modules, no sections)
+    assert(names(s.sub) == "General, Keys, Layout, Modules, Data you share, Columns, Who sees what, Rules, Halls, Runs, Quests, Route, Reminders", "every section: " .. names(s.sub))
     assert(entry(m, "Set up Cute...") and not entry(m, "Reload to apply"), "Set up Cute... before Start; no reload to apply")
     -- a click opens: a tab, the window, a section; a switch flips the engine's setting
     entry(g.sub, "Statistics").set()
