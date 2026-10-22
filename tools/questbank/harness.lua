@@ -24511,6 +24511,36 @@ end
       QB:Settings().arrowScale = nil
     end
   end }
+
+  -- S4 (firsthour). The engine's chat lines and tooltips said QuestBank under Cute (whose Bridge sets QB.NAME): "Right-
+  -- click it in QuestBank ... to Route it again" after Skip this quest, "QuestBank doesn't know quest N", "The game told
+  -- QuestBank its rewards", and the quest tooltip's lines. They name the host, and Skip names the menu's own words
+  FECASES[#FECASES + 1] = { "S4: the engine's chat lines and tooltips name its host", function()
+    local c = lookChar("Hosted", { host = { NAME = "Cute" } })
+    local QB, UI = c.QB, c.QB.UI
+    local q = QB.Quest.Get(7)
+    local n0 = #c.chat
+    UI.SkipQuest(q)
+    QB:SetSkipped(7, false)
+    QB.Link.Click("addon:QuestBank:quest:99999999")
+    UI.QuestClick({ id = 99999998, name = "A Quest Seen", surveyOnly = true, lvl = 5 }, nil, "LeftButton")
+    -- (the lines themselves: QuestBank's own chat prefix is its Print's, which a host's Bridge replaces with its own)
+    local said = table.concat(c.chat, "\n", n0 + 1):gsub("|c%x+QuestBank|r ", "")
+    assert(said:find("Right-click it again and choose Route it again", 1, true) and said:find("Cute doesn't know quest 99999999", 1, true)
+      and said:find("The game told Cute its rewards", 1, true) and not said:find("QuestBank", 1, true), "chat names Cute:\n" .. said)
+    local rewards = QB.Quest.Rewards
+    QB.Quest.Rewards = function() return nil, "unknown" end
+    local was = { q.surveyOnly, q.sodLeftover, q.liveFull }
+    q.surveyOnly, q.sodLeftover, q.liveFull = true, true, nil
+    UI.longTips = true
+    lines = {}
+    UI.QuestTooltip(c.env.GameTooltip, q, QB:Status(q))
+    UI.longTips = nil
+    q.surveyOnly, q.sodLeftover, q.liveFull = was[1], was[2], was[3]
+    QB.Quest.Rewards = rewards
+    local text = table.concat(lines, "\n")
+    assert(text:find("Cute", 1, true) and not text:find("QuestBank", 1, true), "the quest's tooltip names Cute:\n" .. text)
+  end }
   local failed = {}
   for _, case in ipairs(FECASES) do
     local ok, err = pcall(case[2])

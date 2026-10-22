@@ -23,6 +23,8 @@ local STATUS = {
   wrong = { 0.5, 0.5, 0.5 },
 }
 local Q = QB.Quest
+-- the name the words give the engine: QuestBank, or its host (Cute_Quest's Bridge sets QB.NAME), as Arrow.lua's
+local function host() return QB.NAME or "QuestBank" end
 
 -- a label cut after a whole word with "..." when it is wider than its box (the game would cut it mid-letter); the
 -- text as it is when it fits. room: the width it may take, its box's less a little by default. The text's own width
@@ -116,7 +118,7 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl, rewardRow)
   elseif q.xpUnknown then
     src = "not known yet"
   elseif q.surveyOnly then
-    src = "as the game told QuestBank"
+    src = "as the game told " .. host()
   elseif q.confirmed and q.seenOnly then
     src = QB.Comma(q.base) .. ", as players' games showed it"
   elseif q.confirmed then
@@ -137,7 +139,7 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl, rewardRow)
     tip:AddLine(string.format("Probably behind you: %s, a later step of this chain, is %s, and the game only offers a step once the ones before it are handed in.", QB.Quest.Label(st.later), st.how == "held" and "in your log" or "done"), 1, 0.6, 0.3, true)
   end
   if q.sodLeftover then
-    tip:AddLine("A Season of Discovery leftover in Forever's data: nobody has met its NPC in Forever yet, so QuestBank doesn't suggest it.", 1, 0.5, 0.3, true)
+    tip:AddLine("A Season of Discovery leftover in Forever's data: nobody has met its NPC in Forever yet, so " .. host() .. " doesn't suggest it.", 1, 0.5, 0.3, true)
   end
   if q.classic and not q.liveFull then
     tip:AddLine("From the Classic database: not seen in Forever yet, so it may differ or not exist.", 1, 0.6, 0.3, true)
@@ -149,14 +151,14 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl, rewardRow)
       q.turn and "" or " Where it's handed in isn't known yet."), 0.75, 0.75, 1, true)
   end
   if q.surveyOnly then
-    tip:AddLine("Seen in game: QuestBank asked the game about it. Who gives it, where, and for which side isn't known yet.", 0.75, 0.75, 1, true)
+    tip:AddLine("Seen in game: " .. host() .. " asked the game about it. Who gives it, where, and for which side isn't known yet.", 0.75, 0.75, 1, true)
   end
   if q.note then tip:AddLine(q.note, 1, 0.6, 0.3, true) end
   if q.nerfed and not q.confirmed and not q.liveFull and not q.xpUnknown then
     tip:AddLine("An estimate: Wowhead's reading from before Blizzard's 1 October cut, with the cut applied. Quests in your log use the game's own number.", 1, 0.6, 0.3, true)
   end
   if q.liveFull and math.abs(q.liveFull - QB.Model.Listed(q)) > 25 then
-    tip:AddLine(string.format(q.nerfed and "The catalog lists %s. QuestBank uses the game's number." or "Wowhead lists %s. QuestBank uses the game's number.", QB.Comma(QB.Model.Listed(q))), 1, 0.6, 0.3, true)
+    tip:AddLine(string.format(q.nerfed and "The catalog lists %s. %s uses the game's number." or "Wowhead lists %s. %s uses the game's number.", QB.Comma(QB.Model.Listed(q)), host()), 1, 0.6, 0.3, true)
   end
   if xp then
     local line = (q.turnIn and "No XP " or (QB.Comma(xp) .. " XP ")) .. QB:OnTheDay()
@@ -194,7 +196,7 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl, rewardRow)
       if enough then r, g, b = 0.4, 0.9, 0.4 elseif have >= it.need then r, g, b = 1, 0.82, 0 end
       tip:AddDoubleLine(line, enough and "all here" or (have >= it.need and "in your bank" or string.format("%d to go", it.need - have)), r, g, b, r, g, b)
     end
-    if not at then tip:AddLine("Open your bank once and QuestBank remembers what's in it.", 0.6, 0.6, 0.6, true) end
+    if not at then tip:AddLine("Open your bank once and " .. host() .. " remembers what's in it.", 0.6, 0.6, 0.6, true) end
   end
   if q.tip then tip:AddLine(q.tip, 0.85, 0.8, 0.7, true) end
   if q.group then tip:AddLine("Group quest.", 1, 0.5, 0.3) end
@@ -295,12 +297,12 @@ end
 function UI.RewardLines(tip, q)
   local rw, how = Q.Rewards(q)
   if how == "unknown" then
-    tip:AddLine("Rewards: not known yet. Open the quest in game and QuestBank notes them.", 0.75, 0.75, 1, true)
+    tip:AddLine("Rewards: not known yet. Open the quest in game and " .. host() .. " notes them.", 0.75, 0.75, 1, true)
     return
   end
   local c, r, u = rw and rw.c or {}, rw and rw.r or {}, rw and rw.u or {}
   if #c + #r + #u == 0 then
-    tip:AddLine(how == "game" and "No item rewards (as your quest window showed)." or how == "survey" and "No item rewards (as the game told QuestBank)."
+    tip:AddLine(how == "game" and "No item rewards (as your quest window showed)." or how == "survey" and ("No item rewards (as the game told " .. host() .. ").")
       or "No item rewards.", 0.6, 0.6, 0.6)
     return
   end
@@ -332,7 +334,7 @@ function UI.RewardLines(tip, q)
   -- quest window's or the survey's, replaces them: how is then "game" or "survey")
   local classic = how == "catalog" and QB.Data.RCLASSIC and QB.Data.RCLASSIC[q.id]
   if classic then tip:AddLine("Rewards from Classic data (may differ in Forever).", 1, 0.6, 0.3, true) end
-  tip:AddLine((how == "game" and "As your quest window showed them. " or how == "survey" and "As the game told QuestBank. " or "")
+  tip:AddLine((how == "game" and "As your quest window showed them. " or how == "survey" and ("As the game told " .. host() .. ". ") or "")
     .. "Right-click the quest to link one in chat.", 0.6, 0.6, 0.6, true)
 end
 
@@ -361,7 +363,7 @@ questClick = function(q, st, which)
     QB.API.SetWaypoint(target.m, target.x, target.y, target.n, nil, QB.Model.NpcPlace(target.idx, QB.faction), about)
   elseif not target and q.surveyOnly then
     -- a quest the survey alone knows: no NPC to point at, and it says so
-    QB:Print(string.format("Who gives %s isn't known yet. The game told QuestBank its rewards, not where it starts.", q.name))
+    QB:Print(string.format("Who gives %s isn't known yet. The game told %s its rewards, not where it starts.", q.name, host()))
   end
 end
 
@@ -422,7 +424,9 @@ end
 function UI.SkipQuest(q)
   if not q then return end
   QB:SetSkipped(q.id, true)
-  QB:Print(string.format("Skipped %s: out of your route for good. Right-click it in QuestBank (or Shift-click its pin on the map) to Route it again.", q.name))
+  -- (the launch audit: the menu's own words, Route it again, which a host's player finds where the quest is; never
+  -- "Right-click it in QuestBank", which a Cute player has no window of)
+  QB:Print(string.format("Skipped %s: out of your route for good. Right-click it again and choose Route it again (or Shift-click its pin on the map).", q.name))
   if UI.frame and UI.frame:IsShown() then UI:Refresh() end
   if QB.state.log[q.id] then
     UI:ShowMenu("Skipped: " .. UI.Short(q.name, 22), { { "Keep it in my quest log", function() end },

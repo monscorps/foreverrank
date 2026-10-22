@@ -33,7 +33,7 @@ function Link.Click(link, text, button)
   local id = Link.Parse(link)
   if not id then return false end
   local q = QB.Quest.Get(id)
-  if not q then QB:Print("QuestBank doesn't know quest " .. id .. " any more."); return true end
+  if not q then QB:Print((QB.NAME or "QuestBank") .. " doesn't know quest " .. id .. " any more."); return true end
   if IsShiftKeyDown and IsShiftKeyDown() and QB.UI and QB.UI.LinkQuest and QB.UI.LinkQuest(q) then return true end
   if QB.UI and QB.UI.QuestMenu then QB.UI.QuestMenu(q) end
   return true

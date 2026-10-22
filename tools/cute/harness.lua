@@ -19468,6 +19468,22 @@ do
       leave(c)
     end)
   end }
+
+  -- S4 (firsthour), Cute_Quest's own words: the Finds list's note said what guides gave "QuestBank"; the site, which
+  -- gathers them, is foreverrank.com
+  FECASES[#FECASES + 1] = { "S4: the Finds list's note names foreverrank.com", function()
+    inGuild({ member("Rone", 1) }, function()
+      local c = quest("Rone")
+      login(c); tickAll(6)
+      local QB = c.addons[2].private
+      c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+      QB.MapWin.OpenFinds()
+      local tx = texts(c)
+      assert(tx:find("gave foreverrank.com", 1, true) and not tx:find("gave QuestBank", 1, true), "the note:\n" .. tx)
+      leave(c)
+    end)
+  end }
+
   local failed = {}
   for _, case in ipairs(FECASES) do
     local ok, err = pcall(case[2])
