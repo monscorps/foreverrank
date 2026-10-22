@@ -599,7 +599,6 @@ local function arrowScale()
   if v and v >= 0.5 and v <= 2 then return v end
   return 1
 end
-A.Scale = arrowScale
 -- does the arrow, the middle of its top at x, y (across from the screen's middle, down from its top), stand on the
 -- step frame's box (SF.Box: bx, top, bottom, half), at its scale k
 local function onFrame(x, y, bx, top, bottom, half, k)
