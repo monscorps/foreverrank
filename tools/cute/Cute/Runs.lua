@@ -127,6 +127,8 @@ local function myMap()
   return type(m) == "number" and m or nil
 end
 local function ghost() return call("UnitIsDeadOrGhost", "player") == true end
+-- out of any guild: no policy can settle there (Policy:Left keeps no line), so no report can come of a run
+local function outOfGuild() local Ro = C.Roster; return Ro and Ro.InGuild and not Ro:InGuild() or false end
 local function inGroup() return call("IsInGroup") == true end
 
 ----------------------------------------------------------------------------
@@ -282,6 +284,8 @@ function R.Once(what, sfx)
 end
 
 function R:Start(kind, place)
+  -- (out of any guild: no run, so no hello to the group and no line at its end; the guild's members run as ever)
+  if outOfGuild() then return end
   local me = C.MyGUID()
   if not me then return end
   local t = now()
@@ -874,9 +878,8 @@ function R:Finish(rep, shown)
     self:Show(shown or rep)
   end
 end
--- out of any guild no policy can settle (Policy:Left keeps no line): the run ends with no report, and a line says why
--- once a session; the next run starts as any does
-local function outOfGuild() local Ro = C.Roster; return Ro and Ro.InGuild and not Ro:InGuild() or false end
+-- out of any guild no policy can settle (Policy:Left keeps no line): no run starts there (R:Start), and one begun in a
+-- guild left since ends with no report, a line saying why once a session
 function R:NoGuild()
   self:Finish(nil)
   if R.saidNoGuild then return end

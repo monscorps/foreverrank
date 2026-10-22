@@ -12509,8 +12509,9 @@ do local function runsStage()
   end)
   said[#said + 1] = "namesakes take nobody for anybody: your echo never theirs, a third member tells two Branns apart"
 
-  -- (12) a Cute user out of any guild: no policy can settle there, so its run ends with no report of its own (nor the
-  -- scribe's: its fields are no guild's to route), a line says so once, and the next instance starts a run
+  -- (12) a Cute user out of any guild: no policy can settle there, so no report can come of a run. (merge2) No run
+  -- starts at all, so no hello goes to the group and no chat line says why: the guild's members run and report as
+  -- ever, dungeon after dungeon (the merge2 stage weighs the open world too)
   isolated({ gmember("Gil", 1), gmember("Hep", 3) }, function()
     local cs = { gchar("Gil", 1), gchar("Hep", 3) }
     local solo = gchar("Ivy", 3, { inGuild = false })
@@ -12521,7 +12522,7 @@ do local function runsStage()
     local function runThrough(inst, name, encs)
       zone(all, "party", inst, name)
       tickAll(40)
-      assert(solo.C.Runs.Current() and solo.C.Runs.Current().inst == inst, "a run in " .. name .. " out of a guild")
+      assert(not solo.C.Runs.Current() and cs[2].C.Runs.Current() and cs[2].C.Runs.Current().inst == inst, "no run in " .. name .. " out of a guild; the guild's members have theirs")
       for _, enc in ipairs(encs) do fight(G, 60, { Gil = { [0] = 900 }, Ivy = { [0] = 800 } }, enc); tickAll(60) end
       tickAll(60)
       cs[1].C.Runs:EndRun()
@@ -12530,16 +12531,14 @@ do local function runsStage()
       tickAll(10)
     end
     runThrough(36, "The Deadmines", { 1230, 1236 })
-    assert(not solo.C.Runs.Current() and not lastReport(solo) and lastReport(cs[2]), "out of a guild: the run over, no report; the guild's members have theirs")
-    local said1 = 0
-    for _, l in ipairs(solo.chat) do if l:find("need a guild", 1, true) then said1 = said1 + 1 end end
-    assert(said1 == 1, "a line says why, once: " .. said1)
+    assert(not solo.C.Runs.Current() and not lastReport(solo) and lastReport(cs[2]), "out of a guild: no run, no report; the guild's members have theirs")
     runThrough(48, "Blackfathom Deeps", { 1240, 1242 })
     local said2 = 0
     for _, l in ipairs(solo.chat) do if l:find("need a guild", 1, true) then said2 = said2 + 1 end end
-    assert(not solo.C.Runs.Current() and said2 == 1, "the next run starts and ends; the line not said again: " .. said2)
+    assert(not solo.C.Runs.Current() and said2 == 0 and rcount(solo, "2H") == 0, "no run, no hello and no line out of a guild: " .. said2)
+    assert(lastReport(cs[2]).place == "Blackfathom Deeps", "the guild's next run reported")
   end)
-  said[#said + 1] = "out of a guild: the run ends without a report, a line says why once, the next one starts"
+  said[#said + 1] = "out of a guild: no run, no hello, no line; the guild's members report as ever"
 
   -- (4) the lockdown: a 2V answered 11 spends no try, the Chat restriction's Activating holds it and only its Inactive
   -- lets it go, once; a lockdown for the whole stay sends nothing inside, a disband inside gives each client its own
@@ -13301,6 +13300,9 @@ do local function runsStage()
   said[#said + 1] = "the choice: 26 awards each reachable, thresholds at their edges, a GOLD STAR headline, one or two bloopers and none in two, repeats score less, ties by the run id, a closed field no award, a raid's mentions"
 
   print("runs: " .. table.concat(said, "; "))
+  -- (merge2) the group kit for the later rounds' run scenarios: a guild member and their client, the group wired, a
+  -- loading screen, a fight, the group messages a client sent, its last report
+  CUTE_RUNS_KIT = { gmember = gmember, gchar = gchar, group = group, zone = zone, fight = fight, rcount = rcount, lastReport = lastReport, disband = disband }
 end runsStage() end
 
 -- [stage: windows] that stage's tests go right below this line
@@ -14837,6 +14839,8 @@ end
 -- Encounter Journal art as DM.SetCover cuts it for the 130 x 72 cover), the Dungeon atlas where it knows no cover.
 -- M7: Settings > Runs' Last report is the report the history holds when it is clicked: none (deleted beside it from
 -- J's Runs tab) is no Lua error, and the delete draws Settings again, the button greyed.
+-- M8: out of any guild no run starts (no report can come of one): no hello on the group channel and no chat line, in
+-- the open world and in a dungeon; the guild's members run and report as ever.
 do
   local CASES = {}
   local function member(name, rank, o)
@@ -14971,6 +14975,36 @@ do
     for _, e in ipairs(c.env.CuteDB.errors or {}) do assert(not tostring(e.msg):find("attempt to index", 1, true), "no Lua error: " .. tostring(e.where) .. ": " .. tostring(e.msg)) end
     leave(c)
   end) end }
+
+  CASES[#CASES + 1] = { "M8 no run out of a guild", function()
+    local K = CUTE_RUNS_KIT
+    iso({ K.gmember("Gil", 1), K.gmember("Hep", 3) }, function()
+      local gil, hep = K.gchar("Gil", 1), K.gchar("Hep", 3)
+      local ivy = K.gchar("Ivy", 3, { inGuild = false })
+      local all = { gil, hep, ivy }
+      for _, c in ipairs(all) do login(c) end
+      tickAll(40)
+      local G = K.group(all)
+      for _, c in ipairs(all) do G.map[c.o.guid] = 1429 end
+      tickAll(31)
+      assert(gil.C.Runs.Current() and gil.C.Runs.Current().kind == "g" and not ivy.C.Runs.Current(), "the open world: the guild's members run, the one out of a guild does not")
+      K.zone(all, "party", 36, "The Deadmines")
+      tickAll(40)
+      assert(hep.C.Runs.Current() and hep.C.Runs.Current().kind == "d" and not ivy.C.Runs.Current(), "a dungeon: the same")
+      for _, enc in ipairs({ 1230, 1236 }) do K.fight(G, 60, { Gil = { [0] = 900 }, Ivy = { [0] = 800 } }, enc); tickAll(60) end
+      tickAll(60)
+      gil.C.Runs:EndRun()
+      tickAll(40)
+      K.zone(all, "none", 0)
+      tickAll(10)
+      local rep = K.lastReport(hep)
+      assert(rep and rep.place == "The Deadmines" and not K.lastReport(ivy) and not ivy.C.Runs.Current(), "the guild's report; none out of a guild")
+      local line = 0
+      for _, l in ipairs(ivy.chat) do if l:find("need a guild", 1, true) then line = line + 1 end end
+      assert(line == 0 and K.rcount(ivy, "2H") == 0 and #ivy.rsent == 0, "no hello, nothing on the group channel and no chat line: " .. line .. " lines, " .. #ivy.rsent .. " sent")
+      K.disband(G)
+    end)
+  end }
 
   local failed = {}
   for _, case in ipairs(CASES) do
