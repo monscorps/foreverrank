@@ -315,16 +315,22 @@ function R.Draw(ui, scroll)
   kit.rule:ClearAllPoints(); kit.rule:SetPoint("TOPLEFT", 0, -42); kit.rule:SetPoint("TOPRIGHT", 0, -42)
   kit:SetHeight(43)
   ui:SetBand(46)
-  -- the map on the left, "Open the map" under it
+  -- the map on the left, under it a bigger one: "Open in the map", Cute's map (M) on the route's first stop while the Map
+  -- module is on (the windows design; M is no panel, so it opens in a fight too: MapWin.lua MW.OpenOn); with Map off
+  -- (or QuestBank loaded beside Cute, whose own Map page is its map) "Open the map", the game's world map
   local box = Cute.LeftBox(ui, MAP_W)
   local pins = drawMap(box, legs)
-  box.open = box.open or ui.Button(box, "Open the map", 140, 22)
+  local inM = not QB.dormant and Cute.ModuleOn("map") and QB.MapWin ~= nil and QB.MapWin.OpenOn ~= nil
+  local label = inM and "Open in the map" or "Open the map"
+  box.open = box.open or ui.Button(box, label, 140, 22)
   box.open:ClearAllPoints(); box.open:SetPoint("TOPLEFT", 0, -(MAP_H + 8))
-  box.open:SetLabel("Open the map")
+  box.open:SetLabel(label)
   box.open:SetOn(true)
+  local first = legs[1] and legs[1].stop
   -- (the game's map is UIParent's MEDIUM but for its border, Blizzard_WorldMap.xml:67-85, under Cute's HIGH window: L
-  -- steps aside once the map is open)
+  -- steps aside once the map is open; M is one of Cute's windows, raised over L)
   box.open:SetScript("OnClick", Cute.Safe(function()
+    if inM then QB.MapWin.OpenOn(first and first.m) return end
     if E.UI and E.UI.OpenMap and E.UI.OpenMap() and ui.frame then ui.frame:Hide() end
   end, "route: the map"))
   -- the stops

@@ -994,13 +994,20 @@ do
   end
 end
 
+-- M on map m (the menu's zones below, the Route tab's "Open in the map"): opened, in front of the window it was opened
+-- from (an open M is drawn again, not raised, by Cute.Open), on m where it has art (MP.Go says so where it has none);
+-- with no m, where it was
+function MW.OpenOn(m)
+  Cute.Open("map")
+  local w = Cute.Window and Cute.Window("map")
+  local f = w and w.frame
+  if f and f:IsShown() and f.Raise then f:Raise() end
+  local MP = engineMap()
+  if MP and m then MP.Go(m, "user") end
+end
 -- (sub-project F) the menu's Map entry (Cute/Windows.lua W.Menu): your zone, the last three zones M showed but yours, its
 -- Finds list, the game's own map (gameMap, as the header's button)
-local function openOn(m)
-  Cute.Open("map")
-  local MP = engineMap()
-  if MP then MP.Go(m, "user") end
-end
+local openOn = MW.OpenOn
 Cute.MapMenu = function()
   local mine = playerMap()
   local zones = {}

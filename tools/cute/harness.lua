@@ -19409,6 +19409,36 @@ do
       leave(c)
     end)
   end }
+
+  -- S1 (firsthour, owner, look). Route's map button opened the game's world map with Cute's Map on, and in a fight said
+  -- "In a fight only the game's own map key opens the map." The design: "Open in the map" (opens M), on the route's
+  -- first stop; M opens in a fight. With Map off it stays the game's map ("Open the map": the windows round's W19)
+  FECASES[#FECASES + 1] = { "S1: Route's Open in the map opens Cute's map on the route, in a fight too", function()
+    inGuild({ member("Rone", 1) }, function()
+      local c = quest("Rone")
+      login(c); tickAll(6)
+      local QB = c.addons[2].private
+      c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+      local undo = oneStop(QB, { m = 1429, x = 42, y = 65, name = "Goldshire" }, "foot")
+      c.C.UI:Open("route")
+      local open = button(c, "Open in the map")
+      assert(open, "Route's button with Map on:\n" .. texts(c))
+      local went
+      local go = QB.MapPage.Go
+      QB.MapPage.Go = function(m, why) went = { m, why }; return true end
+      c.combat = true
+      local n0 = #c.chat
+      press(open)
+      c.combat = false
+      QB.MapPage.Go = go
+      undo()
+      local M = c.C.UI.Window("map")
+      assert(rawget(M, "frame") and M.frame:IsShown() and not (c.map and c.map.shown), "M opened, not the game's map")
+      assert(went and went[1] == 1429 and went[2] == "user", "M on the route's first stop: " .. tostring(went and went[1]))
+      assert(not table.concat(c.chat, "\n", n0 + 1):find("In a fight", 1, true), "nothing said in a fight")
+      leave(c)
+    end)
+  end }
   local failed = {}
   for _, case in ipairs(FECASES) do
     local ok, err = pcall(case[2])
