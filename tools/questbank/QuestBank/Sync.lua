@@ -72,14 +72,22 @@ local function queue(msg, channel, target)
   if not pumping then pumping = true; C_Timer.After(0.05, pump) end
 end
 
--- (a host that routes what its guild sees, Cute, sets QB.noRaidSync: a guild raid reaches members its officers kept these
--- values from, so in a raid the party sync says nothing; QuestBank alone keeps RAID, its players' own choice)
-local function groupChannel()
+-- the channel your group talks on: INSTANCE_CHAT, RAID or PARTY; nil out of a group
+local function chatChannel()
   if not (IsInGroup and IsInGroup()) then return nil end
-  if QB.noRaidSync and IsInRaid and IsInRaid() then return nil end
   if LE_PARTY_CATEGORY_INSTANCE and IsInGroup(LE_PARTY_CATEGORY_INSTANCE) and not IsInGroup(LE_PARTY_CATEGORY_HOME) then return "INSTANCE_CHAT" end
   return (IsInRaid and IsInRaid()) and "RAID" or "PARTY"
 end
+-- (a host that routes what its guild sees, Cute, sets QB.noRaidSync: a guild raid reaches members its officers kept these
+-- values from, so in a raid the party sync says nothing; QuestBank alone keeps RAID, its players' own choice)
+local function raidHeld() return (QB.noRaidSync and IsInGroup and IsInGroup() and IsInRaid and IsInRaid()) and true or false end
+local function groupChannel()
+  if raidHeld() then return nil end
+  return chatChannel()
+end
+-- (merge6) for the words that say where Send now goes (UI.lua): the party sync's group channel, and whether a raid is
+-- held from it (Send now in a raid with Cute loaded said "your group", and its click "Not in a party or guild")
+S.GroupChannel, S.RaidHeld = groupChannel, raidHeld
 
 -- whether you share with your guild: share.guild, unless a host that routes what its guild sees and runs beside
 -- QuestBank (Cute) set QB.noGuildSync on QuestBank's QB (QuestBankAPI): then nothing goes to GUILD nor is taken from it,
@@ -138,7 +146,9 @@ function S:Broadcast(force)
   if not self.ready then return end
   local chans = channels()
   if #chans == 0 then
-    if force then QB:Print("Not in a party or guild, or sharing is off. /qb sync Name shares with one friend.") end
+    -- (merge6) in a raid with Cute loaded the party sync is held (noRaidSync): that is why, not "not in a party"
+    if force and QB:Settings().share.party and raidHeld() then QB:Print("Nothing goes to a raid while Cute is loaded. /qb sync Name shares with one friend.")
+    elseif force then QB:Print("Not in a party or guild, or sharing is off. /qb sync Name shares with one friend.") end
     return
   end
   local status = statusMsg()
@@ -256,11 +266,14 @@ function S:ResendLive()
 end
 
 ----------------------------------------------------------------------------
--- posts in party and guild chat, which people read: only ever sent from the Post button (UI:PostDialog)
+-- posts in party and guild chat, which people read: only ever sent from the Post button (UI:PostDialog). (merge6) A post
+-- is your own chat line, read and sent by your click, so a host's noRaidSync, which holds the party sync's automatic
+-- messages off a raid, does not hold it, as noGuildSync never held the guild box: in a raid with Cute loaded the box
+-- said "Party (not in a group)"
 ----------------------------------------------------------------------------
 function S.PostChannels()
   local out = {}
-  local g = groupChannel()
+  local g = chatChannel()
   if g then out.party = { channel = g, label = g == "RAID" and "Raid" or (g == "INSTANCE_CHAT" and "Instance" or "Party") } end
   if IsInGuild and IsInGuild() then out.guild = { channel = "GUILD", label = "Guild" } end
   return out

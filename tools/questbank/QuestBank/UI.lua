@@ -3500,12 +3500,15 @@ function UI:CreatePartyView(parent)
     -- (the final audit) as Sync.lua S:Broadcast sends them: the quest list to the group alone, the guild your status;
     -- (merge5) the guild named only where the status goes there, as channels() has it: the guild box ticked, no host
     -- that shares with the guild itself (S.GuildOn: Cute's noGuildSync) and a guild to send to
+    -- (merge6) and the group named only where the quests go there, as channels() has it too: the group box ticked and a
+    -- group channel, none out of a group nor in a raid while Cute is loaded (S.GroupChannel, S.RaidHeld: noRaidSync)
     local S = QB.Sync
-    local group = QB:Settings().share.party
+    local group = QB:Settings().share.party and S and S.GroupChannel and S.GroupChannel() ~= nil
     local guild = S and S.GuildOn and S.GuildOn() and IsInGuild and IsInGuild()
     tip:AddLine((group and guild and "Share now: your quests with your group, your level with your guild")
       or (group and "Share now: your quests with your group") or (guild and "Share now: your level with your guild") or "Share now",
       GOLD[1], GOLD[2], GOLD[3])
+    if S and S.RaidHeld and S.RaidHeld() then tip:AddLine("Nothing goes to a raid while Cute is loaded.", 1, 1, 1, true) end
     if QB.noGuildSync then tip:AddLine("Cute is loaded and shares with your guild itself.", 1, 1, 1, true) end
     tip:AddLine((QB.noGuildSync and "Party sharing" or "Party and guild sharing") .. " is set in Settings. /qb sync Name whispers one friend.", 1, 1, 1, true)
   end)

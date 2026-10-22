@@ -25263,6 +25263,44 @@ end)()
     UI.frame:Hide()
   end }
 
+  -- M3 (look, should). With Cute beside QuestBank and you in a raid, Send now's tooltip said "your quests with your
+  -- group" and its click "Not in a party or guild, or sharing is off": nothing goes to a raid while Cute is loaded
+  -- (noRaidSync). The Post dialog's party box said "Party (not in a group)" there; a post is your own chat line, read
+  -- and sent by your click, as the guild box's goes to guild chat with Cute loaded too, so it goes to the raid
+  CASES[#CASES + 1] = { "M3: in a raid with Cute beside it, Send now says nothing goes to the raid, and Post offers raid chat", function()
+    local c = char("Raider", { raid = true })
+    local QB, UI, S = c.QB, c.QB.UI, c.QB.Sync
+    local share = QB:Settings().share
+    share.party, share.guild = true, true
+    QB.noRaidSync, QB.noGuildSync = true, true
+    UI:Open(4); UI:Refresh()
+    local tip = tipOf(UI.views[4].syncBtn)
+    assert(not tip:find("with your group", 1, true), "the header claims no group share in a raid:\n" .. tip)
+    assert(tip:find("Nothing goes to a raid while Cute is loaded.", 1, true), "the tooltip says why:\n" .. tip)
+    c.outbox = {}
+    local n0 = #c.chat
+    S:Broadcast(true)
+    tick(c, 10)
+    local line = said(c, n0)
+    assert(not line:find("Not in a party or guild", 1, true) and line:find("Nothing goes to a raid while Cute is loaded.", 1, true), "the click says why: " .. line)
+    assert(sentOn(c, "RAID") == 0 and sentOn(c, "GUILD") == 0, "and nothing went")
+    local ch = S.PostChannels()
+    assert(ch.party and ch.party.channel == "RAID" and ch.party.label == "Raid", "Post offers raid chat: " .. tostring(ch.party and ch.party.label))
+    UI:PostDialog("Anyone for the Deadmines?", "A post.")
+    local P = c.env.QuestBankPost
+    assert(P.party:IsEnabled() and P.party.label:GetText() == "Raid", "the party box reads Raid: " .. tostring(P.party.label:GetText()))
+    P.cancel.__scripts.OnClick(P.cancel)
+    -- QuestBank alone in the raid: as it was
+    QB.noRaidSync, QB.noGuildSync = nil, nil
+    tip = tipOf(UI.views[4].syncBtn)
+    assert(tip:match("^[^\n]*") == "Share now: your quests with your group, your level with your guild" and not tip:find("Nothing goes to a raid", 1, true), "alone:\n" .. tip)
+    -- out of a group the header names no group either
+    c.raid, c.o.group = nil, false
+    tip = tipOf(UI.views[4].syncBtn)
+    assert(tip:match("^[^\n]*") == "Share now: your level with your guild", "out of a group:\n" .. tip)
+    UI.frame:Hide()
+  end }
+
   local failed = {}
   for _, case in ipairs(CASES) do
     local ok, err = pcall(case[2])
