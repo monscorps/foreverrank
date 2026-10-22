@@ -22419,7 +22419,9 @@ do
     local pins = MP.finds.active
     local spots = 0
     for _, d in ipairs(list) do spots = spots + #d.spots end
-    assert(#pins == spots, "a pin for each spot: " .. #pins .. " of " .. spots)
+    -- (a pin for each spot, but the data's chest's two, 20 px apart at this size: one pin, as spots that touch are since
+    -- the review of F, R3)
+    assert(#pins == spots - 1, "a pin for each spot, the chest's two that touch one: " .. #pins .. " of " .. spots)
     local rare, lock
     for _, f in ipairs(pins) do
       if f.data.find.rare then rare = f end
@@ -22772,6 +22774,43 @@ do
     MP.Focus(other)
     assert(not MP.Lit(head.data), "and let go")
     said[#said + 1] = "a merged pin lit for each quest it stands for, hovered or read"
+  end
+  -- R3: finds that touch, merged
+  do
+    local c = hostChar("Findmerge", { mapWindow = true, kindMarks = true })
+    local QB = c.QB
+    local MP, MD = QB.MapPage, QB.Data
+    local canvas = MP.canvas
+    MD.FIND[1429] = { { "b", 0, "610,220", 0, "A Luddite's Guide to Caring for Your Demonic Pet", "g" }, { "k", 0, "610,220", 0, 216523, "g" },
+      { "h", 4242, "620,220;620,221", 2, "0.0", "p" }, { "h", 4243, "300,700;301,700", 2, "0.0", "p" } }
+    local zoom = 1
+    canvas.GetCanvasScale = function() return zoom end
+    MP.Go(1415, "user"); MP.Go(1429, "user")
+    local pins = MP.finds.active
+    assert(#pins == 2, "a book and a lock at one spot and a chest beside them: one pin, and the chest far off its own: " .. #pins)
+    local head
+    for _, f in ipairs(pins) do if f.data.merged then head = f end end
+    assert(head and head.data.count == 3 and head.qbCount and head.qbCount:IsShown() and head.qbCount:GetText() == "3", "the pin's count on its corner: 3")
+    lines = {}
+    head:OnMouseEnter()
+    local tip = table.concat(lines, "\n")
+    head:OnMouseLeave()
+    assert(tip:find("A Luddite's Guide", 1, true) and tip:find("Locked", 1, true) and tip:find("Chest", 1, true), "its tooltip names each:\n" .. tip)
+    local lock
+    for _, d in ipairs(MP.Finds(1429)) do if d.kind == "k" then lock = d end end
+    MP.Hover(lock.fkey)
+    assert(MP.Lit(head.data), "the lock's row hovered: the merged pin lit")
+    MP.Hover(nil)
+    -- zoomed in four times: the chest parts from the two at one spot
+    zoom = 4
+    MP.finds:OnCanvasScaleChanged()
+    tick(c, 1)
+    assert(#MP.finds.active == 3, "zoomed in, the chest parts; the book and the lock stay one: " .. #MP.finds.active)
+    zoom = 1
+    MP.finds:OnCanvasScaleChanged()
+    tick(c, 1)
+    assert(#MP.finds.active == 2, "and joins zoomed out")
+    said[#said + 1] = "finds that touch one pin with their count, its tooltip naming each, lit for each, parting zoomed in"
   end
   print("map R: " .. table.concat(said, "; "))
 end

@@ -674,6 +674,20 @@ function Find:Setup(d)
   self:SetAlpha(f.dim and 0.5 or 1)
   self.Badge:Hide()
   self.Count:Hide()
+  -- (a pin standing for several finds: their count, 10 px, white, outlined, on its bottom right corner, as the quests')
+  if d.count then
+    if not self.qbCount then
+      self.qbCount = self:CreateFontString(nil, "OVERLAY", nil, 2)
+      local font = GameFontNormal and GameFontNormal:GetFont() or "Fonts\\FRIZQT__.TTF"
+      self.qbCount:SetFont(font, 10, "OUTLINE")
+      self.qbCount:SetTextColor(1, 1, 1)
+      self.qbCount:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", 4, -3)
+    end
+    self.qbCount:SetText(tostring(d.count))
+    self.qbCount:Show()
+  elseif self.qbCount then
+    self.qbCount:Hide()
+  end
 end
 local DOT = " \194\183 "
 Find.OnMouseEnter = QB.Safe(function(self)
@@ -692,6 +706,13 @@ Find.OnMouseEnter = QB.Safe(function(self)
     GameTooltip:AddLine(f.how .. DOT .. f.who, 0.8, 0.8, 0.8)
   end
   if f.new then GameTooltip:AddLine("Seen in play by you", 0.47, 0.69, 1) end
+  -- (the finds merged into this pin, each its name and how and who)
+  for _, o in ipairs(d.merged or {}) do
+    local of = o.find
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine(of.name or of.kindWord, 1, 1, 1)
+    GameTooltip:AddLine(of.how .. DOT .. (of.dim and "A guild mate saw this" or of.who), 0.8, 0.8, 0.8)
+  end
   P.Instruct(GameTooltip, "Click to show it on the arrow for now")
   GameTooltip:Show()
   MP.Hover(f.fkey, true)
@@ -726,19 +747,53 @@ local function isContinent(m)
 end
 MP.IsContinent = isContinent
 
--- every spot of every find on map m (a continent: its zones', placed on it), each its own pin
+-- every spot of every find on map m (a continent: its zones', placed on it). (The review of sub-project F) Spots that
+-- would touch at the canvas's zoom (closer than a find's 24 px pin on screen) are one pin, as the quests' are
+-- (QuestMap.lua QM.Merge): the first drawn stands for the others, their finds in its d.merged and how many finds it
+-- holds in d.count (a find's own spots close together count once), its tooltip naming each; zoomed in they part (the
+-- layer drawn again once the zoom settles: MP.finds' OnCanvasScaleChanged). A rare up now stands for the others first,
+-- then a find drawn whole, a single guild mate's dim one last
+local FIND_PX = 24
+local function findRank(f) return f.ping and 1 or (f.dim and 3 or 2) end
 local function drawFinds(layer, m)
   if not (QB.mapWindow and QB:Settings().mapFinds ~= false) then return end
   local zones = isContinent(m) and MP.ZonesOf(m) or { m }
-  for _, z in ipairs(zones) do
-    for _, f in ipairs(MP.Finds(z)) do
-      for _, sp in ipairs(f.spots) do
-        local x, y = sp[1], sp[2]
-        if z ~= m then x, y = P.Project({ m = z, x = sp[1] * 100, y = sp[2] * 100 }, m) end
-        if x then layer:Add(FIND, { fkey = f.fkey, find = f, m = z, x = sp[1], y = sp[2] }, x, y) end
+  local map, canvas = layer:GetMap(), layer.canvas
+  local w, h = canvas and canvas:GetWidth() or 0, canvas and canvas:GetHeight() or 0
+  local zoom = map and canvasScale(map) or 1
+  layer.qmZoom = floor(zoom * 4 + 0.5)
+  local tx, ty = FIND_PX / max(1, w * zoom), FIND_PX / max(1, h * zoom)
+  local heads = {}
+  local function place(z, f)
+    for _, sp in ipairs(f.spots) do
+      local x, y = sp[1], sp[2]
+      if z ~= m then x, y = P.Project({ m = z, x = sp[1] * 100, y = sp[2] * 100 }, m) end
+      if x then
+        local head
+        for _, hd in ipairs(heads) do
+          local dx, dy = (hd.px - x) / tx, (hd.py - y) / ty
+          if dx * dx + dy * dy < 1 then head = hd break end
+        end
+        if not head then
+          heads[#heads + 1] = { fkey = f.fkey, find = f, m = z, x = sp[1], y = sp[2], px = x, py = y }
+        elseif head.find ~= f then
+          local had = false
+          for _, o in ipairs(head.merged or {}) do if o.find == f then had = true end end
+          if not had then
+            head.merged = head.merged or {}
+            head.merged[#head.merged + 1] = { fkey = f.fkey, find = f, m = z, x = sp[1], y = sp[2] }
+            head.count = #head.merged + 1
+          end
+        end
       end
     end
   end
+  for rank = 1, 3 do
+    for _, z in ipairs(zones) do
+      for _, f in ipairs(MP.Finds(z)) do if findRank(f) == rank then place(z, f) end end
+    end
+  end
+  for _, d in ipairs(heads) do layer:Add(FIND, d, d.px, d.py) end
 end
 -- how many finds there are on map m (a continent: in its zones), for the layer's switch
 function MP.FindCount(m)
@@ -846,6 +901,17 @@ local function build()
     MP.finds = P.NewLayer(drawFinds, "map page finds", canvas)
     MP.finds.lit = MP.Lit
     MP.layers[#MP.layers + 1] = MP.finds
+    -- (the finds that touch merged at this zoom: a zoom step that changes how near two may stand draws them again once
+    -- it settles, as QuestMap.lua's layer does)
+    local placed = MP.finds.OnCanvasScaleChanged
+    MP.finds.OnCanvasScaleChanged = QB.Safe(function(layer, ...)
+      placed(layer, ...)
+      local zoom = canvasScale(layer:GetMap())
+      if floor(zoom * 4 + 0.5) == layer.qmZoom or layer.qmSoon then return end
+      layer.qmSoon = true
+      C_Timer.After(0.25, QB.Safe(function() layer.qmSoon = nil; if P.Shown(layer) then layer:RefreshAllData() end end, "map page finds: zoom"))
+    end, "map page finds: zoom")
+    MP.finds.OnCanvasSizeChanged = MP.finds.OnCanvasScaleChanged
     -- (MAP_CANVAS_MOUSE_WHEEL_ZOOM_BEHAVIOR_SMOOTH: MapCanvas_ScrollContainerMixin.lua:3, the zoom target eased toward)
     if MapCanvasMixin.SetMouseWheelZoomMode and MAP_CANVAS_MOUSE_WHEEL_ZOOM_BEHAVIOR_SMOOTH then
       canvas:SetMouseWheelZoomMode(MAP_CANVAS_MOUSE_WHEEL_ZOOM_BEHAVIOR_SMOOTH)
