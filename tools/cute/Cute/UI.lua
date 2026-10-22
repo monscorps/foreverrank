@@ -1674,11 +1674,11 @@ function UI:DrawOfficers()
       if not picked then return end
       C.Policy:SetUntrusted(picked.guid, not picked.untrusted)
       C.Comm:PolicySoon()
-      C.Print((picked.untrusted and "trusted again: " or "marked untrusted: ") .. picked.short .. ". The guild hears it with the policy in a few seconds.")
+      C.Print((picked.untrusted and "trusted again: " or "marked untrusted: ") .. picked.short .. ". The guild hears it with the officers' settings in a few seconds.")
       UI:Draw()
     end, picked ~= nil, function(tip)
       tip:AddLine(picked and picked.untrusted and "Trust again" or "Mark untrusted", 1, 1, 1)
-      tip:AddLine("An untrusted member is left out of what the guild learns and of the rankings; their row says so to the officers. It travels with the policy.", 0.85, 0.85, 0.85, true)
+      tip:AddLine("An untrusted member is left out of what the guild learns and of the rankings; their row says so to the officers. It travels with the officers' settings.", 0.85, 0.85, 0.85, true)
       if not picked then tip:AddLine("Click a member's row first.", 0.6, 0.6, 0.6) end
     end } }
   local bx = 6

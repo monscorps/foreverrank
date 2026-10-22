@@ -393,7 +393,7 @@ end
 local function saveTip(st)
   return function(tip)
     tip:AddLine("Save to Guild Info", 1, 1, 1)
-    tip:AddLine("Writes the policy as one line at the end of the guild's Guild Info, the guild's own text kept. Every client routes by it, and only ranks allowed to edit Guild Info can change it.", 0.85, 0.85, 0.85, true)
+    tip:AddLine("Writes the officers' settings as one line at the end of the guild's Guild Info, the guild's own text kept. Every client goes by it, and only ranks allowed to edit Guild Info can change it.", 0.85, 0.85, 0.85, true)
     if st.line then tip:AddLine(st.line, 0.7, 0.7, 0.7, true) end
     if st.why then tip:AddLine(st.why, 0.7, 0.7, 0.7, true) end
   end
@@ -558,7 +558,7 @@ local function drawVisibility(col, officer, ui)
     return
   end
   local band = column(col.x, col.w, true, ui)
-  band:Head("Policy")
+  band:Head("Who sees what")
   band:Note(C.Policy:Describe())
   local unsaved = officer and C.Policy:Unsaved()
   local st = unsaved and C.Policy:SaveState() or {}

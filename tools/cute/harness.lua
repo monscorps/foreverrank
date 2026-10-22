@@ -6477,7 +6477,7 @@ do
     -- been answered)
     tickAll(25)
     local told = false
-    for _, l in ipairs(chatLines(ofa2)) do if l:find("Guild Info does not hold the policy you saved", 1, true) then told = true end end
+    for _, l in ipairs(chatLines(ofa2)) do if l:find("Guild Info does not hold the settings you saved", 1, true) then told = true end end
     assert(told and ofa2.C.Policy:Unsaved() and ofa2.C.Policy:EditPending() and ofa2.C.Policy:Vis("level") == "self" and ofa2.C.Policy.line.fp == yezin.C.Policy.ParseLine(keep).fp
       and mo.C.Policy:Holds() and mo.C.Policy:Route("level") == "all", "Ofa is told, her change back and not saved, the line Guild Info holds read (scenario 52(d))")
     ofa2.C.Policy:Set("level", "all")
@@ -8702,7 +8702,7 @@ do
       fire(mia, "PLAYER_MONEY")
       tickAll(30)
       local P = mia.C.Policy
-      assert(not P:Settled() and P:Describe():find("newer policy", 1, true), how .. ": Mia waits for Guild Info: " .. P:Describe())
+      assert(not P:Settled() and P:Describe():find("newer settings", 1, true), how .. ": Mia waits for Guild Info: " .. P:Describe())
       assert(gotFrom(zed, mia, 1, function(m) return m.channel == "GUILD" and m.msg:find("deaths=", 1, true) end) == 0, how .. ": no death of hers on GUILD")
       assert(gotFrom(ofb, mia, 1, function(m) return m.channel == "WHISPER" end) == 0, how .. ": nothing whispered meanwhile")
       -- out of it: Guild Info read, the new line routes her
@@ -9188,7 +9188,7 @@ do
       tickAll(30)
       local P = ofa2.C.Policy
       if saved then
-        assert(chatHas(ofa2, "another officer saved the policy to Guild Info: your change, not saved, gave way to it.") and P:Vis("gold") == "self"
+        assert(chatHas(ofa2, "another officer saved their settings to Guild Info: your change, not saved, gave way to them.") and P:Vis("gold") == "self"
           and P:Route("deaths") == "self" and not P:EditPending(), "another officer saved meanwhile: her change gave way, and she is told")
       else
         assert(P:EditPending() and P:Vis("gold") == "all" and not chatHas(ofa2, "gave way"), "her change waited for her: " .. P:Describe())
@@ -9783,7 +9783,7 @@ do
     ofb2.C.Comm:Broadcast()
     tickAll(10)
     assert(msgs(ofb2, "1P") == 0 and not mia.C.Policy.doubt and not zed.C.Policy.doubt and zed.C.Policy:Settled(), "his clicks send nothing meanwhile: nobody waits for Guild Info")
-    assert(chatHas(ofb2, "the policy goes to the guild once Guild Info is read."), "Broadcast says it waits")
+    assert(chatHas(ofb2, "the officers' settings go to the guild once Guild Info is read."), "Broadcast says it waits")
     ofb2.infoSecret, ofb2.o.instance = false, nil
     fire(ofb2, "GUILD_ROSTER_UPDATE")
     tickAll(20)
@@ -19540,6 +19540,43 @@ do
     leave(d)
     print("fix-cute-ui U6: the Quests window and Map window bindings toggle their window; Map off says where it is switched on; no Cute_Quest says where the quest window comes from")
   end)
+end
+
+-- U7. Members and officers read no internal words: "policy", "routes by", "the untrusted". Settings > Who sees what is
+--     headed so for officers too; its lines, Broadcast now's and Save's chat lines and Mark untrusted's tooltip say "the
+--     officers' settings", "goes by" and "members marked untrusted". Every chat line, tooltip line, head and note in
+--     Policy.lua, Comm.lua, Settings.lua and UI.lua, and every line P:Describe returns, is held to it
+do
+  local BAD = { "[Pp]olicy", "routes by", "the untrusted" }
+  local function bad(str) for _, b in ipairs(BAD) do if str:find(b) then return b end end end
+  for _, f in ipairs({ "Policy.lua", "Comm.lua", "Settings.lua", "UI.lua" }) do
+    local n, inDescribe = 0, false
+    for line in io.lines(HERE .. "/Cute/" .. f) do
+      n = n + 1
+      if line:find("^function P:Describe") then inDescribe = true elseif inDescribe and line:find("^end") then inDescribe = false end
+      local said = not line:find("^%s*%-%-") and (inDescribe or line:find("C%.Print%(") or line:find("AddLine%(") or line:find(":Head%(") or line:find(":Note%("))
+      if said then
+        for lit in line:gmatch('"([^"]*)"') do
+          local b = bad(lit)
+          assert(not b, string.format("%s:%d says %q to players: \"%s\"", f, n, b, lit))
+        end
+      end
+    end
+  end
+  isolated({ UIX.member("Rone", 1), UIX.member("Pim", 3) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }))
+    login(c); tickAll(6)
+    c.C.UI:Open("settings", "vis")
+    local t = texts(c)
+    assert(t:find("Who sees what", 1, true) and not t:find("Policy", 1, true) and not t:lower():find("policy", 1, true), "an officer's Who sees what, no policy:\n" .. t)
+    leave(c)
+    local m = newClient(charOf({ "Pim", 3, "Raider", "WARRIOR", 5 }))
+    login(m); tick(m, 1)
+    m.C.UI:Open("settings", "vis")
+    assert(not texts(m):lower():find("policy", 1, true), "a member's Who sees what, no policy:\n" .. texts(m))
+    leave(m)
+  end)
+  print("fix-cute-ui U7: no policy, routes by or the untrusted in what members and officers read")
 end
 
 -- this pass's problems and layouts join the run's; the last pass prints them all

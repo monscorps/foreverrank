@@ -1190,12 +1190,12 @@ function M:Broadcast()
   C.Policy:Restamp()
   self:SendPolicy()
   if self.policyOwed then
-    C.Print("the policy goes to the guild once Guild Info is read.")
+    C.Print("the officers' settings go to the guild once Guild Info is read.")
   elseif type(C.Policy.line) == "table" then
-    C.Print(C.Policy:EditPending() and "sent the rules and the untrusted; who sees what goes by Guild Info: Save to Guild Info to change it."
-      or "sent the rules and the untrusted; who sees what goes by Guild Info.")
+    C.Print(C.Policy:EditPending() and "sent the rules and the members marked untrusted; who sees what goes by Guild Info: Save to Guild Info to change it."
+      or "sent the rules and the members marked untrusted; who sees what goes by Guild Info.")
   else
-    C.Print("sent the policy to the guild: who sees what, the rules and the untrusted.")
+    C.Print("sent the officers' settings to the guild: who sees what, the rules and the members marked untrusted.")
   end
 end
 -- Save to Guild Info (Settings' button, a click: Policy.lua P:Save), then the policy sent, so the clients online stop
@@ -1204,9 +1204,9 @@ end
 function M:SaveLine()
   if not C.Roster:MeOfficer() then return false, "officers only" end
   local ok, why = C.Policy:Save()
-  if not ok then C.Print("the policy was not saved: " .. tostring(why)); return false, why end
+  if not ok then C.Print("the officers' settings were not saved: " .. tostring(why)); return false, why end
   self:SendPolicy()
-  C.Print("saved the policy to Guild Info: every client routes by it.")
+  C.Print("saved the officers' settings to Guild Info: every client goes by them.")
   return true
 end
 -- an officer's change in Settings goes to the guild on its own, three seconds after the last of a run of clicks (each
