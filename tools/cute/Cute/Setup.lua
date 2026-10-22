@@ -1,12 +1,15 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- Setup: the first-run card, once per character, and the reload rule's question when Settings closes.
--- The card (CuteSetupFrame, 480 px, centred): the windows (Guild and Quests always, with the key that opens each; the
--- Dungeons and Gear tabs; Cute's Map with its key), what Cute puts on screen (the step frame and arrow, Reminders, the
--- interact light) and the two quest choices (Accept for me, the hand-in). Every row starts
+-- The card (CuteSetupFrame, 480 px, centred): the windows (Guild and Quests always, with the key that opens each; Runs
+-- under Guild; the Dungeons and Gear tabs; Cute's Map with its key), what Cute puts on screen (the step frame and
+-- arrow, Reminders, the interact light) and the two quest choices (Accept for me, the hand-in). Every row starts
 -- from what this character has saved (its modules, the engine's settings), and only a row with nothing saved starts at
 -- the default: everything on but the two automatic choices. Start writes the choices, marks every row shown answered
 -- (CuteDB.chars[me].setup[row]), keeps the keys (Keys.lua) and reloads; after the reload the quest window opens once (the
 -- map's, for a card that came back with its Map row alone).
+-- The rows that change the game unasked say how in one dim line under them (Map: the minimap's mouse is the engine's
+-- while it is on, Minimap.lua Mini.Owned; Reminders: what the bar and banner remind of; Interact light: the game's
+-- soft-target settings, Glow.lua, put back when it is switched off).
 -- Not now changes nothing and the card never comes back by itself (the menu keeps "Set up Cute..." until Start). A row a
 -- later round adds comes back alone, once. Nothing on it is cut: labels and the note wrap.
 -- Shown 3 s after the first loading screen that is out of combat and outside an instance.
@@ -52,6 +55,9 @@ local function rows()
   local q = engine()
   local function add(r) out[#out + 1] = r end
   add({ id = "guild", group = "Windows", label = "Guild", kind = "fixed", key = "guild" })
+  -- (the run-report design's 14 and 18) Runs, on by default, sends run values to the group, so the card asks: a row of
+  -- its own under Guild, ticked; a character who answered the rest sees it alone, once (unindented: no Guild row over it)
+  if C.Modules.byId.runs then add({ id = "runs", group = "Windows", label = "Run reports after dungeons, raids and long groups", kind = "check", module = "runs", indent = 20, under = "guild" }) end
   if quests then
     add({ id = "quests", group = "Windows", label = "Quests and Route", kind = "fixed", key = "quests" })
     add({ id = "dungeons", group = "Windows", label = "Dungeons tab", kind = "check", module = "Cute_Quest:journal", indent = 20 })
@@ -59,20 +65,36 @@ local function rows()
     -- (sub-project F) the Map window with its key: row mapwin, whose tick starts from the earlier mapicons answer (the
     -- game's map with Cute's icons, which took no key); a character who answered that sees this row alone, once. Not
     -- asked while QuestBank is loaded (no window to open: asked once it is not)
-    if not dormant() then add({ id = "mapwin", group = "Windows", label = "Map", kind = "check", module = "Cute_Quest:map", key = "map" }) end
+    if not dormant() then
+      add({ id = "mapwin", group = "Windows", label = "Map", kind = "check", module = "Cute_Quest:map", key = "map", note = function()
+        local k = S.KeyText("map")
+        return (k ~= "-" and ("Cute's map on " .. k) or "Cute's map window") .. "; the minimap's wheel and right-click become Cute's"
+      end })
+    end
     if q then
       add({ id = "step", group = "On screen", label = "Step frame and arrow", kind = "check" })
-      add({ id = "camp", group = "On screen", label = "Reminders", kind = "check" })
-      add({ id = "light", group = "On screen", label = "Interact light", kind = "check" })
+      add({ id = "camp", group = "On screen", label = "Reminders", kind = "check", note = "buffs, food, repair and training, out of a fight" })
+      add({ id = "light", group = "On screen", label = "Interact light", kind = "check", note = "turns on the game's Interact key and its icons; Settings puts them back" })
       add({ id = "accept", group = "Quests", label = "Accept for me", kind = "choice" })
       add({ id = "handin", group = "Quests", label = "Hand finished quests in for me", kind = "check" })
     elseif C.Modules.byId.quests then
       -- (the quest window registered and no engine of its own: QuestBank serves it, Bridge.lua's dormant copy)
       add({ id = "dormant", group = "On screen", kind = "line", label = "QuestBank is loaded: its step frame, arrow and Reminders are its own." })
     end
+  else
+    -- no quest window: Cute_Quest missing (only the Cute folder copied, a common slip) or refused by the client, said
+    -- in one line, so the card's J alone is no puzzle
+    local M = C.Modules
+    if not M.Found("Cute_Quest") then
+      add({ id = "questaddon", group = "Windows", kind = "line", label = "Cute_Quest is not in Interface\\AddOns: your quest window comes with it, from the same download." })
+    elseif M.failed.Cute_Quest then
+      add({ id = "questaddon", group = "Windows", kind = "line", label = "Cute_Quest did not load (" .. tostring(M.failed.Cute_Quest) .. "): your quest window comes with it." })
+    end
   end
   local done, shown = answered(), {}
-  for _, r in ipairs(out) do if r.kind == "line" or not done[r.id] then shown[#shown + 1] = r end end
+  local ids = {}
+  for _, r in ipairs(out) do if r.kind == "line" or not done[r.id] then shown[#shown + 1] = r; ids[r.id] = true end end
+  for _, r in ipairs(shown) do if r.under and not ids[r.under] then r.indent = nil end end
   -- (a line alone is no question)
   local asks = 0
   for _, r in ipairs(shown) do if r.kind ~= "line" then asks = asks + 1 end end
@@ -91,6 +113,7 @@ function S.Start(id)
   local s = q and q.Settings and q.Settings() or nil
   local saved = q and q.Saved and q.Saved() or false
   local camp = modOn("Cute_Quest:camp")
+  if id == "runs" then local v = modOn("runs"); if v == nil then return true end return v end
   if id == "dungeons" then local v = modOn("Cute_Quest:journal"); if v == nil then return true end return v end
   if id == "gear" then local v = modOn("Cute_Quest:gear"); if v == nil then return true end return v end
   if id == "mapwin" or id == "mapicons" then local v = modOn("Cute_Quest:map"); if v == nil then return true end return v end
@@ -249,19 +272,19 @@ function S.Draw()
         if r.key == "guild" and not C.Keys.InGuild() then box:Bind(r.key, "-") end
       end
       y = y + math.max(ROWH, h + 7)
-      -- a hand-picked key that does something else in the game: one dim line under its row
+      -- what the row changes in the game, then a hand-picked key that does something else there: a dim line each
+      local note = r.note
+      if type(note) == "function" then note = note() end
       local under = r.key and S.KeyWords(r.key)
-      if under then
-        local nh = say(f, x + 20, y - 2, inner - 20 - (r.indent or 0), under, DIM, 11)
-        y = y + nh + 2
+      for _, s in ipairs({ note or false, under or false }) do
+        if s then
+          local nh = say(f, x + 20, y - 2, inner - 20 - (r.indent or 0), s, DIM, 11)
+          y = y + nh + 2
+        end
       end
     end
   end
-  -- (M named where the Map window is on, or ticked on the card)
-  local mapOn = p.on.mapwin
-  if mapOn == nil then mapOn = C.Modules.OnKey("Cute_Quest:map") and not dormant() end
-  local keys = mapOn and "J, L and M" or "J and L"
-  local nh = say(f, PAD, y + 10, inner, keys .. " open Cute's windows; each window has a button to the game's own. Change any of this later in Settings: right-click the minimap button. Window and tab changes reload; the rest applies at once.", DIM, 12)
+  local nh = say(f, PAD, y + 10, inner, S.KeysLine(p) .. " Change any of this later in Settings: right-click the minimap button. Window and tab changes reload; the rest applies at once.", DIM, 12)
   y = y + 10 + nh + 12
   for _, k in ipairs({ "labels", "lines", "checks", "keys" }) do f[k]:HideRest() end
   local fight = inCombat()
@@ -275,6 +298,28 @@ function S.Draw()
   f.start:SetPoint("BOTTOMRIGHT", -PAD - f.later:GetWidth() - 6, PAD)
   f.start:SetOn(not fight)
   f:SetHeight(y + 22 + PAD)
+end
+-- the card's sentence on its keys: the keys its boxes show, for the windows this client has (Guild; Quests where its
+-- addon is; Map where it is on, or ticked here), a box that reads "-" left out (outside a guild the Guild key waits,
+-- Keys.lua). One key names its window; none, and only the buttons to the game's own are said
+local WINDOW_WORD = { guild = "guild", quests = "quest", map = "map" }
+function S.KeysLine(p)
+  local mapOn = p.on.mapwin
+  if mapOn == nil then mapOn = C.Modules.OnKey("Cute_Quest:map") and not dormant() end
+  local list = {}
+  for _, id in ipairs({ "guild", "quests", "map" }) do
+    if id == "guild" or (id == "quests" and hasQuests()) or (id == "map" and mapOn) then
+      local k = S.KeyText(id)
+      if id == "guild" and not C.Keys.InGuild() then k = "-" end
+      if k ~= "-" then list[#list + 1] = { id = id, key = k } end
+    end
+  end
+  local own = "each window has a button to the game's own."
+  if #list == 0 then return "Each window has a button to the game's own." end
+  if #list == 1 then return list[1].key .. " opens Cute's " .. WINDOW_WORD[list[1].id] .. " window; " .. own end
+  local keys = {}
+  for i, e in ipairs(list) do keys[i] = e.key end
+  return table.concat(keys, ", ", 1, #keys - 1) .. " and " .. keys[#keys] .. " open Cute's windows; " .. own
 end
 -- what a key box on the card shows: the card's own choice ("follow": the game's key for that window)
 function S.KeyText(id)
@@ -328,6 +373,7 @@ function S.Go()
   local shown = {}
   for _, r in ipairs(p.rows) do if r.kind ~= "line" then done[r.id] = true; shown[r.id] = true end end
   -- the modules (the reload applies them): each shown tab or switch; Reminders (the Camp module) from its own row alone
+  if shown.runs then M.Choose("runs", p.on.runs) end
   if shown.dungeons then M.Choose("Cute_Quest:journal", p.on.dungeons) end
   if shown.gear then M.Choose("Cute_Quest:gear", p.on.gear) end
   if shown.mapwin then M.Choose("Cute_Quest:map", p.on.mapwin) end

@@ -1,7 +1,7 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- Records: the run report's design, section 11 (with 5.3, 9.1, 9.6, 10, 12, 13.2 and 14). A built-in module, on by
 -- default, which a member may switch off for themselves (Settings > Modules: no table, no Records chip, no record toast)
--- and the officers for the whole guild (its own section: a switch that travels with the officers' rules, as
+-- and the officers for the whole guild (the switch beside its row there, which travels with the officers' rules, as
 -- Achievements' does).
 --   Registry the core's, whatever module is on: Fastest clears, a discovered category (code cc, as S.FOUND's), whose
 --            stats are c<instanceID>, seconds from the run's start to its last kill, routed the strictest of cc and
@@ -756,23 +756,24 @@ H().AddChip({ id = "records", title = "Records", order = 30, when = function() r
   tip = "The guild's records: the most in one run, in a week and of all time, and each instance's fastest clear." })
 
 ----------------------------------------------------------------------------
--- Settings > Records: the officers' switch for the whole guild (greyed for members, who set it said)
+-- the officers' switch for the whole guild, beside the module's row in Settings > Modules (Settings.lua draws it,
+-- greyed for members with who sets it)
 ----------------------------------------------------------------------------
-function Rec.Settings(_, col)
-  local isOfficer = C.Roster:MeOfficer()
-  col:Head("Records")
-  col:Check("On for the whole guild", Rec.GuildOn(), isOfficer, function(on)
+Rec.GuildSwitch = {
+  on = function() return Rec.GuildOn() end,
+  set = function(on)
     C.Policy:SetRule("recGuild", (not on) and 0 or nil)
     C.Comm:PolicySoon()
     C.UI:Draw()
-  end, not isOfficer and "Set by the officers" or nil, function(tip)
-    tip:AddLine("On for the whole guild", 1, 1, 1)
-    tip:AddLine("Off: no member's Cute keeps or announces records. Each member can also switch Records off in Modules.", 0.85, 0.85, 0.85, true)
+  end,
+  tip = function(tip)
+    tip:AddLine("Records for the whole guild", 1, 1, 1)
+    tip:AddLine("Off: no member's Cute keeps or announces records, whatever their own Records box says. It applies at once and reaches the guild with the officers' settings.", 0.85, 0.85, 0.85, true)
+    if C.Roster:MeOfficer() then tip:AddLine("Each record is switched on or off on the Halls tab's Records chip.", 0.7, 0.7, 0.7, true) end
     local by = C.Rules.SetBy("recGuild")
     if by then tip:AddLine("Switched off by " .. C.Rules.WhoName(by) .. ".", 0.7, 0.7, 0.7, true) end
-  end)
-  if isOfficer then col:Note("Each record is switched on or off on the Halls tab's Records chip.") end
-end
+  end,
+}
 
 ----------------------------------------------------------------------------
 -- /cute diag cards: the records' line (counts and states, no name)
@@ -804,6 +805,6 @@ end, "records: events"))
 C:RegisterModule({
   id = "records", title = "Records", order = 47, builtin = true, default = true,
   notes = "Guild records on the Halls tab, and a toast when a fastest clear falls.",
-  settings = function(ui, col) Rec.Settings(ui, col) end,
+  guildSwitch = Rec.GuildSwitch,
   onToggle = function(on) if on then C_Timer.After(1, C.Safe(function() Rec:Scan() end, "records: on")) end changed() end,
 })

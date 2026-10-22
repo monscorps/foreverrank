@@ -25,6 +25,9 @@ local MUTE = { 0.52, 0.52, 0.52 }
 local NAV_W = 168   -- the list of sections
 local NAV_GAP = 12  -- between it and the column
 local COL_MAX = 560 -- the column: wider, a label and its boxes read as two things far apart
+-- (the windows design's 7) the long lists, Columns and an officer's Who sees what, take two columns once the window is
+-- this wide, COL_GAP apart
+local TWO_AT, COL_GAP = 1040, 24
 -- the column's spacing, the same in every section. Nothing in Settings is cut: a label or a note wraps and its row grows
 -- to the lines it needs (from 22 px), a choice measures its options and wraps them under its label, and the list of
 -- sections never shrinks its rows (it scrolls)
@@ -116,6 +119,20 @@ local function column(x, w, band, ui)
     or { labels = widgets.labels, values = widgets.values, buttons = widgets.buttons }
   return setmetatable({ x = x, w = w, y = 4, fresh = true, p = p, ui = ui }, Col)
 end
+-- two columns side by side, w wide each, drawn as one: a head starts a list, which goes whole to the shorter column, its
+-- rows after it in that column; every other call draws in the column the last head chose. full is both columns' width
+-- (the band's), Bottom the lower one's end
+local function twoColumns(x, w, ui)
+  local a, b = column(x, w, false, ui), column(x + w + COL_GAP, w, false, ui)
+  local two = { a = a, b = b, cur = a, full = 2 * w + COL_GAP }
+  function two:Bottom() return math.max(a.y, b.y) end
+  return setmetatable(two, { __index = function(t, k)
+    if k == "Head" then return function(self, s) self.cur = (b.y < a.y) and b or a; return Col.Head(self.cur, s) end end
+    local f = Col[k]
+    if type(f) == "function" then return function(self, ...) return f(self.cur, ...) end end
+    return t.cur[k]
+  end })
+end
 -- a FontString at a size of its own (a pooled one may come from a smaller use)
 local function sized(fs, n)
   if fs.cuteSize ~= n then
@@ -156,10 +173,11 @@ function Col:Head(s)
   local _, h = label(self, self.x, self.y, self.w, s, WHITE, nil, 13)
   self.y = self.y + math.max(HEAD, h + 5)
 end
--- a line of explanation, dim, wrapping to the column
-function Col:Note(s)
+-- a line of explanation, dim, wrapping to the column; indent: room on the left (a note under an indented row)
+function Col:Note(s, indent)
   self.fresh = false
-  local _, h = label(self, self.x, self.y + 1, self.w, s, DIM, nil, 12)
+  indent = indent or 0
+  local _, h = label(self, self.x + indent, self.y + 1, self.w - indent, s, DIM, nil, 12)
   self.y = self.y + math.max(NOTE, h + 4)
 end
 -- a check row: the box with its label, one button the width of the column (up to the right-hand words), so a click
@@ -393,7 +411,7 @@ end
 local function saveTip(st)
   return function(tip)
     tip:AddLine("Save to Guild Info", 1, 1, 1)
-    tip:AddLine("Writes the policy as one line at the end of the guild's Guild Info, the guild's own text kept. Every client routes by it, and only ranks allowed to edit Guild Info can change it.", 0.85, 0.85, 0.85, true)
+    tip:AddLine("Writes the officers' settings as one line at the end of the guild's Guild Info, the guild's own text kept. Every client goes by it, and only ranks allowed to edit Guild Info can change it.", 0.85, 0.85, 0.85, true)
     if st.line then tip:AddLine(st.line, 0.7, 0.7, 0.7, true) end
     if st.why then tip:AddLine(st.why, 0.7, 0.7, 0.7, true) end
   end
@@ -542,6 +560,17 @@ end
 -- the pieces on screen: their one lock, the grid, layout mode and the resets (Layout.lua)
 local function drawLayout(col) C.Layout.Draw(col) end
 
+-- a guild rank's name as the game shows it, 0 the guild master: the game's own for the rank order (GuildRoster.lua:45
+-- names its rank menu by GuildControlGetRankName, an undocumented global: /cute api reports it), else a member's rank
+-- as the roster lists it (C_Club's guildRank), else its place
+C.UNDOCUMENTED[#C.UNDOCUMENTED + 1] = "GuildControlGetRankName"
+local function rankName(i)
+  local n = C.Callable("GuildControlGetRankName") and C.Plain(C.Get(GuildControlGetRankName, i + 1)) or nil
+  if type(n) == "string" and n ~= "" then return n end
+  for _, m in ipairs(C.Roster.members or {}) do if m.rank == i and type(m.rankName) == "string" and m.rankName ~= "" then return m.rankName end end
+  return "rank " .. (i + 1)
+end
+
 -- who sees what: the policy, the threshold, the buttons and the two headings in the band, the list under them. A
 -- member reads one line of it: the officers decide, and how many values go to everyone
 local function drawVisibility(col, officer, ui)
@@ -557,8 +586,8 @@ local function drawVisibility(col, officer, ui)
     col:Note(C.Policy:Describe())
     return
   end
-  local band = column(col.x, col.w, true, ui)
-  band:Head("Policy")
+  local band = column(col.x, col.full or col.w, true, ui)
+  band:Head("Who sees what")
   band:Note(C.Policy:Describe())
   local unsaved = officer and C.Policy:Unsaved()
   local st = unsaved and C.Policy:SaveState() or {}
@@ -569,12 +598,17 @@ local function drawVisibility(col, officer, ui)
   -- Info has been read)
   local mine = C.Roster:MyRank() or 99
   local editor = officer and C.Policy.Editable()
-  band:Step("Officer ranks: the ranks that see every value and set this list", "0 to " .. thr, false,
+  -- (the ranks by the game's names, never by number: the stepper counts them)
+  local names = {}
+  for i = 0, thr do names[#names + 1] = rankName(i) end
+  local who = #names == 1 and (names[1] .. " alone sees") or (names[1] .. " to " .. names[#names] .. " see")
+  band:Step("Officer ranks: " .. who .. " every value and set this list", tostring(#names), false,
     (editor and thr > 0 and thr - 1 >= mine) and function() C.Policy:SetThreshold(thr - 1); C.Comm:PolicySoon(); redraw() end or nil,
     (editor and thr < 9) and function() C.Policy:SetThreshold(thr + 1); C.Comm:PolicySoon(); redraw() end or nil,
     function(tip)
       tip:AddLine("Officer ranks", 1, 1, 1)
       tip:AddLine("The guild's ranks, from the guild master down, that see every value and set this list and the rules.", 0.85, 0.85, 0.85, true)
+      tip:AddLine((#names == 1 and "Now one rank: " or ("Now " .. #names .. " ranks: ")) .. table.concat(names, ", ") .. ".", 0.7, 0.7, 0.7, true)
       if officer and thr - 1 < mine and thr > 0 then tip:AddLine("It cannot leave your own rank out: an officer of a higher rank can lower it.", 0.7, 0.7, 0.7, true) end
     end)
   band:Buttons({ { "Save to Guild Info", unsaved and st.ok, save, saveTip(st) }, { "Broadcast now", officer, broadcast }, { "Reset to defaults", editor, function()
@@ -584,6 +618,8 @@ local function drawVisibility(col, officer, ui)
     C.Comm:PolicySoon()
     redraw()
   end } })
+  -- (in two columns, the two headings over each column's boxes)
+  if col.a then local l = column(col.a.x, col.a.w, true, ui); l.y, l.fresh = band.y, false; l:PairHeads() end
   band:PairHeads()
   ui:SetBand(band.y)
   for _, cat in ipairs(C.Stats.CATS) do
@@ -633,10 +669,13 @@ local function drawColumns(col, officer, ui)
   end
 end
 
--- the modules this character runs: the always-on base (the guild window; a module addon's base, the quests window
--- with its Route tab) greyed, then a box each for the rest, a quests window's tabs indented under it. A change waits:
--- the boxes show it at once, the band line says it applies on reload (Reload now, Undo), and closing Settings asks
--- (Setup.lua); a few words on the right where something is not as the box says, its notes in the tooltip
+-- the modules this character runs, by window: Guild (always) with the built-in modules under it (Runs, Achievements,
+-- Records); the always-on base (a module addon's: the quests window with its Route tab) with the quests window's tabs
+-- under it; then the rest (Map, Reminders, any other module addon's). A module with a switch for the whole guild
+-- (def.guildSwitch: Achievements, Records) has it under its row, the officers' to click and greyed for members; it
+-- applies at once, as the officers' settings do. A change waits: the boxes show it at once, the one reload line at the
+-- top says so with Reload now and Undo, and closing Settings asks (Setup.lua); a few words on the right where something
+-- is not as the box says, its notes in the tooltip
 local function drawModules(col, officer)
   local M = C.Modules
   col:Head("Modules")
@@ -644,27 +683,42 @@ local function drawModules(col, officer)
     col:Note("Applies on reload.")
     col:Buttons({ { "Reload now", not M.InCombat(), function() M.Commit() end, function(tip) tip:AddLine("Reload now", 1, 1, 1); tip:AddLine(M.InCombat() and "After combat." or "Reloads the interface with your changes.", 0.85, 0.85, 0.85, true) end },
       { "Undo", true, function() M.Undo(); redraw() end } })
+  else
+    col:Note("Changes here apply on reload.")
   end
-  col:Check("Guild", true, false, function() end, "always")
   local list = M.Available(officer)
-  local base, rest = {}, {}
-  for _, e in ipairs(list) do if e.base then base[#base + 1] = e else rest[#rest + 1] = e end end
-  if #base > 0 then
-    local names = {}
-    for _, e in ipairs(base) do names[#names + 1] = e.title end
-    col:Check(table.concat(names, " and "), true, false, function() end, "always")
+  local base, guild, tabs, rest = {}, {}, {}, {}
+  for _, e in ipairs(list) do
+    if e.base then base[#base + 1] = e
+    elseif e.def and e.def.builtin then guild[#guild + 1] = e
+    elseif e.def and e.def.page and e.def.window == "quests" then tabs[#tabs + 1] = e
+    else rest[#rest + 1] = e end
   end
-  for _, e in ipairs(rest) do
+  local function box(e, indent)
     local tab = e.def and e.def.page and e.def.window == "quests"
     local on = M.StagedOn(e.key, e.on)
     col:Check(e.title .. (tab and " tab" or ""), on, true, function(v) M.Stage(e.key, v); redraw() end, e.status, function(tip)
       tip:AddLine(e.title, 1, 1, 1)
       if e.notes then tip:AddLine(e.notes, 0.85, 0.85, 0.85, true) end
       if e.status then tip:AddLine(e.status, 0.7, 0.7, 0.7, true) end
-      tip:AddLine("A change applies on reload.", 0.5, 0.5, 0.5, true)
-    end, tab and 20 or 0)
+    end, indent)
+    local gs = e.def and e.def.guildSwitch
+    if type(gs) == "table" and type(gs.on) == "function" and type(gs.set) == "function" then
+      col:Check(e.title .. " for the whole guild", gs.on(), officer, function(v) gs.set(v); redraw() end,
+        not officer and "Set by the officers" or nil, gs.tip, indent + 20)
+      local note = officer and gs.note and gs.note()
+      if note then col:Note(note, indent + 40) end
+    end
   end
-  col:Note("Window and tab changes apply on reload.")
+  col:Check("Guild", true, false, function() end, "always")
+  for _, e in ipairs(guild) do box(e, 20) end
+  if #base > 0 then
+    local names = {}
+    for _, e in ipairs(base) do names[#names + 1] = e.title end
+    col:Check(table.concat(names, " and "), true, false, function() end, "always")
+  end
+  for _, e in ipairs(tabs) do box(e, #base > 0 and 20 or 0) end
+  for _, e in ipairs(rest) do box(e, 0) end
 end
 
 -- the sections, by group: { id, title, group, order, draw(col, officer, ui), officers (officers alone), module }
@@ -788,14 +842,19 @@ function C.Settings_Draw(ui)
   end
   nav.list:SetContentHeight(y + 4)
   nav.rows = y
-  -- the chosen section, in one column
-  local w = math.min(COL_MAX, sf:Width() - 12)
-  local col = column(6, w, false, ui)
+  -- the chosen section, in one column; Columns and an officer's Who sees what in two once the window is wide enough
+  local room = sf:Width() - 12
+  local col
+  if (sel.id == "columns" or (sel.id == "vis" and officer)) and (ui.frame:GetWidth() or 0) >= TWO_AT then
+    col = twoColumns(6, math.min(COL_MAX, math.floor((room - COL_GAP) / 2)), ui)
+  else
+    col = column(6, math.min(COL_MAX, room), false, ui)
+  end
   C.Safe(function()
     if sel.module then sel.module.settings(ui, col)
     elseif sel.extra then sel.extra.draw(ui, col)
     else sel.draw(col, officer, ui) end
   end, "settings: " .. sel.id)()
   hideRest()
-  sf:SetContentHeight(col.y + 8)
+  sf:SetContentHeight((rawget(col, "Bottom") and col:Bottom() or col.y) + 8)
 end

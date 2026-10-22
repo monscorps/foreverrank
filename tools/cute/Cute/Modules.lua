@@ -115,6 +115,21 @@ function Cute:RegisterModule(def)
   return C:RegisterModule(def)
 end
 function Cute.Open(page, section) C.UI:Open(page, section) end
+-- a window by key shown or hidden, as its key does (Keys.lua): the game's Key Bindings' Quests window and Map window
+-- (Bindings.xml). A window whose page is not there says why, as /cute does: its module off, or no Cute_Quest
+function Cute.Toggle(key)
+  C.Safe(function()
+    local spec = C.UI.SPEC[key]
+    local home = spec and spec.home or key
+    if key ~= "guild" and key ~= "settings" and not M.Page(home, C.Roster:MeOfficer()) then
+      local def = M.byId[home]
+      if not M.byId.quests then C.Print("the quest window comes with Cute_Quest, which this client does not have.")
+      elseif def and not def.active then C.Print(def.title .. " is switched off. Tick it in Settings, Modules.") end
+      return
+    end
+    C.UI.ToggleWindow(key)
+  end, "binding")()
+end
 function Cute.Refresh() if C.UI and C.UI.RefreshAll then C.UI.RefreshAll() end end
 -- (merge3) Cute_Quest's reminders laid out again (Band.lua, after each refresh of Reminders): what the dashboard reads of
 -- them may have changed (Stats.lua S.PullChanged: your own Ready while Before the pull shows something)

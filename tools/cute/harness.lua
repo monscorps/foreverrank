@@ -568,6 +568,8 @@ local UNDOCUMENTED = {
   GetLootSlotLink = "Mainline/LootFrame.lua:69 and 515",
   -- whether this character may edit Guild Info, which the policy is saved to (Policy.lua P:SaveState)
   CanEditGuildInfo = "Blizzard_Communities/GuildInfo.lua:53 (CommunitiesGuildInfoFrame_UpdatePermissions: the Guild Info edit button by it)",
+  -- a rank's name by its order, 1 the guild master (Settings > Who sees what names the officer ranks by it)
+  GuildControlGetRankName = "Blizzard_Communities/GuildRoster.lua:45 (the roster's rank menu names each rank order by it)",
 }
 
 -- Legacy Challenges as the Legacy window lists them: categories by id (name, parent, how many), achievements by
@@ -758,6 +760,8 @@ local function newClient(o)
       for _, m in ipairs(GUILD) do if m.guid == o.guid then return m.rank <= INFO_EDIT end end
       return false
     end),
+    -- (o.rankNames: the guild's ranks by order; else five)
+    GuildControlGetRankName = api(function(i) return (o.rankNames or { "Guild Master", "Officer", "Veteran", "Raider", "Member" })[i] end),
   }
   if o.withStats then
     -- c.statsEmpty: the list is still empty, as it may be while the data loads at login
@@ -3800,7 +3804,11 @@ do
     tick(slow, 1)
     assert(slow.C.Rules.SeedState() == "fresh" and slow.C.Stats.EnchantKnown(9, "4.1") and slow.C.Sample:Value("unenchanted")[9], "done a frame on: the seed's wrist now asks for an enchant")
     redraw(slow)
-    assert(tipOf(guideHead(slow)):find("From research and the beta, checked against this client", 1, true), "and the Guide's head says where its knowledge comes from")
+    -- (fix-cute-ui: a member's tooltip says what the pick means; where it comes from is /cute diag's)
+    local sd0 = #slow.chat
+    slow.env.SlashCmdList.CUTE("diag")
+    assert(tipOf(guideHead(slow)):find("Levels and bosses as the guild has met them.", 1, true)
+      and table.concat(slow.chat, "\n", sd0 + 1):find("diag guide: From research and the beta, checked against this client", 1, true), "and /cute diag says where the Guide's knowledge comes from")
     leave(slow)
     -- a partial seed: a dungeon without a range, one without a name, one whose range is upside down, a boss without an id,
     -- loot that is no id, an enchant slot past the gear, a recipe without a name, an XP value below zero
@@ -3976,7 +3984,11 @@ if SEEDED then isolated({ { name = "Rulo-Forever", guid = guidOf("Rulo"), rank =
   assert(L.SeedState() == "fresh" and L.BetaAsData() and L.Model().dungeons[36].state == "data" and L.Model().xp[20].state == "data" and L.SlotState(9) == "data",
     "another build: the beta's facts read as research")
   openGuide(later)
-  assert(tipOf(guideHead(later)):find("This client is 1.60.1.70450: what the beta showed counts as research until the guild sees it.", 1, true), "the head's source says so in its tooltip")
+  -- (fix-cute-ui: where the knowledge comes from is /cute diag's; a member's tooltip says what the pick means)
+  local ld0 = #later.chat
+  later.env.SlashCmdList.CUTE("diag")
+  assert(table.concat(later.chat, "\n", ld0 + 1):find("This client is 1.60.1.70450: what the beta showed counts as research until the guild sees it.", 1, true)
+    and not tipOf(guideHead(later)):find("This client is", 1, true), "/cute diag says so, the member's tooltip not")
   check(qwin(later).frame, "member guide, another build")
   local minor = client({ build = "1.61.0.71000" })
   assert(minor.C.Rules.SeedState() == "fresh" and minor.C.Rules.BetaAsData() and minor.C.Rules.Model().dungeons[36].state == "data",
@@ -4330,8 +4342,12 @@ do
     -- (the windows round: the pick a card, its name on it and the whole line in its tooltip; no pick, the line itself)
     local shown = cyPlan.next.card and cyPlan.next.card.d.name or cyPlan.next.line
     local headTip = tipOf(guideHead(cy))
-    assert(first:find(shown, 1, true) and headTip:find(cyPlan.next.line, 1, true) and headTip:find(SEEDED and "From research and the beta, checked against this client" or "Nothing shipped with this copy", 1, true),
-      "the page opens on the pick, where it comes from in the head's tooltip:\n" .. headTip)
+    -- (fix-cute-ui: a member's tooltip says what the pick means; where it comes from is /cute diag's)
+    local cd0 = #cy.chat
+    cy.env.SlashCmdList.CUTE("diag")
+    assert(first:find(shown, 1, true) and headTip:find(cyPlan.next.line, 1, true) and headTip:find("Levels and bosses as the guild has met them.", 1, true)
+      and table.concat(cy.chat, "\n", cd0 + 1):find(SEEDED and "diag guide: From research and the beta, checked against this client" or "diag guide: Nothing shipped with this copy", 1, true),
+      "the page opens on the pick, what it means in the head's tooltip, where it comes from in /cute diag:\n" .. headTip)
     -- /cute diag on the officer: the seed's state, with what was learned
     local d0 = #ruler.chat
     ruler.env.SlashCmdList.CUTE("diag")
@@ -6476,7 +6492,7 @@ do
     -- been answered)
     tickAll(25)
     local told = false
-    for _, l in ipairs(chatLines(ofa2)) do if l:find("Guild Info does not hold the policy you saved", 1, true) then told = true end end
+    for _, l in ipairs(chatLines(ofa2)) do if l:find("Guild Info does not hold the settings you saved", 1, true) then told = true end end
     assert(told and ofa2.C.Policy:Unsaved() and ofa2.C.Policy:EditPending() and ofa2.C.Policy:Vis("level") == "self" and ofa2.C.Policy.line.fp == yezin.C.Policy.ParseLine(keep).fp
       and mo.C.Policy:Holds() and mo.C.Policy:Route("level") == "all", "Ofa is told, her change back and not saved, the line Guild Info holds read (scenario 52(d))")
     ofa2.C.Policy:Set("level", "all")
@@ -8701,7 +8717,7 @@ do
       fire(mia, "PLAYER_MONEY")
       tickAll(30)
       local P = mia.C.Policy
-      assert(not P:Settled() and P:Describe():find("newer policy", 1, true), how .. ": Mia waits for Guild Info: " .. P:Describe())
+      assert(not P:Settled() and P:Describe():find("newer settings", 1, true), how .. ": Mia waits for Guild Info: " .. P:Describe())
       assert(gotFrom(zed, mia, 1, function(m) return m.channel == "GUILD" and m.msg:find("deaths=", 1, true) end) == 0, how .. ": no death of hers on GUILD")
       assert(gotFrom(ofb, mia, 1, function(m) return m.channel == "WHISPER" end) == 0, how .. ": nothing whispered meanwhile")
       -- out of it: Guild Info read, the new line routes her
@@ -9187,7 +9203,7 @@ do
       tickAll(30)
       local P = ofa2.C.Policy
       if saved then
-        assert(chatHas(ofa2, "another officer saved the policy to Guild Info: your change, not saved, gave way to it.") and P:Vis("gold") == "self"
+        assert(chatHas(ofa2, "another officer saved their settings to Guild Info: your change, not saved, gave way to them.") and P:Vis("gold") == "self"
           and P:Route("deaths") == "self" and not P:EditPending(), "another officer saved meanwhile: her change gave way, and she is told")
       else
         assert(P:EditPending() and P:Vis("gold") == "all" and not chatHas(ofa2, "gave way"), "her change waited for her: " .. P:Describe())
@@ -9782,7 +9798,7 @@ do
     ofb2.C.Comm:Broadcast()
     tickAll(10)
     assert(msgs(ofb2, "1P") == 0 and not mia.C.Policy.doubt and not zed.C.Policy.doubt and zed.C.Policy:Settled(), "his clicks send nothing meanwhile: nobody waits for Guild Info")
-    assert(chatHas(ofb2, "the policy goes to the guild once Guild Info is read."), "Broadcast says it waits")
+    assert(chatHas(ofb2, "the officers' settings go to the guild once Guild Info is read."), "Broadcast says it waits")
     ofb2.infoSecret, ofb2.o.instance = false, nil
     fire(ofb2, "GUILD_ROSTER_UPDATE")
     tickAll(20)
@@ -13506,17 +13522,18 @@ do
     -- 60 + 13 x 22 of the 375 px the design gives the list)
     local ids = {}
     for _, sec in ipairs(sections) do ids[#ids + 1] = sec.id end
-    -- (merge3) the cards round's Halls before it and Achievements and Records after it, under Guild
-    assert(table.concat(ids, " "):find("vis rules halls runs ach records example quests", 1, true), "Settings > Halls, Runs, Achievements and Records under Guild: " .. table.concat(ids, " "))
+    -- (merge3) the cards round's Halls before it, under Guild; (fix-cute-ui) Achievements' and Records' guild switches
+    -- are rows in Settings > Modules, no sections of their own
+    assert(table.concat(ids, " "):find("vis rules halls runs example quests", 1, true), "Settings > Halls and Runs under Guild: " .. table.concat(ids, " "))
     M.Set("Cute_Example", false); tick(c, 1)
     UI.OpenSettings("general")
-    -- (the hud round) Settings > Layout makes fourteen, and (merge3) the cards round's Halls, Achievements and Records
-    -- seventeen: at 760 x 420 the list scrolls, its rows still 22 px, as the owner allows past thirteen; at Settings' own
-    -- 800 x 560 every section fits unscrolled
-    assert(#c.C.SettingsPage.Sections(true) == 17, "every section a player can have: " .. #c.C.SettingsPage.Sections(true))
+    -- (the hud round) Settings > Layout makes fourteen, and (merge3) the cards round's Halls fifteen ((fix-cute-ui)
+    -- Achievements and Records have none): at 760 x 420 the list scrolls, its rows still 22 px, as the owner allows past
+    -- thirteen; at Settings' own 800 x 560 every section fits unscrolled
+    assert(#c.C.SettingsPage.Sections(true) == 15, "every section a player can have: " .. #c.C.SettingsPage.Sections(true))
     local navList
     for _, f in ipairs(c.frames) do if f.section and f:IsVisible() then navList = f.__parent.__scrollParent end end
-    assert(navList and navList.bar:IsShown(), "seventeen at 760 x 420: the list scrolls")
+    assert(navList and navList.bar:IsShown(), "fifteen at 760 x 420: the list scrolls")
     check(S.frame, "W3 settings at 760x420, every section listed")
     sizeAll(c, 800, 560)
     UI.OpenSettings("general")
@@ -13712,8 +13729,9 @@ do
     -- Shame retitled)
     assert(names(g.sub) == "Race, Prog, Halls, Runs, Statistics, Officers, Me", "the guild's tabs: " .. names(g.sub))
     assert(names(q.sub) == "Quests, Route, ---, Step frame, Direction arrow", "the quests' tabs and the on-screen switches: " .. names(q.sub))
-    -- (merge3: the cards round's Halls before Runs, Achievements and Records after it; Reminders, on by default, after Route)
-    assert(names(s.sub) == "General, Keys, Layout, Modules, Data you share, Columns, Who sees what, Rules, Halls, Runs, Achievements, Records, Quests, Route, Reminders", "every section: " .. names(s.sub))
+    -- (merge3: the cards round's Halls before Runs; Reminders, on by default, after Route. fix-cute-ui: Achievements' and
+    -- Records' guild switches are rows in Settings > Modules, no sections)
+    assert(names(s.sub) == "General, Keys, Layout, Modules, Data you share, Columns, Who sees what, Rules, Halls, Runs, Quests, Route, Reminders", "every section: " .. names(s.sub))
     assert(entry(m, "Set up Cute...") and not entry(m, "Reload to apply"), "Set up Cute... before Start; no reload to apply")
     -- a click opens: a tab, the window, a section; a switch flips the engine's setting
     entry(g.sub, "Statistics").set()
@@ -15792,13 +15810,13 @@ do local function cardsStage()
     fire(max, "ACHIEVEMENT_EARNED", 150016, false)
     tickAll(5)
     assert(guildSends(max, "^1A|") == m0 and max.C.Sample:Value("ach_recent") == nil and not A(ada).Taking(), "off for the guild: no 1A, no ach_recent, nothing taken")
-    -- Settings > Achievements: the officers' switch, greyed for a member with who sets it
+    -- the officers' switch, greyed for a member with who sets it (fix-cute-ui: beside its row in Settings > Modules)
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
       for _, c in ipairs({ ada, max }) do
-        c.C.UI:Open("settings", "ach")
+        c.C.UI:Open("settings", "modules")
         sizeAll(c, size[1], size[2])
-        c.C.UI:Open("settings", "ach")
-        assert(texts(c):find("On for the whole guild", 1, true) and (c == ada or texts(c):find("Set by the officers", 1, true)), "Settings > Achievements")
+        c.C.UI:Open("settings", "modules")
+        assert(texts(c):find("Achievements for the whole guild", 1, true) and (c == ada or texts(c):find("Set by the officers", 1, true)), "Settings > Modules, Achievements' switch")
         -- (merge3: Settings its own window)
         check(sframe(c), string.format("achievements: settings, %s, %dx%d", c == ada and "officer" or "member", size[1], size[2]))
       end
@@ -15837,7 +15855,7 @@ do local function cardsStage()
     check(CF.frame, "achievements: a guild card and an achievement card")
     CF.frame:Hide()
   end)
-  said[#said + 1] = "achievements: an earn one 1A on GUILD, none for an earn the account had or a guild one; the officers' day row, nothing on a member's client; an unknown id, an untrusted sender, a 21st in ten minutes dropped; over six hours old dated by its arrival, two by its own; held inside and through the lockdown, sent once out; the server's line and guild news for a member without Cute, marked server, a guild card, a secret line nothing; ach_recent the newest twenty within 200 bytes, whispered to the officers, an officer away learns from it; Only you whispered and locked; off for a member and for the guild; Settings > Achievements; /cute diag cards"
+  said[#said + 1] = "achievements: an earn one 1A on GUILD, none for an earn the account had or a guild one; the officers' day row, nothing on a member's client; an unknown id, an untrusted sender, a 21st in ten minutes dropped; over six hours old dated by its arrival, two by its own; held inside and through the lockdown, sent once out; the server's line and guild news for a member without Cute, marked server, a guild card, a secret line nothing; ach_recent the newest twenty within 200 bytes, whispered to the officers, an officer away learns from it; Only you whispered and locked; off for a member and for the guild; its guild switch in Settings > Modules; /cute diag cards"
 
   -- (14) firsts: the ledger seeds 90 s into an officer's first login (guild news, the members' ach_recent); an earn with
   -- no earlier entry is "Guild first?"; one guild news shows earlier is not; one whose earlier entry rests on one
@@ -16241,15 +16259,15 @@ do local function cardsStage()
     assert(recOf(oti, "c36") and recOf(oti, "c36").v == 900 and toasts(oti) == 0 and newsRecords(oti) == 0, "a login's records: quiet")
     assert(Rc(oti).IsOn("c36") and Rc(oti).IsOn("deaths") and Rc(oti).IsOn("g2007"), "the officers' list in the answer to 1G")
     for _, r in ipairs(H(oti).Rows()) do assert(r.src ~= "record", "no Record? row from a login") end
-    -- the Records chip and Settings > Records, for an officer and a member, at both sizes; Preview
+    -- the Records chip and its guild switch in Settings > Modules, for an officer and a member, at both sizes; Preview
     for _, c in ipairs({ ola, dot }) do
       H(c).OpenChip("records")
       for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
         sizeAll(c, size[1], size[2])
         H(c).OpenChip("records")
         check(c.C.UI.frame, string.format("records: the chip, %s, %dx%d", c == ola and "officer" or "member", size[1], size[2]))
-        c.C.UI:Open("settings", "records")
-        assert(texts(c):find("On for the whole guild", 1, true) and (c == ola or texts(c):find("Set by the officers", 1, true)), "Settings > Records")
+        c.C.UI:Open("settings", "modules")
+        assert(texts(c):find("Records for the whole guild", 1, true) and (c == ola or texts(c):find("Set by the officers", 1, true)), "Settings > Modules, Records' switch")
         -- (merge3: Settings its own window)
         check(sframe(c), string.format("records: settings, %s, %dx%d", c == ola and "officer" or "member", size[1], size[2]))
       end
@@ -16278,8 +16296,8 @@ do local function cardsStage()
     assert(recOf(eli, "c36").v == e0 and toasts(eli) == 2, "off: no table kept, no toast")
     assert(toasts(dot) == 2 and recOf(dot, "c36").v == 700, "a second record today on the others: quiet, its row again")
     eli.C.Modules.Set("records", true)
-    ola.C.UI:Open("settings", "records")
-    local sw = checkBox(ola, function(f) return f.label and f.label:GetText() == "On for the whole guild" end)
+    ola.C.UI:Open("settings", "modules")
+    local sw = checkBox(ola, function(f) return f.label and f.label:GetText() == "Records for the whole guild" end)
     assert(sw, "the guild's switch")
     click(sw)
     ola.C.Comm:SendPolicy()
@@ -16310,7 +16328,7 @@ do local function cardsStage()
     local msg = Rc(ola).Message()
     assert(#msg <= 255, "1O within a message: " .. #msg)
     assert(tableBytes < 50000, "the table at 400: " .. tableBytes)
-    said[#said + 1] = string.format("records: every record off at first; a second voice within 5 s a clear record and one toast on every client, nothing sent; members above the range quiet; a holder's own improvement quiet; a second record of an instance in a day its News row again; within 5%% quiet, past it the next day a toast; an untrusted voice and a clear under two minutes none; a most record on a Record? row in the officer's Queue alone, its holder's improvement none, one off the table alone; an untrusted member's and an out-of-bounds most none; a stat the officers close leaves every table and locks its row; a statistic added on the band, filled and a Record? row; a member's 1O refused, one a minute, a login's records quiet and the list in the answer to 1G; the chip and Settings > Records at both sizes, Preview; off for a member and for the guild; /cute diag cards; the table at 400 %d KB, 1O %d bytes", math.ceil(tableBytes / 1024), #msg)
+    said[#said + 1] = string.format("records: every record off at first; a second voice within 5 s a clear record and one toast on every client, nothing sent; members above the range quiet; a holder's own improvement quiet; a second record of an instance in a day its News row again; within 5%% quiet, past it the next day a toast; an untrusted voice and a clear under two minutes none; a most record on a Record? row in the officer's Queue alone, its holder's improvement none, one off the table alone; an untrusted member's and an out-of-bounds most none; a stat the officers close leaves every table and locks its row; a statistic added on the band, filled and a Record? row; a member's 1O refused, one a minute, a login's records quiet and the list in the answer to 1G; the chip and the guild switch in Settings > Modules at both sizes, Preview; off for a member and for the guild; /cute diag cards; the table at 400 %d KB, 1O %d bytes", math.ceil(tableBytes / 1024), #msg)
   end)
 
   -- the Records chip with nothing in it, for a member and an officer
@@ -17291,7 +17309,8 @@ do
     local state = {}
     local function client(name, rank) return newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true, card = true })) end
     local p = client("Pim", 3)
-    local answered = { guild = true, quests = true, dungeons = true, gear = true, mapicons = true, step = true, camp = true, light = true, accept = true, handin = true }
+    -- (fix-cute-ui: Runs answered too, its row the card's since; U1 checks it alone)
+    local answered = { guild = true, runs = true, quests = true, dungeons = true, gear = true, mapicons = true, step = true, camp = true, light = true, accept = true, handin = true }
     local db = { version = "0.8.0", chars = { ["Pim-Forever"] = { counters = {}, setup = answered, keys = { guild = "follow", quests = "follow" },
       modules = { ["Cute_Quest:map"] = false, ["Cute_Quest:journal"] = true } } } }
     login(p, db); tick(p, 3)
@@ -18071,7 +18090,8 @@ do
       return q
     end
     local p = client("Pim", 3)
-    local answered = { guild = true, quests = true, dungeons = true, gear = true, mapicons = true, step = true, camp = true, light = true, accept = true, handin = true }
+    -- (fix-cute-ui: Runs answered too, its row the card's since; U1 checks it alone)
+    local answered = { guild = true, runs = true, quests = true, dungeons = true, gear = true, mapicons = true, step = true, camp = true, light = true, accept = true, handin = true }
     local db = { version = "0.8.0", chars = { ["Pim-Forever"] = { counters = {}, setup = answered, keys = { guild = "follow", quests = "follow" },
       modules = { ["Cute_Quest:map"] = true, ["Cute_Quest:journal"] = true } } } }
     login(p, db); tick(p, 3)
@@ -19622,6 +19642,492 @@ do
   end
   said[#said + 1] = "a guild mate's loot waits for the next build; a build walks the records fifty a frame"
   print("fix-cute-core review: " .. table.concat(said, "; "))
+end
+
+-- [stage: fix-cute-ui] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The launch audit's cute-ui findings, Cute's side.
+-- U1. The setup card asks about Runs: "Run reports after dungeons, raids and long groups", ticked, under Guild (the
+--     run-report design's 14 and 18: Runs sends run values to the group, so the card asks); Start chooses the module.
+--     A character who answered every other row sees the card once more with this row alone, unindented
+----------------------------------------------------------------------------
+-- (this stage's helpers, in one table: the main chunk's locals are near Lua's limit)
+local UIX = {}
+function UIX.member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+function UIX.row(c, label) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == label end) end
+function UIX.button(c, label) for _, b in ipairs(c.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == label then return b end end end
+function UIX.rowIds(c) local out = {}; for _, r in ipairs(c.C.Setup.Rows()) do out[#out + 1] = r.id end return table.concat(out, " ") end
+do
+  local uiMember, uiRow, uiButton, uiRowIds = UIX.member, UIX.row, UIX.button, UIX.rowIds
+  isolated({ uiMember("Rone", 1), uiMember("Pim", 3) }, function()
+    local said = {}
+    local state = {}
+    local function client(name, rank) return newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true, card = true })) end
+    local RUNS = "Run reports after dungeons, raids and long groups"
+    -- a fresh character: the row, ticked, under Guild; unticked and Start, Runs is off and the row answered
+    local c = client("Rone", 1)
+    login(c); tick(c, 3)
+    local r = uiRow(c, RUNS)
+    assert(c.env.CuteSetupFrame and c.env.CuteSetupFrame:IsShown() and r and r:GetChecked(), "a fresh character's card asks about Runs, ticked: " .. uiRowIds(c))
+    local g = checkBox(c, function(cb) return cb.label and cb.label:GetText():find("^Guild") end)
+    assert(g and r.__points[1].x > g.__points[1].x and r.__points[1].y < g.__points[1].y, "the Runs row under Guild, indented")
+    check(c.env.CuteSetupFrame, "fix-cute-ui U1 the setup card with Runs")
+    click(r)
+    press(uiButton(c, "Start"))
+    local ch = c.env.CuteDB.chars["Rone-Forever"]
+    assert(c.reloads == 1 and ch.modules.runs == false and ch.setup.runs == true, "unticked and Start: Runs off, the row answered: " .. tostring(ch.modules.runs))
+    leave(c)
+    said[#said + 1] = "a fresh character's card asks about Runs, ticked, under Guild; Start chooses the module"
+    -- a character who answered every row before Runs had one: the card once more, with this row alone
+    local answered = { guild = true, quests = true, dungeons = true, gear = true, mapwin = true, step = true, camp = true, light = true, accept = true, handin = true }
+    local db = { version = "0.9.0", chars = { ["Pim-Forever"] = { counters = {}, setup = answered, keys = { guild = "follow", quests = "follow", map = "follow" } } } }
+    local p = client("Pim", 3)
+    login(p, db); tick(p, 3)
+    assert(p.env.CuteSetupFrame and p.env.CuteSetupFrame:IsShown() and uiRowIds(p) == "runs", "the card comes back with the Runs row alone: " .. uiRowIds(p))
+    local pr = uiRow(p, RUNS)
+    assert(pr and pr:GetChecked() and pr.__points[1].x == 14, "alone, ticked and unindented: " .. tostring(pr and pr.__points[1].x))
+    check(p.env.CuteSetupFrame, "fix-cute-ui U1 the setup card, the Runs row alone")
+    press(uiButton(p, "Start"))
+    local pch = p.env.CuteDB.chars["Pim-Forever"]
+    assert(pch.modules.runs == true and pch.setup.runs == true and pch.openAfter == nil, "Start: Runs on, answered, no window to open")
+    local db2, qdb = p.env.CuteDB, p.env.CuteQuestDB
+    leave(p)
+    local p2 = client("Pim", 3)
+    p2.env.CuteQuestDB = qdb
+    login(p2, db2, true); tickAll(6)
+    assert(not (p2.env.CuteSetupFrame and p2.env.CuteSetupFrame:IsShown()) and not p2.C.Setup.Pending() and p2.C.Modules.byId.runs.active, "after the reload: no card, Runs on")
+    leave(p2)
+    said[#said + 1] = "a character who answered the rest sees the Runs row alone, once"
+    print("fix-cute-ui U1: " .. table.concat(said, "; "))
+  end)
+end
+
+-- U2. The rows that change the game unasked say how, one DIM line under each: Map ("Cute's map on M; the minimap's
+--     wheel and right-click become Cute's", M the key its box shows), Reminders ("buffs, food, repair and training, out
+--     of a fight") and Interact light ("turns on the game's Interact key and its icons; Settings puts them back")
+function UIX.text(c, s)
+  for _, o in everything() do
+    if o.__kind == "FontString" and o.__shown and o.__text == s and visible(o) and o.__parent and o.__parent.__client == c then return o end
+  end
+end
+do
+  local uiMember, uiRow = UIX.member, UIX.row
+  isolated({ uiMember("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, card = true }))
+    login(c); tick(c, 3)
+    assert(c.env.CuteSetupFrame and c.env.CuteSetupFrame:IsShown(), "the card")
+    local function under(label, words)
+      local r, t = uiRow(c, label), UIX.text(c, words)
+      assert(r and t, "the " .. label .. " row says what it does under it, \"" .. words .. "\":\n" .. texts(c))
+      GEN = GEN + 1
+      local rr, tr = rectOf(r), rectOf(t)
+      assert(tr.t <= rr.b + 3 and tr.t >= rr.b - 6 and tr.l >= rr.l + 18, string.format("right under its row, by its label: row %d..%d, line top %d left %d", rr.t, rr.b, tr.t, tr.l))
+    end
+    under("Map", "Cute's map on M; the minimap's wheel and right-click become Cute's")
+    under("Reminders", "buffs, food, repair and training, out of a fight")
+    under("Interact light", "turns on the game's Interact key and its icons; Settings puts them back")
+    check(c.env.CuteSetupFrame, "fix-cute-ui U2 the setup card's notes")
+    -- the Map line names the key its box shows: N picked by hand
+    local box
+    for _, b in ipairs(c.frames) do if rawget(b, "Bind") and b:IsVisible() and b.id == "map" then box = b end end
+    press(box)
+    box.__scripts.OnKeyDown(box, "N")
+    under("Map", "Cute's map on N; the minimap's wheel and right-click become Cute's")
+    check(c.env.CuteSetupFrame, "fix-cute-ui U2 the setup card's notes, N for the map")
+    leave(c)
+    print("fix-cute-ui U2: the Map, Reminders and Interact light rows each say under them what they change, the Map line with its key")
+  end)
+end
+
+-- U3. The card's sentence names the keys its boxes show, for the windows it shows: J, L and M; a key picked by hand in
+--     its place (Q for the quests); a window whose box reads "-" left out (no Guild key outside a guild, a cleared one);
+--     one key alone names its window ("M opens Cute's map window"); none, and the clause goes
+do
+  local uiMember, uiRow = UIX.member, UIX.row
+  isolated({ uiMember("Rone", 1), uiMember("Pim", 3) }, function()
+    local function says(c, s) return texts(c):find(s, 1, true) ~= nil end
+    local function boxOf(c, id) for _, b in ipairs(c.frames) do if rawget(b, "Bind") and b:IsVisible() and b.id == id then return b end end end
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, card = true }))
+    login(c); tick(c, 3)
+    assert(says(c, "J, L and M open Cute's windows; each window has a button to the game's own."), "the game's keys: J, L and M:\n" .. texts(c))
+    local q = boxOf(c, "quests")
+    press(q); q.__scripts.OnKeyDown(q, "Q")
+    assert(boxOf(c, "quests").label:GetText() == "Q" and says(c, "J, Q and M open Cute's windows") and not says(c, "J, L and M"), "Q picked for the quests: the sentence says Q:\n" .. texts(c))
+    click(uiRow(c, "Map"))
+    assert(says(c, "J and Q open Cute's windows"), "Map unticked: J and Q:\n" .. texts(c))
+    check(c.env.CuteSetupFrame, "fix-cute-ui U3 the card, Q for the quests")
+    leave(c)
+    -- outside a guild: the Guild box reads "-" and the sentence leaves J out
+    local p = newClient(charOf({ "Pim", 3, "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, card = true, inGuild = false }))
+    login(p); tick(p, 3)
+    assert(p.env.CuteSetupFrame and p.env.CuteSetupFrame:IsShown() and boxOf(p, "guild").label:GetText() == "-", "outside a guild: the card, its Guild box '-'")
+    assert(says(p, "L and M open Cute's windows") and not says(p, "J, L and M") and not says(p, "J and"), "outside a guild, no J:\n" .. texts(p))
+    local pq = boxOf(p, "quests")
+    press(pq); pq.__scripts.OnKeyDown(pq, "BACKSPACE")
+    assert(says(p, "M opens Cute's map window; each window has a button to the game's own."), "the quests' key cleared: M alone names its window:\n" .. texts(p))
+    click(uiRow(p, "Map"))
+    assert(says(p, "Each window has a button to the game's own.") and not says(p, "open Cute's") and not says(p, "opens Cute's"), "no key at all: the clause goes:\n" .. texts(p))
+    check(p.env.CuteSetupFrame, "fix-cute-ui U3 the card, no key")
+    leave(p)
+    print("fix-cute-ui U3: the card's sentence names the keys its boxes show, leaving out a '-', one key naming its window, none dropping the clause")
+  end)
+end
+
+-- U4. Without Cute_Quest (only the Cute folder copied) the card asks of the guild window alone and says so: "J opens
+--     Cute's guild window", and a DIM line that the quest window comes with Cute_Quest, from the same download
+do
+  local uiMember = UIX.member
+  isolated({ uiMember("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { card = true }))
+    login(c); tick(c, 3)
+    local t = texts(c)
+    assert(c.env.CuteSetupFrame and c.env.CuteSetupFrame:IsShown() and not c.C.Modules.byId.quests, "no Cute_Quest: the card all the same")
+    assert(t:find("J opens Cute's guild window;", 1, true) and not t:find("J and L", 1, true), "the guild window alone:\n" .. t)
+    assert(t:find("Cute_Quest is not in Interface\\AddOns: your quest window comes with it, from the same download.", 1, true), "and where the quest window is:\n" .. t)
+    check(c.env.CuteSetupFrame, "fix-cute-ui U4 the card without Cute_Quest")
+    leave(c)
+    print("fix-cute-ui U4: without Cute_Quest the card names J and the guild window alone, and says the quest window comes with Cute_Quest")
+  end)
+end
+
+-- U5. UI.FitText cuts a name with no space a whole letter at a time: "S\195\184nderg\195\165rd" (an o-slash and an a-ring) at
+--     every width from 8 to 90 px is valid UTF-8, never a lone lead byte before the "..."; one letter at least is kept
+function UIX.utf8(s)
+  local i, n = 1, #s
+  while i <= n do
+    local b = s:byte(i)
+    local len = b < 0x80 and 1 or (b >= 0xF0 and b < 0xF8) and 4 or (b >= 0xE0 and b < 0xF0) and 3 or (b >= 0xC2 and b < 0xE0) and 2 or nil
+    if not len then return false end
+    for j = i + 1, i + len - 1 do local x = s:byte(j); if not x or x < 0x80 or x > 0xBF then return false end end
+    i = i + len
+  end
+  return true
+end
+do
+  isolated({ UIX.member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }))
+    login(c); tick(c, 1)
+    local f = c.env.CreateFrame("Frame", nil, c.env.UIParent)
+    local fs = f:CreateFontString(nil, "OVERLAY")
+    fs:SetFont(c.C.UI.FONT, 12, "")
+    local names = { "S\195\184nderg\195\165rd", "\195\134\195\152\195\133\195\134\195\152\195\133", "Bj\195\184rnst\195\184ren" }
+    for _, name in ipairs(names) do
+      for room = 8, 90 do
+        c.C.UI.FitText(fs, name, room)
+        local shown = fs:GetText()
+        assert(UIX.utf8(shown), string.format("%d px: %q is no valid UTF-8", room, shown))
+        assert(shown == name or shown:sub(-3) == "...", "cut with the dots: " .. shown)
+        assert(#shown > 3 or shown == name, "a letter at least kept: " .. shown)
+      end
+    end
+    leave(c)
+    print("fix-cute-ui U5: UI.FitText cuts a spaceless name with an o-slash, an ae or an a-ring a whole letter at a time, never half of one")
+  end)
+end
+
+-- U6. The game's Key Bindings entries "Quests window" and "Map window" toggle their window as J, L and M do (a second
+--     press closes it: Bindings.xml calls Cute.Toggle); with the Map module off "Map window" says where it is switched
+--     on, as /cute map does; without Cute_Quest "Quests window" says where the quest window comes from
+do
+  isolated({ UIX.member("Rone", 1) }, function()
+    local xml = assert(io.open(HERE .. "/Cute/Bindings.xml")):read("*a")
+    assert(xml:find('name="CUTE_QUESTS" category="BINDING_HEADER_CUTE">Cute.Toggle("quests")<', 1, true)
+      and xml:find('name="CUTE_MAP" category="BINDING_HEADER_CUTE">Cute.Toggle("map")<', 1, true), "the bindings toggle:\n" .. xml)
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    local Cute = c.env.Cute
+    local qw = c.C.UI.Window("quests")
+    Cute.Toggle("quests")
+    assert(qw.frame and qw.frame:IsShown(), "Quests window: opens")
+    Cute.Toggle("quests")
+    assert(not qw.frame:IsShown(), "pressed again: closes")
+    c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+    local mw = c.C.UI.Window("map")
+    Cute.Toggle("map")
+    assert(mw.frame and mw.frame:IsShown(), "Map window: opens")
+    Cute.Toggle("map")
+    assert(not mw.frame:IsShown(), "pressed again: closes")
+    c.C.Modules.Set("Cute_Quest:map", false); tick(c, 1)
+    local n0 = #c.chat
+    Cute.Toggle("map")
+    assert(not mw.frame:IsShown() and #c.chat == n0 + 1 and c.chat[#c.chat]:find("Map is switched off. Tick it in Settings, Modules.", 1, true), "the Map module off: says where it is switched on: " .. tostring(c.chat[#c.chat]))
+    leave(c)
+    local d = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }))
+    login(d); tickAll(6)
+    local d0 = #d.chat
+    d.env.Cute.Toggle("quests")
+    assert(#d.chat == d0 + 1 and d.chat[#d.chat]:find("the quest window comes with Cute_Quest", 1, true), "without Cute_Quest: says where the quest window comes from: " .. tostring(d.chat[#d.chat]))
+    leave(d)
+    print("fix-cute-ui U6: the Quests window and Map window bindings toggle their window; Map off says where it is switched on; no Cute_Quest says where the quest window comes from")
+  end)
+end
+
+-- U7. Members and officers read no internal words: "policy", "routes by", "the untrusted". Settings > Who sees what is
+--     headed so for officers too; its lines, Broadcast now's and Save's chat lines and Mark untrusted's tooltip say "the
+--     officers' settings", "goes by" and "members marked untrusted". Every chat line, tooltip line, head and note in
+--     Policy.lua, Comm.lua, Settings.lua and UI.lua, and every line P:Describe returns, is held to it
+do
+  local BAD = { "[Pp]olicy", "routes by", "the untrusted" }
+  local function bad(str) for _, b in ipairs(BAD) do if str:find(b) then return b end end end
+  for _, f in ipairs({ "Policy.lua", "Comm.lua", "Settings.lua", "UI.lua" }) do
+    local n, inDescribe = 0, false
+    for line in io.lines(HERE .. "/Cute/" .. f) do
+      n = n + 1
+      if line:find("^function P:Describe") then inDescribe = true elseif inDescribe and line:find("^end") then inDescribe = false end
+      local said = not line:find("^%s*%-%-") and (inDescribe or line:find("C%.Print%(") or line:find("AddLine%(") or line:find(":Head%(") or line:find(":Note%("))
+      if said then
+        for lit in line:gmatch('"([^"]*)"') do
+          local b = bad(lit)
+          assert(not b, string.format("%s:%d says %q to players: \"%s\"", f, n, b, lit))
+        end
+      end
+    end
+  end
+  isolated({ UIX.member("Rone", 1), UIX.member("Pim", 3) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }))
+    login(c); tickAll(6)
+    c.C.UI:Open("settings", "vis")
+    local t = texts(c)
+    assert(t:find("Who sees what", 1, true) and not t:find("Policy", 1, true) and not t:lower():find("policy", 1, true), "an officer's Who sees what, no policy:\n" .. t)
+    leave(c)
+    local m = newClient(charOf({ "Pim", 3, "Raider", "WARRIOR", 5 }))
+    login(m); tick(m, 1)
+    m.C.UI:Open("settings", "vis")
+    assert(not texts(m):lower():find("policy", 1, true), "a member's Who sees what, no policy:\n" .. texts(m))
+    leave(m)
+  end)
+  print("fix-cute-ui U7: no policy, routes by or the untrusted in what members and officers read")
+end
+
+-- U8. Settings > Who sees what names the officer ranks as the game does, never by number: "Guild Master to Officer"
+--     (the game's names for each rank order, GuildControlGetRankName), the stepper counting the ranks, the tooltip
+--     listing them; a step up takes in the next rank by its name, one nobody holds too
+do
+  isolated({ UIX.member("Gwen", 0), UIX.member("Rone", 1), UIX.member("Pim", 3) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { rankNames = { "Guild Master", "Officer", "Veteran", "Raider", "Member" } }))
+    login(c); tickAll(60)
+    local P = c.C.Policy
+    assert(P.Editable() and P:Threshold() == 1, "Guild Info read: the officer ranks editable, down to the officers: " .. tostring(P:Threshold()))
+    c.C.UI:Open("settings", "vis")
+    local function stepTip()
+      for _, fr in ipairs(c.frames) do
+        if fr.__kind == "Button" and fr:IsVisible() and fr.label and fr.label:GetText() == "+" then
+          local tip = tipOf(fr)
+          if tip:find("Officer ranks", 1, true) then return tip, fr end
+        end
+      end
+    end
+    local t = texts(c)
+    assert(t:find("Officer ranks: Guild Master to Officer", 1, true) and not t:find("0 to ", 1, true), "the officer ranks by name:\n" .. t)
+    local tip, plus = stepTip()
+    assert(tip and tip:find("Guild Master, Officer", 1, true), "the tooltip lists them:\n" .. tostring(tip))
+    check(sframe(c), "fix-cute-ui U8 Who sees what, the officer ranks by name")
+    press(plus)
+    t = texts(c)
+    assert(P:Threshold() == 2 and t:find("Officer ranks: Guild Master to Veteran", 1, true), "a step up: Veteran, a rank nobody holds, by its name:\n" .. t)
+    tip = stepTip()
+    assert(tip:find("Guild Master, Officer, Veteran", 1, true), "listed:\n" .. tip)
+    leave(c)
+    print("fix-cute-ui U8: the officer ranks by the game's names, the stepper counting them and its tooltip listing them")
+  end)
+end
+
+-- U9. The dungeon pick's tooltip on L says what the card means to a member ("Levels and bosses as the guild has met
+--     them."), never where the knowledge comes from (research, the beta, builds): that stays for officers, and /cute
+--     diag says it ("diag guide: ..."). A dungeon's tooltip names the research's name for it, and the rule that places
+--     an awaited one, to officers alone; a member reads that its levels are not known yet, and /cute rules has the rule
+do
+  isolated({ UIX.member("Helga", 1), UIX.member("Pim", 3) }, function()
+    local d = { name = "The Test Hold", min = 20, max = 25, kind = "party", seedName = "Test Keep", awaited = true, bosses = {} }
+    local m = newClient(charOf({ "Pim", 3, "Raider", "WARRIOR", 42 }))
+    local o = newClient(charOf({ "Helga", 1, "Officer", "WARRIOR", 42 }))
+    login(m); login(o); tickAll(35)
+    local first, detail = m.C.Guide.Source()
+    openGuide(m); redraw(m)
+    local head = guideHead(m)
+    local tip = head and tipOf(head) or ""
+    assert(tip:find("Levels and bosses as the guild has met them.", 1, true), "the member's pick says what it means:\n" .. tip)
+    -- (the how-sure words beside a range or a boss, "from research", are the Guide's own: the foot alone is the source's)
+    for _, w in ipairs({ first, detail, "Research build", "the beta, checked", "This client is", "Nothing shipped", "The research calls it" }) do
+      assert(not tip:find(w, 1, true), "no source words for a member: " .. w .. "\n" .. tip)
+    end
+    local n0 = #m.chat
+    m.env.SlashCmdList.CUTE("diag")
+    local diag = table.concat(m.chat, "\n", n0 + 1)
+    assert(diag:find("diag guide: " .. first, 1, true) and diag:find(detail, 1, true), "/cute diag says where it comes from:\n" .. diag)
+    local mt = tipText(m.C.Guide.DungeonTip(d))
+    assert(not mt:find("The research calls it", 1, true) and not mt:find("two members entering it", 1, true) and mt:find("Its levels and bosses are not known yet", 1, true), "a member's dungeon tooltip:\n" .. mt)
+    n0 = #m.chat
+    m.env.SlashCmdList.CUTE("rules")
+    local rules = table.concat(m.chat, "\n", n0 + 1)
+    assert(rules:find("two members entering it, or a kill there a group mate names back", 1, true), "/cute rules has the rule:\n" .. rules)
+    -- an officer keeps both
+    openGuide(o); redraw(o)
+    local otip = tipOf(guideHead(o))
+    assert(otip:find(first, 1, true), "the officer's pick says where it comes from:\n" .. otip)
+    local ot = tipText(o.C.Guide.DungeonTip(d))
+    assert(ot:find("The research calls it Test Keep.", 1, true) and ot:find("two members entering it", 1, true), "an officer's dungeon tooltip:\n" .. ot)
+    check(qwin(m).frame, "fix-cute-ui U9 a member's Quests tab")
+    leave(m); leave(o)
+    print("fix-cute-ui U9: the pick's tooltip says what it means to a member; research, builds and rules for officers, /cute diag and /cute rules")
+  end)
+end
+
+-- U10. Settings > Modules lists the modules by window: Guild (always) with Runs, Achievements and Records under it;
+--     Quests and Route (always) with the Dungeons and Gear tabs under it; then Map and Reminders. One reload line, at
+--     the top ("Changes here apply on reload.", "Applies on reload." with Reload now and Undo once a change waits); none
+--     in the rows' tooltips
+-- the check rows a Settings section shows, top to bottom: { label, x }
+function UIX.rows(c)
+  local out = {}
+  GEN = GEN + 1
+  for _, fr in ipairs(c.frames) do
+    if fr.checkRow and fr:IsVisible() and fr.label then local r = rectOf(fr); out[#out + 1] = { label = fr.label:GetText(), x = r.l, t = r.t, row = fr } end
+  end
+  table.sort(out, function(a, b) return a.t > b.t end)
+  return out
+end
+do
+  isolated({ UIX.member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    c.C.UI:Open("settings", "modules")
+    local rows, labels, x = UIX.rows(c), {}, {}
+    for _, r in ipairs(rows) do labels[#labels + 1] = r.label; x[r.label] = r.x end
+    -- (each guild switch under its module: U11)
+    local want = { "Guild", "Runs", "Achievements", "Achievements for the whole guild", "Records", "Records for the whole guild", "Quests and Route", "Dungeons tab", "Gear tab", "Map", "Reminders" }
+    assert(table.concat(labels, ", ") == table.concat(want, ", "), "Settings > Modules by window: " .. table.concat(labels, ", "))
+    local g, q = x["Guild"], x["Quests and Route"]
+    assert(x.Runs == g + 20 and x.Achievements == g + 20 and x.Records == g + 20, "Runs, Achievements and Records under Guild")
+    assert(q == g and x["Dungeons tab"] == q + 20 and x["Gear tab"] == q + 20 and x.Map == g and x.Reminders == g, "the tabs under Quests and Route; Map and Reminders on their own")
+    local function reloadLines() local n = 0; for l in texts(c):gmatch("[^\n]+") do if l ~= "Reload now" and l:lower():find("reload", 1, true) then n = n + 1 end end return n end
+    assert(reloadLines() == 1 and texts(c):find("Changes here apply on reload.", 1, true), "one reload line:\n" .. texts(c))
+    for _, r in ipairs(rows) do assert(not tipOf(r.row):lower():find("reload", 1, true), "no reload in the tooltip of " .. r.label) end
+    check(sframe(c), "fix-cute-ui U10 Settings > Modules by window")
+    click(UIX.row(c, "Gear tab"))
+    assert(reloadLines() == 1 and texts(c):find("Applies on reload.", 1, true), "a change waiting: still one reload line:\n" .. texts(c))
+    c.C.Modules.Undo()
+    leave(c)
+    print("fix-cute-ui U10: Settings > Modules by window, Guild's modules under Guild and the quest tabs under Quests and Route; one reload line")
+  end)
+end
+
+-- U11. Achievements' and Records' guild switches sit beside their module's row in Settings > Modules ("Achievements
+--     for the whole guild" under Achievements), greyed for a member with "Set by the officers"; Settings has no
+--     one-row Achievements or Records section. An officer's click applies at once, as the section's did
+do
+  isolated({ UIX.member("Rone", 1), UIX.member("Pim", 3) }, function()
+    local o = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    local m = newClient(charOf({ "Pim", 3, "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(o); login(m); tickAll(60)
+    for _, c in ipairs({ o, m }) do
+      local ids = {}
+      for _, sec in ipairs(c.C.SettingsPage.Sections(c.C.Roster:MeOfficer())) do ids[#ids + 1] = sec.id end
+      local list = " " .. table.concat(ids, " ") .. " "
+      assert(not list:find(" ach ", 1, true) and not list:find(" records ", 1, true), "no Achievements or Records section:" .. list)
+      c.C.UI:Open("settings", "modules")
+      local rows = UIX.rows(c)
+      for _, t in ipairs({ "Achievements", "Records" }) do
+        local at
+        for i, r in ipairs(rows) do if r.label == t then at = i end end
+        local sw = at and rows[at + 1]
+        assert(sw and sw.label == t .. " for the whole guild" and sw.x == rows[at].x + 20, "the guild switch under " .. t .. ": " .. tostring(sw and sw.label))
+        if c == m then
+          assert(sw.row.__disabled and texts(c):find("Set by the officers", 1, true), "greyed for a member, who sets it said")
+        else
+          assert(not sw.row.__disabled, "the officer's to click")
+        end
+        -- (an officer's note under a switch, why guild news cannot vouch here: under the switch's label)
+        local why = c == o and t == "Achievements" and c.C.Achievements and c.C.Achievements.NewsWords and c.C.Achievements.NewsWords()
+        if why then
+          local f = UIX.text(c, why)
+          GEN = GEN + 1
+          assert(f and rectOf(f).l >= sw.x + 18, "the switch's note under its label: " .. tostring(f and rectOf(f).l) .. " against " .. sw.x)
+        end
+      end
+      check(sframe(c), "fix-cute-ui U11 Settings > Modules with the guild switches, " .. (c == o and "officer" or "member"))
+    end
+    click(UIX.row(o, "Records for the whole guild"))
+    assert(o.C.Rules.Get("recGuild") == 0 and not UIX.row(o, "Records for the whole guild"):GetChecked(), "an officer's click: off for the guild at once")
+    click(UIX.row(o, "Records for the whole guild"))
+    assert(o.C.Rules.Get("recGuild") ~= 0, "and on again")
+    leave(o); leave(m)
+    print("fix-cute-ui U11: Achievements' and Records' guild switches under their rows in Settings > Modules, greyed for members; no one-row sections")
+  end)
+end
+
+-- U12. Settings' long lists take two columns once the window is 1040 px wide or more (the windows design's 7): Columns'
+--     lists (Race, Prog, Hall of Shame cards, Officers) and an officer's Who sees what, each list whole in one column,
+--     the shorter column taking the next; Everyone and Only you over each column's boxes. Under 1040, one column
+do
+  isolated({ UIX.member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }))
+    login(c); tickAll(60)
+    local win = c.C.UI.Window("settings")
+    local function xs(list)
+      local seen, n = {}, 0
+      for _, x in ipairs(list) do if not seen[x] then seen[x] = true; n = n + 1 end end
+      return n
+    end
+    local function rowXs() local out = {}; for _, r in ipairs(UIX.rows(c)) do out[#out + 1] = r.x end return out end
+    local function boxXs()
+      local out = {}
+      GEN = GEN + 1
+      for _, fr in ipairs(c.frames) do if fr.__kind == "CheckButton" and fr:IsVisible() and fr.statId and fr.vis == "all" then out[#out + 1] = rectOf(fr).l end end
+      return out
+    end
+    local function heads(word) local n = 0; for l in texts(c):gmatch("[^\n]+") do if l == word then n = n + 1 end end return n end
+    for _, size in ipairs({ { 1100, 640 }, { 1040, 560 }, { 800, 560 } }) do
+      c.C.UI:Open("settings", "columns")
+      win.frame:SetSize(size[1], size[2]); sdraw(c)
+      local two = size[1] >= 1040
+      assert(xs(rowXs()) == (two and 2 or 1), string.format("Columns at %d px: %d column(s) of rows", size[1], xs(rowXs())))
+      check(win.frame, string.format("fix-cute-ui U12 Settings > Columns at %dx%d", size[1], size[2]))
+      c.C.UI:Open("settings", "vis")
+      sdraw(c)
+      assert(xs(boxXs()) == (two and 2 or 1) and heads("Everyone") == (two and 2 or 1) and heads("Only you") == (two and 2 or 1),
+        string.format("Who sees what at %d px: %d column(s) of boxes, %d Everyone heads", size[1], xs(boxXs()), heads("Everyone")))
+      check(win.frame, string.format("fix-cute-ui U12 Settings > Who sees what at %dx%d", size[1], size[2]))
+    end
+    leave(c)
+    print("fix-cute-ui U12: Columns and Who sees what in two columns from 1040 px, one under it")
+  end)
+end
+
+-- U13. A section's one head is its name in the list: Settings > Halls headed "Halls", Runs "Runs". The step frame's
+--     right-click menu names the sayXP switch as Settings > Quests does: "Say XP after each hand-in: off"
+do
+  isolated({ UIX.member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    -- a head in the column (not the list of sections, whose rows carry their section's id)
+    local function head(t)
+      for _, o in everything() do
+        if o.__kind == "FontString" and o.__shown and o.__text == t and visible(o) and o.__parent and o.__parent.__client == c then
+          local inList = false
+          for _, a in ipairs(ancestors(o)) do if rawget(a, "section") then inList = true end end
+          if not inList then return o end
+        end
+      end
+    end
+    for _, sec in ipairs({ { "halls", "Halls", "Announcements" }, { "runs", "Runs", "Run reports" } }) do
+      c.C.UI:Open("settings", sec[1])
+      assert(head(sec[2]) and not head(sec[3]), "Settings > " .. sec[2] .. " headed " .. sec[2] .. ":\n" .. texts(c))
+    end
+    local QB = c.addons[2].private
+    local n0 = #c.contextMenus
+    QB.StepFrame:Menu(nil)
+    local item
+    for _, e in ipairs(c.contextMenus[#c.contextMenus] or {}) do if e.text and e.text:find("XP", 1, true) then item = e end end
+    assert(#c.contextMenus == n0 + 1 and item and item.text == "Say XP after each hand-in: off", "the step frame's menu in Settings' words: " .. tostring(item and item.text))
+    item.set()
+    assert(c.env.CuteQuestDB.settings.sayXP == true, "its click: on")
+    QB.StepFrame:Menu(nil)
+    for _, e in ipairs(c.contextMenus[#c.contextMenus]) do if e.text and e.text:find("XP", 1, true) then item = e end end
+    assert(item.text == "Say XP after each hand-in: on", "and says so: " .. item.text)
+    leave(c)
+    print("fix-cute-ui U13: Settings > Halls and Runs headed by their names; the step frame's menu says Say XP after each hand-in")
+  end)
 end
 
 -- this pass's problems and layouts join the run's; the last pass prints them all

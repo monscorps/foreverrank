@@ -2078,7 +2078,7 @@ end
 -- of cards is in Settings > Columns (the windows design)
 ----------------------------------------------------------------------------
 function H.SettingsSection(_, col)
-  col:Head("Announcements")
+  col:Head("Halls")
   col:Check("Announcements on my screen", H.Prefs().toast ~= false, true, function(on) H.Prefs().toast = on; C.UI:Draw() end, nil, function(tip)
     tip:AddLine("Announcements on my screen", 1, 1, 1)
     tip:AddLine("A set the officers publish shows as a toast at the top of the screen. Off: it goes to News alone.", 0.85, 0.85, 0.85, true)

@@ -534,7 +534,7 @@ function P:Settle()
       p.threshold, p.diff, p.vis, p.extra = tonumber(draft.threshold) or line.thr, draft.diff, visOf(draft.diff)
       p.edit, p.base, p.editBy = true, draft.base, C.Me()
     else
-      C.Print("another officer saved the policy to Guild Info: your change, not saved, gave way to it.")
+      C.Print("another officer saved their settings to Guild Info: your change, not saved, gave way to them.")
     end
   end
   if readable and not ownEdit(p, line) and self:Fp(p) ~= line.fp then
@@ -542,8 +542,8 @@ function P:Settle()
     -- (an officer's own change, not saved, gives way to the line another officer saved, or to its ranks, which name
     -- this character no officer: said once, in chat)
     if p and p.edit then
-      C.Print(p.base == line.fp and "Guild Info's officer ranks do not include yours: your change, not saved, gave way to its policy."
-        or "another officer saved the policy to Guild Info: your change, not saved, gave way to it.")
+      C.Print(p.base == line.fp and "Guild Info's officer ranks do not include yours: your change, not saved, gave way to its settings."
+        or "another officer saved their settings to Guild Info: your change, not saved, gave way to them.")
     end
     takeRouting(policy(), line.thr, line.diff)
   end
@@ -773,7 +773,7 @@ local function readBack(self, s, line, k, now)
       or "another officer saved over your save: their line says otherwise, and your change gave way to it.")
   else
     putBack(self, s, line)
-    C.Print("Guild Info does not hold the policy you saved: the game did not take it. Your change is back, not saved: save it again.")
+    C.Print("Guild Info does not hold the settings you saved: the game did not take them. Your change is back, not saved: save it again.")
   end
 end
 function P:ReadLine()
@@ -833,7 +833,7 @@ function P:ReadLine()
       if not self.missing then
         self.missing = true
         -- (said after "Cute: ", so not "Cute's line" again)
-        if text ~= "" and C.Roster:MeOfficer() then C.Print("the policy line is missing from Guild Info; Save to Guild Info to put it back.") end
+        if text ~= "" and C.Roster:MeOfficer() then C.Print("Cute's line is missing from Guild Info; Save to Guild Info to put it back.") end
       end
       self.doubt = true
       k.doubt, k.wait = true, nil
@@ -1137,7 +1137,7 @@ function P:SaveState()
   if self.line and self.line.newer then st.why = "Guild Info's line is a newer Cute's: update Cute to change it." return st end
   if C.Get(IsInInstance) == true then st.why = "Save outside an instance: Guild Info may read empty here." return st end
   if self.doubt and not self.missing then st.why = "Another officer saved Guild Info since you read it: wait a moment." return st end
-  if self.unread and not self.missing then st.why = "Another officer's policy came since you read Guild Info: wait a moment." return st end
+  if self.unread and not self.missing then st.why = "Another officer's settings came since you read Guild Info: wait a moment." return st end
   if self.waitFor then st.why = "Guild Info is being read again after a save: wait a moment." return st end
   local fn = type(C_GuildInfo) == "table" and C_GuildInfo.GetInfoText or nil
   local ok, text = false, nil
@@ -1366,9 +1366,9 @@ function P:Describe()
     return C.Roster:MeOfficer() and "Cute's line is missing from Guild Info; Save to Guild Info to put it back."
       or "Cute's line is missing from Guild Info: nothing of yours is sent until an officer saves it again."
   end
-  if self.doubt then return "An officer sent a newer policy: nothing of yours is sent until Guild Info is read again." end
-  if not self:Settled() then return "Waiting for the policy Guild Info names: nothing of yours is sent." end
-  if line and p and p.edit then return "Your change, not saved: only your client routes by it." end
+  if self.doubt then return "An officer sent newer settings: nothing of yours is sent until Guild Info is read again." end
+  if not self:Settled() then return "Waiting for the officers' settings Guild Info names: nothing of yours is sent yet." end
+  if line and p and p.edit then return "Your change, not saved: only your client goes by it." end
   if line then return "Saved to Guild Info " .. when(line.at) .. "." end
   if not (p and p.by) then return "The defaults apply. Guild Info has no Cute line yet." end
   return string.format("Set by %s, %s. Guild Info has no Cute line yet.", p.mine and C.Roster:MyDisplay() or C.Roster:Display(p.by), when(p.at))
