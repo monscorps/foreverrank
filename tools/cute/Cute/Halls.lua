@@ -64,7 +64,7 @@ local function color(fs, c) fs:SetTextColor(c[1], c[2], c[3]) end
 local function rnd() return (math.random and math.random()) or 0.5 end
 
 ----------------------------------------------------------------------------
--- the week: Sample.lua's key ("%Y-%W", the week starting on Monday) as a number, so "last week" is the one before.
+-- the week: Sample.lua's key (S.WeekKey: its Monday's "%Y-%W") as a number, so "last week" is the one before.
 -- The Monday of a key is the days since 1970 to it (the year's first Monday, then whole weeks; week 0 is the days
 -- before it), and the week's number counts Mondays from 5 January 1970
 ----------------------------------------------------------------------------
@@ -85,7 +85,7 @@ function H.Monday(key)
   local d0 = daysBefore(y)
   return d0 + (8 - (d0 + 4) % 7) % 7 + (w - 1) * 7
 end
-function H.WeekKey() return date and date("%Y-%W") or "" end
+function H.WeekKey() return C.Sample.WeekKey() end
 function H.WeekOf(key) local m = H.Monday(key); return m and (m + 3) / 7 or nil end
 function H.WeekNow() return H.WeekOf(H.WeekKey()) end
 -- "Week of 19 Oct" for a week's number (now, or the one before)

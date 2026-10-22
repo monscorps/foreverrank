@@ -156,11 +156,24 @@ local WEEKLY = { logins = true, weekly_raids = true }
 -- (the weekly run stats join it from Runs.lua: Runs, Shout-outs and Bloopers this week; Halls.lua's Deaths and Quests
 -- this week too)
 S.WEEKLY = WEEKLY
+-- the week's key: its Monday's "%Y-%W" (%W counts weeks from the year's first Monday), so the week spanning a new year
+-- keeps one key: Friday 1 January 2027 is in 2026-52 with its Monday, where its own "%Y-%W" says 2027-00. By the
+-- calendar of date("*t") (Lua's os.date table, wday 1 a Sunday and yday from 1; the client's own code reads it,
+-- Blizzard_Communities/GuildNews.lua:107), no clock arithmetic (t: a time, now where nil)
+local function leap(y) return y % 4 == 0 and (y % 100 ~= 0 or y % 400 == 0) end
+function S.WeekKey(t)
+  if not date then return "" end
+  local d = date("*t", t)
+  if type(d) ~= "table" or type(d.wday) ~= "number" or type(d.yday) ~= "number" then return date("%Y-%W", t) end
+  local y, yday = d.year, d.yday - (d.wday + 5) % 7 -- (wday 1 is Sunday: back to the Monday)
+  if yday < 1 then y = y - 1; yday = yday + (leap(y) and 366 or 365) end
+  return string.format("%04d-%02d", y, math.floor((yday - 1) / 7) + 1)
+end
 -- live: called by the ten-minute timer, not by Start (which resets here and then counts the login itself)
 local function dayCheck(live)
   local ch = C.Char()
   local today = date and date("%Y-%m-%d") or ""
-  local week = date and date("%Y-%W") or "" -- %W: the week starts on Monday
+  local week = S.WeekKey() -- (the week starts on Monday)
   local reset = false
   if ch.day ~= today then
     ch.day = today

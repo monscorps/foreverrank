@@ -14501,6 +14501,32 @@ do local function cardsStage()
   end)
   said[#said + 1] = "a withdrawal reaches an officer who was away by the answer to their 1G"
 
+  -- the week spanning the new year is one week: Friday 1 January 2027 is in the week of Monday 28 December, so Deaths
+  -- this week does not reset that Friday and Last week reads the whole week after it
+  isolated({ gmember("Qel", 1, "MAGE"), gmember("Qor", 3, "ROGUE") }, function()
+    local qel, qor = cchar("Qel", 1), cchar("Qor", 3, { class = "ROGUE" })
+    login(qel); login(qor)
+    tickAll(30)
+    local function on(y, m, d) local t = os.time({ year = y, month = m, day = d, hour = 12 }); for _, c in ipairs({ qel, qor }) do c.dayShift = t - (EPOCH + c.clock) end end
+    on(2026, 12, 28)
+    tickAll(601)
+    local wk = H(qel).WeekNow()
+    fire(qor, "PLAYER_DEAD"); fire(qor, "PLAYER_DEAD")
+    tickAll(5)
+    assert(qor.C.Sample:Counter("deaths_week") == 2, "two deaths in the week of 28 December")
+    on(2027, 1, 1)
+    tickAll(601)
+    assert(qor.C.Sample:Counter("deaths_week") == 2 and H(qel).WeekNow() == wk and H(qor).WeekKey() == "2026-52", "Friday 1 January: the same week, no reset: " .. qor.C.Sample:Counter("deaths_week") .. ", " .. H(qor).WeekKey())
+    fire(qor, "PLAYER_DEAD")
+    tickAll(5)
+    on(2027, 1, 4)
+    tickAll(601)
+    assert(qor.C.Sample:Counter("deaths_week") == 0 and H(qel).WeekNow() == wk + 1 and H(qor).WeekKey() == "2027-01", "Monday 4 January: a new week")
+    assert(H(qel).LastWeek(qor.o.guid, "deaths_week") == 3 and H(qor).LastWeek(qor.o.guid, "deaths_week") == 3, "last week read whole across the new year: "
+      .. tostring(H(qel).LastWeek(qor.o.guid, "deaths_week")) .. ", " .. tostring(H(qor).LastWeek(qor.o.guid, "deaths_week")))
+  end)
+  said[#said + 1] = "the week spanning the new year is one week, its Monday's"
+
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end
 
