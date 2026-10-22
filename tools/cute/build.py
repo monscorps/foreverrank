@@ -219,12 +219,11 @@ def build_zip():
     ok("Cute-Uploader.zip built, %d bytes (Cute, Cute_Quest and the uploader)" % os.path.getsize(UPZIP))
 
 
-def zip_stale(zpath, root=HERE):
+def zip_stale(zpath, root=HERE, tops=("Cute", "Cute_Quest")):
     """The files under Cute/ and Cute_Quest/ that differ between a zip and the tree (root/Cute, root/Cute_Quest, as
     build_zip packs them, .DS_Store aside), or are in only one of the two, sorted. The zip's other folders (the
-    uploader's) are not the tree's"""
+    uploader's) are not the tree's. (merge6) tops: the folders compared (QuestBank's page, build_page.py: QuestBank)"""
     import zipfile
-    tops = ("Cute", "Cute_Quest")
     zipped = {}
     with zipfile.ZipFile(zpath) as z:
         for info in z.infolist():

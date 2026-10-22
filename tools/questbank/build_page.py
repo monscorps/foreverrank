@@ -4,7 +4,8 @@
   python3 -I tools/questbank/build_page.py [--page questbank/index.html] [--online]
 
 In order: read the version (QuestBank/QuestBank.toc), the zip sizes (questbank/QuestBank.zip and the Uploader zip, with
-the QuestBank version the Uploader carries), the data story's numbers (QuestBank/Data.lua's D.Q and GAPS.md: quests
+the QuestBank version the Uploader carries) and whether each zip holds the tree's QuestBank folder byte for byte (a
+warning where not: the downloads are the last release's until a release packs them), the data story's numbers (QuestBank/Data.lua's D.Q and GAPS.md: quests
 by level band, Forever data against the Classic seed, what players' games confirmed), stamp them into the page between
 <!--@name--> ... <!--/@name--> markers, then check the page:
   - every local href/src exists beside the page or under the repo; the ids the game and the site link to (share,
@@ -88,6 +89,24 @@ def uploader_version():
                 if m:
                     return m.group(1)
     sys.exit("QuestBank-Uploader.zip carries no QuestBank/QuestBank.toc")
+
+
+def check_zips(zips=None, root=HERE):
+    """(merge6) each download the page offers (QuestBank.zip, QuestBank-Uploader.zip) holds the tree's QuestBank folder
+    byte for byte (tools/cute/build.py zip_stale, the Cute build's own check). Where one does not, a warning, not a
+    problem: the downloads are the last release's until a release packs them (the toc and the changelog bumped, the zip
+    packed, tools/build_uploader.py run, this page restamped). 6.4.2's zips carried fix3-engine's old UI.lua with no
+    word from any check, since only their size and the Uploader's QuestBank version were read"""
+    for zpath in zips if zips is not None else [ZIP, UPZIP]:
+        if not os.path.isfile(zpath):
+            continue
+        stale = cute.zip_stale(zpath, root, ("QuestBank",))
+        name = os.path.basename(zpath)
+        if not stale:
+            ok("%s holds the tree's QuestBank" % name)
+            continue
+        print("  warn %s differs from the tree in %d file%s under QuestBank (%s%s): the download is the last release's;"
+              " a release packs it" % (name, len(stale), "" if len(stale) == 1 else "s", ", ".join(stale[:4]), ", ..." if len(stale) > 4 else ""))
 
 
 def lua_table(src, name):
@@ -713,6 +732,7 @@ def main():
     story = data_story()
     kb, upkb, upv = zip_kb(ZIP), zip_kb(UPZIP), uploader_version()
     ok("version %s, QuestBank.zip %d KB, Uploader %d KB carrying QuestBank %s%s" % (version, kb, upkb, upv, "" if upv == version else " (behind the download: python3 tools/build_uploader.py)"))
+    check_zips()
     ok("data: %s quests planned (%s Forever data, %s Classic seed), %s priced from Forever's own data, %s new in Forever, %s confirmed by players' games (%s seen, %s uploads)"
        % tuple(fmt(story[k]) for k in ("quests", "forever", "classic", "priced", "new", "confirmed", "seen", "uploads")))
     html = open(page, encoding="utf-8").read()

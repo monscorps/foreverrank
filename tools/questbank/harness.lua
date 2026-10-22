@@ -25301,6 +25301,42 @@ end)()
     UI.frame:Hide()
   end }
 
+  -- M4 (release, should). fix3-engine's words reached the tree and not the downloads: build_page.py read the zips' size
+  -- and the Uploader's QuestBank version alone, so QuestBank.zip and QuestBank-Uploader.zip carried 6.4.2's UI.lua with
+  -- no word from any check. It now names each download whose QuestBank folder differs from the tree (a warning: the
+  -- downloads are the last release's until a release packs them)
+  CASES[#CASES + 1] = { "M4: build_page.py names a download whose QuestBank differs from the tree", function()
+    local py = [[
+import importlib.util, os, sys, tempfile, zipfile
+spec = importlib.util.spec_from_file_location("build_page", os.path.join(sys.argv[1], "build_page.py"))
+bp = importlib.util.module_from_spec(spec); spec.loader.exec_module(bp)
+d = tempfile.mkdtemp()
+os.makedirs(os.path.join(d, "QuestBank"))
+open(os.path.join(d, "QuestBank", "QuestBank.toc"), "w").write("## Version: 1.0.0\n")
+open(os.path.join(d, "QuestBank", "UI.lua"), "w").write("new\n")
+same, old = os.path.join(d, "same.zip"), os.path.join(d, "old.zip")
+with zipfile.ZipFile(same, "w") as z:
+    z.write(os.path.join(d, "QuestBank", "QuestBank.toc"), "QuestBank/QuestBank.toc"); z.write(os.path.join(d, "QuestBank", "UI.lua"), "QuestBank/UI.lua")
+    z.writestr("QuestBank Uploader/README.txt", "x")
+with zipfile.ZipFile(old, "w") as z:
+    z.write(os.path.join(d, "QuestBank", "QuestBank.toc"), "QuestBank/QuestBank.toc"); z.writestr("QuestBank/UI.lua", "old\n")
+del bp.problems[:]
+bp.check_zips([same, old], d)
+print("problems", len(bp.problems))
+]]
+    local path = os.tmpname()
+    local f = assert(io.open(path, "w"))
+    f:write(py)
+    f:close()
+    local p = io.popen("python3 -I '" .. path .. "' '" .. HERE .. "' 2>&1")
+    local out = p and p:read("*a") or ""
+    if p then p:close() end
+    os.remove(path)
+    assert(out:find("ok   same.zip holds the tree's QuestBank", 1, true), "a download that is the tree is said so:\n" .. out)
+    assert(out:find("warn old.zip differs from the tree in 1 file under QuestBank (QuestBank/UI.lua)", 1, true), "the stale one named, with its file:\n" .. out)
+    assert(out:find("problems 0\n", 1, true), "a warning, not a problem: the downloads are the last release's:\n" .. out)
+  end }
+
   local failed = {}
   for _, case in ipairs(CASES) do
     local ok, err = pcall(case[2])
