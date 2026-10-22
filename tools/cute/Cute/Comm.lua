@@ -1363,6 +1363,9 @@ function M:SendWord(answer, since)
     if not now[kv] and not findPart(kv) then back, findsOnly = true, false end
   end
   for _, kv in ipairs(parts) do if not was[kv] and not findPart(kv) then findsOnly = false end end
+  -- (Finds open, the members heard each find's voices: a word that changed in its finds alone goes only as an answer, to
+  -- a member who logs in later and asks; the next word for something else carries them too)
+  if findsOnly and not answer and C.Policy:FindsRoute() ~= "self" then return end
   local every = math.max(findsOnly and FINDS_EVERY or WORD_EVERY, 10 * #wordMessages(0, parts))
   if not answer and not word.urgent and word.sentAt and clock() - word.sentAt < every then
     if not word.later then

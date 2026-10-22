@@ -16179,8 +16179,10 @@ do
     assert(table.concat(F:WordParts(), ";") == before, "a third voice moving the mean leaves the word as it was")
     for _, c in ipairs({ ofa, oli, mia, ann, cy }) do leave(c) end
   end)
-  -- Finds open: a find sure now sends no word
-  isolated({ fmember("Ofa", 0), fmember("Mia", 3), fmember("Ann", 3) }, function()
+  -- Finds open: a find sure now sends no word, nor does anything else asking for one (Rules.lua's), the change being
+  -- the finds' alone; a member who logs in later and asks has it in the answer
+  isolated({ fmember("Ofa", 0), fmember("Mia", 3), fmember("Ann", 3), fmember("Lat", 3) }, function()
+    for _, m in ipairs(GUILD) do if m.guid == guidOf("Lat") then m.online = false end end
     local ofa, mia, ann = fchar("Ofa", 0), fchar("Mia", 3), fchar("Ann", 3)
     login(ofa, fpol(true, {})); login(mia, fpol()); login(ann, fpol())
     tickAll(130)
@@ -16190,7 +16192,17 @@ do
     fnoted(ann, "h", 9201, 1429, 506, 500)
     tickAll(400)
     assert(rowOf(ofa, 1429, 9201).sure and select(1, partsOf(ofa, o0 + 1)) == 0, "Finds open: sure on the officer's client, no word sent for it")
-    for _, c in ipairs({ ofa, mia, ann }) do leave(c) end
+    ofa.C.Comm:WordSoon()
+    tickAll(400)
+    assert(select(1, partsOf(ofa, o0 + 1)) == 0, "nor when something else asks for a word, the finds alone changed")
+    for _, m in ipairs(GUILD) do if m.guid == guidOf("Lat") then m.online = true end end
+    local lat = fchar("Lat", 3)
+    login(lat, fpol())
+    fire(ofa, "GUILD_ROSTER_UPDATE")
+    tickAll(120)
+    local r = rowOf(lat, 1429, 9201)
+    assert(r and r.sure, "a member who logs in later: the find in the answer to its ask")
+    for _, c in ipairs({ ofa, mia, ann, lat }) do leave(c) end
     said[#said + 1] = "the finds in the officers' word: half an hour after sure where the officers keep them, by one officer, past the newest 48 nothing taken back, five minutes apart, a key a third voice leaves; open, no word for them"
   end)
   -- K12: the officers keep Finds and none is online: a member's finds wait (no whisper to nobody, nothing lost, the
