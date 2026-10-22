@@ -520,13 +520,32 @@ local function listed(list)
   for _, f in ipairs(list) do if not (f.dim or f.ping) then out[#out + 1] = f end end
   return out
 end
--- a find shown: its zone on the map, panned to its first spot, its pins lit
+-- the map to show for map m: m itself with its art, else the nearest map above it with art (the canvas shows no map
+-- without art, and MP.Go says so in chat), and a spot of m (fractions) where it lies on that map (Pins.lua P.Project:
+-- nil off it). Nil where no map up to the world has art
+local function withArt(MP, m, x, y)
+  local id = m
+  for _ = 1, 6 do
+    if MP.HasArt(id) then
+      if id ~= m and x then x, y = E.Pins.Project({ m = m, x = x * 100, y = y * 100 }, id) end
+      return id, x, y
+    end
+    local i = info(id)
+    id = i and plain(i.parentMapID)
+    if type(id) ~= "number" or id <= 0 then return nil end
+  end
+  return nil
+end
+-- a find shown: its zone on the map (or the map above it with art), panned to its first spot where that lies on it, its
+-- pins lit
 function MW.ShowFind(ui, f)
   local MP = engineMap()
   if not (MP and f) then return end
-  if shownMap() ~= f.m then MP.Go(f.m, "user") end
   local s = f.spots and f.spots[1]
-  if s and MP.canvas then pcall(MP.canvas.PanTo, MP.canvas, s[1], s[2]) end
+  local m, x, y = withArt(MP, f.m, s and s[1], s and s[2])
+  if not m then return end
+  if shownMap() ~= m then MP.Go(m, "user") end
+  if x and y and MP.canvas then pcall(MP.canvas.PanTo, MP.canvas, x, y) end
   MP.Hover(f.fkey)
   MW.Light(ui, f.fkey, false)
 end
@@ -596,8 +615,11 @@ local function zoneList(ui, scroll, m)
       if #zz.zl.ready > 0 then parts[#parts + 1] = #zz.zl.ready .. " ready" end
       if #zz.zl.log > 0 then parts[#parts + 1] = #zz.zl.log .. " in your log" end
       if #zz.zl.pickup > 0 then parts[#parts + 1] = #zz.zl.pickup .. " to pick up" end
-      add({ kind = "two", bar = K.QUEST, icon = { art = { nil, 134269 }, crop = true }, name = zz.name, line2 = table.concat(parts, DOT),
-        fn = function() MP.Go(zz.z, "user") end, tip = function(t) t:AddLine(zz.name, 1, 1, 1); t:AddLine("Click: open it.", 0.5, 0.5, 0.5) end })
+      -- (a zone without art on this client goes nowhere, as its crumb: the canvas shows no map without art)
+      local art = MP.HasArt(zz.z)
+      add({ kind = "two", bar = K.QUEST, icon = { art = { nil, 134269 }, crop = true, desat = not art }, name = zz.name, line2 = table.concat(parts, DOT),
+        fn = art and function() MP.Go(zz.z, "user") end or nil,
+        tip = function(t) t:AddLine(zz.name, 1, 1, 1); t:AddLine(art and "Click: open it." or "No map art for it on this client.", 0.5, 0.5, 0.5) end })
     end
     if #zones == 0 then add({ kind = "note", x = 10, name = "No quests known here at your level." }) end
     setList(ui, scroll, items)

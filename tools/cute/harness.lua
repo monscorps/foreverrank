@@ -15875,6 +15875,48 @@ do
     leave(c)
     said[#said + 1] = "M's finds footer under the list alone, the canvas's size and zoom kept as it comes and goes, laid out clean at both sizes"
   end)
+  -- K5: a find on a map without art, clicked in the Finds list: the map goes to the nearest map above it with art, never
+  -- a chat line, and pans only to where the find's spot lies on that map; a continent's zone without art is a row that
+  -- says so and goes nowhere
+  isolated({ member("Rone", 1) }, function()
+    local c, QB = mapClient("Rone", 1)
+    local MP = QB.MapPage
+    c.C.UI:Open("map")
+    local ui = c.C.UI.Window("map")
+    MP.Go(1429, "user")
+    local disc = QB.Discover.DB()
+    disc.find = { o9010 = { p = { { 1453, 500, 500, 1 } }, b = "A Tome Under the Keep", n = 1 } }
+    disc.findN = (tonumber(disc.findN) or 0) + 1
+    c.noArt = { [1453] = true }
+    QB.MapWin.ShowFinds(ui)
+    local row
+    for _, it in ipairs(ui.mapList.items) do if it.spec.name == "A Tome Under the Keep" then row = it end end
+    assert(row, "the find in the Finds list")
+    local panned
+    local pan = MP.canvas.PanTo
+    MP.canvas.PanTo = function(_, x, y) panned = { x, y } end
+    local n0 = #c.chat
+    row.spec.fn()
+    MP.canvas.PanTo = pan
+    local said2 = table.concat(c.chat, "\n", n0 + 1)
+    assert(not said2:find("no map art", 1, true), "never a chat line: " .. said2)
+    local ex, ey = QB.Pins.Project({ m = 1453, x = 50, y = 50 }, 1415)
+    assert(MP.canvas:GetMapID() == 1415 and ((ex == nil and panned == nil) or (panned and panned[1] == ex and panned[2] == ey)),
+      "the map above it with art, panned to where its spot lies on it: " .. tostring(MP.canvas:GetMapID()) .. " " .. tostring(panned and panned[1]) .. " " .. tostring(ex))
+    -- a continent's zone without art
+    ui.mapFinds = nil
+    MP.Go(1415, "user")
+    c.noArt = { [1429] = true }
+    ui:Draw()
+    local zone
+    for _, it in ipairs(ui.mapList.items) do if it.spec.name == "Elwynn Forest" then zone = it end end
+    assert(zone and zone.spec.fn == nil, "a continent's zone without art: no click")
+    local tip = tipText(zone.spec.tip)
+    assert(tip:find("No map art for it on this client.", 1, true), "its tooltip says so:\n" .. tip)
+    c.noArt = nil
+    leave(c)
+    said[#said + 1] = "a find on a map without art: the map above it with art, no chat line, no wrong pan; a continent's zone without art a row that says so"
+  end)
   print("map K: " .. table.concat(said, "; "))
 end
 
