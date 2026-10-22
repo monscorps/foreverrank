@@ -17210,6 +17210,23 @@ do local function cardsStage()
       assert(not mine:find("scribe", 1, true) and not mine:find("report by", 1, true) and mine:find("3 bosses", 1, true), "your own run: " .. mine)
       assert(theirs:find("report by Brann", 1, true) and not theirs:find("scribe", 1, true), "another's: " .. theirs)
     end)
+
+    -- the card screen has no typed letter x to close it: Close and Esc (UISpecialFrames) close it, as the design has it
+    case("the card screen closed by Close and Esc", { gmember("Cyx", 3) }, function()
+      local c = cchar("Cyx", 3)
+      login(c)
+      tickAll(5)
+      H(c).Test(false)
+      local CF = c.C.CardFrame
+      local x
+      for _, f in ipairs(c.frames) do if f.__kind == "Button" and f:IsVisible() and f.label and f.label:GetText() == "x" then x = f end end
+      local esc = false
+      for _, n in ipairs(c.env.UISpecialFrames) do if n == "CuteCardFrame" then esc = true end end
+      assert(CF.frame:IsShown() and not x and esc, "no typed x; Esc closes it")
+      press(buttonOf(c, "Close"))
+      assert(not CF.frame:IsShown(), "Close closes it")
+      H(c).toastFrame:Hide()
+    end)
     assert(#failed == 0, "fix-cards: " .. #failed .. " case(s) failed:\n  " .. table.concat(failed, "\n  "))
     said[#said + 1] = "the launch audit's cards findings: " .. table.concat(passed, "; ")
   end

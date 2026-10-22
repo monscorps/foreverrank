@@ -72,9 +72,7 @@ local function build()
     local l = U.Text(f, 11, DIM, "RIGHT", 76)
     CF.facts[i] = { v = v, l = l }
   end
-  CF.x = U.Button(f, "x", 20, 20)
-  CF.x:SetPoint("TOPRIGHT", -8, -8)
-  CF.x:SetScript("OnClick", function() f:Hide() end)
+  -- (no close in the header: Esc and Close close it, as the design has it; 0.9's was a typed letter x)
   -- the cards
   for i = 1, 5 do CF.cards[i] = C.Cards.Make(f) end
   CF.gone = U.Text(f, 11, DIM, "LEFT", 900)
