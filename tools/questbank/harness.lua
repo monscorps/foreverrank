@@ -7363,7 +7363,7 @@ do
   local itemLine = false
   for _, l in ipairs(lines) do if l:find("Twilight Pendant") then itemLine = true; print("  tooltip:", l) end end
   assert(itemLine, "the tooltip counts the item in bags and bank")
-  -- the quest turns complete: chat says so, asked for ("Say quest XP in chat": nothing unasked since the review round)
+  -- the quest turns complete: chat says so, asked for ("Say XP after each hand-in": nothing unasked since the review round)
   F:Settings().sayXP = true
   for _, e in ipairs(friend.log) do if e[1] == 1199 then e[2] = 1 end end
   friend.o.bagSlots = { { 5879, 10 } }
@@ -17722,7 +17722,7 @@ end)()
   -- paid nothing); a hand-in run that outlived its hour said it ended; an escort said why the prompt's Yes was grey, or,
   -- with Accept for me on, that the prompt was yours; a call the game blocked said so; QuestTrail loaded said so at every
   -- load. None of them is said now (the blocked call is on /qb errors' list alone); the hand-in's line comes back with
-  -- "Say quest XP in chat", off, in the step frame's menu
+  -- "Say XP after each hand-in", off, in the step frame's menu
   ENGCASES[#ENGCASES + 1] = { "nothing said unasked: hand-ins, a run that ends itself, escorts, a blocked call, QuestTrail", function()
     local c = char("Hushed", "WARRIOR", "Warrior", 1, {}, { level = 5, world = { 0, -8914, -133 }, map = 1429, log = { { 7, 1 }, { 33, 1 } } })
     local env, QB = c.env, c.QB
@@ -17754,8 +17754,8 @@ end)()
     QB:Settings().welcome = nil; QB.StepFrame.Apply()
     QB.StepFrame:Menu(nil)
     local item
-    for _, it in ipairs(QB.UI.lastMenu or {}) do if it[1]:find("^Say quest XP in chat") then item = it end end
-    assert(item and item[1] == "Say quest XP in chat: off", "the step frame's menu has the choice, off: " .. tostring(item and item[1]))
+    for _, it in ipairs(QB.UI.lastMenu or {}) do if it[1]:find("^Say XP after each hand%-in") then item = it end end
+    assert(item and item[1] == "Say XP after each hand-in: off", "the step frame's menu has the choice, off: " .. tostring(item and item[1]))
     item[2]()
     assert(QB:Settings().sayXP == true, "ticked: on")
     local line = said(c, function() turnIn(33, 450) end)
@@ -18511,7 +18511,7 @@ end)()
   -- 19. (the review round) QuestBank still spoke unasked: "X is complete, hand it in, worth about N XP", "X left your log
   -- without a hand-in", and "Hand-in run started" when the first paying hand-in after a lock started the run (its end
   -- said nothing since the launch round). The Guide's design: no other chat lines unless the player asks. They come
-  -- with "Say quest XP in chat" (sayXP), off; the Route page's Start run still says the run started
+  -- with "Say XP after each hand-in" (sayXP), off; the Route page's Start run still says the run started
   ENGCASES[#ENGCASES + 1] = { "nothing said unasked: a quest complete, a quest dropped, a run started by a hand-in", function()
     local c = char("Quietly", "WARRIOR", "Warrior", 1, {}, { level = 5, world = { 0, -8914, -133 }, map = 1429, log = { { 7, 0 }, { 33, 0 }, { 15, 0 } } })
     local QB = c.QB
@@ -18539,8 +18539,8 @@ end)()
     QB:Settings().welcome = nil; QB.StepFrame.Apply()
     QB.StepFrame:Menu(nil)
     local item
-    for _, it in ipairs(QB.UI.lastMenu or {}) do if it[1]:find("^Say quest XP in chat") then item = it end end
-    assert(item and item[1] == "Say quest XP in chat: on", "the menu's row: " .. tostring(item and item[1]))
+    for _, it in ipairs(QB.UI.lastMenu or {}) do if it[1]:find("^Say XP after each hand%-in") then item = it end end
+    assert(item and item[1] == "Say XP after each hand-in: on", "the menu's row: " .. tostring(item and item[1]))
   end }
 
   -- 21. (the review round) A whispered "1R" from anyone got your level, XP, class, GUID's tail and every quest back,
@@ -20030,8 +20030,8 @@ end)()
     -- the step frame's menu says the same choice
     QB.StepFrame.Apply(); QB.StepFrame:Menu(nil)
     local item
-    for _, it in ipairs(QB.UI.lastMenu or {}) do if it[1]:find("^Say quest XP in chat") then item = it end end
-    assert(item and item[1] == "Say quest XP in chat: on", "the step frame's menu agrees: " .. tostring(item and item[1]))
+    for _, it in ipairs(QB.UI.lastMenu or {}) do if it[1]:find("^Say XP after each hand%-in") then item = it end end
+    assert(item and item[1] == "Say XP after each hand-in: on", "the step frame's menu agrees: " .. tostring(item and item[1]))
     UI:Refresh()
     assert(v.sayXP:GetChecked(), "the row follows the setting")
     v.sayXP:SetChecked(false); v.sayXP.__scripts.OnClick(v.sayXP)

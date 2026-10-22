@@ -281,7 +281,7 @@ end
 ----------------------------------------------------------------------------
 function RU.Settings(_, col)
   local db = R().DB()
-  col:Head("Run reports")
+  col:Head("Runs")
   col:Check("Show the report when a run ends", db.show, true, function(on) db.show = on; C.UI:Draw() end)
   col:Check("Long groups outside instances (2 or more, 15 minutes)", db.long, true, function(on) db.long = on; C.UI:Draw() end)
   col:Choice("Keep", { "10", "20", "50" }, tostring(db.keep), function(v)

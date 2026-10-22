@@ -19779,6 +19779,42 @@ do
   end)
 end
 
+-- U13. A section's one head is its name in the list: Settings > Halls headed "Halls", Runs "Runs". The step frame's
+--     right-click menu names the sayXP switch as Settings > Quests does: "Say XP after each hand-in: off"
+do
+  isolated({ UIX.member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    -- a head in the column (not the list of sections, whose rows carry their section's id)
+    local function head(t)
+      for _, o in everything() do
+        if o.__kind == "FontString" and o.__shown and o.__text == t and visible(o) and o.__parent and o.__parent.__client == c then
+          local inList = false
+          for _, a in ipairs(ancestors(o)) do if rawget(a, "section") then inList = true end end
+          if not inList then return o end
+        end
+      end
+    end
+    for _, sec in ipairs({ { "halls", "Halls", "Announcements" }, { "runs", "Runs", "Run reports" } }) do
+      c.C.UI:Open("settings", sec[1])
+      assert(head(sec[2]) and not head(sec[3]), "Settings > " .. sec[2] .. " headed " .. sec[2] .. ":\n" .. texts(c))
+    end
+    local QB = c.addons[2].private
+    local n0 = #c.contextMenus
+    QB.StepFrame:Menu(nil)
+    local item
+    for _, e in ipairs(c.contextMenus[#c.contextMenus] or {}) do if e.text and e.text:find("XP", 1, true) then item = e end end
+    assert(#c.contextMenus == n0 + 1 and item and item.text == "Say XP after each hand-in: off", "the step frame's menu in Settings' words: " .. tostring(item and item.text))
+    item.set()
+    assert(c.env.CuteQuestDB.settings.sayXP == true, "its click: on")
+    QB.StepFrame:Menu(nil)
+    for _, e in ipairs(c.contextMenus[#c.contextMenus]) do if e.text and e.text:find("XP", 1, true) then item = e end end
+    assert(item.text == "Say XP after each hand-in: on", "and says so: " .. item.text)
+    leave(c)
+    print("fix-cute-ui U13: Settings > Halls and Runs headed by their names; the step frame's menu says Say XP after each hand-in")
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end
