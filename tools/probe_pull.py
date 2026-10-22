@@ -1035,8 +1035,8 @@ def finds_rows(acc, keys=None):
     mean, at most four places a map); a book's title or a level when two of those files say it. A key Lock.csv names
     when it was among the candidates of every one of those files that opened it by key (two at least: the key that
     opened it was in each one's bags) and, of those, is carried at the fewest finds (_key_spread); a tie names none, and
-    the object stands as looted. An object a secret chain's key may have opened (SECRET_KEYS) ships no row at all.
-    Sorted."""
+    the object stands as looted. An object a secret chain's key may have opened (SECRET_KEYS among any one file's
+    candidates, wherever it stood) ships no row at all. Sorted."""
     keys = lock_keys() if keys is None else keys
     finds = acc.get("find") or {}
     spread = _key_spread(finds)
@@ -1045,6 +1045,10 @@ def finds_rows(acc, keys=None):
         kind0, fid = key[0], int(key[1:])
         if kind0 == "i":
             continue  # an item read has no place
+        # (a secret chain's next step: one file that opened it with such a key is enough, wherever it stood; the files
+        # that agree on a place may only have looted it, their opening not caught)
+        if SECRET_KEYS & {x for rec in votes.values() for x in rec.get("k") or []}:
+            continue
         by_map = {}
         for who, rec in votes.items():
             for m, x, y, _n in [tuple(p[:4]) for p in rec.get("p") or []]:
@@ -1085,8 +1089,6 @@ def finds_rows(acc, keys=None):
                 continue
             held = [set(votes[who]["k"]) for who in sorted(who_here) if votes[who].get("k")]
             both = set.intersection(*held) if len(held) >= 2 else set()
-            if SECRET_KEYS & both:
-                continue  # (a secret chain's next step)
             title = said("b")
             if title:
                 rows.append([m, "b", fid, spots, files, title])
@@ -1831,6 +1833,19 @@ def selftest_finds():
                           "o800002": {"p": [[1428, 700 + dx, 700, 1]], "b": "A Burnt Page", "k": [281358, 216523]}}, who, 1)
     assert [r for r in finds_rows(kacc, lk) if r[2] in (800001, 800002)] == [], "a secret chain's step: never shipped"
     assert SECRET_KEYS >= {281350, 284092, 284093, 281358, 281359, 276561}
+    # (fix-data) one file opened it with a secret key among its candidates, the other only looted it (its opening came
+    # outside OPEN_S, so it noted no keys): still a secret chain's step. So is one whose key-carrying file stood elsewhere
+    kacc = empty()
+    merge_find(kacc, {"o800003": {"p": [[1428, 300, 300, 1]], "h": {"13.0": 1}, "k": [281358, 5396]},
+                      "o800004": {"p": [[1429, 100, 100, 1]], "h": {"15.0": 1}, "k": [281350]}}, "tP", 1)
+    merge_find(kacc, {"o800003": {"p": [[1428, 303, 301, 1]], "h": {"13.0": 1}},
+                      "o800004": {"p": [[1428, 600, 600, 1]], "h": {"15.0": 1}}}, "tQ", 2)
+    merge_find(kacc, {"o800004": {"p": [[1428, 602, 601, 1]], "h": {"15.0": 1}}}, "tR", 3)
+    assert [r for r in finds_rows(kacc, lk) if r[2] in (800003, 800004)] == [], \
+        "a secret key in one file's candidates hides the object: %r" % finds_rows(kacc, lk)
+    merge_find(kacc, {"o800005": {"p": [[1428, 300, 300, 1]], "h": {"13.0": 1}, "k": [5396]}}, "tP", 4)
+    merge_find(kacc, {"o800005": {"p": [[1428, 303, 301, 1]], "h": {"13.0": 1}}}, "tQ", 5)
+    assert [r[1] for r in finds_rows(kacc, lk) if r[2] == 800005] == ["h"], "an ordinary key, one file: looted, as before"
     assert "aaaaaaaaaaaaaaaa" not in json.dumps(acc), "the token itself is never kept"
 
     # the world: flights, crossings and boat legs, sellers, trainers, trails; one voice a file

@@ -24402,6 +24402,25 @@ do
   print("merge3: " .. table.concat(said, "; "))
 end
 
+-- [stage: fix-data] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- What the finds this engine notes become on the site, checked where it is merged (tools/probe_pull.py --selftest,
+-- made-up files):
+-- D1. An object one file opened with a secret chain's key among its candidates ships no row, though the other file
+--     that agrees on its place only looted it (its opening not caught) or the key-carrying file stood elsewhere
+----------------------------------------------------------------------------
+do
+  local function run(cmd)
+    local p = io.popen(cmd .. " 2>&1")
+    local out = p and p:read("*a") or ""
+    if p then p:close() end
+    return out
+  end
+  local out = run("python3 -I '" .. HERE .. "/../probe_pull.py' --selftest")
+  assert(out:find("selftest OK: the allow-list, Cute's files and the world notes", 1, true), "probe_pull.py --selftest, D1:\n" .. out)
+  print("fix-data: probe_pull.py --selftest: a secret key in one file hides the object")
+end
+
 local seen = {}
 local unique = {}
 for _, p in ipairs(problems) do if not seen[p] then seen[p] = true; unique[#unique + 1] = p end end
