@@ -23047,6 +23047,8 @@ end
 -- HL4 scale: the step frame's centre kept; QuestBank's arrow at 150% (its frame scaled, its points in UIParent's units
 --     divided by it), the compass at 150% (compassSize 72, its frame at 100%), past 200% and under 50% clamped (96 and
 --     24 px); Reminders and Buffs at their scales, their places kept
+-- HL5 (the reminders design's case 18 at its scales) Reminders and Buffs at 80, 100 and 150%, Buffs at its default:
+--     8 px over Reminders, apart, on the screen; their movers at their largest (six icons; six and four members)
 ----------------------------------------------------------------------------
 do
   local c = lookChar("Layouts", { log = { { 7, 0 } } })
@@ -23201,6 +23203,21 @@ do
   assert(near(R.Settings().scale, 1.2) and near(bar:GetScale(), 1.2) and near(bar.__points[1].x * 1.2, R.Settings().pos.x), "Reminders at 120%, its centre kept")
   M.buffs.scale(0.8)
   assert(near(R.Settings().bannerScale, 0.8) and near(ban:GetScale(), 0.8) and near(ban.__points[1].y * 0.8, R.Settings().bannerPos.y), "Buffs at 80%, its bottom kept")
+  -- HL5
+  M.camp.set(nil); M.buffs.set(nil)
+  for _, k in ipairs({ 0.8, 1, 1.5 }) do
+    M.camp.scale(k); M.buffs.scale(k)
+    local cl, ct, cw, ch = M.camp.rect()
+    local bl, bt, bw2, bh2 = M.buffs.rect()
+    assert(near(cw, 250 * k) and near(ch, bar:GetHeight() * k) and near(bw2, 332 * k) and near(bh2, 124 * k),
+      string.format("%d%%: the movers at their largest (six icons; six and four members), whatever shows: %.0f x %.0f, %.0f x %.0f", k * 100, cw, ch, bw2, bh2))
+    assert(bt - bh2 >= ct + 7.99 and bt - bh2 <= ct + 8.01 and cl >= 0 and cl + cw <= W and bl >= 0 and bl + bw2 <= W and bt <= H and ct - ch >= 0,
+      string.format("%d%%: Buffs 8 px over Reminders, apart, on the screen", k * 100))
+    local pb = ban.__points[1]
+    assert(near(bar:GetScale(), k) and near(ban:GetScale(), k) and pb.rel == bar and near(pb.y * k, 8) and near(bar.__points[1].y * k, -190),
+      string.format("%d%%: the pieces at their scale, Buffs on Reminders 8 px up, Reminders' centre at -190", k * 100))
+  end
+  said[#said + 1] = "Reminders and Buffs at 80, 100 and 150%: apart, on the screen, their movers at their largest"
   M.camp.set(nil); M.buffs.set(nil); M.step.set(nil); M.arrow.set(nil)
   assert(R.Settings().scale == nil and R.Settings().bannerScale == nil and s.arrowScale == nil and near(bar:GetScale(), 1), "set nil: 100% again")
   said[#said + 1] = "scale: the step frame's centre kept, QuestBank's arrow scaled and the compass's dial by compassSize (24 to 96 px), Reminders and Buffs"

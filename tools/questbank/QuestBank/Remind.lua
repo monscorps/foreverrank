@@ -525,7 +525,8 @@ end
 -- its players see no change). QB.Movers[key] = { key, name, order, secure, frame(), on(), switch(on), rect(),
 -- move(left, top), scale(k), get(), set(pos) }:
 --   rect     left, top, width, height in UIParent's units from its bottom left: where the piece stands, or would stand
---            while hidden or not made yet (at least a few icons wide: a mover for an empty piece still shows)
+--            while hidden or not made yet (Reminders and Buffs at their largest, six icons and six and four members:
+--            placed against the step frame, a piece never grows onto it later)
 --   move     its top left there, written to the engine's own place and placed at once
 --   scale    0.5 to 2, the piece kept where its own point stands
 --   get      { point, x, y, scale }: its point against UIParent's same point, in UIParent's units; no point at its
@@ -536,7 +537,10 @@ end
 ----------------------------------------------------------------------------
 QB.Movers = QB.Movers or {}
 local MOVER_H = PADT + ROW_H + PADB
-local BANNER_MIN_H = PADT + TITLE_H + SIZE + 8 + PADB
+-- (the pieces at their largest: six icons with their words; six of yours and four members under them, layBanner's sums)
+local BAR_MAX_W = PADX * 2 + MAX * SIZE + (MAX - 1) * GAP
+local BANNER_MAX_W = PADX * 2 + math.max(MAX_BUFFS * SIZE + (MAX_BUFFS - 1) * GAP, MAX_MEMBERS * MEMBER, 120)
+local BANNER_MAX_H = PADT + TITLE_H + SIZE + 8 + ROW_H + 2 + PADB
 local function screen() return UIParent:GetWidth() or 1920, UIParent:GetHeight() or 1080 end
 local function scaleIn(k)
   k = tonumber(k)
@@ -550,8 +554,7 @@ local function placeNow(which)
 end
 local function barSize()
   local k = scaleOf("scale")
-  local w = math.max(PADX * 2 + 3 * SIZE + 2 * GAP, bar and bar:GetWidth() or 0)
-  return w * k, MOVER_H * k
+  return BAR_MAX_W * k, MOVER_H * k
 end
 local function barCentre()
   local pos = R.Settings().pos
@@ -561,9 +564,7 @@ local function barCentre()
 end
 local function bannerSize()
   local k = scaleOf("bannerScale")
-  local w = math.max(PADX * 2 + 120, banner and banner:GetWidth() or 0)
-  local h = math.max(BANNER_MIN_H, banner and banner:GetHeight() or 0)
-  return w * k, h * k
+  return BANNER_MAX_W * k, BANNER_MAX_H * k
 end
 local function bannerBottom()
   local pos = R.Settings().bannerPos
