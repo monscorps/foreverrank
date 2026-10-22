@@ -4346,8 +4346,17 @@ function UI:CreateSettingsView(parent)
   v.discText:SetPoint("TOPLEFT", RIGHT, y0 - 100)
   v.discText:SetHeight(72)
   subhead(RIGHT, y0 - 182, "Sharing and chat")
-  v.shareParty = checkRow(p, RIGHT, y0 - 202, "Share my quests with my party", 300)
+  -- (the final audit) the group gets the same status as the guild and the quest list too (Sync.lua S:Broadcast), in a
+  -- raid or an instance group as well: said as the guild row says its own, and as Cute's row has it
+  v.shareParty = checkRow(p, RIGHT, y0 - 202, "Share my level, XP and quests with my group", 300)
   v.shareParty:SetScript("OnClick", function(self) QB:Settings().share.party = self:GetChecked() and true or false; UI:Refresh() end)
+  v.shareParty:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText("Share my level, XP and quests with my group", 1, 1, 1)
+    GameTooltip:AddLine("Your level, your XP into it, your class, the levels your plan reaches, the quests in it and the XP the game shows for them go to your party, raid or instance group. Only members who run QuestBank see them.", nil, nil, nil, true)
+    GameTooltip:Show()
+  end)
+  v.shareParty:SetScript("OnLeave", function() GameTooltip:Hide() end)
   -- (merge4) the guild hears your status alone (Sync.lua S:Broadcast); the quest list goes to the group only
   v.shareGuild = checkRow(p, RIGHT, y0 - 228, "Share my level and progress with my guild", 300)
   v.shareGuild:SetScript("OnClick", function(self) QB:Settings().share.guild = self:GetChecked() and true or false; UI:Refresh() end)

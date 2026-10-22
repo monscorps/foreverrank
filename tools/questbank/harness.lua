@@ -24973,6 +24973,24 @@ end)()
     assert(S.members[friend].quests and M.PartyHas(33), "the /qb sync friend's list kept")
   end }
 
+  -- P1 (look, should). Settings' party row said "Share my quests with my party", under the guild row that names level and
+  -- XP: the group gets the same status and the quest list too, in a raid or an instance group as well
+  CASES[#CASES + 1] = { "P1: Settings' group row says level, XP and quests, and its tooltip where they go", function()
+    local c = lookChar("Rows")
+    local UI = c.QB.UI
+    UI:Open(5); UI:Refresh()
+    local box = UI.views[5].shareParty
+    assert(box.label:GetText() == "Share my level, XP and quests with my group", "the group row's words: " .. tostring(box.label:GetText()))
+    assert(box.__scripts.OnEnter, "the group row has a tooltip")
+    lines = {}
+    box.__scripts.OnEnter(box)
+    local tip = table.concat(lines, "\n")
+    if box.__scripts.OnLeave then box.__scripts.OnLeave(box) end
+    UI.frame:Hide()
+    assert(tip:find("raid", 1, true) and tip:find("instance group", 1, true) and tip:find("quests", 1, true) and tip:find("QuestBank", 1, true),
+      "its tooltip says what goes and to whom:\n" .. tip)
+  end }
+
   local failed = {}
   for _, case in ipairs(CASES) do
     local ok, err = pcall(case[2])
