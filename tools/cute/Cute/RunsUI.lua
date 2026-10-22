@@ -199,7 +199,7 @@ function RU.Draw(ui)
       b:SetWidth(70)
       b:SetLabel("End run")
       b:SetOn(true)
-      b:SetScript("OnClick", function() R():EndRun(); C.UI:Draw() end)
+      b:SetScript("OnClick", C.Safe(function() R():EndRun(); C.UI:Draw() end, "runs: end run"))
       b:SetScript("OnEnter", nil); b:SetScript("OnLeave", nil)
     end
     y = y + 24
@@ -215,7 +215,7 @@ function RU.Draw(ui)
     b:SetWidth(150)
     b:SetLabel("Show a test report")
     b:SetOn(true)
-    b:SetScript("OnClick", function() RU.Test(false) end)
+    b:SetScript("OnClick", C.Safe(function() RU.Test(false) end, "runs: test"))
     b:SetScript("OnEnter", nil); b:SetScript("OnLeave", nil)
     y = y + 24
   end

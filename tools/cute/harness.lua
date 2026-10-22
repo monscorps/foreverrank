@@ -17051,6 +17051,70 @@ do local function cardsStage()
       assert(once == 1, "a CuteRun message reaches RunComm once: " .. once)
       assert(got == 1 and grew < 32, string.format("3000 messages of another prefix: none reach RunComm (%d), %.1f KB of garbage", got - 1, grew))
     end)
+
+    -- the officers' and leaders' buttons of 0.8 and 0.9 run their actions through C.Safe: an error in one is recorded
+    -- under its path for /cute errors, never handed to the game's handler (the card screen's Publish, Back, Send to
+    -- party; the Halls band's New card and New hall; Test announcement and Open Queue; the composer's Pick, Preview, Save
+    -- draft, Clear; Runs' End run and Show a test report; Records' Preview)
+    case("the cards' buttons record their errors", { gmember("Saf", 1, "MAGE"), gmember("Sib", 3) }, function()
+      local c, mate = cchar("Saf", 1), cchar("Sib", 3)
+      login(c); login(mate)
+      tickAll(200)
+      local function boom(where, b)
+        assert(b, where .. ": the button")
+        c.env.CUTE_DEV = false
+        local ok, err = pcall(press, b)
+        c.env.CUTE_DEV = true
+        local e = (c.env.CuteDB.errors or {})[1]
+        assert(ok and e and e.where == where and e.msg:find("boom", 1, true), where .. ": the click's error recorded, not raised: " .. tostring(err) .. " / " .. tostring(e and e.where))
+      end
+      -- the card screen's buttons
+      H(c).Test(false)
+      local CF = c.C.CardFrame
+      CF.buttons[1].fn = function() error("boom on the card screen") end
+      boom("card screen: button", CF.buttons[1])
+      CF.frame:Hide(); H(c).toastFrame:Hide()
+      -- the Halls band
+      H(c).OpenChip("queue")
+      local Hc = H(c)
+      local newHall = Hc.NewHall
+      Hc.NewHall = function() error("boom in the band") end
+      boom("halls: band", buttonOf(c, "New hall"))
+      Hc.NewHall = newHall
+      -- the composer: Pick and its buttons
+      press(buttonOf(c, "New card"))
+      local menu = c.env.MenuUtil.CreateContextMenu
+      c.env.MenuUtil.CreateContextMenu = function() error("boom in the label's menu") end
+      boom("halls: button", buttonOf(c, "SHOUT-OUT"))
+      c.env.MenuUtil.CreateContextMenu = menu
+      local save = Hc.SaveDraft
+      Hc.SaveDraft = function() error("boom in Save draft") end
+      boom("halls: button", buttonOf(c, "Save draft"))
+      Hc.SaveDraft = save
+      press(buttonOf(c, "Clear"))
+      -- News with nothing published: Test announcement
+      H(c).OpenChip("news")
+      local test = Hc.Test
+      Hc.Test = function() error("boom in the test announcement") end
+      boom("halls: button", buttonOf(c, "Test announcement"))
+      Hc.Test = test
+      -- Records' Preview
+      local Rc0 = c.C.Records
+      Rc0.Entries().deaths = { v = 3, g = mate.o.guid, n = "Sib", c = "MAGE", t = c.C.ServerNow() }
+      H(c).OpenChip("records")
+      local row = rowLabeled(c, "Deaths")
+      local preview = Rc0.Preview
+      Rc0.Preview = function() error("boom in Preview") end
+      boom("records: preview", row and row.pv)
+      Rc0.Preview = preview
+      -- Runs: Show a test report
+      c.C.UI:Open("runs")
+      local RU = c.C.RunsUI
+      local rt = RU.Test
+      RU.Test = function() error("boom in the test report") end
+      boom("runs: test", buttonOf(c, "Show a test report"))
+      RU.Test = rt
+    end)
     assert(#failed == 0, "fix-cards: " .. #failed .. " case(s) failed:\n  " .. table.concat(failed, "\n  "))
     said[#said + 1] = "the launch audit's cards findings: " .. table.concat(passed, "; ")
   end

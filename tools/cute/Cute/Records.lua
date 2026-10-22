@@ -724,7 +724,7 @@ function Rec.Draw(ui)
     end
     if isOfficer and e then
       r.pv:SetLabel("Preview"); r.pv:SetOn(true)
-      r.pv:SetScript("OnClick", function() Rec.Preview(id) end)
+      r.pv:SetScript("OnClick", C.Safe(function() Rec.Preview(id) end, "records: preview"))
     end
     r.fn = nil
     r.tip = function(tip)

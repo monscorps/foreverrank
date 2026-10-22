@@ -84,7 +84,8 @@ local function build()
   CF.buttons = {}
   for i = 1, 3 do
     local b = U.Button(f, "", 90, 24)
-    b:SetScript("OnClick", function(self) if self.fn then self.fn() end end)
+    -- (a click's error recorded for /cute errors, never the game's: Publish, Back, Send to party, Print to chat)
+    b:SetScript("OnClick", C.Safe(function(self) if self.fn then self.fn() end end, "card screen: button"))
     b:SetScript("OnEnter", C.Safe(function(self)
       if not self.why then return end
       GameTooltip:SetOwner(self, "ANCHOR_RIGHT")

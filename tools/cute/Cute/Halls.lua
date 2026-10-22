@@ -1488,7 +1488,7 @@ local function bandButton(ui, x, w, label, on, fn, tip)
   b:SetWidth(w)
   b:SetLabel(label)
   b:SetOn(on and true or false)
-  b:SetScript("OnClick", function() if on then fn() end end)
+  b:SetScript("OnClick", C.Safe(function() if on then fn() end end, "halls: band"))
   if tip then
     b:SetScript("OnEnter", C.Safe(function(self) GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); tip(GameTooltip); GameTooltip:Show() end, "halls: tooltip"))
     b:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1638,7 +1638,7 @@ local function scrollButton(ui, x, y, w, label, fn)
   b:SetWidth(w)
   b:SetLabel(label)
   b:SetOn(true)
-  b:SetScript("OnClick", fn)
+  b:SetScript("OnClick", C.Safe(fn, "halls: button"))
   b:SetScript("OnEnter", nil); b:SetScript("OnLeave", nil)
   return b
 end
@@ -1948,7 +1948,7 @@ function Col:Pick(text, value, fn, tip)
   b:SetWidth(200)
   b:SetLabel(value)
   b:SetOn(true)
-  b:SetScript("OnClick", function(btn) fn(btn) end)
+  b:SetScript("OnClick", C.Safe(function(btn) fn(btn) end, "halls: button"))
   tipOn(b, tip)
   self.y = self.y + STEP
   return b
@@ -1999,7 +1999,7 @@ function Col:Buttons(list)
     b:SetWidth(120)
     b:SetLabel(d[1])
     b:SetOn(d[2] and true or false)
-    b:SetScript("OnClick", function() if d[2] then d[3]() end end)
+    b:SetScript("OnClick", C.Safe(function() if d[2] then d[3]() end end, "halls: button"))
     tipOn(b, d[4])
     bx = bx + 126
   end
