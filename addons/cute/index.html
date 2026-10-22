@@ -173,7 +173,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     <div class="cu-cta">
       <a class="cu-dl" href="Cute.zip">Download Cute <small><span id="cu-ver"><!--@v-->0.9.0<!--/@v--></span>, <!--@kb-->1664<!--/@kb--> KB</small></a>
       <a class="cu-dl cu-dl2" href="Cute-Uploader.zip">Cute with the uploader <small>Windows, <!--@kbu-->1706<!--/@kbu--> KB</small></a>
-      <span class="cu-note">Free, GPL, no accounts. Cute alone sends nothing to any server: your guild sees what its officers allow, your party your level and quest steps (Settings, Data you share); the uploader sends foreverrank.com what you find in the world, never a name.</span>
+      <span class="cu-note">Free, GPL, no accounts. Cute alone sends nothing to any server: your guild sees what its officers allow, your group your level, XP and quests (Settings, Data you share) and, after a run, your run report (Runs); the uploader sends foreverrank.com what you find in the world, never a name.</span>
     </div>
   </div>
 </header>
@@ -210,7 +210,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   <div class="cu-wrap">
     <h2>Install</h2>
     <ol class="cu-steps">
-      <li>Download <a href="Cute.zip">Cute.zip</a> (or, on Windows, <a href="Cute-Uploader.zip">Cute-Uploader.zip</a>, the same with the uploader beside it) and unzip it. You get two folders, <code>Cute</code> and <code>Cute_Quest</code>. Windows' Extract All puts them inside one more folder named after the zip: take the two out of it, or the game will not find them.</li>
+      <li>Download <a href="Cute.zip">Cute.zip</a> and unzip it: two folders, <code>Cute</code> and <code>Cute_Quest</code>. On Windows, <a href="Cute-Uploader.zip">Cute-Uploader.zip</a> has those two plus <code>QuestBank Uploader</code> and <code>QuestBank_Finds</code>, which its <code>Install.bat</code> puts in (step 4). Windows' Extract All puts the folders inside one more folder named after the zip: take <code>Cute</code> and <code>Cute_Quest</code> out of it, or the game will not find them.</li>
       <li>Put both in <code>Interface\AddOns</code>, next to your other addons, so the game finds <code>Interface\AddOns\Cute\Cute.toc</code> and <code>Interface\AddOns\Cute_Quest\Cute_Quest.toc</code>. Both load at every login: <code>Cute_Quest</code> is Cute's quest window.</li>
       <li>Log in: a card asks which windows you want (the guild on <code>J</code>, your quests and route on <code>L</code>, Cute's map on <code>M</code>; Dungeons and Gear are tabs you switch on or off), binds the keys and reloads once. Right-click the elf on the minimap to jump anywhere.</li>
       <li>With the uploader: double-click <code>Install.bat</code> in its <code>QuestBank Uploader</code> folder. It sends foreverrank.com what you found in the world from <code>Cute_Quest.lua</code>, never <code>Cute.lua</code> or a name, and brings back what other players found. It never puts the QuestBank addon in.</li>

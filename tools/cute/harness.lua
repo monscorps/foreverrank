@@ -20938,8 +20938,9 @@ do
     CASES[#CASES + 1] = { "W3 the hero's privacy line names the party", function()
       local hero = plainOf(assert(page:match('<header class="cu%-hero".-</header>'), "the page has its hero"))
       assert(s.share and s.share.party ~= false, "the engine shares with the party by default")
-      assert(not hero:find("nothing leaves the guild", 1, true) and hero:find("party", 1, true), "the party sees your level and quest steps by default: the hero says otherwise:\n" .. hero)
-      said[#said + 1] = "the hero names the party"
+      -- (merge4: the group, in Data you share's own words: merge4's P1)
+      assert(not hero:find("nothing leaves the guild", 1, true) and (hero:find("party", 1, true) or hero:find("group", 1, true)), "the party sees your level and quest steps by default: the hero says otherwise:\n" .. hero)
+      said[#said + 1] = "the hero names the group"
     end }
     CASES[#CASES + 1] = { "W4 a QuestBank player told what M and Reminders need", function()
       local q = c.C.API.QuestSetup
@@ -21011,6 +21012,9 @@ end
 --     past the game's widest and a drag; with the far view off, the minimap is the game's
 -- B1. QuestBank before 6.4.1 beside Cute (no Sync.GuildOn: it reads no noGuildSync) has its guild share off for the
 --     session and put back at the logout; one that reads the flag is left as it is
+-- P1. The hero's privacy line says what goes to your group in the client's own words (Data you share's row) and names
+--     the run report Runs sends
+-- P2. Install says what each download holds: every top folder of Cute.zip and Cute-Uploader.zip is named
 ----------------------------------------------------------------------------
 do
   local CASES, failed, said = {}, {}, {}
@@ -21124,6 +21128,36 @@ do
       leave(q2)
     end)
     said[#said + 1] = "an older QuestBank's guild share held off for the session"
+  end }
+
+  CASES[#CASES + 1] = { "P1 the hero says what goes to your group in the client's words, run reports too", function()
+    local page = read("addons/cute/index.html")
+    local hero = plainOf(assert(page:match('<header class="cu%-hero".-</header>'), "the page has its hero"))
+    local label = assert(read("tools/cute/Cute_Quest/PageQuests.lua"):match('col:Check%("(Share your [^"]+)"'), "Data you share's group row")
+    local what, to = label:match("^Share (.-) with (your %a+)$")
+    assert(what and to, "the row's words: " .. label)
+    assert(hero:find(to .. " " .. what, 1, true), "the hero says \"" .. to .. " " .. what .. "\" (" .. label .. "):\n" .. hero)
+    assert(hero:find("run report", 1, true) and hero:find("Runs", 1, true), "the hero names the run report Runs sends to the group:\n" .. hero)
+    said[#said + 1] = "the hero says " .. to .. " " .. what .. " and the run report"
+  end }
+
+  CASES[#CASES + 1] = { "P2 Install says what each download holds", function()
+    local page = read("addons/cute/index.html")
+    local install = assert(page:match('<section[^>]*id="install".-</section>'), "the page has Install")
+    local first = assert(install:match("<li>(.-)</li>"), "Install's first step")
+    if run("command -v unzip"):find("unzip", 1, true) then
+      for _, zip in ipairs({ "Cute.zip", "Cute-Uploader.zip" }) do
+        assert(first:find('href="' .. zip .. '"', 1, true), "the first step offers " .. zip)
+        local tops = {}
+        for line in run("unzip -Z1 '" .. HERE .. "/../../addons/cute/" .. zip .. "'"):gmatch("[^\n]+") do tops[line:match("^([^/]+)")] = true end
+        for top in pairs(tops) do
+          assert(first:find("<code>" .. top .. "</code>", 1, true), zip .. " holds " .. top .. ", which the first step does not name:\n" .. plainOf(first))
+        end
+      end
+      said[#said + 1] = "Install names each download's folders"
+    else
+      said[#said + 1] = "Install's folders not checked (no unzip here)"
+    end
   end }
 
   for _, case in ipairs(CASES) do
