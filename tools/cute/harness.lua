@@ -21447,6 +21447,171 @@ do
   print("fix2-cute-core: " .. table.concat(said, "; "))
 end
 
+-- [stage: fix3-cute-core] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- fix3-cute-core: the third launch audit's finding on Cute's core, a case each; every case runs, and the block fails
+-- at its end naming each one that did not hold:
+-- S1. A save that opens a stat and closes another (stricter, so every member waits for Guild Info): a member whose read
+--     comes after a mate's asks the guild for nothing, and takes the value the mate sent as he read the line, kept
+--     aside meanwhile
+-- S2. The same save opening Bosses: the kills, the boss's label and the kill claims, sent by the mates as they read the
+--     line, are taken at her own read, nothing asked
+-- S3. A wait that outlasts ten minutes (Guild Info a secret, as inside an encounter): nothing kept aside goes while she
+--     waits, her read takes what it opens, nothing asked; what stays closed goes ten minutes after
+-- S4. A value really lost while she waits (its sender's share of what is kept aside full) is asked for once as the
+--     wait ends
+----------------------------------------------------------------------------
+do
+  local CASES, failed, said = {}, {}, {}
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "MAGE", level = 30, online = true } end
+  local function char(name, rank, extra) return newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", "MAGE", 30 }, extra)) end
+  local function inGuild(guild, fn)
+    local ok, err = true, nil
+    isolated(guild, function() ok, err = pcall(fn) end)
+    if not ok then error(err, 0) end
+  end
+  local function pol(mine, vis)
+    local copy = {}
+    for k, v in pairs(vis or {}) do copy[k] = v end
+    return { policy = { vis = copy, by = "Ofa-Forever", mine = mine or nil, rank = 1, at = EPOCH, threshold = 1 } }
+  end
+  -- Ofa an officer, Mia and Zed members; the hearths the officers' alone, the zones everyone's
+  local function hearths()
+    INFO[7] = infoLine(pol(nil, { hearth = "self" }).policy)
+    local ofa, mia, zed = char("Ofa", 1), char("Mia", 3), char("Zed", 3, { hearth = "Stormwind" })
+    local mdb = pol(nil, { hearth = "self" })
+    login(ofa, pol(true, { hearth = "self" })); login(mia, mdb); login(zed, pol(nil, { hearth = "self" }))
+    tickAll(200)
+    assert(mdb.roster[zed.sender].stats.hearth == nil and mdb.roster[zed.sender].stats.zone ~= nil, "Mia holds Zed's zone, not his hearth")
+    return ofa, mia, zed, mdb
+  end
+  local function opensHearthClosesZone(ofa) assert(ofa.C.Policy:Set("hearth", "all") and ofa.C.Policy:Set("zone", "self") and saveLine(ofa)) end
+
+  CASES[#CASES + 1] = { "S1 a save that opens a stat and closes another: a late reader asks nothing and takes what came before her read", function()
+    inGuild({ member("Ofa", 1), member("Mia", 3), member("Zed", 3) }, function()
+      local ofa, mia, zed, mdb = hearths()
+      -- Mia's roster ask went a second ago: Zed reads the line first, and his hearth comes while she waits for Guild Info
+      mia.C.Roster.askedAt = mia.C.Now() - 1
+      local m0, z0 = msgs(mia, "1R"), msgs(zed, "1R")
+      opensHearthClosesZone(ofa)
+      tickAll(4)
+      local R = mia.C.Roster
+      assert(mia.C.Policy.doubt == true and zed.C.Policy:Route("hearth") == "all", "Mia waits for Guild Info, Zed has read it")
+      assert(R.aside[zed.sender] and R.aside[zed.sender].v.hearth and mdb.roster[zed.sender].stats.hearth == nil, "his hearth came while she waited: kept aside")
+      assert(not R.lostUnsettled, "nothing lost: what is kept aside is no reason to ask")
+      tickAll(120)
+      assert(mia.C.Policy:Route("hearth") == "all" and mia.C.Policy:Route("zone") == "self", "she read the line")
+      assert(msgs(mia, "1R") == m0 and msgs(zed, "1R") == z0, "nobody asked the guild: " .. (msgs(mia, "1R") - m0) .. " and " .. (msgs(zed, "1R") - z0) .. " asks")
+      assert(mdb.roster[zed.sender].stats.hearth == "Stormwind" and mdb.roster[ofa.sender].stats.hearth == "Goldshire",
+        "Mia holds Zed's hearth and Ofa's: " .. tostring(mdb.roster[zed.sender].stats.hearth) .. ", " .. tostring(mdb.roster[ofa.sender].stats.hearth))
+      assert(mdb.roster[zed.sender].stats.zone == nil, "and no zone of his any more")
+      for _, c in ipairs({ ofa, mia, zed }) do leave(c) end
+    end)
+    said[#said + 1] = "a save that opens a stat and closes another: a late reader asks nothing, takes what came before her read"
+  end }
+
+  CASES[#CASES + 1] = { "S2 the same save opening Bosses: the kills, the boss's label and the claims are taken at her read, nothing asked", function()
+    inGuild({ member("Ofa", 1), member("Mia", 3), member("Zed", 3), member("Ann", 3) }, function()
+      local closed = { gc_bosses = "self" }
+      INFO[7] = infoLine(pol(nil, closed).policy)
+      local ofa, mia = char("Ofa", 1), char("Mia", 3)
+      local zed, ann = char("Zed", 3, { party = { "Ann" } }), char("Ann", 3, { party = { "Zed" } })
+      local mdb = pol(nil, closed)
+      login(ofa, pol(true, closed)); login(mia, mdb); login(zed, pol(nil, closed)); login(ann, pol(nil, closed))
+      tickAll(60)
+      -- Zed and Ann kill Rhahk'Zor in the Deadmines together and come out: Bosses kept, Mia has none of it
+      for _, c in ipairs({ zed, ann }) do
+        c.o.instance, c.o.instanceID, c.o.instName = "party", 36, "The Deadmines"
+        fire(c, "PLAYER_ENTERING_WORLD", false, false)
+        fire(c, "ENCOUNTER_END", 1230, "Rhahk'Zor", 1, 5, 1, {})
+      end
+      tickAll(5)
+      for _, c in ipairs({ zed, ann }) do
+        c.o.instance, c.o.instanceID, c.o.instName = "none", nil, nil
+        fire(c, "PLAYER_ENTERING_WORLD", false, false)
+      end
+      tickAll(135)
+      local K = mia.env.CuteDB.known or {}
+      assert(mdb.roster[zed.sender].stats.e1230 == nil and not (K.labels and K.labels.e1230) and not mia.C.Rules.Corroborated(1230, zed.o.guid),
+        "Bosses kept: Mia has none of it")
+      assert(ofa.C.Rules.Corroborated(1230, zed.o.guid), "the officer's client weighs their claims")
+      mia.C.Roster.askedAt = mia.C.Now() - 1
+      local m0 = msgs(mia, "1R")
+      assert(ofa.C.Policy:Set("gc_bosses", "all") and ofa.C.Policy:Set("zone", "self") and saveLine(ofa))
+      tickAll(4)
+      assert(mia.C.Policy.doubt == true and zed.C.Policy:Route("e1230") == "all" and ann.C.Policy:Route("e1230") == "all",
+        "Mia waits for Guild Info, Zed and Ann have read it")
+      tickAll(120)
+      K = mia.env.CuteDB.known or {}
+      assert(mia.C.Policy:Route("e1230") == "all", "she read the line")
+      assert(msgs(mia, "1R") == m0, "she asked the guild for nothing: " .. (msgs(mia, "1R") - m0) .. " asks")
+      assert(mdb.roster[zed.sender].stats.e1230 == 1 and mdb.roster[ann.sender].stats.e1230 == 1, "the kills are hers: " .. tostring(mdb.roster[zed.sender].stats.e1230))
+      assert(K.labels and K.labels.e1230 and mia.C.Stats.byId.e1230, "the boss is named and shown: " .. tostring(K.labels and K.labels.e1230))
+      assert(mia.C.Rules.Corroborated(1230, zed.o.guid) and mia.C.Rules.Corroborated(1230, ann.o.guid), "their claims are weighed")
+      for _, c in ipairs({ ofa, mia, zed, ann }) do leave(c) end
+    end)
+    said[#said + 1] = "the same save opening Bosses: the kills, the label and the claims are taken at her read, nothing asked"
+  end }
+
+  CASES[#CASES + 1] = { "S3 a wait that outlasts ten minutes: nothing aside goes meanwhile, her read takes it, nothing asked", function()
+    inGuild({ member("Ofa", 1), member("Mia", 3), member("Zed", 3) }, function()
+      local ofa, mia, zed, mdb = hearths()
+      -- Guild Info a secret on Mia's client, as inside an encounter: she waits the whole time
+      mia.infoSecret = true
+      local m0 = msgs(mia, "1R")
+      opensHearthClosesZone(ofa)
+      tickAll(2)
+      local R = mia.C.Roster
+      -- (a value of a stat the line keeps closed, Whispers an hour, comes while she waits)
+      R:Apply(zed.sender, { whispers = 7 })
+      tickAll(700)
+      assert(mia.C.Policy.doubt == true and zed.C.Policy:Route("hearth") == "all", "Mia still waits, Zed read the line long ago")
+      assert(R.aside[zed.sender] and R.aside[zed.sender].v.hearth and R.aside[zed.sender].v.whispers and R.aside[ofa.sender] and R.aside[ofa.sender].v.hearth,
+        "what came before her read is all still aside")
+      mia.infoSecret = false
+      fire(mia, "GUILD_ROSTER_UPDATE")
+      tickAll(30)
+      assert(mia.C.Policy.doubt == nil and mia.C.Policy:Route("hearth") == "all", "she read the line")
+      assert(msgs(mia, "1R") == m0, "she asked the guild for nothing: " .. (msgs(mia, "1R") - m0) .. " asks")
+      assert(mdb.roster[zed.sender].stats.hearth == "Stormwind" and mdb.roster[ofa.sender].stats.hearth == "Goldshire",
+        "Mia holds Zed's hearth and Ofa's: " .. tostring(mdb.roster[zed.sender].stats.hearth) .. ", " .. tostring(mdb.roster[ofa.sender].stats.hearth))
+      assert(R.aside[zed.sender] and R.aside[zed.sender].v.whispers and mdb.roster[zed.sender].stats.whispers == nil, "his Whispers, still closed, is still aside, not in his record")
+      tickAll(1300)
+      assert(R.aside[zed.sender] == nil and mdb.roster[zed.sender].stats.whispers == nil and msgs(mia, "1R") == m0, "gone after a while, never kept, nothing asked")
+      for _, c in ipairs({ ofa, mia, zed }) do leave(c) end
+    end)
+    said[#said + 1] = "a wait past ten minutes: nothing aside goes meanwhile, the read takes what it opens, nothing asked"
+  end }
+
+  CASES[#CASES + 1] = { "S4 a value really lost while she waits is asked for once as the wait ends", function()
+    inGuild({ member("Ofa", 1), member("Mia", 3), member("Zed", 3) }, function()
+      local ofa, mia, zed = hearths()
+      mia.C.Roster.askedAt = mia.C.Now() - 1
+      local m0 = msgs(mia, "1R")
+      opensHearthClosesZone(ofa)
+      tickAll(2)
+      local R = mia.C.Roster
+      assert(mia.C.Policy.doubt == true, "Mia waits for Guild Info")
+      -- Ofa's share of what is kept aside is full: a value of hers that comes now is lost
+      local a = R.aside[ofa.sender] or { n = 0, v = {}, l = {} }
+      R.aside[ofa.sender], a.n = a, 1000
+      R:Apply(ofa.sender, { whispers = 7 })
+      assert(R.lostUnsettled == true and not a.v.whispers, "refused, and marked lost")
+      tickAll(120)
+      assert(mia.C.Policy.doubt == nil and msgs(mia, "1R") == m0 + 1, "asked once as the wait ended: " .. (msgs(mia, "1R") - m0))
+      for _, c in ipairs({ ofa, mia, zed }) do leave(c) end
+    end)
+    said[#said + 1] = "a value really lost while waiting is asked for once as the wait ends"
+  end }
+
+  for _, case in ipairs(CASES) do
+    local ok, err = pcall(case[2])
+    if not ok then failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
+  end
+  assert(#failed == 0, "fix3-cute-core: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
+  print("fix3-cute-core: " .. table.concat(said, "; "))
+end
+
 -- [stage: fix2-cute-ui] that stage's tests go right below this line
 ----------------------------------------------------------------------------
 -- The second launch audit's cute-ui findings, a case each; every case runs, and the block fails at its end naming each

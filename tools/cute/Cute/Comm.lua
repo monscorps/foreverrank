@@ -2209,25 +2209,33 @@ end
 -- kill claims from a member (Rules.lua rule 9 weighs them): the sender's GUID by the roster, each group member's by the
 -- last part of their GUID among the roster's and the records'. An untrusted sender's, and on a member's client a claim
 -- on a boss the officers keep to themselves, or while they keep Grouped with (a claim names the group: only a modified
--- Cute would send it on GUILD), are passed by
-function M:ReceiveClaims(body, sender)
+-- Cute would send it on GUILD), are passed by; the latter kept aside a while (Roster.lua R:PartAside: a mate's client
+-- sends them as its read of a saved line opens them, maybe before this client has read it), and heard again as a
+-- reroute here opens them. again: that hearing's (R:ReleaseAside), where a claim still passed by is marked, not kept
+-- aside twice
+function M:ReceiveClaims(body, sender, again)
   if type(body) ~= "string" then return 0 end
   local R = C.Roster
   local g = R:GuidOf(sender)
   if not g or C.Policy:Untrusted(g) then return 0 end
   -- (an officer at the last read that said, while this one lists her without a rank, is one still: Roster.lua)
   local officer, n = R:OfficerStill(), 0
-  if not officer and C.Policy:Route("group") == "self" then return 0 end
+  local grouped = officer or C.Policy:Route("group") ~= "self"
   for enc, t, list in body:gmatch("(%d+)@(%w+):([%w%.]*)") do
-    enc, t = tonumber(enc), unb36(t)
-    if enc and enc < 2 ^ 31 and t and n < 64 and (officer or C.Policy:Route("e" .. enc) == "all") then
-      local with, k = {}, 0
-      for s in list:gmatch("%w+") do
-        local wg = R:GuidBySuffix(s)
-        if wg and wg ~= g and k < 40 then with[wg] = true; k = k + 1 end
+    local e, at = tonumber(enc), unb36(t)
+    if e and e < 2 ^ 31 and at then
+      if not (grouped and (officer or C.Policy:Route("e" .. e) == "all")) then
+        local pk = "K" .. enc .. "@" .. t
+        if again then again[pk] = true else R:PartAside(sender, pk, enc .. "@" .. t .. ":" .. list) end
+      elseif n < 64 then
+        local with, k = {}, 0
+        for s in list:gmatch("%w+") do
+          local wg = R:GuidBySuffix(s)
+          if wg and wg ~= g and k < 40 then with[wg] = true; k = k + 1 end
+        end
+        C.Rules.Claim(g, e, at, with)
+        n = n + 1
       end
-      C.Rules.Claim(g, enc, t, with)
-      n = n + 1
     end
   end
   return n
@@ -2239,7 +2247,8 @@ end
 -- label that cleans to nothing is skipped. A boss's loot names who saw it (by GUID, in what the guild learns), taken
 -- only for a boss the guild has a name for or a kill a group mate named back. A label says who met the thing, so on a
 -- member's client one of a category the officers keep to themselves, a boss's loot with its boss, is passed by, as its
--- claims are (only a modified or 0.5.x Cute sends it on GUILD)
+-- claims are (only a modified or 0.5.x Cute sends it on GUILD), and kept aside a while as they are (M:ReceiveClaims;
+-- again, as there)
 local MAX_ID = 2 ^ 31
 -- the id a label's route is the policy's for: its own, or for an instance whose kind this client does not know for sure
 -- the kind the label says (its own route would be the stricter of Dungeons and Raids, and a member's client would
@@ -2249,7 +2258,7 @@ local function labelRoute(p, num, extra)
   if p == "i" and KIND_ROUTE[extra] then local _, sure = C.Stats.KindOf(num); if not sure then return KIND_ROUTE[extra] end end
   return p .. num
 end
-function M:ReceiveLabels(body, sender)
+function M:ReceiveLabels(body, sender, again)
   if type(body) ~= "string" then return 0 end
   local S, n, before = C.Stats, 0, C.Stats.foundVersion
   -- (who said it: a voice in what the labels decide, and who saw a boss's loot, in rule 8; both need two. Nothing
@@ -2257,28 +2266,35 @@ function M:ReceiveLabels(body, sender)
   local who = sender and C.Roster:GuidOf(sender) or nil
   if not who or C.Policy:Untrusted(who) then return 0 end
   local officer = C.Roster:OfficerStill()
+  local function passed(key, label)
+    if again then again["L" .. key] = true else C.Roster:PartAside(sender, "L" .. key, key .. "=" .. label) end
+  end
   for key, label in body:gmatch("([^=;]+)=([^;]*)") do
     local p, num, extra = key:match("^([efi])(%d+):?([%w]*)$")
     num = tonumber(num)
     local loot = tonumber(key:match("^l(%d+)$"))
+    -- (a label of a kind this client takes: a boss's, an instance's with its kind, a faction's)
+    local kind = p == "e" or (p == "i" and (extra == "p" or extra == "r" or extra == "w")) or (p == "f" and extra == "")
     if loot and loot < MAX_ID then
       local named = S.LabelOf("e" .. loot) ~= nil
-      if (officer or C.Policy:Route("e" .. loot) == "all") and (named or C.Rules.KilledSeen(loot)) then
+      if not (officer or C.Policy:Route("e" .. loot) == "all") then passed(key, label)
+      elseif named or C.Rules.KilledSeen(loot) then
         -- a boss's loot as a member saw it: item ids in base 36, dots between
         local ids = {}
         for x in label:gmatch("[%w]+") do local id = unb36(x); if id and id > 0 and id < MAX_ID and #ids < 24 then ids[#ids + 1] = id end end
         C.Rules.LearnLoot(loot, ids, false, who)
         n = n + 1
       end
-    elseif p and num and num < MAX_ID and #key <= 24 and (officer or C.Policy:Route(labelRoute(p, num, extra)) == "all") then
-      if p == "e" then
+    elseif kind and num and num < MAX_ID and #key <= 24 then
+      if not (officer or C.Policy:Route(labelRoute(p, num, extra)) == "all") then passed(key, label)
+      elseif p == "e" then
         local inst = tonumber(extra)
         S.Label("e" .. num, label, false, (inst and inst < MAX_ID) and inst or nil, nil, who)
         n = n + 1
-      elseif p == "i" and (extra == "p" or extra == "r" or extra == "w") then
+      elseif p == "i" then
         S.Label("i" .. num, label, false, nil, extra, who)
         n = n + 1
-      elseif p == "f" and extra == "" then
+      else
         S.Label("f" .. num, label, false, nil, nil, who)
         n = n + 1
       end

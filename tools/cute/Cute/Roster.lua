@@ -1009,52 +1009,108 @@ function R:ReleaseHeld()
 end
 -- (fix2) a value dropped because the policy this client routes by keeps its stat to the officers, while the sender may
 -- route by a newer one that opens it: the officer's own value goes at the click that opens it, before the save, and a
--- mate's as it reads the saved line, both before this client has read it. Kept aside in memory (R.aside[key][id], as
+-- mate's as it reads the saved line, both before this client has read it. Kept aside in memory (R.aside[key].v[id], as
 -- R.held, MAX_GAME a member) ASIDE_FOR seconds, and taken once a reroute here opens its stat (R:ReleaseAside, from
 -- Policy.lua P:Rerouted); what is left then goes, never saved and never shown. 0.9.1 dropped them and asked every
 -- record whole once its read opened the stat: every member online at once, at every save that opened one
+-- (fix3) The labels and kill claims passed by for the same reason (Comm.lua M:ReceiveLabels, M:ReceiveClaims: a boss,
+-- an instance or a faction the officers keep, which a mate's client sends as its read opens it) are kept the same way,
+-- a part each (R.aside[key].l, counted with the values: R:PartAside), and heard again as a reroute here opens them,
+-- after the values, so the kills taken there have their boss's name. No time counts while this client waits for a read
+-- that may open them (an officer's stricter policy heard, Policy.lua P.doubt, or no line read yet this session: inside
+-- an instance, a whole run): their ten minutes start again at the first sweep after the wait. What is kept aside is no
+-- reason to ask the guild: only a value really lost while this client does not hold the line's policy (refused, its
+-- sender's share full, or gone) is asked for again as the wait ends (R.lostUnsettled, Policy.lua P:Settle). 0.9.2 asked
+-- for every value that came during the wait, and every client online answered with its whole record and pass
 R.aside = {}
-local ASIDE_FOR = 600
+local ASIDE_FOR, ASIDE_WAIT = 600, 60
+local function waiting() local P = C.Policy; return P.doubt == true or P.line == nil end
+local function unsettledNow() return not R:OfficerStill() and not C.Policy:Settled() end
 local function sweepAside()
-  local old, soonest = now() - ASIDE_FOR, nil
+  local t, held = now(), waiting()
+  local old, soonest, lost = t - ASIDE_FOR, nil, false
   for key, a in pairs(R.aside) do
-    for id, x in pairs(a.v) do
-      if x.at <= old then a.v[id] = nil; a.n = a.n - 1
-      elseif not soonest or x.at < soonest then soonest = x.at end
+    for _, list in ipairs({ a.v, a.l }) do
+      for id, x in pairs(list) do
+        if held then x.u = true
+        elseif x.u then x.u, x.at = nil, t
+        elseif x.at <= old then list[id] = nil; a.n = a.n - 1; lost = true end
+        if list[id] ~= nil and not x.u and (not soonest or x.at < soonest) then soonest = x.at end
+      end
     end
     if a.n <= 0 then R.aside[key] = nil end
   end
-  -- (the next sweep as the oldest left runs out)
-  if soonest and not R.asideDue then
+  if lost and unsettledNow() then R.lostUnsettled = true end
+  -- (the next sweep as the oldest left runs out; while this client waits, a minute on)
+  local due = (held and next(R.aside) ~= nil and ASIDE_WAIT) or (soonest and soonest + ASIDE_FOR + 1 - t)
+  if due and not R.asideDue then
     R.asideDue = true
-    C_Timer.After(soonest + ASIDE_FOR + 1 - now(), C.Safe(function() R.asideDue = false; sweepAside() end, "roster: values aside"))
+    C_Timer.After(due, C.Safe(function() R.asideDue = false; sweepAside() end, "roster: values aside"))
   end
 end
-local function putAside(key, id, v, t)
+-- part: a label or a claim (R.aside[key].l), else a value. False where the sender's share is full
+local function putAside(key, id, v, t, part)
   local a = R.aside[key]
-  if not a then a = { n = 0, v = {} }; R.aside[key] = a end
-  if a.v[id] == nil then
-    if a.n >= MAX_GAME then return end
+  if not a then a = { n = 0, v = {}, l = {} }; R.aside[key] = a end
+  local list = part and a.l or a.v
+  if list[id] == nil then
+    if a.n >= MAX_GAME then return false end
     a.n = a.n + 1
   end
-  a.v[id] = { v = v, t = t, at = now() }
+  list[id] = { v = v, t = t, at = now(), u = waiting() or nil }
   if not R.asideDue then
     R.asideDue = true
     C_Timer.After(ASIDE_FOR + 1, C.Safe(function() R.asideDue = false; sweepAside() end, "roster: values aside"))
   end
+  return true
+end
+-- a label or a kill claim passed by for its route (Comm.lua M:ReceiveLabels, M:ReceiveClaims): kept aside under the
+-- sender's record key, pk naming it ("L" and the label's key, "K" and the claim's boss and time), text its part as the
+-- wire carries it
+function R:PartAside(key, pk, text)
+  if not putAside(key, pk, text, nil, true) and unsettledNow() then self.lostUnsettled = true end
+end
+-- the labels and claims kept aside of one sender, heard again as they came (Comm.lua, which passes by again what its
+-- route still keeps, marked in again): the labels first, a boss's loot after them (taken only for a boss with a name),
+-- then the claims, at most 64 a body as on the wire. The number heard
+local function hearAside(key, a, old)
+  local labels, loot, claims = {}, {}, {}
+  for pk, x in pairs(a.l) do
+    if x.at <= old and not x.u then a.l[pk] = nil; a.n = a.n - 1
+    elseif pk:sub(1, 1) == "K" then claims[#claims + 1] = pk
+    elseif pk:sub(2, 2) == "l" then loot[#loot + 1] = pk
+    else labels[#labels + 1] = pk end
+  end
+  table.sort(labels); table.sort(loot); table.sort(claims)
+  for _, pk in ipairs(loot) do labels[#labels + 1] = pk end
+  local again, n = {}, 0
+  local function hear(list, from, to, fn)
+    local body = {}
+    for i = from, to do body[#body + 1] = a.l[list[i]].v end
+    n = n + fn(C.Comm, table.concat(body, ";"), key, again)
+  end
+  if #labels > 0 then hear(labels, 1, #labels, C.Comm.ReceiveLabels) end
+  for i = 1, #claims, 64 do hear(claims, i, math.min(i + 63, #claims), C.Comm.ReceiveClaims) end
+  for _, list in ipairs({ labels, claims }) do
+    for _, pk in ipairs(list) do if not again[pk] then a.l[pk] = nil; a.n = a.n - 1 end end
+  end
+  return n
 end
 function R:ReleaseAside()
   if next(self.aside) == nil then return 0 end
   local officer, n, old = self:MeOfficer(), 0, now() - ASIDE_FOR
   local S, dynamic = C.Stats, C.Stats.IsDynamic
+  local parts = {}
   for key, a in pairs(self.aside) do
     local e = CuteDB.roster[key]
     local ok = type(e) == "table" and type(e.stats) == "table"
     local kv, prev, games = {}, {}, nil
     for id, x in pairs(a.v) do
       local open = officer or C.Policy:Route(id) == "all"
-      if x.at <= old or open then a.v[id] = nil; a.n = a.n - 1 end
-      if ok and open and x.at > old and not S.Implausible(id, x.v, e.stats[id], nil) then
+      -- (u: kept through a wait for Guild Info, whose time does not count: sweepAside)
+      local stale = x.at <= old and not x.u
+      if stale or open then a.v[id] = nil; a.n = a.n - 1 end
+      if ok and open and not stale and not S.Implausible(id, x.v, e.stats[id], nil) then
         e.at = type(e.at) == "table" and e.at or {}
         local dyn = dynamic(id)
         if dyn or e.at[id] == nil or e.at[id] <= x.t then
@@ -1075,6 +1131,8 @@ function R:ReleaseAside()
         end
       end
     end
+    -- (its labels and claims are heard once every value is in, below)
+    if a.l and next(a.l) ~= nil then parts[#parts + 1] = key end
     if a.n <= 0 then self.aside[key] = nil end
     -- (what the rules weigh, as R:Apply)
     if next(kv) ~= nil and C.Rules then C.Rules:Observe(e.stats, kv, self:VoiceOf(key, e), prev) end
@@ -1082,6 +1140,14 @@ function R:ReleaseAside()
   if n > 0 then
     self:Changed()
     if C.UI and C.UI.Refresh then C.UI:Refresh() end
+  end
+  table.sort(parts)
+  for _, key in ipairs(parts) do
+    local a = self.aside[key]
+    if a and C.Comm and C.Comm.ReceiveLabels then
+      n = n + hearAside(key, a, old)
+      if a.n <= 0 then self.aside[key] = nil end
+    end
   end
   return n
 end
@@ -1214,9 +1280,9 @@ function R:Apply(name, kv, whispered)
     elseif not officer and P:Route(id) ~= "all" then
       -- (not in the record: maybe a stat the officers have just opened, sent once by a client that routes by the newer
       -- policy first. Kept aside a while, taken once a reroute here opens it (putAside); asked for again only where it
-      -- came before this client held the line's policy at all, Policy.lua P:Settle)
-      putAside(name, id, v, t)
-      if unsettled then self.lostUnsettled = true end
+      -- is lost while this client does not hold the line's policy, its sender's share of what is kept aside full,
+      -- Policy.lua P:Settle. What is aside is no reason to ask: 0.9.2 asked for it, and the guild answered whole)
+      if not putAside(name, id, v, t) and unsettled then self.lostUnsettled = true end
     else
       if (CHECKED[id] or (type(id) == "string" and id:match("^k%d+$"))) and not ctx then
         -- the member as the roster lists them: by the GUID that came, else the record's, else the sender's name (a GUID
