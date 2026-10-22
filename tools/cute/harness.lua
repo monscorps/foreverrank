@@ -21216,6 +21216,8 @@ end
 --     built, no record walked; a full read that finds levels alone moved builds none either
 -- W1. The wire keeps one sent time a label and one a boss's own claim (its first kill in a group), not every text a kill
 --     or a growing loot list ever sent; a wire of the old kind is kept by id
+-- Q1. A 1Q from a member the officers marked untrusted starts nothing; one asker's 1Q is answered twice a session at
+--     most, and forces the whole statistics pass once in half an hour
 ----------------------------------------------------------------------------
 do
   local CASES, failed, said = {}, {}, {}
@@ -21375,6 +21377,38 @@ do
       for _, c in ipairs({ ann, mo }) do leave(c) end
     end)
     said[#said + 1] = "the wire keeps one sent time a label and a boss's own claim alone, an old wire's by id"
+  end }
+
+  CASES[#CASES + 1] = { "Q1 an untrusted member's 1Q starts nothing; one asker's is answered twice a session, its pass once", function()
+    inGuild({ member("Ofa", 1), member("Ann", 3), member("Mal", 3), member("Bo", 3) }, function()
+      local g = guidOf("Mal")
+      local p = pol()
+      p.policy.untrusted, p.policy.trustAt = { [g] = true }, { [g] = EPOCH }
+      local ann = char("Ann", 3, { withStats = true })
+      login(ann, p)
+      tickAll(700)
+      assert(ann.C.Policy:Untrusted(g), "Mal untrusted on Ann's client")
+      local function answers(from)
+        local rec, pass = 0, 0
+        for i = from + 1, #ann.sent do
+          local m = ann.sent[i].msg
+          if m:sub(1, 3) == "1F|" and m:find("level=", 1, true) then rec = rec + 1 end
+          if m:sub(1, 3) == "1F|" and m:find("g2001=", 1, true) then pass = pass + 1 end
+        end
+        return rec, pass
+      end
+      local s0 = #ann.sent
+      for _ = 1, 3 do ann.C.Comm:Receive("1Q|" .. ann.o.guid, "GUILD", "Mal-Forever"); tickAll(200) end
+      local r, ps = answers(s0)
+      assert(r == 0 and ps == 0, "Mal's 1Qs start nothing: " .. r .. " records, " .. ps .. " passes")
+      s0 = #ann.sent
+      for _ = 1, 3 do ann.C.Comm:Receive("1Q|" .. ann.o.guid, "GUILD", "Bo-Forever"); tickAll(200) end
+      tickAll(500)
+      r, ps = answers(s0)
+      assert(r == 2 and ps == 1, "Bo's three 1Qs: the record whole twice, the pass once: " .. r .. " records, " .. ps .. " passes")
+      leave(ann)
+    end)
+    said[#said + 1] = "an untrusted member's 1Q starts nothing; one asker's is answered twice a session, its pass once in half an hour"
   end }
 
   for _, case in ipairs(CASES) do

@@ -1725,22 +1725,33 @@ local function sinceOf(since, from)
   if from == nil and (not M.base or since < M.base) then return nil end
   return math.min(since, C.ServerNow())
 end
+-- the asks answered lately, by asker (one ask a sender in ASK_AGAIN seconds starts an answer), and when the statistics
+-- pass last answered each member's (once in GAME_AGAIN seconds a member; an officer's always): a copy that asks every
+-- few seconds makes nobody resend
+local ASK_AGAIN, GAME_AGAIN, POLICY_AGAIN, UNTRUSTED_AGAIN = 180, 1800, 30, 300
+M.answered, M.answeredSince, M.gameAnswered, M.policyAsked = {}, {}, {}, {}
 -- a member who holds no record of yours asks for it whole (1Q: after a since answer or a delta from a sender it holds
--- none of), answered as a fresh ask wanting the whole record, the guild's part alone, once in ASK_AGAIN seconds, and
--- the whole statistics pass with it (the ten-minute pass bounds it): its later asks, since its hold, would never bring
--- what the pass said before (a first build sent the record alone)
-M.wholeAsked, M.wholeAskedOf = {}, {}
+-- none of), answered as a fresh ask wanting the whole record, the guild's part alone, once in ASK_AGAIN seconds and
+-- WHOLE_ASKS times a session at most (an honest asker sends one a session, a /reload one more), and the whole
+-- statistics pass with it once in GAME_AGAIN (the ten-minute pass bounds it too): its later asks, since its hold, would
+-- never bring what the pass said before (a first build sent the record alone). A member the officers marked untrusted
+-- is answered nothing (Receive), as its 1R gets the policy alone: 0.9.1 resent the whole record every three minutes
+-- and the whole pass every ten to any member who sent 1Q
+M.wholeAsked, M.wholeAskedOf, M.wholeAsks, M.wholePassed = {}, {}, {}, {}
+local WHOLE_ASKS = 2
 function M:AskedWhole(sender)
   local who = C.Roster:GuidOf(sender) or sender
   local t = C.Now()
   if M.wholeAsked[who] and t - M.wholeAsked[who] < 180 then return end
-  M.wholeAsked[who] = t
+  if (M.wholeAsks[who] or 0) >= WHOLE_ASKS then return end
+  M.wholeAsked[who], M.wholeAsks[who] = t, (M.wholeAsks[who] or 0) + 1
   local e = self:Entry(who)
   e.rec, e.nr, e.pass = true, 0, C.ServerNow()
   await("rec", e)
   M.answerGuild, M.answerFull = true, true
   self:AnswerSoon()
-  if hasPass() then
+  if hasPass() and not (M.wholePassed[who] and t - M.wholePassed[who] < GAME_AGAIN) then
+    M.wholePassed[who], M.gameAnswered[who] = t, t
     e.pass, e.np = true, 0
     await("pass", e)
     M.answerGameGuild, M.gameFull = true, true
@@ -1972,11 +1983,6 @@ function M:ReplayEarly()
   end)
   step()
 end
--- the asks answered lately, by asker (one ask a sender in ASK_AGAIN seconds starts an answer), and when the statistics
--- pass last answered each member's (once in GAME_AGAIN seconds a member; an officer's always): a copy that asks every
--- few seconds makes nobody resend
-local ASK_AGAIN, GAME_AGAIN, POLICY_AGAIN, UNTRUSTED_AGAIN = 180, 1800, 30, 300
-M.answered, M.answeredSince, M.gameAnswered, M.policyAsked = {}, {}, {}, {}
 
 function M:Receive(text, channel, sender, replayed)
   text, channel, sender = C.Plain(text), C.Plain(channel), C.Plain(sender)
@@ -2176,9 +2182,10 @@ function M:Receive(text, channel, sender, replayed)
       if C.Finds then C.Finds:WordCame() end
     end
   elseif kind == "1Q" then
-    -- (a member asking for this client's record whole, by its GUID: another's is passed by)
+    -- (a member asking for this client's record whole, by its GUID: another's is passed by, and a member the officers
+    -- marked untrusted starts nothing, as with its 1R)
     local g = text:match("^1Q|([^|;=]+)$")
-    if g and g == C.MyGUID() then self:AskedWhole(sender) end
+    if g and g == C.MyGUID() and not C.Policy:Untrusted(R:GuidOf(sender)) then self:AskedWhole(sender) end
   elseif kind == "1L" then
     self:ReceiveLabels(text:match("^1L|(.*)$"), sender)
   elseif kind == "1K" then
