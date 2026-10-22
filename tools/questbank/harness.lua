@@ -24593,6 +24593,32 @@ end
     hear("1S|18|100|A|MAGE|0|0|0|-1|0|0|6.4.0|zzzzzzzzzz", "PARTY", "Mate Steelhand-Forever Normal")
     assert(c.QB.Sync.members["Mate Steelhand-Forever Normal"], "QuestBank's own still heard")
   end }
+
+  -- S9 (robust). The addon QuestBank beside Cute shared level, XP, class, a GUID tail and the quest plan on GUILD, and in a
+  -- raid on RAID, whatever the officers' Who sees what said. A host's runtime flags (Cute's dormant Bridge sets them on
+  -- QuestBankAPI; no saved setting written): noRaidSync keeps it off RAID, noGuildSync off GUILD both ways
+  FECASES[#FECASES + 1] = { "S9: a host's noGuildSync keeps QuestBank's guild sharing quiet both ways, whatever share.guild says", function()
+    local c = syncChar("Beside")
+    local QB, S = c.QB, c.QB.Sync
+    local hear = hearer(c)
+    QB:Settings().share.guild = true
+    QB.noGuildSync = true
+    tick(c, 30)
+    c.outbox = {}
+    S.lastStatus, S.lastQuests = nil, nil
+    S:Broadcast(false)
+    hear("1R", "GUILD", "Asker One-Forever Normal")
+    tick(c, 30)
+    local guild, party = 0, 0
+    for _, m in ipairs(c.outbox) do if m[3] == "GUILD" then guild = guild + 1 elseif m[3] == "PARTY" then party = party + 1 end end
+    assert(guild == 0 and party > 0, "nothing on GUILD, the party as before: " .. guild .. ", " .. party)
+    local recorded, unspy = spy(c)
+    hear("1L|118:450:18", "GUILD", "Mate Steelhand-Forever Normal")
+    hear("1S|18|100|A|MAGE|0|0|0|-1|0|0|6.4.0|zzzzzzzzzz", "GUILD", "Guildie Steelhand-Forever Normal")
+    assert(recorded[1] == 0 and S.members["Guildie Steelhand-Forever Normal"] == nil, "nothing taken from GUILD")
+    unspy()
+    QB.noGuildSync = nil
+  end }
   local failed = {}
   for _, case in ipairs(FECASES) do
     local ok, err = pcall(case[2])

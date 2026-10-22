@@ -77,12 +77,18 @@ local function groupChannel()
   return (IsInRaid and IsInRaid()) and "RAID" or "PARTY"
 end
 
+-- whether you share with your guild: share.guild, unless a host that routes what its guild sees and runs beside
+-- QuestBank (Cute) set QB.noGuildSync on QuestBank's QB (QuestBankAPI): then nothing goes to GUILD nor is taken from it,
+-- whatever share.guild says (its saved value untouched), and the guild hears the host's own channel
+local function guildOn() return QB:Settings().share.guild and not QB.noGuildSync end
+S.GuildOn = guildOn
+
 local function channels()
   local share = QB:Settings().share
   local out = {}
   local g = share.party and groupChannel()
   if g then out[#out + 1] = g end
-  if share.guild and IsInGuild and IsInGuild() then out[#out + 1] = "GUILD" end
+  if guildOn() and IsInGuild and IsInGuild() then out[#out + 1] = "GUILD" end
   return out
 end
 
@@ -271,8 +277,9 @@ end
 
 function S:Receive(msg, channel, sender)
   if not sender or type(msg) ~= "string" or #msg > 255 then return end
-  -- (guild sharing off: nothing taken from the guild either, so a single guild mate's XP reading corrects nothing)
-  if channel == "GUILD" and not QB:Settings().share.guild then return end
+  -- (guild sharing off, or a host's noGuildSync: nothing taken from the guild either, so a single guild mate's XP
+  -- reading corrects nothing)
+  if channel == "GUILD" and not guildOn() then return end
   if isMe(sender) then return end
   local kind = msg:sub(1, 2)
   if kind == "1V" then

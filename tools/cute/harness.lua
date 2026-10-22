@@ -19534,6 +19534,36 @@ do
     end)
   end }
 
+  -- S9 (robust). The addon QuestBank beside Cute shared on GUILD and, in a raid, on RAID, whatever the officers' Who sees
+  -- what said. The dormant Bridge sets QuestBank's runtime flags (QuestBankAPI is QuestBank's QB; no saved setting written):
+  -- noRaidSync and noGuildSync, so guild sharing goes through Cute's Comm alone
+  FECASES[#FECASES + 1] = { "S9: QuestBank loaded beside Cute: its sync told off RAID and GUILD, nothing of its settings written", function()
+    inGuild({ member("Rone", 1) }, function()
+      local q = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+      local isLoaded = q.env.C_AddOns.IsAddOnLoaded
+      q.env.C_AddOns.IsAddOnLoaded = function(x) if x == "QuestBank" then return true, true end return isLoaded(x) end
+      local settings = { guide = { on = true, frame = true }, arrow = true, glow = { on = true, style = "sparkle" }, remind = { on = true }, share = { party = true, guild = true }, djShow = { boss = true, rare = true, trash = false, other = true } }
+      q.env.QuestBankAPI = {
+        version = "6.4.0", logReady = true, state = { level = 5, log = {} }, routeNow = { legs = {}, xp = 0, level = 5, t = 0 },
+        Settings = function() return settings end, MarkDirty = function() end, Comma = tostring, Short = tostring,
+        Model = { Busy = function() return false end }, Data = { CAT = {} }, Quest = { Get = function() return nil end },
+        Guide = { Steps = function() return {} end, Text = function(st) return st.text end, TimeToLevel = function() return nil end, MemberSteps = function() return {} end, Reminder = function() return nil end },
+        StepFrame = { Menu = function() end, Apply = function() end, RemindChanged = function() end }, Arrow = { Set = function() end },
+        UI = { PlaceGroups = function() return {}, {}, nil, nil, nil end, Candidates = function() return {} end, QuestClick = function() end, QuestTooltip = function() end },
+        Target = { Route = function() return { legs = {}, xp = 0, level = 5, t = 0 } end }, Run = { Get = function() return nil end },
+        DMap = { Attach = function() end, Refresh = function() end }, Gear = { Attach = function() end, Refresh = function() end, RefreshSoon = function() end },
+        Remind = { Pull = function() return {}, false end },
+      }
+      local API = q.env.QuestBankAPI
+      login(q); tickAll(5)
+      q.C.Modules.Set("Cute_Quest", true); tick(q, 6)
+      assert(q.addons[2].private.dormant == true, "QuestBank loaded: the copy sleeps")
+      assert(API.noRaidSync == true and API.noGuildSync == true, "QuestBank's sync told off RAID and GUILD")
+      assert(settings.share.guild == true and settings.share.party == true, "its saved settings as they were")
+      leave(q)
+    end)
+  end }
+
   -- S4 (firsthour), Cute_Quest's own words: the Finds list's note said what guides gave "QuestBank"; the site, which
   -- gathers them, is foreverrank.com
   FECASES[#FECASES + 1] = { "S4: the Finds list's note names foreverrank.com", function()
