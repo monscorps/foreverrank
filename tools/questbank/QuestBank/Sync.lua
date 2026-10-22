@@ -4,9 +4,10 @@
 -- friend's plan, and follow each other's run. It also passes on the XP numbers each game reports.
 -- Small messages on the addon channel, a few a second at most; nothing goes out while sharing is off.
 --   1S|level|xp|fac|class|banked*100|plan*100|at60*100|runMin|runN|runXP|version|guid   status
---   1Q|part|parts|id.code[have/need],...                                    quests (b banked, a in the log with progress, p to fetch)
+--   1Q|part|parts|id.code[have/need],...                                    quests (b banked, a in the log with progress, p to fetch):
+--                                                                              to your group and a /qb sync friend, never the guild
 --   1L|id:xp:level,...                                                         XP the game reported
---   1R                                                                         please send yours
+--   1R                                                                         please send yours (on GUILD: your status alone)
 --   1G|text                                                                    the Guide's first step (6.0), for the others' step frames
 local _, QB = ...
 if QB.dormant then return end
@@ -21,6 +22,12 @@ local STALE = 30 * 60
 -- reach you from anyone of your faction)
 local GROUP = { PARTY = true, RAID = true, INSTANCE_CHAT = true }
 S.GROUP = GROUP
+-- (the launch audit) GUILD hears your status alone: the quest list goes to your group (and to a friend by /qb sync). Every
+-- login made every QuestBank in the guild send its status and its whole list there (a 1R on GUILD cleared what each had
+-- sent), and each objective ticked sent the list again; only the group reads it (the Party page's dungeons, the
+-- group-quest factor). A guild mate's ask is answered with your status, once a guild mate in ASK_GAP seconds
+local ASK_GAP = 600
+S.guildAsked = {}
 
 local function now() return GetTime and GetTime() or 0 end
 
@@ -128,7 +135,7 @@ function S:Broadcast(force)
   local msgs, sig = questMsgs()
   for _, ch in ipairs(chans) do
     if force or status ~= self.lastStatus then queue(status, ch) end
-    if force or sig ~= self.lastQuests then for _, m in ipairs(msgs) do queue(m, ch) end end
+    if ch ~= "GUILD" and (force or sig ~= self.lastQuests) then for _, m in ipairs(msgs) do queue(m, ch) end end
   end
   self.lastStatus, self.lastQuests = status, sig
   if force then QB:Print("Shared your quests with " .. table.concat(chans, " and "):lower() .. ".") end
@@ -339,6 +346,14 @@ function S:Receive(msg, channel, sender)
       if not QB.host and S.asked[baseName(target)] then
         queue(statusMsg(), "WHISPER", target)
         for _, q in ipairs((questMsgs())) do queue(q, "WHISPER", target) end
+      end
+    elseif channel == "GUILD" then
+      -- (a guild mate's ask: your status alone, once a guild mate in ASK_GAP; nothing sent before is forgotten)
+      local t = now()
+      local at = S.guildAsked[sender]
+      if not at or t - at >= ASK_GAP then
+        S.guildAsked[sender] = t
+        queue(statusMsg(), "GUILD")
       end
     else
       self.lastStatus, self.lastQuests = nil, nil

@@ -24541,6 +24541,39 @@ end
     local text = table.concat(lines, "\n")
     assert(text:find("Cute", 1, true) and not text:find("QuestBank", 1, true), "the quest's tooltip names Cute:\n" .. text)
   end }
+
+  -- S6 (scale). QuestBank alone shares on GUILD by default: every login made every QuestBank in the guild send its status
+  -- and its whole quest list there (a 1R on GUILD cleared what each had sent), and each objective ticked sent the list
+  -- again. The quest list goes to the group alone now; the guild hears your status, and a guild mate's ask is answered
+  -- with it alone, once a guild mate in ten minutes
+  FECASES[#FECASES + 1] = { "S6: on GUILD the status alone, never the quest list; a guild mate's ask answered with it once in ten minutes", function()
+    local c = syncChar("Guildmate", { log = { { 7, 0 }, { 33, 1 } } })
+    local QB, S = c.QB, c.QB.Sync
+    local hear = hearer(c)
+    QB:Settings().share.guild = true
+    tick(c, 30)
+    local function sent(fn)
+      c.outbox = {}
+      fn()
+      tick(c, 40)
+      local out = {}
+      for _, m in ipairs(c.outbox) do if m[3] == "GUILD" or m[3] == "PARTY" then out[#out + 1] = m end end
+      return out
+    end
+    local function count(list, kind, ch) local n = 0; for _, m in ipairs(list) do if m[2]:sub(1, 2) == kind and m[3] == ch then n = n + 1 end end; return n end
+    local out = sent(function() S:Broadcast(true) end)
+    assert(count(out, "1S", "GUILD") == 1 and count(out, "1Q", "GUILD") == 0 and count(out, "1Q", "PARTY") >= 1,
+      string.format("a share: the status on GUILD, the quests to the party alone: %d %d %d", count(out, "1S", "GUILD"), count(out, "1Q", "GUILD"), count(out, "1Q", "PARTY")))
+    out = sent(function() hear("1R", "GUILD", "Asker One-Forever Normal") end)
+    assert(count(out, "1S", "GUILD") == 1 and #out == 1, "a guild mate's ask: the status on GUILD, nothing more: " .. #out)
+    out = sent(function() hear("1R", "GUILD", "Asker One-Forever Normal") end)
+    assert(#out == 0, "the same ask again within ten minutes: nothing: " .. #out)
+    tick(c, 601)
+    out = sent(function() hear("1R", "GUILD", "Asker One-Forever Normal") end)
+    assert(count(out, "1S", "GUILD") == 1 and count(out, "1Q", "GUILD") == 0, "ten minutes on: the status again")
+    out = sent(function() hear("1R", "PARTY", "Mate Steelhand-Forever Normal") end)
+    assert(count(out, "1Q", "PARTY") >= 1 and count(out, "1Q", "GUILD") == 0, "the party's ask: the quests to the party, none to the guild")
+  end }
   local failed = {}
   for _, case in ipairs(FECASES) do
     local ok, err = pcall(case[2])
