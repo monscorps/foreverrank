@@ -22131,6 +22131,332 @@ do
   print("merge2 M2: Settings' notes box says in its tooltip that where you found things is noted too")
 end
 
+-- [stage: map] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The map round (sub-project F, Cute's Map window M). QuestBank's side: a host's map window (QB.mapWindow, set by Cute's
+-- Bridge) and its kind marks (QB.kindMarks); QuestBank alone draws its own page as before.
+-- F1. The canvas in a host's box (MP.Host): moved into it at the box's strata, sized to it, drawn as it shows; the host
+--     told of a new map (with the zone's quests), a pin's click and a pin's hover; given back with MP.Host(nil).
+-- F2. The wheel through zones: the game's smooth zoom; out at the smallest zoom up a map (past one without art), in at
+--     the smallest zoom over a zone into it and on zooming there; zoomed in, the game's own wheel. The right-click up a
+--     map, never a menu; a Ctrl-click's spot on the arrow named for its zone and said to the host. QuestBank alone keeps
+--     its menu.
+-- F3. The levels of the providers a host adds (graveyards under the area points, map links over them, the finds with
+--     the vignettes, your corpse over your group), only for a host.
+-- F4. Pins merged where they touch on the host's map (a count on the corner), parting zoomed in once the zoom settles;
+--     a continent draws its zones' ! and ? (placed on it, a click's waypoint in the zone), no objective marks.
+-- F5. The kind marks: an objective's spot is its kind's cursor at 20 px with no disc; a stop of the route the game's
+--     disc with its number (the gold one for stop 1), the ? once its quests are done; QuestBank alone the quest disc.
+-- F6. The finds: QuestBank's data (the guides' book), your own notes (a book, a chest, a rare) at once, a herb node or a
+--     quest object never; the guides' book you read once; spoiler-free tooltips (no key named, no text), a click on the
+--     arrow; "Finds on the map" off draws none; QuestBank alone has no finds layer.
+----------------------------------------------------------------------------
+do
+  local function windowChar(name, flags, o)
+    o = o or {}
+    local c = newClient({ name = name, level = o.level or 5, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1,
+      race = "Human", log = o.log or {}, done = o.done or {}, world = o.world or { 0, -8914, -133 }, map = o.map or 1429, bagSlots = {}, bind = "Goldshire" })
+    local env = c.env
+    -- (the game's map canvas as far as a host's window drives it: the smooth wheel, the cursor, the zone under it; the
+    -- scroll container's smallest zoom and its own wheel, recorded)
+    env.MAP_CANVAS_MOUSE_WHEEL_ZOOM_BEHAVIOR_SMOOTH = 1
+    c.wheels = {}
+    env.MapCanvasMixin = env.CreateFromMixins(env.MapCanvasMixin, {
+      SetMouseWheelZoomMode = function(self, mode) self.__wheelMode = mode end,
+      GetNormalizedCursorPosition = function() return c.cursor and c.cursor[1] or 0.5, c.cursor and c.cursor[2] or 0.5 end,
+    })
+    env.MapCanvasScrollControllerMixin = env.CreateFromMixins(env.MapCanvasScrollControllerMixin, {
+      OnMouseWheel = function(_, delta) c.wheels[#c.wheels + 1] = delta end,
+      GetScaleForMinZoom = function() return 1 end,
+      GetCanvasScale = function() return c.scale or 1 end,
+    })
+    env.C_Map.GetMapInfoAtPosition = function(m) local z = c.under and c.under[m]; if z then return env.C_Map.GetMapInfo(z) end return nil end
+    for k, v in pairs(flags or {}) do c.QB[k] = v end
+    if o.objectives then c.objectives = o.objectives end
+    login(c)
+    return c
+  end
+  local said = {}
+  -- F1, F2, F3
+  do
+    local c = windowChar("Mapwin", { mapWindow = true, kindMarks = true }, { log = { { 7, 0 }, { 33, 1 } } })
+    local QB, env = c.QB, c.env
+    local MP, QM, P = QB.MapPage, QB.QuestMap, QB.Pins
+    local canvas = MP.canvas
+    assert(canvas and canvas.__wheelMode == 1, "the host's canvas: the game's smooth wheel zoom")
+    -- F3: the levels
+    local mgr = canvas:GetPinFrameLevelsManager()
+    local function lv(t) return mgr.defs[t] and mgr.defs[t].start or nil end
+    assert(lv("PIN_FRAME_LEVEL_SELECTABLE_GRAVEYARD") < lv("PIN_FRAME_LEVEL_AREA_POI") and lv("PIN_FRAME_LEVEL_AREA_POI") < lv("PIN_FRAME_LEVEL_MAP_LINK")
+      and lv("PIN_FRAME_LEVEL_MAP_LINK") < lv("PIN_FRAME_LEVEL_VIGNETTE") and lv("PIN_FRAME_LEVEL_VIGNETTE") < lv("PIN_FRAME_LEVEL_QUEST_OFFER")
+      and lv("PIN_FRAME_LEVEL_GROUP_MEMBER") < lv("PIN_FRAME_LEVEL_CORPSE"), "the host's providers' levels where the world map has them")
+    said[#said + 1] = "the levels of the host's providers as the world map's"
+    -- F1: the host's box
+    local box = env.CreateFrame("Frame", nil, env.UIParent)
+    box:SetSize(740, 500)
+    local told = { changed = {}, reveal = {}, hovered = {}, showing = {} }
+    local hooks = { strata = "HIGH",
+      Changed = function(m) told.changed[#told.changed + 1] = m end,
+      Reveal = function(ids) told.reveal[#told.reveal + 1] = ids end,
+      Hovered = function(id) told.hovered[#told.hovered + 1] = id or false end,
+      Showing = function(text) told.showing[#told.showing + 1] = text end }
+    local holder = canvas:GetParent()
+    local qd = QM.pageProvider.draws or 0
+    assert(MP.Host(box, hooks) == canvas, "MP.Host gives the canvas")
+    assert(canvas:GetParent() == box and canvas:GetWidth() == 740 and canvas:GetHeight() == 500 and canvas:IsVisible(),
+      "the canvas in the box, at its strata, its size: " .. tostring(canvas:GetWidth()) .. " x " .. tostring(canvas:GetHeight()))
+    assert((QM.pageProvider.draws or 0) > qd, "shown in the box: the layers drawn")
+    MP.Go(1415, "user"); MP.Go(1429, "user")
+    assert(told.changed[#told.changed] == 1429 and MP.lists and MP.zone, "the host told of the new map, the zone's quests read: " .. tostring(told.changed[#told.changed]))
+    box:SetSize(600, 420)
+    MP.Fit()
+    assert(canvas:GetWidth() == 600 and canvas:GetHeight() == 420, "a box resized: the canvas with it")
+    -- a quest pin's hover and click tell the host
+    QB:Recompute(true); QB.Model.Finish(); P:Update(); QM:Update()
+    local icon
+    for _, f in ipairs(QM.pageProvider.active) do if f.data.kind ~= "dungeon" then icon = icon or f end end
+    assert(icon, "a quest pin on the host's map")
+    lines = {}
+    icon:OnMouseEnter()
+    assert(type(told.hovered[#told.hovered]) == "number" and MP.hover == told.hovered[#told.hovered], "a pin hovered: the host told of its quest")
+    icon:OnMouseLeave()
+    assert(told.hovered[#told.hovered] == false and MP.hover == nil, "and as it is left")
+    local SetWaypoint, got = QB.API.SetWaypoint, nil
+    QB.API.SetWaypoint = function(...) got = { ... } end
+    icon:OnMouseClickAction("LeftButton")
+    assert(got and #told.reveal == 1 and type(told.reveal[1]) == "table", "a pin clicked: on the arrow, and the host shown its quests")
+    said[#said + 1] = "the canvas in the host's box, sized to it, the host told of the map, a pin's hover and click"
+    -- F2: the wheel
+    local sc = canvas.ScrollContainer
+    assert(sc.__scripts.OnMouseWheel and sc.OnMouseWheel == MP.Wheel, "the wheel is the window's")
+    c.scale = 2
+    sc.__scripts.OnMouseWheel(sc, -1)
+    assert(canvas.mapID == 1429 and c.wheels[#c.wheels] == -1, "zoomed in: the game's own wheel")
+    c.scale = 1
+    sc.__scripts.OnMouseWheel(sc, -1)
+    assert(canvas.mapID == 1415 and not MP.follow and #told.changed > 1 and told.changed[#told.changed] == 1415, "out at the smallest zoom: up a map, the continent")
+    local n0 = #c.wheels
+    c.under = { [1415] = 1433 }
+    sc.__scripts.OnMouseWheel(sc, 1)
+    assert(canvas.mapID == 1433 and #c.wheels == n0 + 1 and c.wheels[#c.wheels] == 1, "in at the smallest zoom over Redridge: into it, and the wheel on zooming there")
+    c.under = nil
+    sc.__scripts.OnMouseWheel(sc, 1)
+    assert(canvas.mapID == 1433 and c.wheels[#c.wheels] == 1, "in over no zone of its own: the game's zoom")
+    -- a parent without art is passed for its own (Azeroth's, here)
+    c.noArt = { [1415] = true }
+    sc.__scripts.OnMouseWheel(sc, -1)
+    assert(canvas.mapID == 947, "a parent without art passed: " .. tostring(canvas.mapID))
+    c.noArt = nil
+    sc.__scripts.OnMouseWheel(sc, -1)
+    assert(canvas.mapID == 947, "the world: nowhere further up")
+    MP.Go(1429, "user")
+    -- the right-click up a map, no menu; Ctrl-click named for its zone and said to the host
+    c.contextMenus = {}
+    local handler = canvas.__clickHandlers[1]
+    assert(handler(canvas, "RightButton", 0.5, 0.5) == true and canvas.mapID == 1415 and #c.contextMenus == 0, "right-click: up a map, no menu")
+    MP.Go(1429, "user")
+    c.ctrl = true
+    got = nil
+    assert(handler(canvas, "LeftButton", 0.5, 0.25) == true and got and got[1] == 1429 and got[4] == "Elwynn Forest 50, 25", "Ctrl-click: the spot on the arrow, named for its zone: " .. tostring(got and got[4]))
+    assert(told.showing[#told.showing] == "Elwynn Forest 50, 25", "and said to the host")
+    c.ctrl = false
+    QB.API.SetWaypoint = SetWaypoint
+    said[#said + 1] = "the wheel through zones (up past a map without art, into Redridge and on zooming), the right-click up a map, Ctrl-click named and said"
+    -- given back
+    MP.Host(nil)
+    assert(canvas:GetParent() == holder and MP.host == nil, "MP.Host(nil): the canvas back on its holder")
+  end
+  -- F2, F3: QuestBank alone keeps its page as it was
+  do
+    local c = windowChar("Mapalone", nil)
+    local MP = c.QB.MapPage
+    local canvas = MP.canvas
+    assert(canvas and canvas.__wheelMode == nil and canvas.ScrollContainer.OnMouseWheel ~= MP.Wheel and MP.finds == nil, "QuestBank alone: the canvas's own wheel, no finds layer")
+    local mgr = canvas:GetPinFrameLevelsManager()
+    assert(mgr.defs.PIN_FRAME_LEVEL_MAP_LINK == nil and mgr.defs.PIN_FRAME_LEVEL_CORPSE == nil, "QuestBank alone: its own levels")
+    MP.Go(1429, "user")
+    c.contextMenus = {}
+    assert(canvas.__clickHandlers[1](canvas, "RightButton", 0.5, 0.5) == true and #c.contextMenus == 1 and canvas.mapID == 1429, "QuestBank alone: the right-click is its menu")
+    said[#said + 1] = "QuestBank alone: its own wheel, levels, right-click menu, no finds"
+  end
+  -- F4, F5: merged where they touch, parting zoomed in; a continent's pins; the kind marks
+  do
+    local objectives = { [7] = { { text = "Kobold Vermin slain: 3/10", finished = false, numFulfilled = 3, numRequired = 10 } },
+      [18] = { { text = "Red Burlap Bandana: 2/12", finished = false, numFulfilled = 2, numRequired = 12 } } }
+    local c = windowChar("Mapmerge", { mapWindow = true, kindMarks = true }, { level = 3, log = { { 7, 0 }, { 18, 0 }, { 33, 1 } }, objectives = objectives })
+    local QB, env = c.QB, c.env
+    local MP, QM, P, MD = QB.MapPage, QB.QuestMap, QB.Pins, QB.Data
+    local canvas = MP.canvas
+    local box = env.CreateFrame("Frame", nil, env.UIParent)
+    box:SetSize(1002, 668)
+    MP.Host(box, { strata = "HIGH" })
+    MD.SN = { [1] = "Kobold Vermin", [2] = "Red Burlap Bandana" }
+    MD.SPOT = { [7] = "k,1,1429,700,200,25,c,1;k,1,1429,710,200,25,c,1", [18] = "c,5,1429,200,700,40,w,2" }
+    MD.SREQ = { [7] = "1:10", [18] = "5:12" }
+    local zoom = 1
+    canvas.GetCanvasScale = function() return zoom end
+    local function redraw() QB:Recompute(true); QB.Model.Finish(); P:Update(); QM:Update() end
+    MP.Go(1429, "user")
+    redraw()
+    local function marks(id)
+      local out = {}
+      for _, f in ipairs(QM.pageProvider.active) do if f.data.kind == "obj" and f.data.id == id then out[#out + 1] = f end end
+      return out
+    end
+    local m7 = marks(7)
+    assert(#m7 == 1 and m7[1].data.count == 2 and m7[1].qbCount and m7[1].qbCount:IsShown() and m7[1].qbCount:GetText() == "2", "two marks 10 px apart on the host's map: one pin with a count")
+    -- F5: the kind mark: the attack cursor at 20 px, no disc
+    local k = m7[1]
+    assert(k.Glyph.__atlas == "Crosshair_Attack_32" and k.Glyph:GetWidth() == 20 and not k.Disc:IsShown(), "an objective's spot: its kind's cursor at 20 px, no disc: " .. tostring(k.Glyph.__atlas))
+    lines = {}; k.__scripts.OnEnter(k)
+    assert(k.Hi:IsShown() and k.Hi.__atlas == "Crosshair_Attack_32", "lit by the mouse as a pin is")
+    k.__scripts.OnLeave(k)
+    local m18 = marks(18)
+    assert(#m18 == 1 and m18[1].Glyph.__atlas == "Crosshair_LootAll_32", "a loot objective: the loot cursor")
+    -- zoomed in four times: they part once the zoom settles
+    zoom = 4
+    QM.pageProvider:OnCanvasScaleChanged()
+    tick(c, 1)
+    assert(#marks(7) == 2 and not marks(7)[1].data.count, "zoomed in, the two marks part")
+    zoom = 1
+    QM.pageProvider:OnCanvasScaleChanged()
+    tick(c, 1)
+    assert(#marks(7) == 1, "and join zoomed out")
+    said[#said + 1] = "pins merged where they touch on the host's map, parting zoomed in"
+    -- F5: a stop of the route: its number on the game's disc, stop 1 the gold one; done, the ?
+    QB:Settings().mapRoute = true
+    redraw()
+    local stop1
+    for _, f in ipairs(P.pageProvider.active) do if f.data.num == 1 then stop1 = f end end
+    if stop1 then
+      if stop1.data.ready then
+        assert(stop1.Glyph:IsShown() and not (stop1.qbNum and stop1.qbNum:IsShown()), "a stop whose quests are done: the ?")
+      else
+        assert(stop1.qbNum and stop1.qbNum:IsShown() and stop1.qbNum:GetText() == "1" and stop1.Disc.__atlas == "UI-QuestPoi-QuestNumber-SuperTracked" and not stop1.Glyph:IsShown(),
+          "stop 1: its number on the gold disc: " .. tostring(stop1.Disc.__atlas))
+      end
+    end
+    -- a stop's look on its own: stop 2 in progress on the plain disc with its number; then done, the ?, the number gone
+    local f = P.pageProvider:Make(P.ROUTE)
+    P.Pin.Setup(f, { num = 2, ready = false, family = "basic" })
+    assert(f.qbNum:GetText() == "2" and f.qbNum:IsShown() and f.Disc.__atlas == "UI-QuestPoi-QuestNumber" and not f.Glyph:IsShown(), "stop 2: its number on the disc")
+    P.Pin.Setup(f, { num = 2, ready = true, family = "basic" })
+    assert(not f.qbNum:IsShown() and f.Glyph:IsShown() and f.Glyph.__atlas == "UI-QuestIcon-TurnIn-Normal", "its quests done: the hand-in's ?")
+    said[#said + 1] = "kind marks: an objective's spot its cursor at 20 px, a stop its number on the game's disc (the gold one for stop 1), the ? once done"
+    -- F4: a continent: its zones' ! and ?, placed on it, a click's waypoint in its zone; no objective marks
+    MP.Go(1415, "user")
+    local give, objs = nil, 0
+    for _, fr in ipairs(QM.pageProvider.active) do
+      if fr.data.kind == "give" or fr.data.kind == "turn" then give = give or fr end
+      if fr.data.kind == "obj" then objs = objs + 1 end
+    end
+    assert(give and give.data.m ~= 1415 and give.data.zx and objs == 0, "the continent: its zones' ! and ?, no objective marks")
+    local SetWaypoint, got = QB.API.SetWaypoint, nil
+    QB.API.SetWaypoint = function(...) got = { ... } end
+    give:OnMouseClickAction("LeftButton")
+    assert(got and got[1] == give.data.m and math.abs(got[2] - give.data.zx * 100) < 0.01, "a continent's pin: its waypoint in its zone")
+    QB.API.SetWaypoint = SetWaypoint
+    local counts = MP.Counts(1415)
+    assert(counts.pickup > 0, "the continent counts its zones' quests: " .. counts.pickup)
+    said[#said + 1] = "a continent draws its zones' ! and ? (a waypoint in the zone), no marks, and counts them"
+  end
+  -- F5: QuestBank alone: the quest disc for an objective's spot, a stop's disc and glyph
+  do
+    local objectives = { [7] = { { text = "Kobold Vermin slain: 3/10", finished = false, numFulfilled = 3, numRequired = 10 } } }
+    local c = windowChar("Mapdiscs", nil, { level = 3, log = { { 7, 0 } }, objectives = objectives })
+    local QB = c.QB
+    local P, QM, MD = QB.Pins, QB.QuestMap, QB.Data
+    local f = P.pageProvider:Make(P.ROUTE)
+    P.Pin.Setup(f, { num = 2, ready = false, family = "basic" })
+    assert(not rawget(f, "qbNum") and f.Glyph.__atlas == "Quest-In-Progress-Icon-yellow" and f.Disc:IsShown(), "QuestBank alone: a stop is the quest disc in progress")
+    local g = QM.pageProvider:Make(QM.POI)
+    QM.IconMethods.Setup(g, { kind = "obj", family = "basic", spot = { kind = "k" } })
+    assert(g.Disc:IsShown() and g.Glyph.__atlas == "Quest-In-Progress-Icon-yellow", "QuestBank alone: an objective's spot the quest disc")
+    said[#said + 1] = "QuestBank alone: the quest disc for spots and stops"
+  end
+  -- F6: the finds
+  do
+    local c = windowChar("Mapfinds", { mapWindow = true, kindMarks = true })
+    local QB, env = c.QB, c.env
+    local MP, MD = QB.MapPage, QB.Data
+    local canvas = MP.canvas
+    local box = env.CreateFrame("Frame", nil, env.UIParent)
+    box:SetSize(1002, 668)
+    MP.Host(box, { strata = "HIGH" })
+    -- the data: the guides' book in Elwynn (Data.lua's seed), a lock by a guide's place, a chest two files agree on
+    MD.FIND[1429] = { { "b", 0, "654,701", 0, "Archmage Theocritus' Research Journal", "g" }, { "k", 0, "610,220", 0, 216523, "g" },
+      { "h", 4242, "300,300;320,300", 2, "0.0", "p" } }
+    -- your notes: a book of your own, a chest, a herb node, a quest object, a rare, the guides' book read, an item read
+    local disc = QB.Discover.DB()
+    disc.find = {
+      o9001 = { p = { { 1429, 400, 400, 1 } }, b = "A Diary of Your Own", n = 1 },
+      o9002 = { p = { { 1429, 500, 500, 1 } }, h = { ["4.1"] = 1, ["7.5"] = 1 }, n = 1 },
+      o9003 = { p = { { 1429, 510, 510, 1 } }, h = { ["7.9"] = 3 }, n = 1 },
+      o9004 = { p = { { 1429, 520, 520, 1 } }, h = { ["12.0"] = 2 }, n = 1 },
+      c9005 = { p = { { 1429, 600, 600, 1 } }, r = 34, n = 1 },
+      o9006 = { p = { { 1429, 655, 702, 1 } }, b = "Archmage Theocritus' Research Journal", n = 1 },
+      i9007 = { b = "A Letter Read in Your Bags", n = 1 },
+    }
+    disc.findN = 7
+    local list = MP.Finds(1429)
+    local by = {}
+    for _, d in ipairs(list) do by[d.name] = d end
+    local book = by["Archmage Theocritus' Research Journal"]
+    assert(book and book.mine and not book.new and book.who == "you" and #book.spots == 1, "the guides' book you read: one find, yours, not new")
+    assert(by["A Diary of Your Own"] and by["A Diary of Your Own"].new and by["A Diary of Your Own"].kind == "b", "your own book: new")
+    local chests = 0
+    for _, d in ipairs(list) do if d.kind == "h" then chests = chests + 1 end end
+    assert(chests == 2 and by["Rare, level 34"] and by["Rare, level 34"].rare and by.Locked and by.Locked.who == "guides",
+      "a chest of the data and one of yours (no herb node, no quest object), a rare by its level, the guides' lock: " .. chests)
+    for _, d in ipairs(list) do assert(d.name ~= "A Letter Read in Your Bags", "an item read in your bags has no place on the map") end
+    local maps = MP.FindMaps()
+    local has = false
+    for _, m in ipairs(maps) do if m == 1429 then has = true end end
+    assert(has and #maps > 5, "the maps with finds: the seed's and yours")
+    -- drawn: a pin a spot, round in the ring; the rare with its elite mark
+    MP.Go(1415, "user"); MP.Go(1429, "user")
+    local pins = MP.finds.active
+    local spots = 0
+    for _, d in ipairs(list) do spots = spots + #d.spots end
+    assert(#pins == spots, "a pin for each spot: " .. #pins .. " of " .. spots)
+    local rare, lock
+    for _, f in ipairs(pins) do
+      if f.data.find.rare then rare = f end
+      if f.data.find.kind == "k" then lock = f end
+    end
+    assert(rare and rare.qbElite:IsShown() and rare.qbElite.__atlas == "nameplates-icon-elite-silver" and rare.qbRing.__tex == MD.TEX.ring and rare.Texture:GetWidth() == 18,
+      "the rare: its icon round at 18 px in the ring, the silver elite mark")
+    lines = {}
+    lock:OnMouseEnter()
+    local tip = table.concat(lines, "\n")
+    assert(tip:find("Locked", 1, true) and tip:find("needs a key", 1, true) and not tip:find("216523", 1, true) and not tip:find("Item ", 1, true),
+      "the lock's tooltip: needs a key, never which:\n" .. tip)
+    assert(MP.hover == lock.data.fkey, "a find hovered: its key lit")
+    lock:OnMouseLeave()
+    local SetWaypoint, got = QB.API.SetWaypoint, nil
+    QB.API.SetWaypoint = function(...) got = { ... } end
+    lock:OnMouseClickAction("LeftButton")
+    assert(got and got[1] == 1429 and math.abs(got[2] - 61) < 0.01 and math.abs(got[3] - 22) < 0.01, "a click: on the arrow")
+    QB.API.SetWaypoint = SetWaypoint
+    -- lit from the list: a find's key lights its pins and no quest's
+    MP.Hover(lock.data.fkey)
+    assert(MP.Lit(lock.data) and not MP.Lit({ id = 216523 }), "a find's key lights its own pins alone")
+    MP.Hover(nil)
+    assert(MP.FindCount(1429) == #list and MP.Counts(1429).finds == #list, "the layer's count")
+    -- the continent: the zone's finds placed on it
+    MP.Go(1415, "user")
+    assert(#MP.finds.active > 0, "the continent shows its zones' finds")
+    -- off: none
+    QB:Settings().mapFinds = false
+    MP.Go(1429, "user"); MP.finds:RefreshAllData()
+    assert(#MP.finds.active == 0, "Finds on the map off: none")
+    QB:Settings().mapFinds = nil
+    said[#said + 1] = "the finds: the guides' book read once as yours, your book new, chests (no herb node or quest object), a rare by its level, the lock needing a key never named, a pin a spot in the ring, the rare's elite mark, a click on the arrow, the continent's, off none"
+  end
+  print("map F: " .. table.concat(said, "; "))
+end
+
+
 local seen = {}
 local unique = {}
 for _, p in ipairs(problems) do if not seen[p] then seen[p] = true; unique[#unique + 1] = p end end
