@@ -1408,7 +1408,7 @@ R.Add({ key = "ammo", neverName = "Ammo", piece = "reminders", order = 80, row =
 
 -- your hearthstone: the ones Forever has (6948, 243229 Hearthstone of the Dawn, 284163), then the single-use 282006; ready by
 -- its item cooldown (C_Container.GetItemCooldown, read on BAG_UPDATE_COOLDOWN; never C_Spell.GetSpellCooldown(8690),
--- secret in a fight)
+-- secret in a fight). The planner's API.HearthLeft and API.HasHearth (Core.lua) read the one carried from this list too
 R.HEARTHS = { 6948, 243229, 284163, 282006 }
 function R.Hearth()
   local bagsNow = R.Bags()
@@ -1972,8 +1972,9 @@ local API = QB.API
 function API.UnspentTalents()
   local CT = C_ClassTalents
   if CT and type(CT.HasUnspentTalentPoints) == "function" then
+    -- (its false is an answer: "ok and plain(v) or nil" made it nil, and the old count answered instead)
     local ok, v = pcall(CT.HasUnspentTalentPoints)
-    v = ok and plain(v) or nil
+    if ok then v = plain(v) else v = nil end
     if type(v) == "boolean" then return v end
   end
   if type(GetNumUnspentTalents) == "function" then

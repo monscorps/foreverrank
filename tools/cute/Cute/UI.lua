@@ -1220,6 +1220,9 @@ function UI:Cell(r, i)
         if C.Roster:MeOfficer() and n < #C.Stats.READY_INPUTS then
           tip:AddLine("The gaps the officers keep are in their own columns, not counted here.", 0.6, 0.6, 0.6, true)
         end
+        -- (merge3) your own row: what Reminders' Before the pull shows now, which your verdict here waits on
+        local pull = row.me and C.Stats.ReadyPull() or nil
+        if pull then tip:AddLine("Before the pull: " .. table.concat(pull, ", ") .. ".", 0.9, 0.9, 0.9, true) end
       else
         tip:AddLine(UI.Format(def, v), 0.9, 0.9, 0.9)
       end
@@ -1254,6 +1257,8 @@ local function fillCell(c, def, row, hidden, w, onlyYou)
     return
   end
   local v = valueOf(def, row)
+  -- (merge3) your own Ready agrees with Reminders' Before the pull: "gaps" at best while it shows something (Stats.lua)
+  if def.id == "ready" and row.me and type(v) == "number" then v = C.Stats.ReadyOwn(v) end
   color(c.label, INK)
   if def.kind == "pips" and type(v) == "string" and v ~= "" then
     c.label:SetText("")

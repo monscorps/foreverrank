@@ -482,12 +482,28 @@ function API.BindName()
   return GetBindLocation and GetBindLocation() or ""
 end
 
--- seconds until the hearthstone is ready (0: it is), with its cooldown's start and duration; nil when the client
--- won't say (no answer, an error, a secret value)
+-- the hearthstone you carry: the first of Reminders' list in your bags (Remind.lua R.HEARTHS: 6948, 243229 Hearthstone of
+-- the Dawn, 284163, then the single-use 282006; 6948 alone before Remind.lua has loaded); nil when you carry none or
+-- the client won't say
+local function carriedHearth()
+  local f = (C_Item and C_Item.GetItemCount) or GetItemCount
+  if type(f) ~= "function" then return nil end
+  local R = QB.Remind
+  for _, id in ipairs((R and type(R.HEARTHS) == "table") and R.HEARTHS or { 6948 }) do
+    local ok, n = pcall(f, id)
+    n = ok and QB.Plain(n) or nil
+    if type(n) == "number" and n > 0 then return id end
+  end
+  return nil
+end
+API.CarriedHearth = carriedHearth
+
+-- seconds until the hearthstone you carry is ready (0: it is), with its cooldown's start and duration; nil when the
+-- client won't say (no answer, an error, a secret value). Carrying none, 6948's (the planner asks HasHearth first)
 function API.HearthLeft()
   local f = (C_Container and C_Container.GetItemCooldown) or GetItemCooldown
   if type(f) ~= "function" then return nil end
-  local ok, start, duration = pcall(f, 6948)
+  local ok, start, duration = pcall(f, carriedHearth() or 6948)
   if not ok then return nil end
   start, duration = QB.Plain(start), QB.Plain(duration)
   if type(start) ~= "number" or type(duration) ~= "number" then return nil end
@@ -495,14 +511,8 @@ function API.HearthLeft()
   return math.max(0, start + duration - GetTime()), start, duration
 end
 
--- a hearthstone in your bags; false when the client won't say
-function API.HasHearth()
-  local f = (C_Item and C_Item.GetItemCount) or GetItemCount
-  if type(f) ~= "function" then return false end
-  local ok, n = pcall(f, 6948)
-  n = ok and QB.Plain(n) or nil
-  return type(n) == "number" and n > 0
-end
+-- a hearthstone of Reminders' list in your bags; false when the client won't say
+function API.HasHearth() return carriedHearth() ~= nil end
 
 -- the hearthstone is ready within a minute and a half, or its cooldown can't be read (the planner counts on it then)
 function API.HearthReady()

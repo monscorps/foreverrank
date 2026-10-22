@@ -24266,6 +24266,53 @@ do
   print("hud layout: " .. table.concat(said, "; "))
 end
 
+-- [stage: merge3] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The third merge round: what the hud round left for the merge, the engine's side.
+-- N1. The planner's hearthstone is Reminders' (Remind.lua R.HEARTHS: 6948, 243229, 284163, then the single-use
+--     282006): API.HasHearth says yes for any of them carried, API.HearthLeft reads the cooldown of the one carried
+--     (the first of the list in the bags); none carried, no hearth
+-- N4. API.UnspentTalents (Cute's talents_free and Reminders' Talents) takes HasUnspentTalentPoints' no as the answer
+----------------------------------------------------------------------------
+do
+  local said = {}
+  -- N1
+  local c = lookChar("Hearths")
+  local env, QB, A = c.env, c.QB, c.QB.API
+  local cds = {}
+  env.C_Container.GetItemCooldown = function(id) local cd = cds[id]; if cd then return cd[1], cd[2], 1 end return 0, 0, 1 end
+  c.o.bagSlots = {}
+  assert(A.HasHearth() == false and A.CarriedHearth() == nil, "none carried: no hearth")
+  c.o.bagSlots = { { 243229, 1 } }
+  cds[243229] = { env.GetTime() - 600, 1800 }
+  assert(A.HasHearth() == true and A.CarriedHearth() == 243229, "the Hearthstone of the Dawn alone: a hearth")
+  local left = A.HearthLeft()
+  assert(left and math.abs(left - 1200) < 0.5, "its cooldown read, not 6948's: " .. tostring(left))
+  c.o.bagSlots = { { 282006, 1 }, { 6948, 1 } }
+  cds[6948] = { 0, 0 }
+  assert(A.CarriedHearth() == 6948 and A.HearthLeft() == 0, "6948 first of the list where it is carried: ready")
+  c.o.bagSlots = { { 282006, 1 } }
+  assert(A.HasHearth() == true and A.CarriedHearth() == 282006, "the single-use one, the last of the list")
+  assert(QB.Remind.HEARTHS[1] == 6948 and #QB.Remind.HEARTHS == 4, "the list is Reminders'")
+  c.o.bagSlots = {}
+  said[#said + 1] = "the planner's hearthstone is the one carried of Reminders' four"
+  -- N4: the talent frame's own answer is the answer, a no included (the old count, which may read wrong on camelot,
+  -- only where it gives none)
+  local talents, count = false, 2
+  env.C_ClassTalents = { HasUnspentTalentPoints = function() return talents end }
+  env.GetNumUnspentTalents = function() return count end
+  assert(A.UnspentTalents() == false, "HasUnspentTalentPoints says no: no, whatever the old count says")
+  talents, count = true, 0
+  assert(A.UnspentTalents() == true, "it says yes: yes, the old count 0")
+  env.C_ClassTalents = nil
+  count = 2
+  assert(A.UnspentTalents() == true, "no talent frame's question: the old count")
+  env.GetNumUnspentTalents = nil
+  said[#said + 1] = "the talent frame's no is the answer"
+  assert(#(env.QuestBankDB.errors or {}) == 0, "no error recorded")
+  print("merge3: " .. table.concat(said, "; "))
+end
+
 local seen = {}
 local unique = {}
 for _, p in ipairs(problems) do if not seen[p] then seen[p] = true; unique[#unique + 1] = p end end

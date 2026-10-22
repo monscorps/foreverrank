@@ -18954,6 +18954,10 @@ end
 -- P2. Cute_Quest's camp module starts on (its default kept, the one module addon's default Cute keeps): a character who
 --     answers the card Not now has Reminders all the same; another module addon's default is dropped; no module takes
 --     the id layout (Settings > Layout's)
+-- P3. The dashboard reads what Reminders reads: talents_free from the talent frame's own question (HasUnspentTalentPoints:
+--     points waiting while the old count reads 0 are 1, none are 0), bags_free the general bags' free slots (a
+--     profession's bag left out), and your own row's Ready "gaps" at best while Before the pull shows something, its
+--     names in the tooltip, what is sent unchanged
 ----------------------------------------------------------------------------
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
@@ -19007,6 +19011,49 @@ do
       "no module takes the id layout")
     leave(e)
     said[#said + 1] = "Reminders on for a character who answers Not now; another addon's default dropped; layout reserved"
+    -- P3
+    local f = client(false, { talents = 0 })
+    local has = true
+    f.env.C_ClassTalents = { HasUnspentTalentPoints = function() return has end }
+    login(f); tickAll(6)
+    local S = f.C.Sample
+    S:Read("talents_free")
+    assert(S:Value("talents_free") == 1, "points waiting, the old count 0: 1: " .. tostring(S:Value("talents_free")))
+    f.o.talents = 3
+    S:Read("talents_free")
+    assert(S:Value("talents_free") == 3, "the count where the old call gives one: " .. tostring(S:Value("talents_free")))
+    has = false
+    S:Read("talents_free")
+    assert(S:Value("talents_free") == 0, "none waiting: 0, whatever the old call says")
+    local QBf = f.addons[2].private
+    local saved = f.env.C_Container.GetContainerNumFreeSlots
+    f.env.C_Container.GetContainerNumFreeSlots = function(b) if b == 3 then return 6, 32 end return b == 0 and 4 or 2, 0 end
+    S:Read("bags_free")
+    assert(S:Value("bags_free") == 10 and QBf.API.FreeSlots() == 10, "the general bags' free slots, a herb bag's left out: " .. tostring(S:Value("bags_free")))
+    f.env.C_Container.GetContainerNumFreeSlots = saved
+    S:Read("bags_free")
+    S:Read("ready")
+    local sent = S:Value("ready")
+    f.C.UI:Open("prog")
+    local own = rowOf(f, "Rone")
+    local cell = own and cellOf(own, "ready")
+    assert(cell, "your own row's Ready")
+    local before = cell.label:GetText()
+    local pull = QBf.Remind.Pull
+    QBf.Remind.Pull = function() return { { name = "Elixir of the Mongoose" }, { name = "Well Fed" } }, true end
+    f.C.UI:Draw()
+    own = rowOf(f, "Rone"); cell = cellOf(own, "ready")
+    assert(cell.label:GetText() == (before == "ready" and "gaps" or before), "Before the pull shows two: your Ready gaps at best: " .. tostring(before) .. " -> " .. tostring(cell.label:GetText()))
+    assert(tipOf(cell):find("Before the pull: Elixir of the Mongoose, Well Fed.", 1, true), "its tooltip names them")
+    assert(S:Value("ready") == sent, "what is sent unchanged")
+    QBf.Remind.Pull = function() return {}, false end
+    f.C.UI:Draw()
+    own = rowOf(f, "Rone"); cell = cellOf(own, "ready")
+    assert(cell.label:GetText() == before and not tipOf(cell):find("Before the pull", 1, true), "off: as it was")
+    QBf.Remind.Pull = pull
+    check(f.C.UI.frame, "merge3 Prog, your own Ready")
+    leave(f)
+    said[#said + 1] = "talents_free and bags_free read what Reminders read; your own Ready waits on Before the pull"
     print("merge3: " .. table.concat(said, "; "))
   end)
 end

@@ -127,6 +127,17 @@ end
 -- readers. Each returns a plain value or nil. The client's namespaced APIs are looked up at call time.
 ----------------------------------------------------------------------------
 local Get, Num, api = C.Get, C.Num, C.Api
+-- (merge3) the reads Cute shares with Reminders, one answer for both (the reminders design's section 6): Cute_Quest's door
+-- (Band.lua Cute.QuestReads: the engine's, QuestBank's own while it is loaded). nil where no engine says (Cute without
+-- Cute_Quest, an engine older than Reminders), and each stat reads as it did then
+local function questRead(name)
+  local Q = C.API and C.API.QuestReads
+  local f = Q and Q[name]
+  if type(f) ~= "function" then return nil end
+  local ok, a, b = pcall(f)
+  if not ok then return nil end
+  return C.Plain(a), C.Plain(b)
+end
 local function money() return Num("GetMoney") end
 local function gtime() return (GetTime and GetTime()) or 0 end
 -- an enum value by name, as the client has it; the documented value where the table is missing
@@ -878,7 +889,16 @@ D("mount", "Mount", "leveling", { kind = "flag", beat = false, on = { "NEW_MOUNT
   end
   return false
 end })
-D("talents_free", "Unspent talents", "leveling", { read = function() return Num("GetNumUnspentTalents") end, on = { "PLAYER_TALENT_UPDATE", "PLAYER_LEVEL_UP" } })
+-- (merge3) whether points wait is the talent frame's own question (QB.API.UnspentTalents, HasUnspentTalentPoints), as
+-- Reminders' Talents asks it: none, 0; some, the old talent frame's count where it gives one, else 1 (it may read 0 on
+-- camelot); no engine to ask, the count as before
+D("talents_free", "Unspent talents", "leveling", { read = function()
+  local has = questRead("UnspentTalents")
+  if has == false then return 0 end
+  local n = Num("GetNumUnspentTalents")
+  if has == true then return math.max(1, n or 0) end
+  return n
+end, on = { "PLAYER_TALENT_UPDATE", "PLAYER_LEVEL_UP" } })
 D("spec", "Spec", "leveling", { kind = "text", on = "PLAYER_TALENT_UPDATE", read = function()
   local i = Num(api("C_SpecializationInfo", "GetSpecialization"))
   if not i then return nil end
@@ -938,6 +958,22 @@ function S.ReadyGaps(v, counts)
   if counts.durability and type(v.durability) == "number" and v.durability < 50 then gaps[#gaps + 1] = "durability under 50%" end
   if counts.potions and v.potions == 0 then gaps[#gaps + 1] = "no potions" end
   return gaps
+end
+-- (merge3) your own row's Ready and Reminders' Before the pull agree (the reminders design's section 5): what Before the
+-- pull shows now (QB.Remind.Pull, through Cute.QuestReads), by name, while it is on and shows something; nil otherwise.
+-- Your own row alone (UI.lua): the verdict sent stays what it counts, which the guild may see
+function S.ReadyPull()
+  local recs, on = questRead("Pull")
+  if on ~= true or type(recs) ~= "table" or #recs == 0 then return nil end
+  local names = {}
+  for _, r in ipairs(recs) do names[#names + 1] = type(r) == "table" and type(r.name) == "string" and r.name or "something to use" end
+  return names
+end
+-- your own Ready as your row shows it: "gaps" at best while Before the pull shows something, with its names
+function S.ReadyOwn(v)
+  local pull = S.ReadyPull()
+  if pull and v == 2 then return 1, pull end
+  return v, pull
 end
 local GEAR_ON = { "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "GET_ITEM_INFO_RECEIVED" }
 local BAG_ON = { "BAG_UPDATE_DELAYED", "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "GET_ITEM_INFO_RECEIVED" }
@@ -1070,7 +1106,13 @@ local HEALTHSTONES = { 5512, 5511, 5509, 5510, 9421, 19004, 19005, 19006, 19007,
 D("stones", "Healthstones", "prog", { read = function() local n = 0; for _, id in ipairs(HEALTHSTONES) do n = n + itemCount(id) end; return n end,
   on = BAG_ON, bag = true })
 D("ammo", "Ammo", "prog", { read = function() return Num("GetInventoryItemCount", "player", 0) end, on = BAG_ON, bag = true, hint = "in the ammo slot" })
-D("bags_free", "Free bag slots", "prog", { read = function() return bagTotal("GetContainerNumFreeSlots") end, on = BAG_ON, bag = true })
+-- (merge3) the general bags' free slots, as Reminders' Bags counts them (QB.API.FreeSlots: bag family 0, the reagent bag
+-- and a profession's bag left out); no engine to ask, every bag's as before
+D("bags_free", "Free bag slots", "prog", { read = function()
+  local n = questRead("FreeSlots")
+  if type(n) == "number" then return n end
+  return bagTotal("GetContainerNumFreeSlots")
+end, on = BAG_ON, bag = true })
 D("bags_size", "Bag slots", "prog", { read = function() return bagTotal("GetContainerNumSlots") end, on = BAG_ON, bag = true })
 -- the raid buffs guild mates give you (learned, above) that are not on you now, in a group or an instance
 D("buffs_missing", "Raid buffs missing", "prog", { default = "self", on = { "UNIT_AURA", "GROUP_ROSTER_UPDATE", "PLAYER_ENTERING_WORLD" },

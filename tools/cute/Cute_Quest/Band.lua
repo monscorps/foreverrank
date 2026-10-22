@@ -222,6 +222,14 @@ Cute.QuestBand = {
     return t .. "; " .. m
   end,
 }
+-- (merge3) the reads Cute's dashboard shares with Reminders, one answer for both (the reminders design's section 6;
+-- Remind.lua's QB.API and R.Pull, QuestBank's own while it is loaded): unspent talent points (a boolean), the general
+-- bag slots free, and what Before the pull shows with whether it is on. nil where the engine has none (an older one)
+Cute.QuestReads = {
+  UnspentTalents = function() local A = E.API; if A and type(A.UnspentTalents) == "function" then return A.UnspentTalents() end return nil end,
+  FreeSlots = function() local A = E.API; if A and type(A.FreeSlots) == "function" then return A.FreeSlots() end return nil end,
+  Pull = function() local R = E.Remind; if R and type(R.Pull) == "function" then return R.Pull() end return nil, false end,
+}
 -- the on-screen switches in Cute's menu (Quests (L) > Step frame, Direction arrow): the engine's own settings, the
 -- copy's (while QuestBank is loaded its settings are its own: none)
 Cute.OnScreen = function()
