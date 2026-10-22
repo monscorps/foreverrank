@@ -52,6 +52,7 @@ Band.lua
 Reader.lua
 PageQuests.lua
 PageRoute.lua
+MapWin.lua
 PageMap.lua
 PageJournal.lua
 PageGear.lua

@@ -787,7 +787,7 @@ local function build()
     MP.finds.lit = MP.Lit
     MP.layers[#MP.layers + 1] = MP.finds
     -- (MAP_CANVAS_MOUSE_WHEEL_ZOOM_BEHAVIOR_SMOOTH: MapCanvas_ScrollContainerMixin.lua:3, the zoom target eased toward)
-    if canvas.SetMouseWheelZoomMode and MAP_CANVAS_MOUSE_WHEEL_ZOOM_BEHAVIOR_SMOOTH then
+    if MapCanvasMixin.SetMouseWheelZoomMode and MAP_CANVAS_MOUSE_WHEEL_ZOOM_BEHAVIOR_SMOOTH then
       canvas:SetMouseWheelZoomMode(MAP_CANVAS_MOUSE_WHEEL_ZOOM_BEHAVIOR_SMOOTH)
     end
     local sc = canvas.ScrollContainer
@@ -859,7 +859,7 @@ end
 function MP.ChildAtCursor()
   local canvas = MP.canvas
   local m = shownMap()
-  if not (canvas and m and canvas.GetNormalizedCursorPosition and C_Map and C_Map.GetMapInfoAtPosition) then return nil end
+  if not (canvas and m and MapCanvasMixin.GetNormalizedCursorPosition and C_Map and C_Map.GetMapInfoAtPosition) then return nil end
   local okC, x, y = pcall(canvas.GetNormalizedCursorPosition, canvas)
   x, y = okC and QB.Plain(x), okC and QB.Plain(y)
   if type(x) ~= "number" or type(y) ~= "number" then return nil end
@@ -873,7 +873,8 @@ end
 
 -- the scroll container at its smallest zoom (and not on its way elsewhere)
 local function atMinZoom(sc)
-  if not (sc.GetScaleForMinZoom and sc.GetCanvasScale) then return false end
+  local S = MapCanvasScrollControllerMixin
+  if not (S and S.GetScaleForMinZoom and S.GetCanvasScale) then return false end
   local ok, lo = pcall(sc.GetScaleForMinZoom, sc)
   local ok2, now = pcall(sc.GetCanvasScale, sc)
   lo, now = ok and tonumber(QB.Plain(lo)), ok2 and tonumber(QB.Plain(now))

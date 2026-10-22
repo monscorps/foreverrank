@@ -14829,6 +14829,313 @@ do
   end)
 end
 
+-- [stage: map] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The map round (sub-project F): Cute's Map window, M (MapWin.lua, the Map module's page).
+-- C1. The window from the core's builder (CuteMapFrame, 1120 x 640, down to 860 x 500): the title, "Game's map", the cog
+--     on Settings > Map with its Finds row; the row under the header the crumbs, Here and the layers with their counts
+--     (the module's own tab hidden); the canvas in its box on the left at the window's strata and the box's size, the
+--     list on the right (320 px, 260 at the smallest); laid out with no problem at both sizes; the Bridge's map flags;
+--     tab 8 and the engine's Map page are the window; the Map module off, M opens nothing and /qb map the Quests tab.
+-- C2. Our list: the zone's head (its name, levels, how many quests), Ready to hand in, In your log, To pick up, each
+--     quest two lines (its objectives, or whom it comes from), then Finds here; a row hovered lights its pins, a pin
+--     hovered lights its row and scrolls it into view; a click reads the quest with its pins focused, Back the list.
+-- C3. The finds: one of your own in Finds here, "new"; All finds the Finds list by zone with its words; a row's click
+--     takes the map to it; Back; /cute finds opens it.
+-- C4. The game's four providers: added once; in a fight none draws (a new map's hide), each draws after it; the area
+--     points from the client, never the world map's cache, with no widget sets; a map link to a map without art left out.
+--     Opened in a fight, the window opens; "Game's map" greyed then, and out of combat opens the game's map, Cute's
+--     window stepping aside.
+-- C5. Memory with the window open: what the quest module keeps (the gate's budget).
+----------------------------------------------------------------------------
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  local said = {}
+  -- the game's four providers as the world map has them, recorded: each draws its pins in RefreshAllData (AcquirePin,
+  -- blocked in a fight), clears them in RemoveAllData
+  local function providers(c)
+    local env = c.env
+    c.drawn, c.cleared, c.acquired = {}, {}, {}
+    local function provider(name, template)
+      return { __blizzard = name,
+        GetMap = function(self) return self.owningMap end, OnAdded = function(self, map) self.owningMap = map end, OnRemoved = function() end,
+        OnShow = function() end, OnHide = function() end, OnMapChanged = function(self) self:RefreshAllData() end,
+        OnCanvasScaleChanged = function() end, OnCanvasSizeChanged = function() end,
+        GetPinTemplate = function() return template end,
+        RemoveAllData = function() c.cleared[#c.cleared + 1] = name end,
+        RefreshAllData = function() if c.combat then error("ADDON_ACTION_BLOCKED: " .. name .. " acquired its pins in a fight", 2) end; c.drawn[#c.drawn + 1] = name end }
+    end
+    env.DeathMapDataProviderMixin = provider("corpse", "CorpsePinTemplate")
+    env.AreaPOIDataProviderMixin = provider("areapoi", "AreaPOIPinTemplate")
+    env.MapLinkDataProviderMixin = provider("maplink", "MapLinkPinTemplate")
+    env.SelectableGraveyardDataProviderMixin = provider("graveyard", "SelectableGraveyardPinTemplate")
+    env.GetAreaPOIsForPlayerByMapIDCached = function() error("the world map's area point cache read from the addon", 2) end
+    env.C_AreaPoiInfo = {
+      GetAreaPOIForMap = function() return { 101 } end,
+      GetAreaPOIInfo = function(_, id) return { areaPoiID = id, name = "A Point", iconWidgetSet = 5, tooltipWidgetSet = 6 } end,
+    }
+    env.C_Map.GetMapLinksForMap = function() return { { linkedUiMapID = 1436 }, { linkedUiMapID = 9999 } } end
+  end
+  local function onCanvas(c, canvas)
+    canvas.AcquirePin = function(_, template, info)
+      if c.combat then error("ADDON_ACTION_BLOCKED: a pin acquired in a fight", 2) end
+      c.acquired[#c.acquired + 1] = { template, info }
+    end
+  end
+  local function rows(ui)
+    local out = {}
+    for _, p in ipairs(ui.mapList and { ui.mapList.pool, ui.mapList.roundPool } or {}) do
+      for _, r in ipairs(p.items) do if r:IsShown() then out[#out + 1] = r end end
+    end
+    return out
+  end
+  local function rowNamed(ui, name) for _, r in ipairs(rows(ui)) do if r.name:GetText() == name then return r end end end
+  local function bandButton(ui, label) for _, b in ipairs(ui.bandButtons.items) do if b:IsShown() and b.label:GetText() == label then return b end end end
+  isolated({ member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, log = { [7] = 2 } }))
+    providers(c)
+    login(c); tickAll(6)
+    local QB, env = c.addons[2].private, c.env
+    local MP, QM = QB.MapPage, QB.QuestMap
+    assert(MP.canvas, "the map canvas built at login")
+    onCanvas(c, MP.canvas)
+    -- C1
+    assert(QB.mapWindow == true and QB.kindMarks == true, "the Bridge's map flags")
+    c.C.UI:Open("map")
+    local ui = c.C.UI.Window("map")
+    assert(not (ui.frame and ui.frame:IsShown()), "the Map module off: M opens nothing")
+    env.SlashCmdList.QUESTBANK("map")
+    assert(qwin(c).frame:IsShown() and qwin(c).page == "quests", "the Map module off: /qb map the Quests tab")
+    qwin(c).frame:Hide()
+    c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+    assert(QB:Settings().mapPage == true and MP.On(), "the Map module on: the engine's Map page is on, and Cute's window")
+    QB.UI:Open(8)
+    assert(ui.frame and ui.frame:IsShown() and ui.frame == env.CuteMapFrame, "the engine's tab 8 opens the Map window")
+    assert(ui.frame:GetWidth() == 1120 and ui.frame:GetHeight() == 640 and ui.title:GetText() == "Map", "1120 x 640, titled Map")
+    local canvas = MP.canvas
+    assert(canvas and canvas:GetParent() == ui.mapBox.inner and canvas.__strata == "HIGH", "the canvas in the window's box, at its strata: " .. tostring(canvas) .. " " .. tostring(canvas and canvas:GetParent() == ui.mapBox.inner) .. " " .. tostring(canvas and canvas.__strata) .. " " .. tostring(MP.Available()) .. " " .. tostring(QB.QuestMap.Available()) .. " " .. tostring(MP.waiting) .. " login " .. tostring(QB.loginDone) .. " pins " .. tostring(QB.Pins.provider) .. " qm " .. tostring(QB.QuestMap.provider) .. " qmw " .. tostring(QB.QuestMap.waiting) .. " errors " .. tostring(env.CuteQuestDB.errors and env.CuteQuestDB.errors[1] and env.CuteQuestDB.errors[1].msg) .. " / " .. tostring(env.CuteDB.errors and env.CuteDB.errors[1] and env.CuteDB.errors[1].msg))
+    assert(canvas:GetWidth() == ui.mapBox.inner:GetWidth() and canvas:GetHeight() == ui.mapBox.inner:GetHeight() and canvas:GetWidth() > 600, "the canvas the box's size: " .. tostring(canvas:GetWidth()))
+    assert(ui.scroll:Width() == 320, "the list 320 px: " .. tostring(ui.scroll:Width()))
+    for id, b in pairs(ui.tabs) do assert(not b:IsShown(), "no tab in the map's row: " .. id) end
+    local crumbs = {}
+    for _, b in ipairs(ui.mapCrumbs) do if b:IsShown() then crumbs[#crumbs + 1] = b.label:GetText() end end
+    local here = MP.canvas:GetMapID()
+    assert(#crumbs == 3 and crumbs[1] == "Azeroth" and crumbs[2] == "Eastern Kingdoms" and ui.mapHere:IsShown(), "the crumbs and Here: " .. table.concat(crumbs, " > "))
+    local layersShown = 0
+    for _, b in ipairs(ui.mapLayers) do if b:IsShown() then layersShown = layersShown + 1; assert(tonumber(b.count:GetText()) > 0, "a layer with something here") end end
+    assert(layersShown > 0, "the layers with their counts")
+    assert(ui.mapGame and ui.mapGame:IsShown() and ui.mapGame.label:GetText() == "Game's map", "the game's map button")
+    check(ui.frame, "map window at 1120x640")
+    -- the cog: Settings > Map, with its Finds row
+    press(ui.cog)
+    assert(c.C.UI.Window("settings").frame:IsShown() and checkBox(c, function(cb) return cb.label and cb.label:GetText() == "Finds on the map" end), "the cog: Settings > Map, Finds on the map")
+    c.C.UI.Window("settings").frame:Hide()
+    -- the smallest
+    ui.frame:SetSize(860, 500)
+    ui:Draw()
+    assert(ui.scroll:Width() == 260 and canvas:GetWidth() == ui.mapBox.inner:GetWidth(), "at 860 x 500 the list 260 px, the canvas the rest: " .. tostring(ui.scroll:Width()))
+    check(ui.frame, "map window at 860x500")
+    ui.frame:SetSize(1120, 640)
+    ui:Draw()
+    -- /cute map: the window; the module's tab id is its page
+    ui.frame:Hide()
+    env.SlashCmdList.CUTE("map")
+    assert(ui.frame:IsShown(), "/cute map opens it")
+    said[#said + 1] = "the window from the builder (1120 x 640 and 860 x 500, laid out clean), the canvas in its box at the window's strata, the list 320 and 260 px, the crumbs, Here and the layers in the row, the cog on Settings > Map; tab 8, /qb map and /cute map open it; the module off, M nothing and /qb map the Quests tab"
+    -- C2: the list
+    MP.Go(1429, "user")
+    local t = texts(c)
+    assert(t:find("Elwynn Forest", 1, true), "the zone's head:\n" .. t)
+    local heads, quests = {}, 0
+    for _, it in ipairs(ui.mapList.items) do
+      if it.spec.kind == "two" and it.spec.lvl then quests = quests + 1 end
+      if it.spec.kind == "head" then heads[#heads + 1] = it.spec.name end
+    end
+    local hs = table.concat(heads, ", ")
+    assert(hs:find("To pick up", 1, true) and hs:find("Finds here", 1, true) and quests > 0, "the sections: " .. hs .. ", " .. quests .. " quests")
+    local row
+    for _, r in ipairs(rows(ui)) do if r.mapKey and type(r.mapKey) == "number" and r.line2:IsShown() then row = row or r end end
+    assert(row and (row.line2:GetText():find("^from ") or row.line2:GetText():find("^to ") or row.line2:GetText():find("|A:Crosshair_", 1, true)), "a quest's second line: its objectives with their cursors, or whom it comes from: " .. tostring(row and row.line2:GetText()))
+    hover(row)
+    assert(MP.hover == row.mapKey, "a row hovered: its quest's pins lit")
+    local lit = 0
+    for _, f in ipairs(QM.pageProvider.active) do if MP.Lit(f.data) then lit = lit + 1 end end
+    row.__scripts.OnLeave(row)
+    assert(MP.hover == nil, "and let go")
+    -- a pin hovered: its row lit
+    local pin
+    for _, f in ipairs(QM.pageProvider.active) do
+      local d = f.data
+      if d.kind ~= "dungeon" then
+        local id = d.quests and d.quests[1] and d.quests[1].id or d.id
+        for _, it in ipairs(ui.mapList.items) do if it.key == id then pin = pin or f end end
+      end
+    end
+    assert(pin, "a pin of a quest in the list")
+    pin:OnMouseEnter()
+    local lid = ui.mapLit
+    assert(lid ~= nil, "a pin hovered: its row lit")
+    local litRow
+    for _, r in ipairs(rows(ui)) do if r.mapKey == lid then litRow = r end end
+    assert(litRow and math.abs((litRow.bg.__color or {})[4] - 0.06) < 0.001, "the row lit by its background, in view")
+    pin:OnMouseLeave()
+    assert(ui.mapLit == nil, "and back")
+    -- a click reads the quest, its pins focused; Back: the list
+    press(row)
+    assert(ui.reading and ui.reading.id == row.mapKey and MP.focus == row.mapKey and bandButton(ui, "Back"), "a row's click reads it, its pins focused")
+    check(ui.frame, "map window, a quest to read")
+    press(bandButton(ui, "Back"))
+    assert(not ui.reading and MP.focus == nil and #rows(ui) > 0, "Back: the list, the focus let go")
+    said[#said + 1] = "the list: the zone's head, the sections, a quest's second line; a row hovered lights its pins, a pin hovered its row; a click reads it with its pins focused, Back"
+    -- C3: the finds
+    local disc = QB.Discover.DB()
+    disc.find = { o9001 = { p = { { 1429, 400, 400, 1 } }, b = "A Diary of Your Own", n = 1 } }
+    disc.findN = (disc.findN or 0) + 1
+    ui:Draw()
+    for i, it in ipairs(ui.mapList.items) do if it.spec.name == "Finds here" then ui.scroll.bar:SetValue(ui.mapList.tops[i]) end end
+    local diary = rowNamed(ui, "A Diary of Your Own")
+    assert(diary and diary.val:IsShown() and diary.val:GetText() == "new", "your own find in Finds here: new")
+    for i, it in ipairs(ui.mapList.items) do if it.spec.name == "Finds here" then ui.scroll.bar:SetValue(ui.mapList.tops[i]) end end
+    local all
+    for _, r in ipairs(rows(ui)) do if r.name:GetText() == "Finds here" then all = r end end
+    assert(all and all.who:GetText() == "All finds", "Finds here, with All finds on its right")
+    press(all)
+    t = texts(c)
+    assert(ui.mapFinds and t:find("Never a book's text or where a key leads.", 1, true) and bandButton(ui, "Back"), "the Finds list and its words:\n" .. t)
+    check(ui.frame, "map window, the Finds list")
+    MP.Go(1415, "user")
+    -- (on the continent the list starts from the zones nearest; the diary's row found again where it is)
+    for i, it in ipairs(ui.mapList.items) do if it.spec.name == "A Diary of Your Own" then ui.scroll.bar:SetValue(ui.mapList.tops[i]) end end
+    local first = rowNamed(ui, "A Diary of Your Own")
+    assert(first, "the diary in the Finds list")
+    local key = first.mapKey
+    press(first)
+    assert(MP.canvas:GetMapID() == 1429 and MP.hover == key and key == "find:1429:b:9001", "a find's click: the map on its zone, its pins lit: " .. tostring(MP.canvas:GetMapID()) .. " " .. tostring(MP.hover) .. " " .. tostring(first.mapKey))
+    press(bandButton(ui, "Back"))
+    assert(not ui.mapFinds, "Back: the zone's list")
+    ui.frame:Hide()
+    env.SlashCmdList.CUTE("finds")
+    assert(ui.frame:IsShown() and ui.mapFinds, "/cute finds: the Finds list")
+    press(bandButton(ui, "Back"))
+    said[#said + 1] = "the finds: yours new in Finds here, All finds by zone with its words, a click takes the map there, Back, /cute finds"
+    -- C4: the four providers
+    local added = {}
+    for dp in pairs(canvas.dataProviders) do if dp.cuteName then added[#added + 1] = dp.cuteName end end
+    table.sort(added)
+    assert(table.concat(added, " ") == "AreaPOIDataProviderMixin DeathMapDataProviderMixin MapLinkDataProviderMixin SelectableGraveyardDataProviderMixin", "the four, once: " .. table.concat(added, " "))
+    c.acquired = {}
+    MP.Go(1436, "user")
+    local links, poi = 0, nil
+    for _, a in ipairs(c.acquired) do
+      if a[1] == "MapLinkPinTemplate" then links = links + 1 end
+      if a[1] == "AreaPOIPinTemplate" then poi = a[2] end
+    end
+    assert(links == 2, "both links while both maps have art: " .. links)
+    c.noArt = { [9999] = true }
+    c.acquired = {}
+    MP.Go(1429, "user")
+    links = 0
+    for _, a in ipairs(c.acquired) do
+      if a[1] == "MapLinkPinTemplate" then links = links + 1 end
+      if a[1] == "AreaPOIPinTemplate" then poi = a[2] end
+    end
+    assert(links == 1, "a map link to a map without art left out: " .. links)
+    assert(poi and poi.iconWidgetSet == nil and poi.tooltipWidgetSet == nil and poi.name == "A Point", "an area point from the client, no widget sets")
+    c.noArt = nil
+    -- a fight: nothing drawn, a new map's pins hidden; after it, drawn
+    c.combat = true
+    fire(c, "PLAYER_REGEN_DISABLED")
+    local d0, x0 = #c.drawn, #c.cleared
+    c.acquired = {}
+    MP.Go(1436, "user")
+    assert(#c.drawn == d0 and #c.acquired == 0 and #c.cleared > x0, "in a fight: nothing drawn, the other map's pins hidden")
+    assert(ui.mapGame.__disabled, "Game's map greyed in a fight")
+    ui.frame:Hide()
+    c.C.UI:Open("map")
+    assert(ui.frame:IsShown(), "M opens in a fight")
+    c.combat = false
+    fire(c, "PLAYER_REGEN_ENABLED")
+    assert(#c.drawn > d0 or #c.acquired > 0, "after the fight: the four drawn")
+    -- Game's map: the game's own, Cute's window steps aside
+    ui:Draw()
+    press(ui.mapGame)
+    assert(c.map.shown and not ui.frame:IsShown(), "Game's map: the game's world map, Cute's window aside")
+    c.map:Close()
+    said[#said + 1] = "the game's four providers added once, none drawn in a fight and each after it, area points from the client with no widget sets, a link to a map without art left out; M opens in a fight; Game's map opens the game's and steps aside"
+    assert(#(env.CuteQuestDB.errors or {}) == 0, "no engine error recorded: " .. tostring(env.CuteQuestDB.errors and env.CuteQuestDB.errors[1] and env.CuteQuestDB.errors[1].msg))
+    leave(c)
+  end)
+  print("map C: " .. table.concat(said, "; "))
+end
+-- C5: memory with the Map window open: what the quest module keeps, weighed as 36d weighs it (everything reachable from
+-- its private table and its saved variables; a widget a small table; the module's own upvalues followed), with every
+-- quest page opened and the map window drawn on a zone and on its Finds list. The budget is QuestBank's, 11 MB
+if SEEDED then
+  local function pow2(n) local p = 1; while p < n do p = p * 2 end; return p end
+  local function kept(c, roots)
+    collectgarbage("collect"); collectgarbage("collect")
+    local seen = { [c] = true, [c.env] = true, [BASE] = true, [_G] = true, [ALL] = true, [clients] = true, [c.frames] = true, [c.timers] = true }
+    seen[c.C] = true
+    local total, queue, qi = 0, roots, 1
+    local function push(v)
+      local tv = type(v)
+      if tv == "string" then
+        if not seen[v] then seen[v] = true; total = total + 17 + #v end
+      elseif (tv == "table" or tv == "function") and not seen[v] then
+        queue[#queue + 1] = v
+      end
+    end
+    while qi <= #queue do
+      local v = queue[qi]
+      queue[qi], qi = false, qi + 1
+      if v and not seen[v] then
+        seen[v] = true
+        if type(v) == "table" then
+          if rawget(v, "__kind") and rawget(v, "__scripts") then
+            total = total + 150
+            for k, x in pairs(v) do if type(k) ~= "string" or not k:find("^__") then push(k); push(x) end end
+            for _, sc in pairs(rawget(v, "__scripts")) do push(sc) end
+          else
+            local n, h = #v, 0
+            for k in pairs(v) do if not (type(k) == "number" and k >= 1 and k <= n and k % 1 == 0) then h = h + 1 end end
+            total = total + 64 + (n > 0 and pow2(n) * 8 or 0) + (h > 0 and pow2(h) * 24 or 0)
+            local mt = debug.getmetatable(v)
+            if type(mt) == "table" then push(mt) end
+            for k, x in pairs(v) do push(k); push(x) end
+          end
+        else
+          local info = debug.getinfo(v, "Su")
+          total = total + 40 + 8 * (info.nups or 0)
+          if info.source:find("Cute_Quest/", 1, true) then
+            for i = 1, info.nups or 0 do local _, x = debug.getupvalue(v, i); push(x) end
+          end
+        end
+      end
+    end
+    return total / 1024
+  end
+  isolated({ { name = "Memo-Forever", guid = guidOf("Memo"), rank = 1, rankName = "Officer", class = "PALADIN", level = 20, online = true } }, function()
+    local mc = newClient(charOf({ "Memo", 1, "Officer", "PALADIN", 20 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(mc)
+    tickAll(5)
+    for _, key in ipairs({ "Cute_Quest", "Cute_Quest:route", "Cute_Quest:map", "Cute_Quest:journal", "Cute_Quest:gear", "Cute_Quest:camp" }) do mc.C.Modules.Set(key, true) end
+    tick(mc, 6)
+    local QB = mc.addons[2].private
+    QB.Model.Finish()
+    for _, page in ipairs({ "quests", "route", "journal", "gear", "map" }) do mc.C.UI:Open(page) end
+    local ui = mc.C.UI.Window("map")
+    QB.MapPage.Go(1429, "user")
+    QB.MapWin.ShowFinds(ui)
+    ui.mapFinds = nil; ui:Draw()
+    local KEEP_BUDGET = 11 * 1024
+    local keptKB = kept(mc, { QB, mc.env.QuestBankDB })
+    print(string.format("map C5: the quest module keeps %.0f KB with the Map window open on a zone and its Finds list (budget %d KB)", keptKB, KEEP_BUDGET))
+    assert(keptKB < KEEP_BUDGET, string.format("the quest module keeps %.0f KB with the map open, over its budget of %d KB", keptKB, KEEP_BUDGET))
+    leave(mc)
+  end)
+end
+
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

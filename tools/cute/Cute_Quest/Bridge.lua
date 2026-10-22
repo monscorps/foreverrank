@@ -38,6 +38,11 @@ E.cornerPlace = true
 -- (the windows round) fewer pins on the game's world map: none of ours where the game draws one, touching ones merged with
 -- a count (QuestMap.lua QM.Thin); QuestBank alone draws them all
 E.thinMap = true
+-- (sub-project F) the engine's map canvas is Cute's Map window (M, MapWin.lua): the game's smooth wheel through zones, its
+-- right-click up a map, pins merged where they touch and drawn on a continent, the finds (MapPage.lua, QuestMap.lua); and
+-- each kind of pin its own look on both maps: an objective's spot its kind's cursor, a stop of the route its number on
+-- the game's disc, so the game's own quest disc is the only one with the three dots (Pins.lua P.StyleKind, P.StyleStop)
+E.mapWindow, E.kindMarks = true, true
 -- the engine's words name the host: "Choose a reward: X is Cute's pick", "Nothing to do: /cute quests", the minimap
 -- menu's "Cute settings"; and they leave out the /qb commands a Cute player is never told of (host: Settings alone)
 E.NAME, E.CMD, E.host = "Cute", "/cute quests", true
@@ -131,7 +136,8 @@ end
 -- as the quest window's tabs (the party is the Quests tab's band); a tab whose module is off (Dungeons) is the Quests
 -- tab (Cute's own way with an off page is Race: a travel, train, grind or corpse step clicked in the step frame opened
 -- the guild's table)
-local PAGE = { [1] = "quests", [2] = "quests", [3] = "route", [4] = "quests", [5] = "settings", [6] = "quests", [7] = "journal", [8] = "quests" }
+-- (sub-project F: tab 8, the engine's Map page, is Cute's Map window)
+local PAGE = { [1] = "quests", [2] = "quests", [3] = "route", [4] = "quests", [5] = "settings", [6] = "quests", [7] = "journal", [8] = "map" }
 local function pageOf(tab)
   local page = PAGE[tab] or "quests"
   if page ~= "quests" and page ~= "settings" and not Cute.ModuleOn(page) then page = "quests" end
@@ -149,7 +155,7 @@ function UI:Open(tab)
   if win and win.frame and win.frame:IsShown() then QB.Reader.Read(win, q) end
 end
 -- the page a click opens, by name, for the engine's words ("Click: the Quests page.": Arrow.lua)
-local TITLE = { quests = "Quests", route = "Route", settings = "Settings", journal = "Dungeons", gear = "Gear" }
+local TITLE = { quests = "Quests", route = "Route", settings = "Settings", journal = "Dungeons", gear = "Gear", map = "Map" }
 function UI.PageName(tab) return TITLE[pageOf(tab)] or "Quests" end
 function UI:ShowTab(tab) self:Open(tab) end
 function UI:TogglePage(tab) self:Open(tab) end
@@ -177,7 +183,8 @@ function UI.OpenMap(toggle)
   pcall(OpenWorldMap)
   return wm:IsShown() and true or false
 end
-function UI.MapPageOn() return false end
+-- (the engine's Map page is Cute's Map window while the Map module is on)
+function UI.MapPageOn() return Cute.ModuleOn("map") end
 function UI.Caret() end
 function UI:ShowMenu(title, items)
   if type(MenuUtil) == "table" and type(MenuUtil.CreateContextMenu) == "function" then
@@ -315,11 +322,13 @@ end, "cute quest: login"))
 -- /qb and /questbank: the pages Cute has, by name; everything else is the engine's own command (skip, way, done,
 -- arrow, trace...)
 local engineSlash = SlashCmdList.QUESTBANK
-local WORD = { [""] = "quests", route = "route", prep = "quests", plan = "quests", available = "quests", journal = "journal", gear = "gear", map = "quests", maps = "quests", settings = "settings", options = "settings" }
+local WORD = { [""] = "quests", route = "route", prep = "quests", plan = "quests", available = "quests", journal = "journal", gear = "gear", map = "map", maps = "map", settings = "settings", options = "settings" }
 SlashCmdList.QUESTBANK = function(msg)
   msg = (msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
   local cmd = msg:match("^(%S*)"):lower()
   local page = WORD[cmd]
+  -- (/qb map with the Map module off: the Quests tab, as 0.7 did; /qb map <zone> is the engine's own, which opens tab 8)
+  if page == "map" and not Cute.ModuleOn("map") then page = "quests" end
   if page and (cmd == msg:lower() or cmd == "") then Cute.Open(page, page == "settings" and "quests" or nil) return end
   if engineSlash then engineSlash(msg) end
 end
