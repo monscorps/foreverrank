@@ -24915,6 +24915,35 @@ end)()
     assert(#c.outbox == 0, "the same ask again within ten minutes: nothing")
   end }
 
+  -- G1 (robust, should). One who left your group while you stayed in it kept their step on your frame and their quests on
+  -- your tooltips (merge4's DropSteps ran only when you left groups altogether); a guild mate's 1S kept them for good
+  CASES[#CASES + 1] = { "G1: a member who leaves your group loses their step and quests; a hidden name drops nothing", function()
+    local c = char("Stayer", { party = { { "Brann", "PALADIN", 18 }, { "Cora", "MAGE", 18 } } })
+    local QB, S, G = c.QB, c.QB.Sync, c.QB.Guide
+    QB:Settings().share.guild = true
+    local hear = hearer(c)
+    local brann, cora = "Brann Steelhand-Forever Normal", "Cora Steelhand-Forever Normal"
+    for _, who in ipairs({ brann, cora }) do
+      hear("1S|18|100|A|PALADIN|0|0|0|-1|0|0|6.4.1|zzzzzzzzzz", "PARTY", who)
+      hear("1Q|1|1|7.a1/8", "PARTY", who)
+      hear("1G|Kill Kobold Vermin 1/8", "PARTY", who)
+    end
+    assert(#G.MemberSteps() == 2 and S.members[brann].quests, "both steps shown, Brann's quests kept")
+    -- Brann leaves; the game hides the names a while: nothing dropped
+    c.party = { { "Cora", "MAGE", 18 } }
+    local realName = c.env.UnitName
+    c.env.UnitName = function(unit) if unit ~= "player" then return SECRET.str() end return realName(unit) end
+    roster(c)
+    c.env.UnitName = realName
+    assert(#G.MemberSteps() == 2, "a hidden name: nothing dropped")
+    roster(c)
+    local steps = G.MemberSteps()
+    assert(#steps == 1 and steps[1].name == "Cora Steelhand", "Brann gone: Cora's step alone: " .. #steps)
+    assert(S.members[brann].quests == nil and S.members[cora].quests, "Brann's quests gone, Cora's kept")
+    hear("1S|18|160|A|PALADIN|0|0|0|-1|0|0|6.4.1|zzzzzzzzzz", "GUILD", brann)
+    assert(#G.MemberSteps() == 1, "his status on GUILD brings no step back")
+  end }
+
   -- Q1 (trust, should). 6.4.1 took 1Q from GUILD (6.4.0 and older still send it there) and from anyone's whisper: every
   -- quest on such a list ranked 1.5 times in the Guide and a group quest lost its solo cost. A quest list comes from your
   -- group, or by whisper from whom you sent yours to (/qb sync); a whispered status from them alone; out of a group the

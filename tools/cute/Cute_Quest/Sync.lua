@@ -415,6 +415,30 @@ end
 function S:DropSteps()
   for _, m in pairs(self.members) do forget(m) end
 end
+-- (the final audit) the group's names as the game lists them now, by their first word: nil while it hides one or lists
+-- nobody else, and then nothing is dropped (S.GroupUnits walks no raid)
+local function groupNames()
+  local n = GetNumGroupMembers and QB.Plain(GetNumGroupMembers()) or 0
+  if type(n) ~= "number" or n < 2 then return nil end
+  local raid = IsInRaid and QB.Plain(IsInRaid()) == true
+  local out = {}
+  for i = 1, raid and n or math.min(n - 1, 4) do
+    local w = firstWord(UnitName and QB.Plain(UnitName((raid and "raid" or "party") .. i)) or nil)
+    if type(w) ~= "string" or w == "" then return nil end
+    out[w:lower()] = true
+  end
+  return out
+end
+-- (the final audit) one who left your group while you stay in it: theirs forgotten. merge4's DropSteps ran only once you
+-- were out of every group, so a leaver's step stayed on your frame, and a guild mate's 1S kept it there for good
+function S:DropGone()
+  local here = groupNames()
+  if not here then return end
+  for _, m in pairs(self.members) do
+    local w = firstWord(m.name)
+    if not (type(w) == "string" and here[w:lower()]) then forget(m) end
+  end
+end
 function S:Members()
   local out = {}
   local t = now()
@@ -651,8 +675,8 @@ function S:Init()
       S:Receive(msg, channel, sender)
     elseif event == "GROUP_ROSTER_UPDATE" then
       -- (merge4) out of a group: every step heard goes, so a former group mate's never shows in your next group; (the final
-      -- audit) and their quest lists
-      if not (IsInGroup and QB.Plain(IsInGroup()) == true) then S:DropSteps() end
+      -- audit) and their quest lists. Still in one: what the members who left had
+      if not (IsInGroup and QB.Plain(IsInGroup()) == true) then S:DropSteps() else S:DropGone() end
       local ch = groupChannel()
       if ch and ch ~= S.lastGroup and QB:Settings().share.party then
         S.lastStatus, S.lastQuests = nil, nil
