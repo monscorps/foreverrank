@@ -191,17 +191,29 @@ local function tally(e, noMe)
 end
 -- the officers' word says it: the officer whose word said it is one still (Roster.lua R:OfficerVoice: listed at an
 -- officer's rank, not marked untrusted), as Rules.lua's R.Word reads each officer's word again
-local function said(e) return type(e.o) == "string" and C.Roster:OfficerVoice(e.o) end
+-- (each sender's answer kept while the roster's who is who, the policy and the line's officer ranks stand: a build reads
+-- it for every find the word said)
+local voiceAt, voicePol, voiceThr, voiceOf = nil, nil, nil, {}
+local function said(e)
+  local o = e.o
+  if type(o) ~= "string" then return false end
+  local R, P = C.Roster, C.Policy
+  local thr = P:LineThreshold()
+  if voiceAt ~= R.idVersion or voicePol ~= P.ver or voiceThr ~= thr then voiceAt, voicePol, voiceThr, voiceOf = R.idVersion, P.ver, thr, {} end
+  local v = voiceOf[o]
+  if v == nil then v = R:OfficerVoice(o) and true or false; voiceOf[o] = v end
+  return v
+end
 local function sure(e) return said(e) or (tally(e)) >= 2 end
 F.Sure, F.Said = sure, said
--- the voices that count, counted again when the roster's who is who (Roster.lua R.idVersion) or the policy changed: where
--- the count moved, the version does (the map and the footers drawn from it again)
-local votersAt, votersPol, voters = nil, nil, nil
+-- the voices that count, counted again when the roster's who is who (Roster.lua R.idVersion), the policy or the line's
+-- officer ranks changed: where the count moved, the version does (the map and the footers drawn from it again)
+local votersAt, votersPol, votersThr, voters = nil, nil, nil, nil
 function F:Voters()
   local R, P = C.Roster, C.Policy
-  local at, pol = R and R.idVersion, P and P.ver
-  if at == votersAt and pol == votersPol then return end
-  votersAt, votersPol = at, pol
+  local at, pol, thr = R and R.idVersion, P and P.ver, P and P:LineThreshold()
+  if at == votersAt and pol == votersPol and thr == votersThr then return end
+  votersAt, votersPol, votersThr = at, pol, thr
   -- (an officer gone or demoted: another officer's word that says the same find holds it)
   if voters ~= nil and self.TakeWord then self:TakeWord(true) end
   local s, me, n = store(), C.MyGUID(), 0
