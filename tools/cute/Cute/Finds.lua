@@ -23,11 +23,14 @@
 -- messages an hour, PER_MSG entries a message, a ping a creature in PING_EVERY.
 -- Who sees it. The Finds category of Who sees what (Stats.lua S.FOUND gains "finds", code "cf", Everyone by default),
 -- with Zone (a find says where you stood: Policy.lua P:FindsRoute). Closed, each 1X leaves whispered to the officers
--- online (Comm.lua's build and mark, as any value the officers keep); an officer's client confirms what it hears with
--- two voices and says the guild's sure finds in the officers' word (1N, no GUID: F:WordParts), which is how the
--- members, and those who log in later, have them; a member's relay proves no voices and is never taken (the word is
--- taken only from an officer's voice). A member's client takes no 1X on GUILD while the category is closed (only an
--- edited copy would send one) and keeps no other member's voice (Policy.lua P:Purge, F.StripTraces).
+-- online (Comm.lua's build and mark, as any value the officers keep; with none online it waits for one); an officer's
+-- client confirms what it hears with two voices and says the guild's sure finds in the officers' word (1N, no GUID:
+-- F:WordParts) WORD_AGE after they became sure (never where two members stood a minute ago), which is how the members,
+-- and those who log in later, have them. Open, the members heard the voices: the word carries the finds to those who
+-- ask later (Comm.lua sends no word for the finds alone). A member's relay proves no voices and is never taken (the
+-- word is taken only from an officer's voice, and what it said is sure while that officer is one). A member's client
+-- takes no 1X on GUILD while the category is closed (only an edited copy would send one) and keeps no other member's
+-- voice (Policy.lua P:Purge, F.StripTraces). With "Share finds with the guild" off your finds are no voice at all.
 -- And this character's counts, Statistics' Finds category: Finds first, Books read, Rares seen, Chests looted.
 local _, C = ...
 local F = { ver = 0, pings = {}, pingFrom = {}, pinged = {}, outPings = {}, rate = {}, sentAt = {},
