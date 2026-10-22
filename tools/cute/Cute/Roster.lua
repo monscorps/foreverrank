@@ -196,8 +196,8 @@ function R:Refresh(event)
   self.listedWhole = complete == true
   local members, byGuid, byFirst, seen, sig, names, me, top, unread = {}, {}, {}, {}, {}, {}, nil, nil, 0
   -- (byId: the members by club member id, for one member's event, R:MemberEvent; flipped: one went online or off since
-  -- the last read)
-  local byId, was, flipped = {}, self.byKey, false
+  -- the last read; levelled: one's level moved)
+  local byId, was, flipped, levelled = {}, self.byKey, false, false
   for _, m in ipairs(list) do
     if not seen[m.key] then
       seen[m.key] = m
@@ -206,6 +206,7 @@ function R:Refresh(event)
       if m.id ~= nil then byId[m.id] = m end
       local w = was and was[m.key]
       if w and w.online ~= m.online then flipped = true end
+      if w and w.level ~= m.level then levelled = true end
       -- the members by their first name, for R:SenderMember (namesakes side by side); a member online whose name reads
       -- in no form may be any of them (R:SenderMember)
       if m.first then local l = byFirst[m.first]; if not l then l = {}; byFirst[m.first] = l end; l[#l + 1] = m
@@ -214,8 +215,10 @@ function R:Refresh(event)
       if m.level and (not top or m.level > top) then top = m.level end
       -- (the name too: a rename, or a GUID's name read at last, changes who a sender string names. Not whether the
       -- member is online: a login, a logout or an Away in the guild walked every record (R:Sweep) and built who is who
-      -- again, 0.9.0; the unread names online are counted on their own, and the officers online are offSig's)
-      sig[#sig + 1] = m.key .. ":" .. m.rank .. ":" .. tostring(m.level) .. ":" .. tostring(m.canon)
+      -- again, 0.9.0; the unread names online are counted on their own, and the officers online are offSig's. Nor its
+      -- level, which nothing built from who is who reads (the level cap goes by maxLevel): every level-up in the guild
+      -- walked every record, 0.9.1)
+      sig[#sig + 1] = m.key .. ":" .. m.rank .. ":" .. tostring(m.canon)
       names[#names + 1] = m.key .. ":" .. tostring(m.canon)
     end
   end
@@ -312,7 +315,7 @@ function R:Refresh(event)
   -- the officers this client tells its Only-you values: one no more is forgotten (told again when made one again), and
   -- one this refresh made an officer is told now (Comm.lua)
   step("roster: officers", function() if C.Comm and C.Comm.Officers then C.Comm:Officers() end end)
-  if changed or flipped then
+  if changed or flipped or levelled then
     self.updatedAt = now()
     if C.UI and C.UI.Refresh then C.UI:Refresh() end
     -- (a mate online or off, a level: the quest window's dungeon pick, Guide.lua)
@@ -502,11 +505,13 @@ function R:OfficersOnline()
   self.offSig = table.concat(offs, "|")
 end
 -- one member's event (CLUB_MEMBER_PRESENCE_UPDATED: clubId, memberId, presence; CLUB_MEMBER_UPDATED: clubId, memberId,
--- ClubDocumentation.lua): that member read again and patched in place where only whether it is online, its zone or its
--- class moved, the rows drawn again; anything about who it is (its name, rank or level), a member this roster does not
--- list or one whose name reads in no form (counted among the unread online) is the full read two seconds on. Another
--- club's (a community) is nothing of the guild's. 0.9.0 read all 500 members two seconds after every login, logout,
--- Away and zone change in the guild, and walked every record at each online flip
+-- ClubDocumentation.lua): that member read again and patched in place where only whether it is online, its zone, its
+-- class or its level moved (a level up: the level cap's top raised, a ding the channel told first judged), the rows
+-- drawn again; anything about who it is (its name or rank), a level that went down or reads no more, a member this
+-- roster does not list or one whose name reads in no form (counted among the unread online) is the full read two
+-- seconds on. Another club's (a community) is nothing of the guild's. 0.9.0 read all 500 members two seconds after
+-- every login, logout, Away and zone change in the guild, and walked every record at each online flip; 0.9.1 still did
+-- at every level-up
 function R:MemberEvent(clubId, memberId)
   clubId, memberId = C.Plain(clubId), C.Plain(memberId)
   -- (an event that names nothing: the full read)
@@ -516,14 +521,17 @@ function R:MemberEvent(clubId, memberId)
   local old = self.trusted and self.byId and self.byId[memberId]
   if not old then return self:Soon() end
   local m = readMember(guild, memberId, C.MyGUID())
-  if not m or m.key ~= old.key or m.rank ~= old.rank or m.level ~= old.level or m.canon ~= old.canon or m.name ~= old.name or m.self ~= old.self
-    or (not m.first and not m.self and m.online ~= old.online) then return self:Soon() end
-  if m.online == old.online and m.zone == old.zone and m.class == old.class then return end
+  local up = m ~= nil and type(m.level) == "number" and (old.level == nil or m.level > old.level)
+  if not m or m.key ~= old.key or m.rank ~= old.rank or (m.level ~= old.level and not up) or m.canon ~= old.canon or m.name ~= old.name
+    or m.self ~= old.self or (not m.first and not m.self and m.online ~= old.online) then return self:Soon() end
+  if m.online == old.online and m.zone == old.zone and m.class == old.class and not up then return end
   local officer = m.online ~= old.online and not m.self and m.rank <= math.max(C.Policy:Threshold(), C.Policy:LineThreshold())
-  old.online, old.zone, old.class = m.online, m.zone, m.class
+  old.online, old.zone, old.class, old.level = m.online, m.zone, m.class, m.level
   if officer then self:OfficersOnline() end
+  if up and (self.maxLevel == nil or m.level > self.maxLevel) then self.maxLevel = m.level; self.levelVersion = self.levelVersion + 1 end
   self.updatedAt = now()
   self:Changed()
+  if up then step("roster: dings", function() self:Dings() end) end
   if C.UI and C.UI.Refresh then C.UI:Refresh() end
   if C.Guide and C.Guide.Redraw then C.Guide.Redraw() end
 end

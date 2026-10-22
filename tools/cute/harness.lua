@@ -21212,6 +21212,8 @@ end
 -- R2. A stat opened: no member asks the guild for what it dropped while it routed by the line from before (the
 --     officer's value sent at the click, a mate's sent as it read the line first). Kept aside in memory, those are
 --     taken once its own read opens the stat; one of a stat that stays closed goes after a while, never kept
+-- L1. A level-up in the guild is patched in place from its club event (the level cap raised): no full read, no identity
+--     built, no record walked; a full read that finds levels alone moved builds none either
 ----------------------------------------------------------------------------
 do
   local CASES, failed, said = {}, {}, {}
@@ -21302,6 +21304,43 @@ do
       for _, c in ipairs({ ofa, mia, zed }) do leave(c) end
     end)
     said[#said + 1] = "a stat opened: nobody asks the guild, what came before the read is taken as it opens, a closed one's goes"
+  end }
+
+  CASES[#CASES + 1] = { "L1 a level-up is patched in place from its club event", function()
+    local guild = { member("Ofa", 0) }
+    for i = 1, 30 do guild[#guild + 1] = member("Lv" .. i, 3) end
+    inGuild(guild, function()
+      local c = char("Ofa", 0)
+      login(c); tickAll(40)
+      local R = c.C.Roster
+      local calls = { sweep = 0, identity = 0 }
+      local rs, ri = R.Sweep, R.Identity
+      R.Sweep = function(...) calls.sweep = calls.sweep + 1; return rs(...) end
+      R.Identity = function(...) calls.identity = calls.identity + 1; return ri(...) end
+      local ver0, lv0, reads0 = R.version, R.levelVersion, c.memberReads or 0
+      -- Lv3 dings: its event names it
+      guild[4].level = 31
+      fire(c, "CLUB_MEMBER_UPDATED", 7, 4)
+      assert(not R.soon and (c.memberReads or 0) - reads0 == 1, "the member read alone, no full read booked")
+      assert(calls.sweep == 0 and calls.identity == 0 and R.version > ver0, "no identity built, no record walked; the rows drawn again")
+      assert(R.byGuid[guidOf("Lv3")].level == 31 and R.maxLevel == 31 and R.levelVersion > lv0, "Lv3 at 31, the cap's top raised: " .. tostring(R.maxLevel))
+      local row
+      for _, r in ipairs(R:Rows()) do if r.guid == guidOf("Lv3") then row = r end end
+      assert(row and row.level == 31, "its row says 31")
+      -- a full read that finds a level alone moved (its event missed): rows only
+      guild[5].level = 32
+      local ver1 = R.version
+      fire(c, "GUILD_ROSTER_UPDATE")
+      assert(calls.sweep == 0 and calls.identity == 0 and R.byGuid[guidOf("Lv4")].level == 32 and R.maxLevel == 32 and R.version > ver1,
+        "a full read with a level alone moved: rows only: " .. calls.identity .. " identities, " .. calls.sweep .. " sweeps")
+      -- a rank moved still reads the guild
+      guild[6].rank = 1
+      fire(c, "CLUB_MEMBER_UPDATED", 7, 6)
+      assert(R.soon, "a rank moved: the full read booked")
+      R.Sweep, R.Identity = rs, ri
+      leave(c)
+    end)
+    said[#said + 1] = "a level-up is patched in place from its club event; a full read with levels alone moved builds no identity"
   end }
 
   for _, case in ipairs(CASES) do
