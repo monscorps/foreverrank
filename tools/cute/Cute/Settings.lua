@@ -334,7 +334,8 @@ end
 -- with Broadcast now and applied by the guild like the visibility. White where an officer set it; the buttons'
 -- tooltip says what it does, its default and who set it
 local function round(v, step) return math.floor(v / step + 0.5) * step end
-function Col:Rule(name, text)
+-- (text and hint: Settings' own words for a rule, where the registry's, Rules.lua's, name a part that has moved)
+function Col:Rule(name, text, hint)
   local R = C.Rules
   local t = R.TUNE_BY[name]
   if not t then return end
@@ -354,7 +355,7 @@ function Col:Rule(name, text)
     (officer and v < hi - 1e-9) and function() set(R.Get(name) + step) end or nil,
     function(tip)
       tip:AddLine(text or t[2], 1, 1, 1)
-      tip:AddLine(t[7], 0.85, 0.85, 0.85, true)
+      tip:AddLine(hint or t[7], 0.85, 0.85, 0.85, true)
       local by = R.SetBy(name)
       tip:AddLine("Default " .. R.Show(name, R.RULES[name]) .. (by and (". Set to " .. R.Show(name) .. " by " .. R.WhoName(by) .. ".") or "."), 0.7, 0.7, 0.7, true)
     end)
@@ -593,9 +594,11 @@ local function drawRules(col, officer)
   col:Head("What the guild learns")
   col:Note(officer and "White: set by an officer. A change goes to the guild on its own." or "White: set by an officer. Only officers can change them.")
   for _, t in ipairs(R.TUNE) do if not t[8] then col:Rule(t[1]) end end
+  -- (the retired Guide's two, read now by the Quests tab's dungeon pick: their words here, the registry's as the core has
+  -- them)
   col:Head("Dungeons and gear")
-  col:Rule("guideWindow", "Members near your level (levels)")
-  col:Rule("guideAhead", "Dungeons ahead (levels)")
+  col:Rule("guideWindow", "Members near your level (levels)", "The dungeon pick names the guild mates online in a dungeon's range within this many levels of yours; for officers, where most members are, over twice as many.")
+  col:Rule("guideAhead", "Dungeons ahead (levels)", "The dungeon pick names the next dungeon to open within this many levels of yours.")
   col:Buttons({ { "Broadcast now", officer, broadcast }, { "Rules to defaults", officer, function()
     for _, t in ipairs(R.TUNE) do if R.SetBy(t[1]) then C.Policy:SetRule(t[1], nil) end end
     C.Comm:PolicySoon()

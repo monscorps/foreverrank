@@ -12903,6 +12903,33 @@ do
   end)
 end
 
+-- W25 (the review of sub-project C): Settings > Rules names the dungeon pick's two rules in its own words, labels and
+-- tooltips alike ("The dungeon pick names...", never the retired Guide's "Next up"), from Settings itself: the rules'
+-- registry (Rules.lua, the core's, and the page's stats.js written from it) is left as the core has it
+do
+  isolated({ { name = "Rone-Forever", guid = guidOf("Rone"), rank = 1, rankName = "Officer", class = "WARRIOR", level = 5, online = true } }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    c.C.UI:Open("settings", "rules")
+    local function tipFor(label)
+      for _, b in ipairs(c.frames) do
+        if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == "+" then
+          local t = tipOf(b)
+          if t:find(label, 1, true) then return t end
+        end
+      end
+    end
+    for _, r in ipairs({ { "Members near your level (levels)", "The dungeon pick names the guild mates online in a dungeon's range" },
+      { "Dungeons ahead (levels)", "The dungeon pick names the next dungeon to open" } }) do
+      local t = tipFor(r[1])
+      assert(t and t:find(r[2], 1, true) and not t:find("Guide", 1, true) and not t:find("Next up", 1, true), "Settings > Rules: " .. r[1] .. " in the pick's words:\n" .. tostring(t))
+    end
+    hideAll(c)
+    leave(c)
+    print("windows W25: Settings > Rules names the dungeon pick's two rules in its own words, label and tooltip, the rules' registry as the core has it")
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end
