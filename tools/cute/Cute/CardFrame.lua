@@ -373,12 +373,13 @@ function CF:Announce(set, opts)
   local width = CF.title.GetUnboundedStringWidth or CF.title.GetStringWidth
   CF.title:SetText(set.title or ""); CF.sub:SetText(sub)
   local need = x0 + math.max(width(CF.title), width(CF.sub)) + 20 + factsW + 40
-  -- (a preview's guild chat line, whole on two lines at most: the frame as wide as two lines of it need)
+  -- (a preview's guild chat line, whole on two lines at most: the frame as wide as two lines of it need, and a long
+  -- word's width more, which a line break may leave at the end of the first)
   local chat = opts.preview and set.chat and chatText(set) or nil
   if chat then
     if not CF.chat then CF.chat = U.Text(f, 11, DIM, "LEFT", 900); CF.chat:SetWordWrap(true) end
     CF.chat:SetText(chat)
-    need = math.max(need, math.ceil(width(CF.chat) / 2) + 24 + 32)
+    need = math.max(need, math.ceil(width(CF.chat) / 2) + 80 + 32)
   end
   local w = math.max(CF.Width(#cards), math.min(980, math.ceil(need)))
   f:SetSize(w, H_SET)
