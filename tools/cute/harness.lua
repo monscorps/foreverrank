@@ -15565,8 +15565,9 @@ do
     assert(#sent1X(ann, a0 + 1, "GUILD") == 0, "Ann's too")
     local ro = rowsOf(ofa, 1429)[1]
     assert(ro and ro.sure and ro.mates == 2, "Ofa's client: two voices, sure")
-    -- the officers' word says it, a GUID nowhere in it
-    tickAll(90)
+    -- the officers' word says it half an hour on (the review of G: never where two members stood a minute ago), a GUID
+    -- nowhere in it
+    tickAll(1900)
     local word
     for _, m in ipairs(ofa.sent) do if m.msg:sub(1, 3) == "1N|" and m.msg:find(";fh", 1, true) or (m.msg:sub(1, 3) == "1N|" and m.msg:find("|fh", 1, true)) then word = m.msg end end
     assert(word and not word:find("Player-", 1, true), "the officers' word says the sure chest: " .. tostring(word))
@@ -16075,9 +16076,9 @@ do
     tickAll(65)
     fnoted(ann, "h", 9201, 1429, 506, 500)
     tickAll(65)
-    tickAll(120)
+    tickAll(1900)
     local r = rowOf(cy, 1429, 9201)
-    assert(r and r.sure and r.mates == 0, "Cy has the chest from the officers' word: sure")
+    assert(r and r.sure and r.mates == 0, "Cy has the chest from the officers' word (half an hour on): sure")
     assert(#ofa.C.Finds:WordParts() == 1 and #oli.C.Finds:WordParts() == 1, "each officer who heard both voices says it, the other's word taken or not")
     -- both officers demoted on Cy's client: the word's finds sure no more
     for _, m in ipairs(GUILD) do if m.guid == guidOf("Ofa") or m.guid == guidOf("Oli") then m.rank, m.rankName = 3, "Raider" end end
@@ -16090,6 +16091,93 @@ do
     assert(r and r.sure, "an officer again: sure again from its word")
     for _, c in ipairs({ ofa, oli, mia, ann, cy }) do leave(c) end
     said[#said + 1] = "the officers' word's finds sure by an officer's voice while it is one; each officer says what it heard"
+  end)
+  -- K11: the finds in the officers' word. The officers keep Finds: a find sure now is said half an hour on (never where
+  -- two members stood a minute ago), by one officer (the other's copy covered), past the word's newest 48 too (a find
+  -- leaving the word takes nothing back), a word that changed in its finds alone five minutes after the last at the
+  -- soonest, its key the same when a third voice moves the find's mean. Finds open: a find sure now sends no word
+  local function partsOf(c, from)
+    local n, finds = 0, 0
+    for i = from or 1, #c.sent do
+      local m = c.sent[i]
+      if m.msg:sub(1, 3) == "1N|" then n = n + 1; for _ in m.msg:gmatch("[|;]f[bkhx]") do finds = finds + 1 end end
+    end
+    return n, finds
+  end
+  isolated({ fmember("Ofa", 0), fmember("Oli", 1), fmember("Mia", 3), fmember("Ann", 3), fmember("Cy", 3) }, function()
+    local closed = { gc_finds = "self" }
+    local ofa, oli, mia, ann, cy = fchar("Ofa", 0), fchar("Oli", 1), fchar("Mia", 3), fchar("Ann", 3), fchar("Cy", 3)
+    login(ofa, fpol(true, closed)); login(oli, fpol(nil, closed)); login(mia, fpol(nil, closed)); login(ann, fpol(nil, closed)); login(cy, fpol(nil, closed))
+    tickAll(130)
+    local F = ofa.C.Finds
+    -- the officers hear Mia's and Ann's chests whispered, ten a message
+    local function hear(list, from)
+      for _, o in ipairs({ ofa, oli }) do
+        for _, who in ipairs(from) do
+          local parts = {}
+          for _, en in ipairs(list) do parts[#parts + 1] = F.Pack(en) end
+          for i = 1, #parts, 10 do o.C.Finds:Receive(table.concat(parts, ";", i, math.min(#parts, i + 9)), who.sender, true) end
+        end
+      end
+    end
+    local list = {}
+    for i = 1, 50 do list[i] = { k = "h", id = 20000 + i, m = 1429, x = (i % 25) * 40, y = math.floor(i / 25) * 40 + 20 } end
+    local o0, l0 = #ofa.sent, #oli.sent
+    hear(list, { mia, ann })
+    tickAll(600)
+    local _, f1 = partsOf(ofa, o0 + 1)
+    local _, f2 = partsOf(oli, l0 + 1)
+    assert(f1 + f2 == 0, "ten minutes on: no find in the word yet")
+    tickAll(1300)
+    _, f1 = partsOf(ofa, o0 + 1)
+    _, f2 = partsOf(oli, l0 + 1)
+    assert((f1 == 48) ~= (f2 == 48) and f1 + f2 == 48, "half an hour on: the newest 48, said by one officer: " .. f1 .. " and " .. f2)
+    tickAll(10)
+    assert(rowOf(cy, 1429, 20050) and rowOf(cy, 1429, 20050).sure, "Cy has them, sure")
+    -- the 51st: the oldest leaves the word, which takes nothing back: one officer says it, five minutes after the last
+    local o1, l1 = #ofa.sent, #oli.sent
+    local t1 = ofa.clock
+    hear({ { k = "h", id = 20051, m = 1436, x = 500, y = 500 } }, { mia, ann })
+    tickAll(1900)
+    local n1, g1 = partsOf(ofa, o1 + 1)
+    local n2, g2 = partsOf(oli, l1 + 1)
+    assert((g1 > 0) ~= (g2 > 0), "the 51st said by one officer, the other covered: " .. g1 .. " and " .. g2)
+    local first
+    for _, c in ipairs({ ofa, oli }) do for i = (c == ofa and o1 or l1) + 1, #c.sent do if c.sent[i].msg:sub(1, 3) == "1N|" then first = math.min(first or math.huge, c.sent[i].at) end end end
+    assert(first and first - t1 >= 1740, "half an hour after it became sure (kept to the minute): " .. tostring(first and first - t1))
+    assert(rowOf(cy, 1436, 20051) and rowOf(cy, 1436, 20051).sure and rowOf(cy, 1429, 20003) and rowOf(cy, 1429, 20003).sure, "Cy has the 51st, and keeps the one that left the word")
+    -- two words that changed in their finds alone: five minutes apart at the least
+    local o2, l2 = #ofa.sent, #oli.sent
+    hear({ { k = "h", id = 20052, m = 1436, x = 600, y = 500 } }, { mia, ann })
+    tickAll(1830)
+    hear({ { k = "h", id = 20053, m = 1436, x = 700, y = 500 } }, { mia, ann })
+    tickAll(1900)
+    local at = {}
+    for _, c in ipairs({ ofa, oli }) do for i = (c == ofa and o2 or l2) + 1, #c.sent do local m = c.sent[i]; if m.msg:sub(1, 3) == "1N|" then at[#at + 1] = m.at end end end
+    table.sort(at)
+    local words = {}
+    for _, t in ipairs(at) do if #words == 0 or t - words[#words] > 30 then words[#words + 1] = t end end
+    assert(#words >= 2, "two words: " .. #words)
+    for i = 2, #words do assert(words[i] - words[i - 1] >= 300, "a finds-only word five minutes after the last at the soonest: " .. (words[i] - words[i - 1])) end
+    -- a third voice moving the mean: the word's key stays
+    local before = table.concat(F:WordParts(), ";")
+    F:Receive(F.Pack({ k = "h", id = 20051, m = 1436, x = 510, y = 505 }), cy.sender, true)
+    assert(table.concat(F:WordParts(), ";") == before, "a third voice moving the mean leaves the word as it was")
+    for _, c in ipairs({ ofa, oli, mia, ann, cy }) do leave(c) end
+  end)
+  -- Finds open: a find sure now sends no word
+  isolated({ fmember("Ofa", 0), fmember("Mia", 3), fmember("Ann", 3) }, function()
+    local ofa, mia, ann = fchar("Ofa", 0), fchar("Mia", 3), fchar("Ann", 3)
+    login(ofa, fpol(true, {})); login(mia, fpol()); login(ann, fpol())
+    tickAll(130)
+    local o0 = #ofa.sent
+    fnoted(mia, "h", 9201, 1429, 500, 500)
+    tickAll(65)
+    fnoted(ann, "h", 9201, 1429, 506, 500)
+    tickAll(400)
+    assert(rowOf(ofa, 1429, 9201).sure and select(1, partsOf(ofa, o0 + 1)) == 0, "Finds open: sure on the officer's client, no word sent for it")
+    for _, c in ipairs({ ofa, mia, ann }) do leave(c) end
+    said[#said + 1] = "the finds in the officers' word: half an hour after sure where the officers keep them, by one officer, past the newest 48 nothing taken back, five minutes apart, a key a third voice leaves; open, no word for them"
   end)
   print("map K: " .. table.concat(said, "; "))
 end

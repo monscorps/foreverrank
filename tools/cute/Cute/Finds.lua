@@ -50,6 +50,8 @@ local PING_LIFE = 600    -- seconds a ping shows
 local PINGS = 40         -- pings kept
 local HEAR_HOUR = 40     -- messages taken from one sender an hour
 local WORD_MAX = 48      -- sure finds an officer's word says, the newest
+local WORD_AGE = 1800    -- seconds a find is sure before the word says it, where the officers keep Finds or Zone (said
+                         -- at once, it would tell every member where two members stood a minute ago)
 local SEEN_MAX = 3000    -- this character's finds counted (Statistics' Finds category)
 local MAP_MAX, ID_MAX = 99999, 99999999
 F.NEAR, F.ALL, F.EACH, F.VOICES, F.HOUR, F.EVERY, F.PING_LIFE = NEAR, ALL, EACH, VOICES, HOUR, EVERY, PING_LIFE
@@ -117,7 +119,9 @@ end
 ----------------------------------------------------------------------------
 -- the store: CuteDB.known.finds = { n, list }, each { k, id, m, x, y (the mean of its voices), t (a book's title), m2,
 -- x2, y2, s (a crossing's far end and seconds), v = { [GUID] = its spot packed }, o (the sender string of the officer
--- whose word said it: sure while that is an officer's voice), at (n when last touched), sa (n when it became sure) }
+-- whose word said it: sure while that is an officer's voice), at (n when last touched), sa (n when it became sure), st
+-- (the server's time then, to the minute), wx, wy, wx2, wy2 (its place then: the word's key, which a voice moving the
+-- mean afterwards leaves as it was) }
 ----------------------------------------------------------------------------
 local function store()
   local k = C.Stats.Known()
@@ -267,7 +271,10 @@ function F.Voice(g, en)
   s.n = s.n + 1
   e.at = s.n
   local became = sure(e) and not was
-  if became then e.sa = s.n end
+  if became then
+    e.sa, e.st = s.n, math.floor(C.ServerNow() / 60) * 60
+    e.wx, e.wy, e.wx2, e.wy2 = e.x, e.y, e.x2, e.y2
+  end
   return e, became
 end
 
@@ -616,8 +623,9 @@ function F:Receive(body, sender, whispered)
   end
   self.taken = self.taken + n
   if changed then self:Bump() end
-  -- (an officer's client says what became sure in the officers' word, once a minute at most: Comm.lua)
-  if becameSure and R:MeOfficer() and C.Comm.WordSoon then C.Comm:WordSoon() end
+  -- (an officer's client says what became sure in the officers' word, where the officers keep Finds or Zone and the
+  -- members heard no voice: WORD_AGE on, F:WordLater. Open, they heard both; the word says it to those who ask later)
+  if becameSure and R:MeOfficer() and C.Policy:FindsRoute() == "self" then self:WordLater() end
   return n
 end
 -- a ping heard: one a creature from one sender in PING_EVERY, PINGS kept, each PING_LIFE
@@ -654,17 +662,29 @@ end
 -- the officers' word (Comm.lua adds these to Rules.lua's parts): an officer's client says the guild's sure finds, the
 -- newest WORD_MAX, no GUID and no count: f<kind><object>@<map>:<x>,<y>=<title or 1>, fx<map>:<x>,<y>><map>:<x>,<y>=<s>
 ----------------------------------------------------------------------------
+-- (its place as it became sure: a voice moving the mean since changes no key, so the word stays the same)
 local function wordKey(e)
-  if e.k == "x" then return "fx" .. spotText(e.m, e.x, e.y) .. ">" .. spotText(e.m2, e.x2, e.y2) end
-  return "f" .. e.k .. b36(e.id) .. "@" .. spotText(e.m, e.x, e.y)
+  if e.k == "x" then return "fx" .. spotText(e.m, e.wx or e.x, e.wy or e.y) .. ">" .. spotText(e.m2, e.wx2 or e.x2, e.wy2 or e.y2) end
+  return "f" .. e.k .. b36(e.id) .. "@" .. spotText(e.m, e.wx or e.x, e.wy or e.y)
 end
+-- a part of the word that is a find's (Comm.lua: one leaving the word takes nothing back, and a word that changed in its
+-- finds alone waits longer); Rules.lua's parts start n, x, d or b
+function F.WordPart(kv) return type(kv) == "string" and kv:sub(1, 1) == "f" end
+-- an old enough find: sure for WORD_AGE where the officers keep Finds or Zone
+local function aged(e, closed, t) return not closed or not e.st or t - e.st >= WORD_AGE end
 function F:WordParts()
   local s = store()
   if not s then return {} end
   local list = {}
+  local closed, t = C.Policy:FindsRoute() == "self", C.ServerNow()
   -- (what this client's voices prove: another officer's word may have said it too, and this one says it all the same,
   -- for the members who ask while that officer is away)
-  for _, e in ipairs(s.list) do if (tally(e)) >= 2 then list[#list + 1] = e end end
+  for _, e in ipairs(s.list) do
+    if (tally(e)) >= 2 and aged(e, closed, t) then
+      list[#list + 1] = e
+      if not e.wx then e.wx, e.wy, e.wx2, e.wy2 = e.x, e.y, e.x2, e.y2 end
+    end
+  end
   table.sort(list, function(a, b) return (a.sa or 0) > (b.sa or 0) end)
   local out = {}
   for i = 1, math.min(WORD_MAX, #list) do
@@ -674,6 +694,25 @@ function F:WordParts()
   end
   table.sort(out)
   return out
+end
+-- the word once the youngest sure find waiting for it is WORD_AGE old (one look then, and again for the next)
+function F:WordLater()
+  if self.wordLaterDue then return end
+  local s, t = store(), C.ServerNow()
+  local soon
+  for _, e in ipairs(s and s.list or {}) do
+    if e.st and t - e.st < WORD_AGE and (tally(e)) >= 2 then
+      local d = e.st + WORD_AGE - t
+      if not soon or d < soon then soon = d end
+    end
+  end
+  if not soon then return end
+  self.wordLaterDue = true
+  C_Timer.After(math.max(1, soon) + 5, C.Safe(function()
+    F.wordLaterDue = false
+    if C.Roster:MeOfficer() and C.Comm.WordSoon then C.Comm:WordSoon() end
+    F:WordLater()
+  end, "finds: the officers' word"))
 end
 -- a word part back to an entry, or nil
 local function wordEntry(key, v)

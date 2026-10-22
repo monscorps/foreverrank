@@ -1302,6 +1302,8 @@ local function wordParts()
 end
 M.WordParts = wordParts
 local WORD_EVERY = 60 -- seconds before a word, unasked, follows the last (ten for each message it takes, if more)
+local FINDS_EVERY = 300 -- (sub-project G) the same for a word that changed in its finds alone (Finds.lua's parts)
+local function findPart(kv) return C.Finds ~= nil and C.Finds.WordPart(kv) end
 local function wordMessages(at, parts) return numbered(string.format("1N|%.0f|", at), parts) end
 -- every part said in another officer's newest word, which the members hold (Rules.lua R.Word: each officer's newest)
 local function wordSaid(parts)
@@ -1352,10 +1354,16 @@ function M:SendWord(answer, since)
   -- time (up to 64 messages where the officers keep Bosses), so a run of kills, or a range moving a level, says it once
   -- and keeps the officer's own deltas moving; it names nobody, and late costs nothing. What the officers did
   -- themselves (a member marked untrusted, a rule retuned, the policy changed: word.urgent) goes at once
-  local now, back = {}, false
+  -- (sub-project G) A find's part leaving the word takes nothing back: the word says the newest sure finds alone, and a
+  -- member keeps what it took. A word that changed in its finds alone waits FINDS_EVERY
+  local now, back, was, findsOnly = {}, false, {}, true
   for _, kv in ipairs(parts) do now[kv] = true end
-  for kv in (word.text or ""):gmatch("[^;]+") do if not now[kv] then back = true end end
-  local every = math.max(WORD_EVERY, 10 * #wordMessages(0, parts))
+  for kv in (word.text or ""):gmatch("[^;]+") do
+    was[kv] = true
+    if not now[kv] and not findPart(kv) then back, findsOnly = true, false end
+  end
+  for _, kv in ipairs(parts) do if not was[kv] and not findPart(kv) then findsOnly = false end end
+  local every = math.max(findsOnly and FINDS_EVERY or WORD_EVERY, 10 * #wordMessages(0, parts))
   if not answer and not word.urgent and word.sentAt and clock() - word.sentAt < every then
     if not word.later then
       word.later = true
