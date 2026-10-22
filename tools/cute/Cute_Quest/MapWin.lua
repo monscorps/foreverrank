@@ -878,7 +878,8 @@ end
 -- (sub-project G) the footer of L and M, only while there is something to say: the finds of yours QuestBank's data
 -- lacks, and how many of them a guild mate's find agrees with ("14 new finds, a dot, 3 confirmed by the guild", the numbers
 -- in INK), its 2 px NEW bar and the book's icon at 14 px; a click opens M on the Finds list, its tooltip the privacy
--- sentence (Cute/Finds.lua's words). The scroll area, the side column and the map's box end above it (the window's foot)
+-- sentence (Cute/Finds.lua's words). The scroll area and the side column end above it (the window's foot); on M it
+-- stands under the list alone, and the map's box keeps its height (a canvas resized loses the zoom chosen on it)
 ----------------------------------------------------------------------------
 local FOOT = 24
 local function footerOf(ui)
