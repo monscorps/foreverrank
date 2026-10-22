@@ -214,7 +214,13 @@ end
 ----------------------------------------------------------------------------
 function R.Current() return R.run end
 -- the Runs tab drawn again where it is open (a run started or ended, a report kept: UI:Refresh, a second at most)
-local function redraw() local U = C.UI; if U and U.page == "runs" and U.Refresh then U:Refresh() end end
+-- (the Runs tab where it is open, and Settings > Runs beside it: its Last report follows the history)
+local function redraw()
+  local U = C.UI
+  if U and U.page == "runs" and U.Refresh then U:Refresh() end
+  local st = U and U.windows and U.windows.settings
+  if st and st.section == "runs" and st.Refresh then st:Refresh() end
+end
 local function save(run) local ch = C.Char(); ch.run = run end
 local function lootNow()
   local L = C_LootHistory

@@ -130,6 +130,7 @@ end
 
 -- the report on the screen. opts.test: the test report (TEST RECAP; Print to chat, Next, Close)
 function CF:Report(rep, opts)
+  if type(rep) ~= "table" then return end
   opts = opts or {}
   local f = build()
   local U = C.UI

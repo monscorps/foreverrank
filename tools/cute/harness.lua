@@ -14835,6 +14835,8 @@ end
 -- (it draws as it opens).
 -- M6: a run report's header shows the dungeon's cover through Cute_Quest's door (Band.lua Cute.QuestCover: the
 -- Encounter Journal art as DM.SetCover cuts it for the 130 x 72 cover), the Dungeon atlas where it knows no cover.
+-- M7: Settings > Runs' Last report is the report the history holds when it is clicked: none (deleted beside it from
+-- J's Runs tab) is no Lua error, and the delete draws Settings again, the button greyed.
 do
   local CASES = {}
   local function member(name, rank, o)
@@ -14921,6 +14923,52 @@ do
     local after = errs()
     assert(#after == before, "no error recorded by the reports: " .. table.concat(after, " | ", before + 1))
     if before > 0 then print("merge2 M6: recorded at the login, before the reports: " .. table.concat(after, " | ", 1, before)) end
+    leave(c)
+  end) end }
+
+  CASES[#CASES + 1] = { "M7 Settings > Runs' Last report after the report went from J's Runs tab", function() iso({ member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 30 }))
+    login(c); tickAll(6)
+    local menus = {}
+    c.env.MenuUtil = { CreateContextMenu = function(owner, gen)
+      local entries, root = {}, {}
+      function root:CreateButton(text, fn) entries[#entries + 1] = { text = text, fn = fn } end
+      function root:CreateTitle(text) entries[#entries + 1] = { title = text } end
+      function root:CreateDivider() end
+      gen(owner, root)
+      menus[#menus + 1] = entries
+    end }
+    local Rn, CF = c.C.Runs, c.C.CardFrame
+    Rn.Keep({ id = "m2-only", kind = "d", inst = 36, place = "The Deadmines", start = c.C.ServerNow() - 3600, dur = 1800, bosses = 2, known = 6, wipes = 0, deaths = 0,
+      cards = {}, mentions = {}, gone = {}, members = {}, n = 2 })
+    -- Settings > Runs beside J's Runs tab
+    c.C.UI:Open("runs")
+    c.C.UI:Open("settings", "runs")
+    local last = labelled(c, "Last report")
+    assert(last and not last.__disabled and c.C.UI.frame:IsShown(), "Last report live, J open beside Settings")
+    local row
+    for _, r in ipairs(c.C.UI.lists.runs.items) do if r:IsShown() then row = r end end
+    assert(row, "the report's row on J's Runs tab")
+    row.__scripts.OnClick(row, "RightButton")
+    local menu = menus[#menus]
+    assert(menu and menu[2] and menu[2].text == "Delete from history", "right-click: Delete from history")
+    menu[2].fn()
+    assert(#Rn.DB().list == 0, "the history empty")
+    last = labelled(c, "Last report")
+    assert(last and last.__disabled, "Settings drawn again: Last report greyed")
+    -- a button drawn before the history emptied (a trim, another window): its click asks the history then, and finds
+    -- nothing to show
+    Rn.Keep({ id = "m2-two", kind = "d", inst = 36, place = "The Deadmines", start = c.C.ServerNow() - 1800, dur = 1800, bosses = 2, known = 6, wipes = 0, deaths = 0,
+      cards = {}, mentions = {}, gone = {}, members = {}, n = 2 })
+    c.C.SettingsPage.Redraw()
+    last = labelled(c, "Last report")
+    assert(last and not last.__disabled, "a report again: Last report live")
+    table.remove(Rn.DB().list, 1)
+    press(last)
+    assert(not CF.frame or not CF.frame:IsShown(), "nothing to show")
+    CF:Report(nil)
+    assert(not errorAt(c, "settings: Last report") and not errorAt(c, "runs: report"), "no Lua error: " .. tostring((errorAt(c, "settings: Last report") or {}).msg))
+    for _, e in ipairs(c.env.CuteDB.errors or {}) do assert(not tostring(e.msg):find("attempt to index", 1, true), "no Lua error: " .. tostring(e.where) .. ": " .. tostring(e.msg)) end
     leave(c)
   end) end }
 

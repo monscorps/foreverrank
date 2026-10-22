@@ -148,10 +148,11 @@ function RU.Tick()
     RU.Tick()
   end, "runs: the band's clock"))
 end
+-- (every open window drawn again: Settings > Runs, beside J since the windows round, greys its Last report)
 local function deleteFromHistory(rep)
   local list = R().DB().list
   for i = #list, 1, -1 do if list[i] == rep then table.remove(list, i) end end
-  C.UI:Draw()
+  C.UI.DrawAll()
 end
 function RU.Draw(ui)
   local U = C.UI
@@ -288,7 +289,11 @@ function RU.Settings(_, col)
     if n then db.keep = n; while #db.list > n do table.remove(db.list) end end
     C.UI:Draw()
   end)
-  col:Buttons({ { "Show a test report", true, function() RU.Test(false) end }, { "Last report", #db.list > 0, function() C.CardFrame:Report(db.list[1]) end } })
+  -- (Last report: the history's newest when it is clicked, which may be none by then: a delete in J's Runs tab beside it)
+  col:Buttons({ { "Show a test report", true, function() RU.Test(false) end }, { "Last report", #db.list > 0, function()
+    local last = R().DB().list[1]
+    if last then C.CardFrame:Report(last) end
+  end } })
 end
 
 ----------------------------------------------------------------------------
