@@ -677,7 +677,7 @@ function Find:Setup(d)
   -- (a pin standing for several finds: their count, 10 px, white, outlined, on its bottom right corner, as the quests')
   if d.count then
     if not self.qbCount then
-      self.qbCount = self:CreateFontString(nil, "OVERLAY", nil, 2)
+      self.qbCount = self:CreateFontString(nil, "OVERLAY")
       local font = GameFontNormal and GameFontNormal:GetFont() or "Fonts\\FRIZQT__.TTF"
       self.qbCount:SetFont(font, 10, "OUTLINE")
       self.qbCount:SetTextColor(1, 1, 1)
