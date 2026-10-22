@@ -2,6 +2,7 @@
 -- One line per version, newest first: Core.lua prints this version's at the first login on it.
 local _, C = ...
 C.CHANGES = {
+  ["0.9.3"] = "An officer's save that opens one stat and closes another no longer makes late members ask the guild for everything.",
   ["0.9.2"] = "The interact light keeps its switch with Reminders off; opening a stat no longer makes the guild resend everything; an older QuestBank stays quiet in raids.",
   ["0.9.1"] = "The setup card asks about run reports; the Quests and Map keys close what they open; the arrow and toasts sit clear of the game's text; lighter logins.",
   ["0.9.0"] = "Cute's map on M with the guild's finds; Reminders; Move frames; officers publish cards: halls, achievements and guild records.",

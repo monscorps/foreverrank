@@ -11407,9 +11407,12 @@ do
     tickAll(20)
     for i = 1, 40 do c.C.SawVersion("9.0." .. i, guidOf("Cobb")) end
     assert(c.C.newer == nil, "one voice announces nothing")
-    c.C.SawVersion("0.9.3", guidOf("Cyra"))
-    c.C.SawVersion("0.9.3", guidOf("Cato"))
-    assert(c.C.newer == "0.9.3", "two members' version announced after a copy's forty: " .. tostring(c.C.newer))
+    -- (0.9.3) the real update one past this Cute, whatever its version: the case said "0.9.3", no update once Cute was 0.9.3
+    local maj, min, pat = c.C.version:match("^(%d+)%.(%d+)%.(%d+)$")
+    local real = maj .. "." .. min .. "." .. (tonumber(pat) + 1)
+    c.C.SawVersion(real, guidOf("Cyra"))
+    c.C.SawVersion(real, guidOf("Cato"))
+    assert(c.C.newer == real, "two members' version announced after a copy's forty: " .. tostring(c.C.newer))
   end)
   said[#said + 1] = "a copy's made-up versions fill nothing, a real update still told"
 
