@@ -466,28 +466,12 @@ local FIND_WHO = { p = "players' games", f = "players' games", g = "guides" }
 local FIND_SPOTS = 4 -- spots drawn for one find
 local FIND_NEAR = 0.02 -- a spot of yours this close (map fraction) to one of the data's is that spot
 MP.FIND_ICON, MP.FIND_KIND, MP.FIND_HOW = FIND_ICON, FIND_KIND, FIND_HOW
--- the item kinds a chest gives (Enum.ItemClass: consumable 0, container 1, weapon 2, armour 4, recipe 9, miscellaneous
--- 15): an object of yours that gave none of them (herbs and ore give trade goods, 7; quest objects quest items, 12) is
--- no find
-local CHEST_ITEMS = { [0] = true, [1] = true, [2] = true, [4] = true, [9] = true, [15] = true }
-local function chestKinds(h)
-  for k in pairs(type(h) == "table" and h or {}) do
-    local cls = tonumber(tostring(k):match("^(%d+)%."))
-    if cls and CHEST_ITEMS[cls] then return true end
-  end
-  return false
-end
 -- what one of your notes is: a rare (a creature), a book, a lock, a chest, or nothing to draw (an item read from your
--- bags has no place; an object that gave no chest's kinds)
-local function ownKind(key, rec)
-  local c = key:sub(1, 1)
-  if c == "c" then return "r" end
-  if c ~= "o" or type(rec) ~= "table" then return nil end
-  if type(rec.b) == "string" and rec.b ~= "" then return "b" end
-  if type(rec.k) == "table" and #rec.k > 0 then return "k" end
-  if chestKinds(rec.h) then return "h" end
-  return nil
-end
+-- bags has no place; an object that gave no chest's kinds: Finds.lua's KindOf, which a host's guild hears by too)
+local function ownKind(key, rec) return QB.Finds.KindOf(key, rec) end
+local FIND_DOT = " \194\183 "
+-- (sub-project G) how many guild mates saw it, in words
+local function mates(n) return n == 1 and "a guild mate" or (n .. " guild mates") end
 local function spotsOf(str)
   local out = {}
   for x, y in tostring(str or ""):gmatch("(%d+),(%d+)") do
@@ -510,16 +494,19 @@ local function findOf(m, kind, id, name, src)
            rare = kind == "r" or nil, who = FIND_WHO[src] or "players' games", src = src }
 end
 -- the finds on zone m: { fkey, kind, fid, m, spots = { { x, y }, ... } in fractions, name, kindWord, how, who, mine, new
--- (yours, not in QuestBank's data yet), icon, rare, level }, the data's first. Kept while the data and your notes read
--- the same (disc.findN counts every note)
+-- (yours, not in QuestBank's data yet), icon, rare, level, mates (guild mates who saw it), guild (the guild's alone),
+-- sure, dim (one guild mate's alone), ping (a rare a guild mate sees now: the GetTime() it was seen) }, the data's
+-- first. Kept while the data, your notes and a host's guild read the same (disc.findN counts every note, Finds.Ver
+-- every change of the guild's)
 local findMemo, findMemoN = {}, 0
 function MP.Finds(m)
   local D = QB.Data
   local disc = type(QuestBankDB) == "table" and type(QuestBankDB.disc) == "table" and QuestBankDB.disc or nil
   local own = disc and type(disc.find) == "table" and disc.find or nil
   local n = disc and tonumber(disc.findN) or 0
+  local ver = QB.Finds.Ver()
   local memo = findMemo[m]
-  if memo and memo.data == D.FIND and memo.own == own and memo.n == n then return memo.list end
+  if memo and memo.data == D.FIND and memo.own == own and memo.n == n and memo.ver == ver then return memo.list end
   local list = {}
   for _, r in ipairs(type(D.FIND) == "table" and D.FIND[m] or {}) do
     if type(r) == "table" and FIND_ICON[r[1]] then
@@ -556,17 +543,55 @@ function MP.Finds(m)
       end
     end
   end
+  -- (sub-project G) the finds a host's guild shared (Finds.lua's GuildRows; none for QuestBank alone): one of the data's
+  -- or yours where it is the same thing at a spot near one of its own, which then says how many guild mates saw it;
+  -- else the guild's own, sure (two members agree, or the officers' word) or dim (one guild mate's alone, which changes
+  -- nothing until a second agrees), and a rare a guild mate sees now as a ping, which goes after ten minutes. Spoiler-free
+  -- as the rest: a name (a book's title) and a spot only for what a guild mate found
+  local before = #list
+  for _, g in ipairs(QB.Finds.GuildRows(m)) do
+    local x, y = type(g) == "table" and tonumber(g.x), type(g) == "table" and tonumber(g.y)
+    if x and y and FIND_ICON[g.kind] then
+      local p, d = { x / 1000, y / 1000 }, nil
+      for i = 1, g.ping and 0 or before do
+        local e = list[i]
+        if e.kind == g.kind and (e.fid == g.id or (g.kind == "b" and e.fid == 0 and e.name == g.name)) then
+          for _, s in ipairs(e.spots) do if abs(s[1] - p[1]) + abs(s[2] - p[2]) <= FIND_NEAR then d = e end end
+        end
+        if d then break end
+      end
+      if d then
+        d.mates = math.max(d.mates or 0, tonumber(g.mates) or 0)
+      else
+        d = findOf(m, g.kind, tonumber(g.id) or 0, type(g.name) == "string" and g.name or nil, nil)
+        -- (one object at two spots is two of the guild's finds: the spot in the key)
+        d.fkey = d.fkey .. "@" .. x .. "," .. y .. (g.ping and ":up" or "")
+        d.spots[1] = p
+        d.guild, d.mates, d.level = true, tonumber(g.mates) or 0, tonumber(g.level)
+        d.sure, d.ping = g.sure and true or nil, tonumber(g.ping)
+        d.dim = not (d.sure or d.ping) or nil
+        list[#list + 1] = d
+      end
+    end
+  end
   for _, d in ipairs(list) do
     if d.kind == "r" and d.level then d.name = string.format("Rare, level %d", d.level) end
+    if d.guild then
+      if d.ping then d.how = "up now" end
+      -- (sure by the officers' word alone: no guild mate counted here, the guild's)
+      d.who = (d.ping or d.dim) and "a guild mate" or (d.mates > 0 and mates(d.mates)) or "the guild"
+    elseif (d.mates or 0) > 0 then
+      d.who = d.who .. FIND_DOT .. mates(d.mates)
+    end
     d.row = nil
   end
   table.sort(list, function(a, b) if (a.new or false) ~= (b.new or false) then return not a.new end return a.fkey < b.fkey end)
   findMemoN = findMemoN + 1
   if findMemoN > 24 then findMemo, findMemoN = {}, 1 end
-  findMemo[m] = { data = D.FIND, own = own, n = n, list = list }
+  findMemo[m] = { data = D.FIND, own = own, n = n, ver = ver, list = list }
   return list
 end
--- the maps with finds on them: the data's and your notes', each once
+-- the maps with finds on them: the data's, your notes' and a host's guild's, each once
 function MP.FindMaps()
   local seen, out = {}, {}
   for m in pairs(type(QB.Data.FIND) == "table" and QB.Data.FIND or {}) do
@@ -579,8 +604,25 @@ function MP.FindMaps()
       if type(m) == "number" and not seen[m] then seen[m] = true; out[#out + 1] = m end
     end
   end
+  for _, m in ipairs(QB.Finds.GuildMaps()) do
+    if type(m) == "number" and not seen[m] then seen[m] = true; out[#out + 1] = m end
+  end
   table.sort(out)
   return out
+end
+-- (sub-project G) the footers' counts: the finds of yours QuestBank's data lacks (new), and how many of them a guild
+-- mate's find agrees with (confirmed)
+function MP.FindTally()
+  local new, sure = 0, 0
+  for _, m in ipairs(MP.FindMaps()) do
+    for _, d in ipairs(MP.Finds(m)) do
+      if d.new then
+        new = new + 1
+        if (d.mates or 0) > 0 then sure = sure + 1 end
+      end
+    end
+  end
+  return new, sure
 end
 
 -- a find's pin: its icon at 18 px, cut round, in the game's minimap button ring (MiniMap-TrackingBorder: the ring's art
@@ -620,8 +662,10 @@ function Find:Setup(d)
   self.qbHi:SetTexture(f.icon)
   self.qbHi:SetTexCoord(0.08, 0.92, 0.08, 0.92)
   if f.rare and QB.Art(self.qbElite, "nameplates-icon-elite-silver", nil) then self.qbElite:Show() else self.qbElite:Hide() end
-  -- (a find of yours QuestBank's data lacks is drawn the same: its tooltip says so)
+  -- (a find of yours QuestBank's data lacks is drawn the same: its tooltip says so. One guild mate's alone is dim, at
+  -- half its alpha, until a second agrees: sub-project G)
   icon:SetDesaturated(false)
+  self:SetAlpha(f.dim and 0.5 or 1)
   self.Badge:Hide()
   self.Count:Hide()
 end
@@ -632,7 +676,15 @@ Find.OnMouseEnter = QB.Safe(function(self)
   if not f then return end
   GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
   GameTooltip:AddLine(f.name or f.kindWord, 1, 1, 1)
-  GameTooltip:AddLine(f.how .. DOT .. f.who, 0.8, 0.8, 0.8)
+  if f.dim then
+    GameTooltip:AddLine(f.how .. DOT .. "A guild mate saw this", 0.8, 0.8, 0.8)
+    GameTooltip:AddLine("It counts once a second one agrees.", 0.5, 0.5, 0.5, true)
+  elseif f.ping then
+    local ago = math.max(0, ((GetTime and GetTime()) or f.ping) - f.ping) / 60
+    GameTooltip:AddLine(f.how .. DOT .. f.who .. DOT .. (ago < 1 and "just now" or (math.floor(ago) .. " min ago")), 0.8, 0.8, 0.8)
+  else
+    GameTooltip:AddLine(f.how .. DOT .. f.who, 0.8, 0.8, 0.8)
+  end
   if f.new then GameTooltip:AddLine("Seen in play by you", 0.47, 0.69, 1) end
   P.Instruct(GameTooltip, "Click to show it on the arrow for now")
   GameTooltip:Show()

@@ -22456,6 +22456,216 @@ do
   end
   print("map F: " .. table.concat(said, "; "))
 end
+----------------------------------------------------------------------------
+-- (map, part 2: sub-project G, finds in the guild) QuestBank's side: a host's guild (Finds.host, which Cute's Bridge sets)
+-- G1. Each find of yours is told to the host as you note it: a book read where it stands (its title, never its text), a
+--     chest looted, an object opened with a key (never which key), a rare's plate every time it shows (its level), a
+--     crossing (where you came out, how long), each saying whether QuestBank's data has it (by its object, a guides'
+--     book by its title, a guides' lock by its key); never a herb node, a quest object or an item read in your bags.
+--     QuestBank alone (no host): the same notes, nothing told.
+-- G2. The guild's finds on the map: a sure one with its guild mates, one guild mate's alone dim (half its alpha, "A
+--     guild mate saw this"), a rare up now as a ping ("just now"), one of yours or of the data's a guild mate saw
+--     saying so; the footers' counts (yours QuestBank lacks, those a guild mate agrees with); the host's maps among
+--     the maps with finds; its version a new list; QuestBank alone none of it.
+----------------------------------------------------------------------------
+do
+  local OBJ = "GameObject-0-4455-0-12-%d-0000A1B2C3"
+  local CRE = "Creature-0-4455-0-12-%d-0000A1B2C3"
+  local said = {}
+  local function findsChar(name, flags, o)
+    o = o or {}
+    local c = newClient({ name = name, level = 20, cap = 60, faction = "Alliance", className = "Mage", class = "MAGE", classID = 8,
+      race = "Human", log = {}, done = {}, world = { 0, -9450, 60 }, map = 1429, bagSlots = o.bags or {}, bind = "Goldshire", xp = 0 })
+    local env = c.env
+    c.mp = { 0.5, 0.5 }
+    env.C_Map.GetPlayerMapPosition = function()
+      if not c.mp then return nil end
+      return { x = c.mp[1], y = c.mp[2], GetXY = function(self) return self.x, self.y end }
+    end
+    env.C_Item.GetItemInfoInstant = function(id) local k = (c.klass or {})[id]; if not k then return nil end return id, "", "", "", 0, k[1], k[2] end
+    env.C_Item.GetItemNameByID = function() return nil end
+    env.IsInInstance = function() return false, "none" end
+    env.UnitClassification = function(unit) local p = (c.plates or {})[unit]; return p and p.cls or "normal" end
+    local guid, level = env.UnitGUID, env.UnitLevel
+    env.UnitGUID = function(unit) local p = (c.plates or {})[unit]; if p then return p.guid end return guid(unit) end
+    env.UnitLevel = function(unit) local p = (c.plates or {})[unit]; if p then return p.level end return level(unit) end
+    env.ItemTextGetItem = function() return c.text and c.text.title end
+    env.ItemTextGetText = function() return c.text and c.text.body end
+    env.ItemTextGetCreator = function() return nil end
+    env.C_RestrictedActions = { IsAddOnRestrictionActive = function() return false end }
+    -- (the game's map canvas as a host's window drives it: F's mocks)
+    env.MAP_CANVAS_MOUSE_WHEEL_ZOOM_BEHAVIOR_SMOOTH = 1
+    env.MapCanvasMixin = env.CreateFromMixins(env.MapCanvasMixin, {
+      SetMouseWheelZoomMode = function(self, mode) self.__wheelMode = mode end,
+      GetNormalizedCursorPosition = function() return 0.5, 0.5 end,
+    })
+    env.MapCanvasScrollControllerMixin = env.CreateFromMixins(env.MapCanvasScrollControllerMixin, {
+      OnMouseWheel = function() end, GetScaleForMinZoom = function() return 1 end, GetCanvasScale = function() return 1 end,
+    })
+    env.C_Map.GetMapInfoAtPosition = function() return nil end
+    for k, v in pairs(flags or {}) do c.QB[k] = v end
+    login(c)
+    return c
+  end
+  local function ev(c, event, ...) local f = c.QB.Finds.frame; f.__scripts.OnEvent(f, event, ...) end
+  local function host(c)
+    local h = { told = {}, rows = {}, maps = {}, ver = 0 }
+    h.Noted = function(...) h.told[#h.told + 1] = { ... } end
+    h.Rows = function(m) return h.rows[m] or {} end
+    h.Maps = function() return h.maps end
+    c.QB.Finds.host = h
+    return h
+  end
+  -- G1: told as noted
+  do
+    local c = findsChar("Guildfind", nil, { bags = { { 216523, 1 } } })
+    local QB, D = c.QB, c.QB.Data
+    local F = QB.Finds
+    local h = host(c)
+    c.klass = { [2589] = { 7, 5 }, [118] = { 0, 1 }, [5000] = { 12, 0 }, [216523] = { 13, 0 } }
+    D.FIND[1429] = { { "h", 4242, "300,300", 2, "0.1", "p" }, { "b", 0, "654,701", 0, "Archmage Theocritus' Research Journal", "g" } }
+    -- a book read where it stands
+    c.soft, c.mp, c.text = { guid = OBJ:format(9101) }, { 0.401, 0.402 }, { title = "Raven Hill Tome", body = "never this" }
+    ev(c, "ITEM_TEXT_BEGIN"); ev(c, "ITEM_TEXT_READY"); ev(c, "ITEM_TEXT_CLOSED")
+    local t = h.told[1]
+    assert(#h.told == 1 and t[1] == "b" and t[2] == 9101 and t[3] == 1429 and t[4] == 401 and t[5] == 402 and t[6] == "Raven Hill Tome" and t[7] == false,
+      "a book read: told its object, map, spot and title, not the data's: " .. tostring(t and table.concat({ tostring(t[1]), tostring(t[2]), tostring(t[3]), tostring(t[4]), tostring(t[5]), tostring(t[6]), tostring(t[7]) }, " ")))
+    for _, x in ipairs(t) do assert(x ~= "never this", "never the text") end
+    -- the guides' book by its title: told as the data's
+    c.soft, c.text = { guid = OBJ:format(9102) }, { title = "Archmage Theocritus' Research Journal", body = "..." }
+    ev(c, "ITEM_TEXT_BEGIN"); ev(c, "ITEM_TEXT_READY"); ev(c, "ITEM_TEXT_CLOSED")
+    assert(#h.told == 2 and h.told[2][1] == "b" and h.told[2][7] == true and c.env.QuestBankDB.disc.find.o9102, "the guides' book: noted, told as the data's")
+    c.soft, c.text = nil, nil
+    -- a chest looted; a herb node and a quest object never; the data's chest as the data's
+    c.mp = { 0.5, 0.5 }
+    c.loot = { { id = 118, src = { { OBJ:format(9201), 1 } } } }
+    ev(c, "LOOT_OPENED", false, false)
+    c.loot = { { id = 2589, src = { { OBJ:format(9202), 1 } } } }
+    ev(c, "LOOT_OPENED", false, false)
+    c.loot = { { id = 5000, src = { { OBJ:format(9203), 1 } } } }
+    ev(c, "LOOT_OPENED", false, false)
+    assert(#h.told == 3 and h.told[3][1] == "h" and h.told[3][2] == 9201 and h.told[3][4] == 500 and h.told[3][7] == false, "the chest told; no herb node, no quest object")
+    c.loot = { { id = 118, src = { { OBJ:format(4242), 1 } } } }
+    ev(c, "LOOT_OPENED", false, false)
+    assert(#h.told == 4 and h.told[4][2] == 4242 and h.told[4][7] == true, "the data's chest: told as the data's")
+    -- an object opened with a key, never its key; the data's lock, by its object and a guides' lock by its key
+    local keep = D.OPEN
+    D.OPEN = { [3366] = 0 }
+    c.soft, c.mp = { guid = OBJ:format(9301) }, { 0.7, 0.3 }
+    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-1", 3366)
+    t = h.told[5]
+    assert(#h.told == 5 and t[1] == "k" and t[2] == 9301 and t[4] == 700 and t[6] == nil and t[7] == false, "a lock told, never its key")
+    D.FIND[1429][#D.FIND[1429] + 1] = { "k", 9302, "100,100", 1, 216523, "p" }
+    c.soft = { guid = OBJ:format(9302) }
+    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-2", 3366)
+    assert(#h.told == 6 and h.told[6][7] == true, "the data's lock: the data's")
+    D.FIND[1429][#D.FIND[1429] + 1] = { "k", 0, "610,220", 0, 216523, "g" }
+    assert(F.Known(1429, "k", 9999, nil, { 5, 216523 }) and not F.Known(1429, "k", 9999, nil, { 5 }), "a guides' lock is known by its key")
+    c.soft = { guid = OBJ:format(9303) }
+    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-3", 3366)
+    assert(#h.told == 7 and h.told[7][7] == true, "a lock opened with the guides' lock's key: the data's")
+    D.OPEN, c.soft = keep, nil
+    -- a rare's plate, every time it shows
+    c.plates = { nameplate3 = { cls = "rareelite", guid = CRE:format(7001), level = 31 } }
+    c.mp = { 0.2, 0.25 }
+    ev(c, "NAME_PLATE_UNIT_ADDED", "nameplate3")
+    ev(c, "NAME_PLATE_UNIT_ADDED", "nameplate3")
+    t = h.told[8]
+    assert(#h.told == 9 and t[1] == "r" and t[2] == 7001 and t[4] == 200 and t[5] == 250 and t[6] == 31 and h.told[9][1] == "r",
+      "a rare told each time its plate shows, with its level")
+    assert(c.env.QuestBankDB.disc.find.c7001.n == 1, "noted once in its cell, as before")
+    c.plates = nil
+    -- a crossing
+    local key = F.NoteCrossing({ m = 1429, x = 310, y = 690, c = 0, wx = -9000, wy = 100 }, { m = 1453, x = 500, y = 500, c = 0, wx = -8800, wy = 600 }, 12)
+    local x = h.told[10]
+    assert(key and x and x[1] == "x" and x[2] == 0 and x[3] == 1429 and x[4] == 310 and x[5] == 690 and x[6].m == 1453 and x[6].x == 500 and x[6].secs == 12,
+      "a crossing told: where it starts, where you came out, how long")
+    -- QuestBank alone: the same, nothing told and nothing wrong
+    F.host = nil
+    c.loot = { { id = 118, src = { { OBJ:format(9401), 1 } } } }
+    ev(c, "LOOT_OPENED", false, false)
+    assert(#h.told == 10 and c.env.QuestBankDB.disc.find.o9401, "QuestBank alone: noted as before, told nothing")
+    assert(F.Ver() == 0 and #F.GuildRows(1429) == 0 and #F.GuildMaps() == 0, "QuestBank alone: no guild")
+    said[#said + 1] = "told as noted: a book with its title (never its text), a chest, a lock (never its key), a rare at every plate, a crossing, each saying whether the data has it (a guides' book by its title, a guides' lock by its key); no herb node or quest object; QuestBank alone nothing"
+  end
+  -- G2: the guild's finds on the map
+  do
+    local c = findsChar("Guildmap", { mapWindow = true, kindMarks = true })
+    local QB, env = c.QB, c.env
+    local MP, MD = QB.MapPage, QB.Data
+    local box = env.CreateFrame("Frame", nil, env.UIParent)
+    box:SetSize(1002, 668)
+    MP.Host(box, { strata = "HIGH" })
+    MD.FIND[1429] = { { "b", 0, "654,701", 0, "Archmage Theocritus' Research Journal", "g" } }
+    local disc = QB.Discover.DB()
+    disc.find = {
+      o9002 = { p = { { 1429, 500, 500, 1 } }, h = { ["4.1"] = 1 }, n = 1 },
+      o9003 = { p = { { 1429, 800, 800, 1 } }, b = "A Diary of Your Own", n = 1 },
+    }
+    disc.findN = 2
+    local before = #MP.Finds(1429)
+    assert(before == 3, "the data's book and two of yours: " .. before)
+    local h = host(c)
+    h.rows[1429] = {
+      { kind = "b", id = 9101, x = 401, y = 402, name = "Raven Hill Tome", mates = 2, sure = true },
+      { kind = "h", id = 9201, x = 250, y = 250, mates = 1 },
+      { kind = "r", id = 7001, x = 200, y = 250, level = 31, mates = 1, ping = c.clock },
+      { kind = "h", id = 9002, x = 505, y = 498, mates = 1 },
+      { kind = "b", id = 9500, x = 655, y = 700, name = "Archmage Theocritus' Research Journal", mates = 3, sure = true },
+      { kind = "k", id = 9600, x = 900, y = 900, mates = 0, sure = true },
+    }
+    h.maps = { 1429, 1436 }
+    assert(#MP.Finds(1429) == before, "kept while the host's version is the same")
+    h.ver = 1
+    local list = MP.Finds(1429)
+    local by = {}
+    for _, d in ipairs(list) do by[(d.name or d.kindWord) .. (d.guild and ":guild" or "")] = d end
+    local tome = by["Raven Hill Tome:guild"]
+    assert(tome and tome.sure and not tome.dim and tome.who == "2 guild mates" and tome.how == "read here", "a sure book: its title, two guild mates")
+    local dim = by["Chest:guild"]
+    assert(dim and dim.dim and dim.who == "a guild mate", "one guild mate's chest: dim")
+    local ping = by["Rare, level 31:guild"]
+    assert(ping and ping.ping and not ping.dim and ping.how == "up now" and ping.rare, "a rare up now: a ping")
+    local mine = by.Chest
+    assert(mine and mine.mine and mine.new and mine.mates == 1 and mine.who == "you \194\183 a guild mate", "your chest a guild mate saw: " .. tostring(mine and mine.who))
+    local guides = by["Archmage Theocritus' Research Journal"]
+    assert(guides and guides.who == "guides \194\183 3 guild mates" and not by["Archmage Theocritus' Research Journal:guild"], "the guides' book three guild mates saw: one find")
+    local word = by["Locked:guild"]
+    assert(word and word.sure and not word.dim and word.who == "the guild" and word.how == "needs a key", "the officers' word's lock: the guild's, sure")
+    assert(#list == before + 4, "four of the guild's own: " .. #list)
+    local new, sure = MP.FindTally()
+    assert(new == 2 and sure == 1, "the footers' counts: two of yours QuestBank lacks, one a guild mate agrees with: " .. new .. ", " .. sure)
+    local has = false
+    for _, m in ipairs(MP.FindMaps()) do if m == 1436 then has = true end end
+    assert(has, "the host's maps among the maps with finds")
+    -- drawn: the dim one at half its alpha, its tooltip; the ping's
+    MP.Go(1415, "user"); MP.Go(1429, "user")
+    local pinOf = {}
+    for _, f in ipairs(MP.finds.active) do pinOf[f.data.find.fkey] = f end
+    local dp, pp, tp = pinOf[dim.fkey], pinOf[ping.fkey], pinOf[tome.fkey]
+    assert(dp and pp and tp and dp:GetAlpha() == 0.5 and pp:GetAlpha() == 1 and tp:GetAlpha() == 1, "the dim pin at half its alpha, the others whole")
+    lines = {}
+    dp:OnMouseEnter()
+    local tip = table.concat(lines, "\n")
+    dp:OnMouseLeave()
+    assert(tip:find("A guild mate saw this", 1, true), "the dim pin: A guild mate saw this:\n" .. tip)
+    lines = {}
+    pp:OnMouseEnter()
+    tip = table.concat(lines, "\n")
+    pp:OnMouseLeave()
+    assert(tip:find("Rare, level 31", 1, true) and tip:find("up now", 1, true) and tip:find("just now", 1, true), "the ping's tooltip:\n" .. tip)
+    lines = {}
+    tp:OnMouseEnter()
+    tip = table.concat(lines, "\n")
+    tp:OnMouseLeave()
+    assert(tip:find("Raven Hill Tome", 1, true) and tip:find("read here \194\183 2 guild mates", 1, true), "the sure book's tooltip:\n" .. tip)
+    -- QuestBank alone: none of the guild's
+    QB.Finds.host = nil
+    assert(#MP.Finds(1429) == before and select(2, MP.FindTally()) == 0, "QuestBank alone: the data's and yours alone")
+    said[#said + 1] = "the guild's finds on the map: a sure book with two guild mates, one guild mate's chest dim at half alpha, a rare up now as a ping, your chest and the guides' book saying who else saw them; the footers' counts; the host's maps; its version a new list; QuestBank alone none"
+  end
+  print("map G: " .. table.concat(said, "; "))
+end
 
 
 local seen = {}

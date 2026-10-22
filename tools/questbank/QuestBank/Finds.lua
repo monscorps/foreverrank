@@ -23,6 +23,10 @@
 -- or outside the Forever client, and all of it sits under Settings' "Note items, spells and loot" box (unticking clears
 -- it, as it clears the loot notes). Never a player's name: a book's title is the only text kept.
 -- Also here: QuestBank_Finds, the uploader's data addon, read into D.FIND at login where Data.lua has no row.
+-- (sub-project G) And a host's guild (Finds.host, which Cute's Bridge.lua sets; QuestBank alone has none): each find of
+-- yours is told to it as you note it (with whether QuestBank's data has it), and the finds its guild shared are drawn
+-- with yours (Finds.GuildRows, MapPage.lua). Nothing of the guild's is ever kept here: the host keeps it (Cute:
+-- CuteDB.known.finds).
 -- Only reads: nothing is looted, opened, targeted or cast.
 local _, QB = ...
 if QB.dormant then return end
@@ -193,6 +197,91 @@ end
 Finds.AddPoint = addPoint
 
 ----------------------------------------------------------------------------
+-- (sub-project G) what a note is, whether QuestBank's data has it, and a host's guild
+----------------------------------------------------------------------------
+-- the item kinds a chest gives (Enum.ItemClass: consumable 0, container 1, weapon 2, armour 4, recipe 9, miscellaneous
+-- 15): an object that gave none of them (herbs and ore give trade goods, 7; quest objects quest items, 12) is no find
+local CHEST_ITEMS = { [0] = true, [1] = true, [2] = true, [4] = true, [9] = true, [15] = true }
+local function chestKinds(h)
+  for k in pairs(type(h) == "table" and h or {}) do
+    local cls = tonumber(tostring(k):match("^(%d+)%."))
+    if cls and CHEST_ITEMS[cls] then return true end
+  end
+  return false
+end
+-- what one of your notes is (the map draws it, a host's guild hears of it): "r" a rare (a creature), "b" a book, "k" a
+-- lock, "h" a chest, or nil (an item read from your bags has no place; an object that gave no chest's kinds)
+function Finds.KindOf(key, rec)
+  if type(key) ~= "string" then return nil end
+  local c = key:sub(1, 1)
+  if c == "c" then return "r" end
+  if c ~= "o" or type(rec) ~= "table" then return nil end
+  if type(rec.b) == "string" and rec.b ~= "" then return "b" end
+  if type(rec.k) == "table" and #rec.k > 0 then return "k" end
+  if chestKinds(rec.h) then return "h" end
+  return nil
+end
+
+-- does QuestBank's data (Data.lua's D.FIND and the data file's rows added to it) have this find on map m: the same
+-- object (or creature), or a guides' place with no object (id 0) of the same book's title or the same lock's key (a key
+-- among keys, the item ids a lock of yours was opened with)
+function Finds.Known(m, kind, id, title, keys)
+  local rows = type(QB.Data.FIND) == "table" and QB.Data.FIND[m] or nil
+  for _, r in ipairs(type(rows) == "table" and rows or {}) do
+    if type(r) == "table" and r[1] == kind then
+      if r[2] ~= 0 and r[2] == id then return true end
+      if r[2] == 0 and kind == "b" and title ~= nil and r[5] == title then return true end
+      if r[2] == 0 and kind == "k" then for _, k in ipairs(type(keys) == "table" and keys or {}) do if k == r[5] then return true end end end
+    end
+  end
+  return false
+end
+
+-- A host's guild: Finds.host = { Noted = fn(kind, id, m, x, y, extra, data), Rows = fn(m), Maps = fn(), ver = n }
+-- (Cute's Bridge.lua; QuestBank alone has none, and nothing below does anything):
+--   Noted  a find of yours as you note it: "b" a book read where it stands (extra its title), "k" an object opened with
+--          a key, "h" a chest looted, "r" a rare's nameplate shown (extra its level; every time one shows: the host
+--          keeps the pace of its pings), "x" a crossing (id 0, extra { m, x, y, secs } where you came out and how long
+--          it took); the spot in thousandths of map m; data true where QuestBank's data has it (the host counts it,
+--          and shares only what the data lacks)
+--   Rows   the finds on map m the guild shared: { kind, id, x, y (thousandths), name (a book's title), level (a rare's),
+--          mates (how many guild mates saw it, you not counted), sure (two members agree, or the officers' word says
+--          so), ping (a rare seen now: the GetTime() it was seen) }, kept by the host
+--   Maps   the maps it has finds on
+--   ver    goes up whenever Rows may say something else
+local function tell(kind, id, m, x, y, extra, data)
+  local h = Finds.host
+  if not (h and type(h.Noted) == "function" and m and x and y) then return end
+  QB.Try("finds: told the host", h.Noted, kind, id, m, x, y, extra, data == true)
+end
+Finds.Tell = tell
+local NONE = {}
+function Finds.GuildRows(m)
+  local h = Finds.host
+  if not (h and type(h.Rows) == "function") then return NONE end
+  local ok, rows = pcall(h.Rows, m)
+  return (ok and type(rows) == "table") and rows or NONE
+end
+function Finds.GuildMaps()
+  local h = Finds.host
+  if not (h and type(h.Maps) == "function") then return NONE end
+  local ok, maps = pcall(h.Maps)
+  return (ok and type(maps) == "table") and maps or NONE
+end
+-- the overlay's version: what a host's guild shared changed (Core.lua's re-plan signature may join it, as Travel's TV.ver)
+function Finds.Ver()
+  local h = Finds.host
+  return (h and tonumber(h.ver)) or 0
+end
+-- a note just made, told to the host's guild as the kind it is now, and whether QuestBank's data has it
+local function told(key, rec, m, x, y)
+  local kind = Finds.KindOf(key, rec)
+  local id = tonumber(key:sub(2))
+  if not (kind and id) or kind == "r" then return end
+  tell(kind, id, m, x, y, kind == "b" and rec.b or nil, Finds.Known(m, kind, id, rec.b, rec.k))
+end
+
+----------------------------------------------------------------------------
 -- objects: looted outdoors, opened with a key, read
 ----------------------------------------------------------------------------
 -- an item's class and subclass as the client knows it (C_Item.GetItemInfoInstant: itemID, type, subType, equipLoc,
@@ -358,6 +447,8 @@ function Finds.LootOpened(isFromItem)
     diag("ol")
     if #op.keys > 0 then noteLocked(order[1], op.keys, m, x, y) end
   end
+  -- (a host's guild hears of each chest and lock as it is now)
+  for _, key in ipairs(order) do told(key, db().find[key], m, x, y) end
 end
 
 -- a cast of yours went off: one of the client's opening spells (D.OPEN: an open-lock effect of a lock type that is no
@@ -377,7 +468,7 @@ function Finds.Cast(spell)
   if key then
     local m, x, y = QB.Discover.Spot()
     diag("oo")
-    if m and #keys > 0 then noteLocked(key, keys, m, x, y) end
+    if m and #keys > 0 then noteLocked(key, keys, m, x, y); told(key, db().find[key], m, x, y) end
     opening = nil
     return
   end
@@ -463,6 +554,7 @@ function Finds.TextReady()
     local rec = record(r.key)
     addPoint(rec, m, x, y)
     rec.b = r.title
+    told(r.key, rec, m, x, y)
     return
   end
   diag("bn")
@@ -485,15 +577,18 @@ function Finds.Plate(unit)
   diag("rp")
   local m, x, y = QB.Discover.Spot()
   if not m then return end
+  local okL, lvl = pcall(UnitLevel, unit)
+  lvl = okL and num(lvl) or nil
+  if lvl and lvl <= 0 then lvl = nil end
+  -- (a host's guild hears of the rare every time its plate shows: it is up now; the host keeps the pace)
+  tell("r", tonumber(key:sub(2)), m, x, y, lvl, Finds.Known(m, "r", tonumber(key:sub(2))))
   local near = QB.Discover.OS_NEAR
   local cell = key .. ":" .. m .. ":" .. floor(x / near) .. "," .. floor(y / near)
   if rareSeen[cell] then return end
   rareSeen[cell] = true
   local rec = record(key)
   addPoint(rec, m, x, y)
-  local okL, lvl = pcall(UnitLevel, unit)
-  lvl = okL and num(lvl) or nil
-  if lvl and lvl > 0 then rec.r = lvl end
+  if lvl then rec.r = lvl end
 end
 
 ----------------------------------------------------------------------------
@@ -655,6 +750,7 @@ function Finds.NoteCrossing(a, b, secs)
   if fac == "A" or fac == "H" then e.f = fac end
   capCrossings(all)
   diag("xk")
+  tell("x", 0, a.m, a.x, a.y, { m = b.m, x = b.x, y = b.y, secs = secs })
   return key
 end
 
