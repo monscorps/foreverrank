@@ -19505,6 +19505,43 @@ do
   end)
 end
 
+-- U6. The game's Key Bindings entries "Quests window" and "Map window" toggle their window as J, L and M do (a second
+--     press closes it: Bindings.xml calls Cute.Toggle); with the Map module off "Map window" says where it is switched
+--     on, as /cute map does; without Cute_Quest "Quests window" says where the quest window comes from
+do
+  isolated({ UIX.member("Rone", 1) }, function()
+    local xml = assert(io.open(HERE .. "/Cute/Bindings.xml")):read("*a")
+    assert(xml:find('name="CUTE_QUESTS" category="BINDING_HEADER_CUTE">Cute.Toggle("quests")<', 1, true)
+      and xml:find('name="CUTE_MAP" category="BINDING_HEADER_CUTE">Cute.Toggle("map")<', 1, true), "the bindings toggle:\n" .. xml)
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    local Cute = c.env.Cute
+    local qw = c.C.UI.Window("quests")
+    Cute.Toggle("quests")
+    assert(qw.frame and qw.frame:IsShown(), "Quests window: opens")
+    Cute.Toggle("quests")
+    assert(not qw.frame:IsShown(), "pressed again: closes")
+    c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+    local mw = c.C.UI.Window("map")
+    Cute.Toggle("map")
+    assert(mw.frame and mw.frame:IsShown(), "Map window: opens")
+    Cute.Toggle("map")
+    assert(not mw.frame:IsShown(), "pressed again: closes")
+    c.C.Modules.Set("Cute_Quest:map", false); tick(c, 1)
+    local n0 = #c.chat
+    Cute.Toggle("map")
+    assert(not mw.frame:IsShown() and #c.chat == n0 + 1 and c.chat[#c.chat]:find("Map is switched off. Tick it in Settings, Modules.", 1, true), "the Map module off: says where it is switched on: " .. tostring(c.chat[#c.chat]))
+    leave(c)
+    local d = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }))
+    login(d); tickAll(6)
+    local d0 = #d.chat
+    d.env.Cute.Toggle("quests")
+    assert(#d.chat == d0 + 1 and d.chat[#d.chat]:find("the quest window comes with Cute_Quest", 1, true), "without Cute_Quest: says where the quest window comes from: " .. tostring(d.chat[#d.chat]))
+    leave(d)
+    print("fix-cute-ui U6: the Quests window and Map window bindings toggle their window; Map off says where it is switched on; no Cute_Quest says where the quest window comes from")
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end
