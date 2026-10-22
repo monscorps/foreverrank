@@ -21515,7 +21515,8 @@ do
   assert(recorded == 1, "the party is still heard")
   QB:Settings().share.guild = true
   hear("1L|118:450:18", "GUILD")
-  assert(recorded == 2, "guild sharing on: the guild is heard as before")
+  -- (fix2-engine L1) an XP reading comes from your group alone, guild sharing on or off
+  assert(recorded == 1, "guild sharing on: a guild mate's reading still corrects nothing")
   QB.Live.Record = record
   QB:Settings().share.guild = false
   -- in a raid: RAID while QuestBank is its own host, nothing with a host's noRaidSync
@@ -24774,6 +24775,78 @@ end
     collectgarbage("collect")
   end
   assert(#failed == 0, "merge4: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
+end)()
+
+-- [stage: fix2-engine] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The final audit's engine findings (launch/fix2-engine), a case each; each failed on 6.4.1's files. Every case runs,
+-- and the block fails at its end naming each one that did not hold
+----------------------------------------------------------------------------
+;(function()
+  local CASES = {}
+  -- a character at level o.level in a party and a guild (o.group, o.guild false: out of either), c.party the game's
+  local function char(name, o)
+    o = o or {}
+    local c = newClient({ name = name, level = o.level or 18, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1, race = "Human",
+      log = o.log or {}, done = {}, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Goldshire", guild = o.guild ~= false, group = o.group ~= false })
+    c.party = o.party
+    login(c)
+    return c
+  end
+  local function hearer(c) local f = c.QB.Sync.frame; return function(msg, channel, who) f.__scripts.OnEvent(f, "CHAT_MSG_ADDON", "QuestBank", msg, channel, who) end end
+  local function roster(c) c.QB.Sync.frame.__scripts.OnEvent(c.QB.Sync.frame, "GROUP_ROSTER_UPDATE") end
+  -- the messages a client sent: of a kind (its first letters, or the whole message), on a channel
+  local function sent(c, kind, ch)
+    local n = 0
+    for _, m in ipairs(c.outbox) do if m[1] == "QuestBank" and m[3] == ch and (m[2] == kind or m[2]:sub(1, #kind + 1) == kind .. "|") then n = n + 1 end end
+    return n
+  end
+  local function said(c, from) return (table.concat(c.chat, "\n", from + 1):gsub("|c%x+QuestBank|r ", "")) end
+
+  -- L1 (trust, must). With the guild box on (the default) every non-grey quest in your log went to GUILD as 1L after
+  -- every re-plan, and a guild mate's 1L corrected your plan's XP; Settings and the changelog say the quests and the
+  -- readings are your group's alone
+  CASES[#CASES + 1] = { "L1: XP readings go to your group alone, each once until it changes; none is taken from the guild", function()
+    local c = char("Reader", { level = 5, log = { { 7, 0 } } })
+    local QB, S = c.QB, c.QB.Sync
+    QB:Settings().share.guild = true
+    local q = QB.Quest.Get(7)
+    local listed = q and QB.Model.Listed(q) or 0
+    assert(q and listed > 0 and QB.Model.Pct(q.lvl, 5) >= 100, "Kobold Camp Cleanup pays in full at level 5: " .. tostring(listed))
+    tick(c, 30)
+    c.outbox = {}
+    c.logXP = { [7] = listed }
+    QB:MarkDirty(); tick(c, 30)
+    assert(c.env.QuestBankDB.live and c.env.QuestBankDB.live[7] and c.env.QuestBankDB.live[7].src == "log", "the log's reading kept")
+    assert(sent(c, "1L", "PARTY") == 1, "the reading to the party: " .. sent(c, "1L", "PARTY"))
+    assert(sent(c, "1L", "GUILD") == 0, "never to the guild: " .. sent(c, "1L", "GUILD"))
+    c.outbox = {}
+    QB:MarkDirty(); tick(c, 30)
+    assert(sent(c, "1L", "PARTY") + sent(c, "1L", "GUILD") == 0, "a re-plan with the same reading sends nothing: " .. (sent(c, "1L", "PARTY") + sent(c, "1L", "GUILD")))
+    -- a guild mate's reading corrects nothing; the party's does
+    local n, record = 0, QB.Live.Record
+    QB.Live.Record = function(id, xp, lvl, src) if src == "party" then n = n + 1 end return record(id, xp, lvl, src) end
+    local hear = hearer(c)
+    hear("1L|7:" .. listed * 2 .. ":5", "GUILD", "Mate Steelhand-Forever Normal")
+    assert(n == 0, "a guild mate's reading: not taken")
+    hear("1L|7:" .. listed * 2 .. ":5", "PARTY", "Mate Steelhand-Forever Normal")
+    assert(n == 1, "the party's reading: taken")
+    QB.Live.Record = record
+    -- out of a group: a new reading goes nowhere
+    c.o.group = false; roster(c)
+    c.outbox = {}
+    c.logXP = { [7] = listed * 3 }
+    QB:MarkDirty(); tick(c, 30)
+    assert(sent(c, "1L", "PARTY") + sent(c, "1L", "GUILD") == 0, "out of a group: no reading sent")
+  end }
+
+  local failed = {}
+  for _, case in ipairs(CASES) do
+    local ok, err = pcall(case[2])
+    if ok then print("fix2-engine: " .. case[1] .. ": ok") else failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
+    collectgarbage("collect")
+  end
+  assert(#failed == 0, "fix2-engine: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
 end)()
 
 local seen = {}

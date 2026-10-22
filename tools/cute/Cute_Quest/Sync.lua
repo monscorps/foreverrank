@@ -6,7 +6,7 @@
 --   1S|level|xp|fac|class|banked*100|plan*100|at60*100|runMin|runN|runXP|version|guid   status
 --   1Q|part|parts|id.code[have/need],...                                    quests (b banked, a in the log with progress, p to fetch):
 --                                                                              to your group and a /qb sync friend, never the guild
---   1L|id:xp:level,...                                                         XP the game reported
+--   1L|id:xp:level,...                                                         XP the game reported, to your group alone
 --   1R                                                                         please send yours (on GUILD: your status alone)
 --   1G|text                                                                    the Guide's first step (6.0), for the others' step frames
 local _, QB = ...
@@ -198,17 +198,20 @@ function S:Changed()
   end, "party sync: sharing"))
 end
 
+-- (the final audit) an XP reading goes to your group alone, while you share with it: on GUILD every quest of your log went
+-- to the guild, whose readings this one no longer takes either (S:Receive)
 function S:QueueLive(id, xp, level)
+  if not (QB:Settings().share.party and groupChannel()) then return end
   self.live[#self.live + 1] = id .. ":" .. xp .. ":" .. level
   if self.liveWaiting then return end
   self.liveWaiting = true
   C_Timer.After(5, QB.Safe(function()
     S.liveWaiting = false
-    local chans = channels()
+    local ch = QB:Settings().share.party and groupChannel()
     while #S.live > 0 do
       local batch = {}
       while #S.live > 0 and #batch < 14 do batch[#batch + 1] = table.remove(S.live, 1) end
-      for _, ch in ipairs(chans) do queue("1L|" .. table.concat(batch, ","), ch) end
+      if ch then queue("1L|" .. table.concat(batch, ","), ch) end
     end
   end, "party sync: XP"))
 end
@@ -288,13 +291,13 @@ function S:Receive(msg, channel, sender)
     if v then self:HeardVersion(v, sender) end
     return
   end
-  -- (the launch audit) the realm's version channel carries 1V alone; a step line comes from your group alone, an XP
-  -- reading from your group or the guild you share with. Anyone of your faction can whisper you or speak there: a
-  -- stranger's 1G showed in your step frame, escape codes and all, and their 1L corrected your plan's XP. Your own
-  -- S:Step and QueueLive never whisper either; a whispered status and quest list still come (/qb sync)
+  -- (the launch audit) the realm's version channel carries 1V alone; a step line comes from your group alone, and (the
+  -- final audit) an XP reading too. Anyone of your faction can whisper you or speak there: a stranger's 1G showed in your
+  -- step frame, escape codes and all, and their 1L corrected your plan's XP. Your own S:Step and QueueLive never whisper
+  -- either; a whispered status and quest list still come (/qb sync)
   if channel == "CHANNEL" then return end
   if kind == "1G" and not GROUP[channel] then return end
-  if kind == "1L" and not (GROUP[channel] or channel == "GUILD") then return end
+  if kind == "1L" and not GROUP[channel] then return end
   if kind == "1S" and statusIsMine(msg) then
     -- our own echo, under a sender string we didn't recognise: it is us from now on
     S.mySender = sender
