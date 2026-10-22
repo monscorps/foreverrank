@@ -2159,7 +2159,9 @@ function UI.WaypointObjective(q)
   if best then QB.API.SetWaypoint(best.m, best.x * 100, best.y * 100, q.name, nil, nil, { qid = q.id, what = "obj" }) else QB:Print("No objective place known for " .. q.name .. " yet.") end
 end
 
--- a problem with a quest, noted for foreverrank.com: it goes up with your next upload
+-- a problem with a quest, noted in QuestBank's saved file (QuestBankDB.reports). (The final audit) it stays on the PC:
+-- reports are outside every upload's allow-list (the uploader, the page, the Worker, probe_pull.py), so the line says
+-- where it is kept and promises no upload
 UI.REPORTS = { "The giver is not where QuestBank says", "The hand-in is somewhere else", "The XP is wrong",
                "The quest does not exist in Forever", "The objectives are somewhere else", "The rewards are wrong" }
 function UI.Report(q, reason)
@@ -2169,7 +2171,7 @@ function UI.Report(q, reason)
   list[#list + 1] = { id = q.id, r = reason, at = time and time() or 0, b = QB.Data.BUILD, lvl = QB.state.level,
                       m = QB.Plain(QB.API.MapID()), wx = me and math.floor(me.wx) or nil, wy = me and math.floor(me.wy) or nil }
   while #list > 100 do table.remove(list, 1) end
-  QB:Print(string.format("Noted for %s: %s. It goes to foreverrank.com with your next upload.", q.name, reason:lower()))
+  QB:Print(string.format("Noted for %s: %s. It is kept in your saved file, QuestBank.lua, and not sent anywhere.", q.name, reason:lower()))
 end
 function UI.ReportMenu(q)
   local items = {}

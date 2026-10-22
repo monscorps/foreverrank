@@ -24840,6 +24840,20 @@ end)()
     assert(sent(c, "1L", "PARTY") + sent(c, "1L", "GUILD") == 0, "out of a group: no reading sent")
   end }
 
+  -- R1 (trust, must). The quest detail's Report printed "It goes to foreverrank.com with your next upload", but
+  -- QuestBankDB.reports is outside every upload allow-list (the uploader, the page, the Worker, probe_pull.py)
+  CASES[#CASES + 1] = { "R1: a report says it stays in the saved file, never that it is uploaded", function()
+    local c = char("Reporter", { group = false, guild = false })
+    local QB = c.QB
+    local n0 = #c.chat
+    QB.UI.Report(QB.Quest.Get(7), QB.UI.REPORTS[3])
+    local line = said(c, n0)
+    local list = c.env.QuestBankDB.reports
+    assert(type(list) == "table" and list[#list].id == 7, "the report kept in QuestBankDB.reports")
+    assert(not line:find("upload", 1, true) and not line:find("foreverrank.com", 1, true), "no promise of an upload: " .. line)
+    assert(line:find("saved file", 1, true) and line:find("QuestBank.lua", 1, true), "the line says where it is kept: " .. line)
+  end }
+
   local failed = {}
   for _, case in ipairs(CASES) do
     local ok, err = pcall(case[2])
