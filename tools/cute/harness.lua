@@ -16179,6 +16179,35 @@ do
     for _, c in ipairs({ ofa, mia, ann }) do leave(c) end
     said[#said + 1] = "the finds in the officers' word: half an hour after sure where the officers keep them, by one officer, past the newest 48 nothing taken back, five minutes apart, a key a third voice leaves; open, no word for them"
   end)
+  -- K12: the officers keep Finds and none is online: a member's finds wait (no whisper to nobody, nothing lost, the
+  -- hour's count untouched), and go to the first officer who comes online
+  isolated({ fmember("Ofa", 0), fmember("Mia", 3) }, function()
+    local closed = { gc_finds = "self" }
+    for _, m in ipairs(GUILD) do if m.guid == guidOf("Ofa") then m.online = false end end
+    local mia = fchar("Mia", 3)
+    login(mia, fpol(nil, closed))
+    tickAll(130)
+    local m0 = #mia.sent
+    fnoted(mia, "h", 9201, 1429, 500, 500)
+    tickAll(300)
+    local out = mia.env.CuteDB.chars["Mia-Forever"].findsOut
+    assert(#said1X(mia, m0 + 1) == 0 and #out == 1 and (mia.C.Finds.sent or 0) == 0, "no officer online: nothing sent, the chest waits")
+    local line
+    for _, l in ipairs(mia.C.Diag()) do if l:find("^diag finds:") then line = l end end
+    assert(line and line:find("no officer online", 1, true), "/cute diag says why: " .. tostring(line))
+    -- Ofa comes online
+    for _, m in ipairs(GUILD) do if m.guid == guidOf("Ofa") then m.online = true end end
+    local ofa = fchar("Ofa", 0)
+    login(ofa, fpol(true, closed))
+    tickAll(10)
+    fire(mia, "GUILD_ROSTER_UPDATE")
+    tickAll(130)
+    local w = said1X(mia, m0 + 1)
+    assert(#w == 1 and w[1].channel == "WHISPER" and w[1].target == ofa.sender and #out == 0, "an officer online: the chest whispered to Ofa")
+    assert(rowOf(ofa, 1429, 9201), "Ofa has it")
+    leave(mia); leave(ofa)
+    said[#said + 1] = "the officers keep Finds and none is online: the finds wait, then go to the first officer online"
+  end)
   print("map K: " .. table.concat(said, "; "))
 end
 

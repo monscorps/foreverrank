@@ -533,6 +533,9 @@ function F:Wait()
   -- (IsInInstance, InstanceDocumentation.lua:170)
   if C.Get("IsInInstance") == true then return nil, "an instance" end
   if M:Locked() then return nil, "the lockdown" end
+  -- (the officers keep Finds or Zone: whispered to the officers online, Comm.lua's mark; with none online it would go to
+  -- nobody, so it waits for one)
+  if C.Policy:FindsRoute() == "self" and #C.Roster:OfficerTargets() == 0 then return nil, "no officer online" end
   local t = now()
   local w = (M.helloAt or t) + FIRST - t
   if self.lastSent then w = math.max(w, self.lastSent + EVERY - t) end
@@ -571,7 +574,7 @@ function F:Flush()
   if not shareOn() then self.outPings = {}; for i = #out, 1, -1 do out[i] = nil end return end
   local wait, why = self:Wait()
   self.waiting = why
-  if wait == nil then self:FlushSoon(why == "no guild" and 60 or 10) return end
+  if wait == nil then self:FlushSoon((why == "no guild" or why == "no officer online") and 60 or 10) return end
   if wait > 0 then self:FlushSoon(wait) return end
   table.sort(pings, function(a, b) if a.at ~= b.at then return a.at > b.at end return a.id < b.id end)
   local e, took = F.Message(pings, out)
