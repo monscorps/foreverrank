@@ -1173,6 +1173,23 @@ local function scaleOf(t)
   sc = ok and QB.Plain(sc) or nil
   return type(sc) == "number" and sc or nil
 end
+-- (the review of the windows round) the frame type's own SetScale, never a Lua override over it: ObjectiveTrackerFrame is
+-- an Edit Mode system (Blizzard_ObjectiveTracker.xml:3) whose OnSystemLoad keeps the C method as SetScaleBase and puts
+-- SetScaleOverride in SetScale (EditModeSystemTemplates.lua:9-11), which moves its points, runs ManageFramePositions and
+-- the tracker's Update (:117-145) as its caller: the tracker's item buttons would carry QuestBank's taint. nil where no
+-- C method can be told apart (then the alpha alone)
+local function baseSetScale(t)
+  local own = rawget(t, "SetScale")
+  if own == nil then return type(t.SetScale) == "function" and t.SetScale or nil end
+  local base = rawget(t, "SetScaleBase")
+  if type(base) == "function" then return base end
+  local mt = getmetatable(t)
+  local idx = type(mt) == "table" and mt.__index or nil
+  if type(idx) == "table" and type(idx.SetScale) == "function" and idx.SetScale ~= own then return idx.SetScale end
+  return nil
+end
+-- the hundredth, as the client reads it back: a frame's scale is a 32-bit float there (0.01 is 0.0099999998)
+local function isOut(sc) return type(sc) == "number" and math.abs(sc - OUT_SCALE) < 0.001 end
 function SF.Tracker()
   local t = tracker()
   if not t then return end
@@ -1180,7 +1197,7 @@ function SF.Tracker()
   local want = settings().hideTracker ~= false and f ~= nil and f:IsShown() and not trackerEditing and true or false
   if fighting() then trackerWait = true return end
   trackerWait = false
-  local scales = type(t.SetScale) == "function"
+  local setScale = baseSetScale(t)
   if want then
     if not trackerHooked and type(hooksecurefunc) == "function" then
       trackerHooked = true
@@ -1198,12 +1215,13 @@ function SF.Tracker()
     end
     trackerOut = true
     if t:GetAlpha() ~= 0 then t:SetAlpha(0) end
-    local sc = scales and scaleOf(t)
-    if sc and sc ~= OUT_SCALE then trackerScale = sc; t:SetScale(OUT_SCALE) end
+    -- (the scale it has kept, never the hundredth it already is: every SF.Apply while it is out asks again)
+    local sc = setScale and scaleOf(t)
+    if sc and not isOut(sc) then trackerScale = sc; pcall(setScale, t, OUT_SCALE) end
   elseif trackerOut then
     trackerOut = false
     t:SetAlpha(1)
-    if scales and trackerScale and scaleOf(t) == OUT_SCALE then t:SetScale(trackerScale) end
+    if setScale and trackerScale and isOut(scaleOf(t)) then pcall(setScale, t, trackerScale) end
   end
 end
 SF.TrackerOut = function() return trackerOut end

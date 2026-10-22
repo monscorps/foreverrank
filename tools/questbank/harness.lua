@@ -463,6 +463,17 @@ local function newClient(o)
     for _, m in ipairs({ "Show", "Hide", "SetShown", "SetPoint", "ClearAllPoints", "SetAllPoints", "SetParent", "EnableMouse" }) do
       rawset(otf, m, function() error("an addon called " .. m .. " on the game's quest tracker (a managed frame: its layout would run as the addon)", 2) end)
     end
+    -- an Edit Mode system frame (Blizzard_ObjectiveTracker.xml:3): its OnSystemLoad keeps the C SetScale as SetScaleBase
+    -- and puts SetScaleOverride in SetScale (EditModeSystemTemplates.lua:9-11), which moves its points, lays the right-hand
+    -- frames out and runs the tracker's Update as whoever called it (:117-145); c.trackerOverride counts its calls. The
+    -- client keeps a frame's scale as a 32-bit float: 0.01 reads back as 0.0099999998
+    local function f32(v)
+      if type(v) ~= "number" or v == 0 then return v end
+      local m, e = math.frexp(v)
+      return math.ldexp(math.floor(m * 2 ^ 24 + 0.5) / 2 ^ 24, e)
+    end
+    rawset(otf, "SetScaleBase", function(self, v) self.__scale = f32(v) end)
+    rawset(otf, "SetScale", function(self, v) c.trackerOverride = (c.trackerOverride or 0) + 1; self:SetScaleBase(v) end)
     env.ObjectiveTrackerFrame = otf
   end
   -- the minimap in its cluster and container, as the client builds it (Blizzard_Minimap/Mainline/Minimap.xml)
@@ -20840,51 +20851,61 @@ end
 -- OnSizeChanged, OnShow or OnHide for the right-hand container to lay itself out by), the scale it had kept for the
 -- session and put back with the alpha (the row off, the step frame off); nothing else is called on it; never in a
 -- fight; Edit Mode's enter puts both back so the player can place it, its exit and EDIT_MODE_LAYOUTS_UPDATED set them
--- again. The step frame's default place stays where the tracker at its own size leaves room
+-- again. The step frame's default place stays where the tracker at its own size leaves room.
+-- (the review of the windows round) The scale goes through the frame type's own SetScale (SetScaleBase), never the Edit
+-- Mode override in SetScale, which would run the tracker's layout and Update as QuestBank; and it is read as the client
+-- keeps it, a 32-bit float (0.01 reads 0.0099999998): every SF.Apply while it is out keeps the scale it had, and it
+-- comes back
 do
   local c = lookChar("Scaled")
   local s, SF, T = c.QB:Settings(), c.QB.StepFrame, c.env.ObjectiveTrackerFrame
+  local function near(a, b) return type(a) == "number" and math.abs(a - b) < 1e-4 end
   local f = c.env.QuestBankStep
-  assert(f:IsShown() and T:GetAlpha() == 0 and T:GetScale() == 0.01, "out of sight: alpha 0 and scale 0.01: " .. T:GetAlpha() .. ", " .. T:GetScale())
+  assert(f:IsShown() and T:GetAlpha() == 0 and near(T:GetScale(), 0.01), "out of sight: alpha 0 and scale 0.01: " .. T:GetAlpha() .. ", " .. T:GetScale())
   local placed = f.__points[1].x
   -- every method asked of the tracker from here on, by name
   local calls = {}
   local mt = getmetatable(T)
   local idx = mt.__index
   mt.__index = function(t, k) local v = idx(t, k); if type(v) == "function" then calls[k] = (calls[k] or 0) + 1 end; return v end
+  -- (a redraw while it is out: its scale, read back as the client keeps it, is not the one to keep)
+  SF.Apply(); SF.Apply()
   s.guide.hideTracker = false; SF.Apply()
-  assert(T:GetAlpha() == 1 and T:GetScale() == 1, "the row off: alpha and scale back")
+  assert(T:GetAlpha() == 1 and near(T:GetScale(), 1), "the row off: alpha and scale back: " .. T:GetScale())
   rawset(T, "__scale", 0.9) -- (the scale it has: the session's to keep)
-  s.guide.hideTracker = true; SF.Apply()
-  assert(T:GetAlpha() == 0 and T:GetScale() == 0.01 and f.__points[1].x == placed, "on again: out of sight, the step frame where it was")
+  s.guide.hideTracker = true; SF.Apply(); SF.Apply()
+  assert(T:GetAlpha() == 0 and near(T:GetScale(), 0.01) and f.__points[1].x == placed, "on again: out of sight, the step frame where it was")
   s.guide.frame = false; SF.Apply()
-  assert(T:GetAlpha() == 1 and T:GetScale() == 0.9, "the step frame off: back at the scale it had")
+  assert(T:GetAlpha() == 1 and near(T:GetScale(), 0.9), "the step frame off: back at the scale it had: " .. T:GetScale())
   s.guide.frame = true; SF.Apply()
   -- in a fight nothing is touched; after it, out of sight again
   s.guide.hideTracker = false
   c.combat = true; SF.Apply()
-  assert(T:GetAlpha() == 0 and T:GetScale() == 0.01, "in a fight: left as it is")
+  assert(T:GetAlpha() == 0 and near(T:GetScale(), 0.01), "in a fight: left as it is")
   c.combat = false; c.ev(c.QB.eventFrame, "PLAYER_REGEN_ENABLED")
-  assert(T:GetAlpha() == 1 and T:GetScale() == 0.9, "the fight over: back")
+  assert(T:GetAlpha() == 1 and near(T:GetScale(), 0.9), "the fight over: back")
   s.guide.hideTracker = true; SF.Apply()
   -- Edit Mode: back while it is open, out of sight again as it closes or lays the frames out again
   c.env.EventRegistry:TriggerEvent("EditMode.Enter")
-  assert(T:GetAlpha() == 1 and T:GetScale() == 0.9, "Edit Mode open: the tracker back to be placed")
+  assert(T:GetAlpha() == 1 and near(T:GetScale(), 0.9), "Edit Mode open: the tracker back to be placed")
   c.env.EventRegistry:TriggerEvent("EditMode.Exit")
-  assert(T:GetAlpha() == 0 and T:GetScale() == 0.01, "Edit Mode closed: out of sight again")
-  rawset(T, "__scale", 1); rawset(T, "__alpha", 1) -- (a layout applied: the system's own place and look)
+  assert(T:GetAlpha() == 0 and near(T:GetScale(), 0.01), "Edit Mode closed: out of sight again")
   local ev = SF.events
   assert(ev and ev.__scripts.OnEvent, "the step frame hears EDIT_MODE_LAYOUTS_UPDATED")
   ev.__scripts.OnEvent(ev, "EDIT_MODE_LAYOUTS_UPDATED")
-  assert(T:GetAlpha() == 0 and T:GetScale() == 0.01, "a layout applied: out of sight again")
+  assert(T:GetAlpha() == 0 and near(T:GetScale(), 0.01), "a layout applied while out: out of sight still")
+  rawset(T, "__scale", 1); rawset(T, "__alpha", 1) -- (a layout applied: the system's own place and look)
+  ev.__scripts.OnEvent(ev, "EDIT_MODE_LAYOUTS_UPDATED")
+  assert(T:GetAlpha() == 0 and near(T:GetScale(), 0.01), "a layout applied: out of sight again")
   s.guide.hideTracker = false; SF.Apply()
-  assert(T:GetScale() == 1, "the row off: the scale the layout gave it")
+  assert(near(T:GetScale(), 1), "the row off: the scale the layout gave it")
   mt.__index = idx
   local other = {}
   for k in pairs(calls) do if k ~= "SetAlpha" and k ~= "GetAlpha" and k ~= "SetScale" and k ~= "GetScale" then other[#other + 1] = k end end
   table.sort(other)
   assert(#other == 0, "nothing but its alpha and its scale asked of the tracker: " .. table.concat(other, ", "))
-  print("windows D3: the game's quest tracker out of sight at alpha 0 and scale 0.01 (no click lands on it), its scale kept and put back with the alpha, never in a fight, back for Edit Mode and out again after it; nothing else called on it")
+  assert((c.trackerOverride or 0) == 0, "the Edit Mode override in its SetScale never called: " .. tostring(c.trackerOverride))
+  print("windows D3: the game's quest tracker out of sight at alpha 0 and scale 0.01 (no click lands on it) through the frame type's own SetScale, never the Edit Mode override; its scale, read as a 32-bit float, kept and put back with the alpha, never in a fight, back for Edit Mode and out again after it; nothing else called on it")
 end
 
 -- D4. The step frame as a stop of the route, in a host's look (Cute's QB.Skin.stop): it stands on the world with no
