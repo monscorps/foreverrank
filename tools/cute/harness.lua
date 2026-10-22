@@ -11569,7 +11569,8 @@ do
 end
 
 -- (the merge review) a quest no way is known to (its minutes math.huge: Zephras Isle to Elwynn, M.Between knows no way
--- across) reads its place in Most XP a minute, never "inf min"
+-- across) reads its place in Most XP a minute, never "inf min". (merge2: the windows round's Quests tab names the eight
+-- "Best XP anywhere", folded until its head is clicked; they read the same)
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
   isolated({ member("Rone", 1) }, function()
@@ -11584,16 +11585,25 @@ do
       return real(self, limit, ...)
     end
     c.C.UI:Open("quests")
+    local L = qwin(c)
+    local function rows() local out = {}; for _, r in ipairs(L.hosts.quests.pool.items) do if r:IsShown() then out[#out + 1] = r end end return out end
+    local head
+    for _, r in ipairs(rows()) do if r.name:GetText() == "Best XP anywhere" then head = r end end
+    assert(head, "the Best XP anywhere head:\n" .. texts(c))
+    press(head); tick(c, 2)
     local t = texts(c)
-    QB.UI.Candidates = real
     local cat = D.CAT[D.Q[7][8]].name
-    assert(t:find("Most XP a minute", 1, true) and not t:find("inf min", 1, true) and not t:find("nan min", 1, true), "Most XP a minute: no inf min:\n" .. t)
-    local row
-    for _, r in ipairs(c.C.UI.lists.quests.items) do if r:IsShown() and r.name:GetText() == QB.Quest.Get(7).name then row = r end end
+    assert(t:find("Best XP anywhere", 1, true) and not t:find("inf min", 1, true) and not t:find("nan min", 1, true), "Best XP anywhere: no inf min:\n" .. t)
+    local row, under = nil, false
+    for _, r in ipairs(rows()) do
+      if r.name:GetText() == "Best XP anywhere" then under = true
+      elseif under and r.name:GetText() == QB.Quest.Get(7).name then row = r end
+    end
+    QB.UI.Candidates = real
     assert(row and row.who:GetText() == cat, "the quest's place in its minutes' stead: " .. tostring(row and row.who:GetText()))
     assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
     leave(c)
-    print("merge1: Most XP a minute: a quest no way is known to reads its place, never inf min")
+    print("merge1: Best XP anywhere: a quest no way is known to reads its place, never inf min")
   end)
 end
 
@@ -11605,6 +11615,8 @@ end
 -- numbers (1-12, 18, 19, 20)
 do local function runsStage()
   local said = {}
+  -- (merge2) the guild window's i-th band line shown: the helper the windows round's harness no longer needs
+  local function bandLine(c, i) local n = 0; for _, l in ipairs(c.C.UI.bandLines.items) do if l:IsShown() then n = n + 1; if n == i then return l end end end end
 
   -- the group: the mock gains what the run reads, documented or called by Camelot's own code, each where its doc says:
   -- the group's units (UnitName, UnitGUID, UnitClass, UnitRace, UnitSex, UnitIsGroupLeader, UnitIsDeadOrGhost,
@@ -13473,6 +13485,16 @@ do
     local sections = c.C.SettingsPage.Sections(true)
     assert(n == #sections and heights[22] and not heights[16] and not heights[20], "every section listed, each row 22 px: " .. n .. " of " .. #sections)
     assert(sectionsShown(c) == "general keys modules share columns vis rules example quests route map dungeons camp", "the sections by group: " .. sectionsShown(c))
+    -- (merge2) Settings > Runs among them, under Guild after the guild's own (sectionsShown sets it aside for the runs
+    -- stage); then the harness's own module addon (Cute_Example, the registration API's probe, which no player has) off:
+    -- every section a player can have, the run report's with them, fits unscrolled (16 + 60 + 13 x 22 of the 375 px the
+    -- design gives the list); a fourteenth scrolls, as the design allows
+    local ids = {}
+    for _, sec in ipairs(sections) do ids[#ids + 1] = sec.id end
+    assert(table.concat(ids, " "):find("vis rules runs example quests", 1, true), "Settings > Runs under Guild: " .. table.concat(ids, " "))
+    M.Set("Cute_Example", false); tick(c, 1)
+    UI.OpenSettings("general")
+    assert(#c.C.SettingsPage.Sections(true) == 13, "every section a player can have: " .. #c.C.SettingsPage.Sections(true))
     local navList
     for _, f in ipairs(c.frames) do if f.section and f:IsVisible() then navList = f.__parent.__scrollParent end end
     assert(navList and not navList.bar:IsShown(), "the list fits unscrolled at 760 x 420")
@@ -13663,9 +13685,10 @@ do
     assert(m[1].kind == "title" and m[1].text == "Cute", "titled Cute")
     local g, q, s = entry(m, "Guild (J)"), entry(m, "Quests (L)"), entry(m, "Settings")
     assert(g and q and s and g.responds and q.responds and s.responds, "Guild (J), Quests (L) and Settings, each opening its window when clicked: " .. names(m))
-    assert(names(g.sub) == "Race, Prog, Hall of Shame, Statistics, Officers, Me", "the guild's tabs: " .. names(g.sub))
+    -- (merge2: the run report's Runs tab and its section among them)
+    assert(names(g.sub) == "Race, Prog, Hall of Shame, Runs, Statistics, Officers, Me", "the guild's tabs: " .. names(g.sub))
     assert(names(q.sub) == "Quests, Route, ---, Step frame, Direction arrow", "the quests' tabs and the on-screen switches: " .. names(q.sub))
-    assert(names(s.sub) == "General, Keys, Modules, Data you share, Columns, Who sees what, Rules, Quests, Route", "every section: " .. names(s.sub))
+    assert(names(s.sub) == "General, Keys, Modules, Data you share, Columns, Who sees what, Rules, Runs, Quests, Route", "every section: " .. names(s.sub))
     assert(entry(m, "Set up Cute...") and not entry(m, "Reload to apply"), "Set up Cute... before Start; no reload to apply")
     -- a click opens: a tab, the window, a section; a switch flips the engine's setting
     entry(g.sub, "Statistics").set()
@@ -13683,7 +13706,7 @@ do
     sw.set()
     -- the member: no Officers, no Rules
     local pm = menuOf(pim, "compartment")
-    assert(names(entry(pm, "Guild").sub) == "Race, Prog, Hall of Shame, Statistics, Me" and not names(entry(pm, "Settings").sub):find("Rules", 1, true), "the member's menu: no officers' entries: " .. names(entry(pm, "Guild").sub))
+    assert(names(entry(pm, "Guild").sub) == "Race, Prog, Hall of Shame, Runs, Statistics, Me" and not names(entry(pm, "Settings").sub):find("Rules", 1, true), "the member's menu: no officers' entries: " .. names(entry(pm, "Guild").sub))
     -- the compartment's click: the guild window
     pim.env.Cute_OnCompartment("Cute", "LeftButton")
     assert(pim.C.UI.frame:IsShown(), "the compartment's click: J")
