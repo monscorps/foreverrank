@@ -163,6 +163,15 @@ end
 -- whispered ask got your level, XP, class, GUID's tail and every quest back, whatever the share settings
 S.asked = {}
 local function baseName(n) return type(n) == "string" and (n:match("^([^%-]+)") or n):lower() or nil end
+-- (the chat's sender name may carry more than the unit's: the first word decides)
+local function firstWord(n) return type(n) == "string" and n:match("^[^%s%-]+") or n end
+-- (the final audit) whether a sender is someone you sent yours to: by the name as typed, or by its first word, as chat
+-- gives a sender the surname a typed name has not
+local function asked(sender)
+  if S.asked[baseName(sender)] then return true end
+  local w = firstWord(sender)
+  return type(w) == "string" and S.asked[w:lower()] == true
+end
 function S:Whisper(name)
   if not self.ready or not name or name == "" then return end
   queue(statusMsg(), "WHISPER", name)
@@ -315,10 +324,14 @@ function S:Receive(msg, channel, sender)
   -- (the launch audit) the realm's version channel carries 1V alone; a step line comes from your group alone, and (the
   -- final audit) an XP reading too. Anyone of your faction can whisper you or speak there: a stranger's 1G showed in your
   -- step frame, escape codes and all, and their 1L corrected your plan's XP. Your own S:Step and QueueLive never whisper
-  -- either; a whispered status and quest list still come (/qb sync)
+  -- either. (The final audit) a quest list comes from your group, or by whisper from someone you sent yours to (/qb
+  -- sync), and a whispered status from them alone: QuestBank 6.4.0 and older send their list on GUILD, anyone can
+  -- whisper, and every quest on a list ranked higher in your Guide (M.PartyHas) and lost a group quest's solo cost
   if channel == "CHANNEL" then return end
   if kind == "1G" and not GROUP[channel] then return end
   if kind == "1L" and not GROUP[channel] then return end
+  if kind == "1Q" and not (GROUP[channel] or (channel == "WHISPER" and asked(sender))) then return end
+  if kind == "1S" and channel == "WHISPER" and not asked(sender) then return end
   if kind == "1S" and statusIsMine(msg) then
     -- our own echo, under a sender string we didn't recognise: it is us from now on
     S.mySender = sender
@@ -374,7 +387,7 @@ function S:Receive(msg, channel, sender)
     local target = channel == "WHISPER" and sender or nil
     if target then
       -- (only to someone you sent yours to, and never inside a host: S.asked)
-      if not QB.host and S.asked[baseName(target)] then
+      if not QB.host and asked(target) then
         queue(statusMsg(), "WHISPER", target)
         for _, q in ipairs((questMsgs())) do queue(q, "WHISPER", target) end
       end
@@ -392,9 +405,15 @@ end
 ----------------------------------------------------------------------------
 -- for the Party page
 ----------------------------------------------------------------------------
--- every member's step forgotten (out of a group: G.MemberSteps lists every step held)
+-- a member's step and quest list forgotten, but a /qb sync friend's list (G.MemberSteps lists every step held, and
+-- M.PartyHas and the tooltips read every list)
+local function forget(m)
+  if m.step ~= nil then m.step = nil; memberChanged() end
+  if (m.quests or m.pending) and not asked(m.key) then m.quests, m.pending = nil, nil; memberChanged() end
+end
+-- out of a group: every member's
 function S:DropSteps()
-  for _, m in pairs(self.members) do if m.step ~= nil then m.step = nil; memberChanged() end end
+  for _, m in pairs(self.members) do forget(m) end
 end
 function S:Members()
   local out = {}
@@ -631,7 +650,8 @@ function S:Init()
     if event == "CHAT_MSG_ADDON" then
       S:Receive(msg, channel, sender)
     elseif event == "GROUP_ROSTER_UPDATE" then
-      -- (merge4) out of a group: every step heard goes, so a former group mate's never shows in your next group
+      -- (merge4) out of a group: every step heard goes, so a former group mate's never shows in your next group; (the final
+      -- audit) and their quest lists
       if not (IsInGroup and QB.Plain(IsInGroup()) == true) then S:DropSteps() end
       local ch = groupChannel()
       if ch and ch ~= S.lastGroup and QB:Settings().share.party then
@@ -737,9 +757,8 @@ function S.Shareable()
   return out
 end
 
--- the sync record of a party member by name, when they run QuestBank
--- (the chat's sender name may carry more than the unit's: the first word decides)
-local function firstWord(n) return type(n) == "string" and n:match("^[^%s%-]+") or n end
+-- the sync record of a party member by name, when they run QuestBank (firstWord, above: the chat's sender name may
+-- carry more than the unit's)
 function S:MemberByName(name)
   local want = firstWord(name)
   for _, m in pairs(self.members) do if m.name == name or firstWord(m.name) == want then return m end end

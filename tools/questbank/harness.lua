@@ -24447,7 +24447,8 @@ end
     local steps = G.MemberSteps()
     assert(#steps == 0, "a stranger's whispered step: never on your frame: " .. tostring(steps[1] and steps[1].text))
     assert(recorded[1] == 0, "a whispered XP reading corrects nothing")
-    assert(S.members[stranger] and S.members[stranger].level == 60, "a whispered status still comes (/qb sync)")
+    -- (fix2-engine Q1) a whispered status comes from whom you sent yours to (/qb sync) alone
+    assert(S.members[stranger] == nil, "a stranger's whispered status: not taken")
     hear("1S|60|0|A|WARRIOR|0|0|0|-1|0|0|6.4.0|yyyyyyyyyy", "CHANNEL", spammer)
     hear("1G|Spam", "CHANNEL", spammer)
     hear("1L|118:450:18", "CHANNEL", spammer)
@@ -24912,6 +24913,35 @@ end)()
     hear("1H", "GUILD", asker)
     tick(c, 40)
     assert(#c.outbox == 0, "the same ask again within ten minutes: nothing")
+  end }
+
+  -- Q1 (trust, should). 6.4.1 took 1Q from GUILD (6.4.0 and older still send it there) and from anyone's whisper: every
+  -- quest on such a list ranked 1.5 times in the Guide and a group quest lost its solo cost. A quest list comes from your
+  -- group, or by whisper from whom you sent yours to (/qb sync); a whispered status from them alone; out of a group the
+  -- group's lists go
+  CASES[#CASES + 1] = { "Q1: a quest list from your group or a /qb sync friend alone; out of a group the group's lists go", function()
+    local c = char("Lister")
+    local QB, S, M = c.QB, c.QB.Sync, c.QB.Model
+    QB:Settings().share.guild = true
+    local hear = hearer(c)
+    local guildie, stranger, friend, mate = "Guildie Steelhand-Forever Normal", "Grimm Shade-Forever Normal", "Friend Steelhand-Forever Normal", "Mate Steelhand-Forever Normal"
+    hear("1S|18|100|A|MAGE|0|0|0|-1|0|0|6.4.0|aaaaaaaaaa", "GUILD", guildie)
+    hear("1Q|1|1|7.a1/8", "GUILD", guildie)
+    assert(S.members[guildie] and S.members[guildie].level == 18 and S.members[guildie].quests == nil, "a guild mate's status taken, his quest list not")
+    assert(not M.PartyHas(7), "a guild mate's list steers nothing")
+    hear("1S|60|0|A|WARRIOR|0|0|0|-1|0|0|6.4.1|bbbbbbbbbb", "WHISPER", stranger)
+    hear("1Q|1|1|33.a1/8", "WHISPER", stranger)
+    assert(S.members[stranger] == nil and not M.PartyHas(33), "a stranger's whisper: nothing taken")
+    S:Whisper("Friend")
+    hear("1S|18|100|A|MAGE|0|0|0|-1|0|0|6.4.1|cccccccccc", "WHISPER", friend)
+    hear("1Q|1|1|33.a1/8", "WHISPER", friend)
+    assert(S.members[friend] and S.members[friend].quests and M.PartyHas(33), "the friend you sent yours to: status and list taken")
+    hear("1S|18|100|A|MAGE|0|0|0|-1|0|0|6.4.1|dddddddddd", "PARTY", mate)
+    hear("1Q|1|1|7.a1/8", "PARTY", mate)
+    assert(S.members[mate].quests and M.PartyHas(7), "the party's list taken")
+    c.o.group = false; roster(c)
+    assert(S.members[mate].quests == nil and not M.PartyHas(7), "out of the group: the party's list gone")
+    assert(S.members[friend].quests and M.PartyHas(33), "the /qb sync friend's list kept")
   end }
 
   local failed = {}
