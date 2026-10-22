@@ -15736,6 +15736,20 @@ end
 -- (map, part 3: the review of F and G) Cute's side
 -- K1. M's legend: under the kind marks the In your log switch and its section's head show an objective's cursor, as its
 --     pins do; with "Our icons on the game's map" unticked, M keeps its pins and its switches lit.
+-- K2. The reader's buttons inside M's narrow list (Share in a group: the third on a line of its own).
+-- K3. While a quest is read in M: a pin hovered or clicked leaves the reader's scroll alone; M closed ends the reader;
+--     the Finds list opened over it shows.
+-- K4. M's finds footer under the list alone: the canvas keeps its size and zoom as it comes and goes.
+-- K5. A find on a map without art: the map above it with art, never a chat line; a continent's zone without art no click.
+-- K6. The menu's Map (M): your zone, the last three zones, Finds, the game's map greyed in a fight; none with it off.
+-- K7. QuestBank loaded: the setup card asks nothing of the Map window and names J and L.
+-- K8. Data you share's Show finds only while the Map window is on.
+-- K9. The voices that count are the roster's members' (another guild's GUIDs, a member who left: none).
+-- K10. The officers' word's finds sure by that officer's voice while it is one; each officer says what it heard.
+-- K11. The word's finds: half an hour after sure where the officers keep them, one officer past the newest 48, five
+--      minutes apart, keys a third voice leaves; with Finds open no word for them.
+-- K12. The officers keep Finds and none is online: the finds wait, then go to the first one online.
+-- K13. Sharing off: your own finds are no voice. K14. The store at its cap keeps its index (the garbage measured).
 ----------------------------------------------------------------------------
 do
   local said = {}
