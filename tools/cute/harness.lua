@@ -14615,6 +14615,26 @@ do local function cardsStage()
   end)
   said[#said + 1] = "a set withdrawn frees the items it greyed in the other officers' queues"
 
+  -- two officers publishing in the same second: both sets kept everywhere (a set is its stamp and its publisher), and
+  -- one withdrawn takes the other with it nowhere
+  isolated({ gmember("Ugo", 1, "MAGE"), gmember("Ulf", 1, "PRIEST"), gmember("Urd", 3, "ROGUE") }, function()
+    local ugo, ulf, urd = cchar("Ugo", 1), cchar("Ulf", 1, { class = "PRIEST" }), cchar("Urd", 3, { class = "ROGUE" })
+    login(ugo); login(ulf); login(urd)
+    tickAll(200)
+    local function card(k) return { guid = urd.o.guid, name = "Urd", class = "ROGUE", kind = "shout", title = "T" .. k, line = "L", source = "" } end
+    assert(H(ugo):Publish({ kind = "n", title = "From Ugo", cards = { card(1) } }) and H(ulf):Publish({ kind = "n", title = "From Ulf", cards = { card(2) } }), "both published")
+    assert(H(ugo).Sets()[1].at == H(ulf).Sets()[1].at, "in the same second: one stamp")
+    tickAll(10)
+    local function titles(c) local t = {}; for _, x in ipairs(H(c).Sets()) do t[#t + 1] = x.title end table.sort(t) return table.concat(t, ", ") end
+    for _, c in ipairs({ ugo, ulf, urd }) do assert(titles(c) == "From Ugo, From Ulf", c.o.name .. " holds both: " .. titles(c)) end
+    local mine
+    for _, x in ipairs(H(ugo).Sets()) do if x.title == "From Ugo" then mine = x end end
+    assert(H(ugo):Withdraw(mine.at, mine.pub), "Ugo withdraws hers")
+    tickAll(5)
+    for _, c in ipairs({ ugo, ulf, urd }) do assert(titles(c) == "From Ulf", c.o.name .. " keeps Ulf's: " .. titles(c)) end
+  end)
+  said[#said + 1] = "two officers' sets in the same second both kept, one withdrawn alone"
+
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end
 

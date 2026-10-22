@@ -460,21 +460,24 @@ function H:SaveDraft(set)
 end
 
 ----------------------------------------------------------------------------
--- 1C: a set on the wire (13.2). h=<kind>,<title>,<by>,<period>,<ranked>, then a c= part per card: <suffix>,<name>,
+-- 1C: a set on the wire (13.2). h=<kind>,<title>,<by>,<period>,<ranked>,<publisher's GUID suffix>, then a c= part per
+-- card: <suffix>,<name>,
 -- <class>,<race>,<sex>,<label>,<icon>,<source>,<title>,<line>,<value>,<value label>, a comma within a text a tilde
 -- (the text cut and cleaned as Preview shows it, sendable below). Parts packed into messages of
--- 255 bytes, i of n under one stamp: 1C|<at>|<i>/<n>|... (an answer to 1G: 1C|<at>|a|<i>/<n>|...); 1C|<at>|x withdraws
--- (in an answer to 1G, 1C|<at>|x|<when>: a withdrawal the asker may have missed, at its own time)
+-- 255 bytes, i of n under one stamp: 1C|<at>|<i>/<n>|... (an answer to 1G: 1C|<at>|a<publisher>|<i>/<n>|...).
+-- 1C|<at>|x||<publisher> withdraws (in an answer to 1G, 1C|<at>|x|<when>|<publisher>: a withdrawal the asker may
+-- have missed, at its own time). A set is its stamp and its publisher: two officers' in the same second are two
 ----------------------------------------------------------------------------
 local LIMIT, PARTS_MAX = 255, 8
 function H.Messages(set, answer)
   local function w(s, max) return wire(clean(s, max)) end
-  local parts = { "h=" .. table.concat({ set.kind or "n", w(set.title, TITLE), w(set.by, NAME), set.period or "", tostring(tonumber(set.ranked) or "") }, ",") }
+  local pub = (set.pub or sfxOf(set.byGuid) or ""):gsub("[^%x]", "")
+  local parts = { "h=" .. table.concat({ set.kind or "n", w(set.title, TITLE), w(set.by, NAME), set.period or "", tostring(tonumber(set.ranked) or ""), pub }, ",") }
   for _, c in ipairs(set.cards or {}) do
     parts[#parts + 1] = "c=" .. table.concat({ (c.sfx or sfxOf(c.guid) or ""):gsub("[^%w]", ""), w(c.name, NAME), w(c.class, 12), w(c.race, 12), tostring(tonumber(c.sex) or ""),
       CODE[c.kind] or "O", tostring(tonumber(c.icon) or ""), w(c.source, 24), w(c.title, TITLE), w(c.line, LINE), w(bare(c.value), VALUE), w(c.valueLabel, VLABEL) }, ",")
   end
-  local head = "1C|" .. string.format("%.0f", set.at or 0) .. "|" .. (answer and "a|" or "")
+  local head = "1C|" .. string.format("%.0f", set.at or 0) .. "|" .. (answer and ("a" .. pub .. "|") or "")
   local bodies, cur = {}, nil
   for _, p in ipairs(parts) do
     if cur and #head + 4 + #cur + 1 + #p > LIMIT then bodies[#bodies + 1] = cur; cur = nil end
@@ -497,6 +500,7 @@ function H.Parse(at, body)
       set.title, set.by = clean(f[2], TITLE), clean(f[3], NAME)
       set.period = PERIOD_WORD[f[4] or ""] and f[4] or nil
       set.ranked = tonumber(f[5] or "")
+      set.pub = (f[6] or ""):match("^%x+$")
     elseif k == "c" and #set.cards < 5 then
       local f = fields(v)
       local kind = KIND_OF[f[6] or ""]
@@ -612,7 +616,7 @@ function H:Publish(set, chatLine)
   local at = math.floor(now())
   if at <= H.Newest() then at = H.Newest() + 1 end
   local out = { at = at, kind = set.kind or "n", title = clean(set.title, TITLE), period = set.period, ranked = set.ranked, cards = {},
-    by = C.Roster:MyDisplay(), byGuid = C.MyGUID(), got = now() }
+    by = C.Roster:MyDisplay(), byGuid = C.MyGUID(), pub = sfxOf(C.MyGUID()), got = now() }
   for i, c in ipairs(set.cards) do if i <= 5 then out.cards[i] = sendable(c) end end
   for _, m in ipairs(H.Messages(out, false)) do C.Comm.Queue({ msg = m }) end
   keep(out)
@@ -640,30 +644,35 @@ function H:Publish(set, chatLine)
   return true
 end
 -- Withdraw (officers, a published set in News): 1C with its stamp and x; gone from every client's News
-function H:Withdraw(at)
+function H:Withdraw(at, pub)
   at = tonumber(at)
   if not (at and officer()) then return false end
-  C.Comm.Queue({ msg = "1C|" .. string.format("%.0f", at) .. "|x" })
-  H:Withdrawn(at)
+  pub = type(pub) == "string" and pub:match("^%x+$") or nil
+  C.Comm.Queue({ msg = "1C|" .. string.format("%.0f", at) .. "|x" .. (pub and ("||" .. pub) or "") })
+  H:Withdrawn(at, nil, pub)
   return true
 end
+-- a set by its stamp and publisher (pub nil: any set of that stamp, as one with no publisher named is), and the key
+-- a withdrawal is kept by
+local function samePub(a, b) return a == nil or b == nil or a == b end
+local function goneKey(at, pub) return string.format("%.0f", at) .. (pub and (":" .. pub) or "") end
 -- (when: the withdrawal's own time, where an answer to 1G tells one this client missed)
-function H:Withdrawn(at, when)
+function H:Withdrawn(at, when, pub)
   local d = H.DB()
   local sets = d.sets
   local gone = {}
-  for i = #sets, 1, -1 do if tonumber(sets[i].at) == at then gone[#gone + 1] = table.remove(sets, i) end end
+  for i = #sets, 1, -1 do if tonumber(sets[i].at) == at and samePub(pub, sets[i].pub) then gone[#gone + 1] = table.remove(sets, i) end end
   if officer() then for _, set in ipairs(gone) do self:Ungrey(set) end end
-  local t = now()
-  d.gone[tostring(at)] = d.gone[tostring(at)] or ((type(when) == "number" and when > 0 and when <= t + 60) and when or t)
+  local t, key = now(), goneKey(at, pub)
+  d.gone[key] = d.gone[key] or ((type(when) == "number" and when > 0 and when <= t + 60) and when or t)
   -- (the last 30 withdrawals kept, so an answer to 1G brings none back)
   local n, oldest, ok = 0, nil, nil
   for k, t in pairs(d.gone) do n = n + 1; if not oldest or t < oldest then oldest, ok = t, k end end
   if n > SETS and ok then d.gone[ok] = nil end
-  for i = #H.toasts, 1, -1 do if H.toasts[i].at == at then table.remove(H.toasts, i) end end
+  for i = #H.toasts, 1, -1 do if H.toasts[i].at == at and samePub(pub, H.toasts[i].pub) then table.remove(H.toasts, i) end end
   local CF = C.CardFrame
-  if CF and CF.set and CF.set.at == at and CF.frame and CF.frame:IsShown() then CF.frame:Hide() end
-  if H.toastNow and H.toastNow.at == at and H.toastFrame then H.toastFrame:Hide(); H.toastNow = nil end
+  if CF and CF.set and CF.set.at == at and samePub(pub, CF.set.pub) and CF.frame and CF.frame:IsShown() then CF.frame:Hide() end
+  if H.toastNow and H.toastNow.at == at and samePub(pub, H.toastNow.pub) and H.toastFrame then H.toastFrame:Hide(); H.toastNow = nil end
   refresh()
 end
 
@@ -682,15 +691,19 @@ function H:ReceiveSet(text, sender)
   if not at then return end
   -- (from an officer by the roster, not marked untrusted: a member's or an untrusted officer's set is nobody's)
   if not C.Roster:OfficerVoice(sender) then H.refused = (H.refused or 0) + 1; return end
-  -- (a withdrawal: x, or x|<when> in an answer to 1G for a client that missed it)
-  local xw = rest:match("^x|?(%d*)$")
-  if xw then
-    if xw ~= "" then H.answerHeard = true end
-    H.goneHeard[tostring(at)] = gtime()
-    return self:Withdrawn(at, tonumber(xw))
+  -- (a withdrawal: x||<publisher>, or x|<when>|<publisher> in an answer to 1G for a client that missed it)
+  local xr = rest:match("^x(.*)$")
+  if xr then
+    local xw, xp = xr:match("^|(%d*)|?(%x*)$")
+    if xr ~= "" and not xw then return end
+    if xw and xw ~= "" then H.answerHeard = true end
+    xp = (xp and xp ~= "") and xp or nil
+    H.goneHeard[goneKey(at, xp)] = gtime()
+    return self:Withdrawn(at, tonumber(xw or ""), xp)
   end
-  local answer = rest:sub(1, 2) == "a|"
-  if answer then rest = rest:sub(3) end
+  local apub = rest:match("^a(%x*)|")
+  local answer = apub ~= nil
+  if answer then rest = rest:sub(#apub + 3) end
   local i, n, body = rest:match("^(%d+)/(%d+)|(.*)$")
   i, n = tonumber(i), tonumber(n)
   if not (i and n and i >= 1 and i <= n and n <= PARTS_MAX) then return end
@@ -704,7 +717,7 @@ function H:ReceiveSet(text, sender)
   -- (parts gathered by sender and stamp; a set half heard two minutes ago is forgotten, and 64 wait at most)
   local t, count = gtime(), 0
   for k, p in pairs(H.parts) do if t - p.t > 120 then H.parts[k] = nil else count = count + 1 end end
-  local key = sender .. "|" .. at
+  local key = sender .. "|" .. at .. "|" .. (apub or "")
   local p = H.parts[key]
   if not p or p.n ~= n then
     if count >= 64 then return end
@@ -722,10 +735,12 @@ end
 -- a whole set heard: kept, its items greyed in this officer's queue, shown once
 function H:Took(set, sender, answer)
   local d = H.DB()
-  if d.gone[tostring(set.at)] then return end
-  for _, s in ipairs(d.sets) do if tonumber(s.at) == set.at then return end end
   local R = C.Roster
   local g = R:GuidOf(sender)
+  -- (a live set's publisher is its sender; an answer's, what its header says)
+  if not answer then set.pub = sfxOf(g) or set.pub end
+  if d.gone[goneKey(set.at)] or (set.pub and d.gone[goneKey(set.at, set.pub)]) then return end
+  for _, s in ipairs(d.sets) do if tonumber(s.at) == set.at and samePub(s.pub, set.pub) then return end end
   local m = g and R.byGuid[g]
   -- (a live set is named by its sender's roster entry; an answer was published by whom its header says)
   if not answer then set.by = (m and m.name and C.Short(m.name)) or R:Display(sender) end
@@ -853,11 +868,12 @@ function H:Answer(askedAt, recHeard0)
   if goneSince then
     local gone = {}
     for k, t in pairs(H.DB().gone) do
-      if type(t) == "number" and t > goneSince and tonumber(k) and not ((H.goneHeard[k] or -1) >= (askedAt or 0)) then gone[#gone + 1] = { at = tonumber(k), t = t } end
+      local at, pub = tostring(k):match("^(%d+):?(%x*)$")
+      if at and type(t) == "number" and t > goneSince and not ((H.goneHeard[k] or -1) >= (askedAt or 0)) then gone[#gone + 1] = { at = tonumber(at), pub = pub, t = t } end
     end
     table.sort(gone, function(x, y) return x.t > y.t end)
     for i = 1, math.min(#gone, ANSWER_SETS) do
-      C.Comm.Queue({ msg = "1C|" .. string.format("%.0f", gone[i].at) .. "|x|" .. string.format("%.0f", gone[i].t) })
+      C.Comm.Queue({ msg = "1C|" .. string.format("%.0f", gone[i].at) .. "|x|" .. string.format("%.0f", gone[i].t) .. "|" .. gone[i].pub })
     end
   end
   -- (another officer's answer begun since the ask said what it covers: the askers count as answered all the same)
@@ -1572,7 +1588,7 @@ function H.DrawNews(ui)
           MenuUtil.CreateContextMenu(r, function(_, root)
             root:CreateTitle(set.title or "")
             if set.kind == "h" or set.kind == "s" then root:CreateButton("Update", function() local ok, why = H:Update(set); if not ok and why then C.Print("not updated: " .. why .. ".") end end) end
-            root:CreateButton("Withdraw", function() H:Withdraw(set.at) end)
+            root:CreateButton("Withdraw", function() H:Withdraw(set.at, set.pub) end)
           end)
         end
         return
