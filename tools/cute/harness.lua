@@ -14426,6 +14426,51 @@ do local function cardsStage()
   end)
   said[#said + 1] = "a fastest clear's record the larger of two agreeing times, so one voice under it neither lowers nor holds it"
 
+  -- a NEW RECORD says a group cleared it together only where its voices came together: two runs' times within five
+  -- seconds of each other, two hours apart, change the record quietly; a group's own a few seconds apart toast, its
+  -- mates the voices that came with it
+  isolated({ lmember("Quay", 1, "PALADIN", 30), lmember("Quod", 3, "MAGE", 20), lmember("Quip", 3, "ROGUE", 20), lmember("Quiz", 3, "DRUID", 20), lmember("Qadi", 3, "HUNTER", 20) }, function()
+    local quay = cchar("Quay", 1, { class = "PALADIN" })
+    local quod, quip = cchar("Quod", 3, { class = "MAGE", level = 20 }), cchar("Quip", 3, { class = "ROGUE", level = 20 })
+    local quiz, qadi = cchar("Quiz", 3, { class = "DRUID", level = 20 }), cchar("Qadi", 3, { class = "HUNTER", level = 20 })
+    local all = { quay, quod, quip, quiz, qadi }
+    for _, c in ipairs(all) do login(c) end
+    tickAll(100)
+    -- (the Deadmines' range, as scenario 17 learns it: two members kill its first boss together at 20)
+    local function enter(c, kind, id, name) c.o.instance, c.o.instanceID, c.o.instName = kind, id, name; fire(c, "PLAYER_ENTERING_WORLD", false, false) end
+    quod.o.party, quip.o.party = { "Quip" }, { "Quod" }
+    for _, c in ipairs({ quod, quip }) do enter(c, "party", 36, "The Deadmines"); fire(c, "ENCOUNTER_END", 1230, "Rhahk'Zor", 1, 5, 1, {}) end
+    tickAll(35)
+    for _, c in ipairs({ quod, quip }) do enter(c, "none", 0, nil) end
+    quod.o.party, quip.o.party = nil, nil
+    tickAll(35)
+    assert(Rc(quay):SetOn("cc", true), "Fastest clears on")
+    tickAll(5)
+    local function toasts(c) return H(c).toastsShown or 0 end
+    assert(Rc(quod).OwnClear(36, 2000) and Rc(quip).OwnClear(36, 1999), "the first record")
+    tickAll(125)
+    assert(recOf(quay, "c36") and recOf(quay, "c36").v == 2000, "the first record, quietly")
+    -- two runs two hours apart whose times agree within five seconds: the record moves, nobody toasts
+    assert(Rc(quiz).OwnClear(36, 1000), "one run's clear")
+    tickAll(125)
+    tickAll(7200)
+    assert(Rc(qadi).OwnClear(36, 1003), "another run's, two hours on")
+    tickAll(125)
+    for _, c in ipairs(all) do
+      local r = recOf(c, "c36")
+      assert(r and r.v == 1003 and toasts(c) == 0 and newsRecords(c) == 0, c.o.name .. ": two runs' times are no group's: quiet, " .. tostring(r and r.v) .. ", " .. toasts(c))
+    end
+    -- one group's two voices a few seconds apart: the toast, with one mate
+    assert(Rc(quod).OwnClear(36, 900) and Rc(quip).OwnClear(36, 898), "one group's clear")
+    tickAll(125)
+    for _, c in ipairs(all) do
+      local r = recOf(c, "c36")
+      assert(r and r.v == 900 and r.g == quod.o.guid and toasts(c) == 1 and newsRecords(c) == 1 and H(c).News("records")[1].cards[1].line == "With 1 guild mate.",
+        c.o.name .. ": one group's record, its mate: " .. tostring(r and r.v) .. ", " .. toasts(c))
+    end
+  end)
+  said[#said + 1] = "a NEW RECORD only where its voices came together; two runs' agreeing times two hours apart quiet"
+
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end
 

@@ -25,8 +25,9 @@
 --            R:OfficerVoice passes, newest wins, a change sent at once and one a minute at most; an officer answering a
 --            1G whose records stamp is older sends it (Halls.lua). Turning a record on fills it with today's best
 --            silently
---   Shown    a fastest clear that is on, beaten by 5% or more by voices all within the instance's level range (Rules.lua
---            rule 3; none known, none shown) and not by its own holder, is a NEW RECORD on every client: a set of one
+--   Shown    a fastest clear that is on, beaten by 5% or more by voices that came live together (one group's, within
+--            30 minutes of each other) all within the instance's level range (Rules.lua rule 3; none known, none
+--            shown) and not by its own holder, is a NEW RECORD on every client: a set of one
 --            card kept in News and toasted (Halls.lua: once a day an instance, within the toasts' limits); nothing is
 --            sent, every client decides alone. Any other record that is on, taken by another member live, is a
 --            "Record?" row in each officer's own Queue, published by an officer or not at all. A record that is off
@@ -47,6 +48,7 @@ local SEND_GAP = 60         -- 1O: one message a minute at most
 local CLEARS_CHANNEL = 300  -- clear stats defined from the channel at most (your own always are)
 local CODES_MAX, LIMIT = 60, 255
 local CLEAR_LO, CLEAR_HI = 120, 6 * 3600
+local TOGETHER = 1800       -- a NEW RECORD's voices came live within this many seconds of its holder's (one group's)
 local DOT = " \194\183 " -- (a middle dot in Windows-1252; the file stays ASCII)
 local WHITE, INK, DIM, MUTE = { 0.96, 0.96, 0.96 }, { 0.86, 0.86, 0.86 }, { 0.58, 0.58, 0.58 }, { 0.52, 0.52, 0.52 }
 local TROPHY = 311945 -- INV_Misc_Trophy_Argent
@@ -271,6 +273,10 @@ function Rec:Seen(id, g, v, live, from)
   changed()
 end
 
+-- when a clear's value came live from a member this session (Rec.came[id][guid], GetTime): a NEW RECORD's voices are
+-- one group's where they came together
+Rec.came = {}
+local function came(id, g) local t = Rec.came[id]; if not t then t = {}; Rec.came[id] = t end t[g] = gtime() end
 -- the voices for a clear: every member with a value for it that counts, smallest first, ties to the smaller GUID
 local function voices(id)
   local out = {}
@@ -334,6 +340,14 @@ function Rec:Clear(n, live)
   -- shown: on, live, a record before it beaten by 5% or more by another holder, every voice within the range
   local loud = live and Rec.IsOn(id) and prev ~= nil and prev.g ~= best.g and best.v <= prev.v * BETTER
   if loud then
+    -- (one group's voices came live together, this session: two runs' times within five seconds of each other, hours
+    -- apart, are no group's clear; the card's mates are the voices that came with it)
+    local came, together = Rec.came[id] or {}, {}
+    local t0 = came[best.g]
+    for _, b in ipairs(group) do if t0 and came[b.g] and math.abs(came[b.g] - t0) <= TOGETHER then together[#together + 1] = b end end
+    if #together < 2 then loud = false else group = together end
+  end
+  if loud then
     local top = Rec.RangeTop(n)
     if not top then loud = false end
     for _, b in ipairs(group) do
@@ -341,7 +355,7 @@ function Rec:Clear(n, live)
       if not (top and m and type(m.level) == "number" and m.level <= top) then loud = false end
     end
   end
-  if loud then self:Announce(n, E[id]) else Rec.quiet = Rec.quiet + 1 end
+  if loud then E[id].m = #group - 1; self:Announce(n, E[id]) else Rec.quiet = Rec.quiet + 1 end
   changed()
 end
 
@@ -446,7 +460,7 @@ function Rec:After(sender, kv, delta)
     -- (only what the roster kept: a value it dropped as one that cannot be is none)
     if type(id) == "string" and type(v) == "number" and e.stats[id] == v and Rec.Kind(id) then
       local p = id:sub(1, 1)
-      if p == "c" then clears = clears or {}; clears[#clears + 1] = tonumber(id:sub(2))
+      if p == "c" then clears = clears or {}; clears[#clears + 1] = tonumber(id:sub(2)); if live then came(id, g) end
       elseif p == "g" then
         -- (a statistics pass is a thousand of them: only the ones added are looked at)
         on, E = on or Rec.List().codes, E or Rec.Entries()
@@ -460,6 +474,7 @@ end
 function Rec:Own(id, old, new)
   if type(id) ~= "string" or type(new) ~= "number" or not Rec.Kind(id) then return end
   local live = C.Sample.loaded == true and (old ~= nil or (Rec.loginAt ~= nil and gtime() - Rec.loginAt >= LIVE_AFTER))
+  if live and id:sub(1, 1) == "c" then came(id, C.MyGUID()) end
   self:Seen(id, C.MyGUID(), new, live)
 end
 -- (the five-second ticker moves time played: a stat that holds no record returns here, making nothing)
