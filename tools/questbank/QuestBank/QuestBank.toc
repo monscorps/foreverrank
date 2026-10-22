@@ -25,6 +25,7 @@ Minimap.lua
 DungeonMap.lua
 Glow.lua
 Walk.lua
+Remind.lua
 Camp.lua
 Model.lua
 Legacy.lua

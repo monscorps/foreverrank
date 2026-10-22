@@ -1,6 +1,7 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- The step frame (6.0): the Guide's current step, the next two greyed beneath, a quest-item button when the step needs
--- one, "about 14 min to level 6", the trainer reminder, and the party's steps. Each step says where (the launch round):
+-- one, "about 14 min to level 6", the one line of guidance that means going somewhere (the hud round: Train, Flight
+-- path, Sleeping bag, Remind.Step), and the party's steps. Each step says where (the launch round):
 -- the kind's game icon, its name, who and where ("Mathrengyl Bearwalker - Darnassus") and the minutes to get there for
 -- the step now; the next two, name and place on one line with the minutes where a new trip starts; every row's tooltip
 -- the whole step, the NPC and place, minutes and XP. Small, movable (a drag;
@@ -19,6 +20,7 @@ local WIDTH, PAD, ROW = 260, 12, 18 -- (PAD: the text sits inside the 12 px bord
 -- the step now's row: its name, then who and where 20 px down (clear of the item button at the frame's top right);
 -- the text starts after the icon (TEXT_X) and leaves the minutes their column (MINS_W)
 local ROW1, TEXT_X, MINS_W = 34, 20, 44
+local LINE_MINS = 38 -- (the reminder line's minutes: "12 min" at 11 px)
 local INNER = WIDTH - PAD * 2
 -- (the windows round) a host's look, QB.Skin.stop (Cute_Quest's): the frame as a stop of the route, standing on the
 -- world with no backdrop (the setting guide.backdrop brings the host's flat one back) and its text outlined and
@@ -340,9 +342,34 @@ local function build()
   f.time = fs(f, small, soft, WIDTH - PAD * 2)
   f.time:SetPoint("TOPLEFT", PAD, -PAD - ROW1 - ROW * 2)
   if STOP then f.time:Hide() end
-  f.remind = fs(f, small, "GOLD", WIDTH - PAD * 2)
-  f.remind:SetPoint("TOPLEFT", PAD, -PAD - ROW * 4)
-  f.remind:Hide()
+  -- (the hud round) the line: a 14 px icon, its words at 12 px in the ink, the minutes at 11 px on the right; a 2 px bar
+  -- at its left in its category's colour (the sleeping bag's quest gold); a click shows its place on the arrow, a
+  -- right-click is Remind's menu (Not now, Never: the line's, the step frame's own menu stays the steps')
+  local line = CreateFrame("Button", nil, f)
+  line:SetSize(INNER, ROW)
+  line:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  line.icon = line:CreateTexture(nil, "ARTWORK")
+  line.icon:SetSize(14, 14)
+  line.icon:SetPoint("TOPLEFT", STOP and 5 or 1, -2)
+  line.bar = line:CreateTexture(nil, "ARTWORK")
+  line.bar:SetSize(2, 14)
+  line.bar:SetPoint("TOPLEFT", STOP and 1 or -4, -2)
+  line.bar:Hide()
+  line.text = fs(line, 12, "INK", INNER - TEXT_X - LINE_MINS)
+  line.text:SetPoint("TOPLEFT", TEXT_X, -2)
+  line.mins = fs(line, 11, "INK", LINE_MINS)
+  line.mins:SetJustifyH("RIGHT")
+  line.mins:SetPoint("TOPRIGHT", 0, -3)
+  line:SetScript("OnClick", QB.Safe(function(self, button)
+    local rec = self.rec
+    if not rec then return end
+    if button == "RightButton" then if QB.Remind and QB.Remind.Menu then QB.Remind.Menu(self) end return end
+    if QB.Remind and QB.Remind.Go then QB.Remind.Go(rec) end
+  end, "step frame: line"))
+  line:SetScript("OnEnter", QB.Safe(function(self) if self.rec and QB.Remind and QB.Remind.Tip then QB.Remind.Tip(self, self.rec) end end, "step frame: line"))
+  line:SetScript("OnLeave", rowLeave)
+  line:Hide()
+  f.remind = line
   -- the once-ever note where the game's quest tracker went (SF.Tracker): two lines, wrapped
   f.note = fs(f, small, soft, WIDTH - PAD * 2)
   f.note:SetWordWrap(true)
@@ -501,6 +528,32 @@ end
 
 -- what the lines were last drawn from (SF.Refresh); -1: draw them again
 local lastVer, lastTime, lastRemind, lastMembers, lastNote, lastMins = -1, nil, false, -1, false, nil
+-- (the hud round) the line's record, its words and its minutes as last drawn: Remind tells after each refresh
+local lineRec, lineText, lineWord
+function SF.RemindChanged(rec)
+  local text, word = rec and rec.text, rec and rec.word
+  if rec == lineRec and text == lineText and word == lineWord then return end
+  lineRec, lineText, lineWord = rec, text, word
+  lastVer = -1
+  if SF.frame and SF.frame:IsShown() then SF.Refresh() end
+end
+-- the line drawn from its record: its icon (an atlas where the client has it, else the file, at its corners), words,
+-- minutes and bar
+local function drawLine(line, rec)
+  line.rec = rec
+  if line.qbTex ~= rec.tex or line.qbAtlas ~= rec.atlas then
+    line.qbTex, line.qbAtlas = rec.tex, rec.atlas
+    QB.Art(line.icon, rec.atlas, rec.tex or QB.Data.TEX.questGeneric)
+    if rec.tc and not rec.atlas then line.icon:SetTexCoord(rec.tc[1], rec.tc[2], rec.tc[3], rec.tc[4]) else line.icon:SetTexCoord(0, 1, 0, 1) end
+  end
+  -- (the words take the minutes' room where there are none)
+  local tw = INNER - TEXT_X - (rec.mins and LINE_MINS or 0)
+  if line.text:GetWidth() ~= tw then line.text:SetWidth(tw); line.text.qbText, line.text.qbA = nil, nil end
+  rowText(line.text, rec.text or "", nil)
+  line.mins:SetText(rec.mins and rec.word or "")
+  local col = rec.cat == "xp" and QUEST or nil
+  if col then line.bar:SetColorTexture(col[1], col[2], col[3], 1); line.bar:Show() else line.bar:Hide() end
+end
 
 -- the fight over (PLAYER_REGEN_ENABLED, from Core.lua's frame): a change that waited goes through now. The frame
 -- shown: its next refresh does it all; hidden (Hide in a fight, the Guide turned off): its OnUpdate never runs, so the
@@ -918,7 +971,8 @@ function SF.Refresh()
   if SF.pendingItem and not fighting() then lastVer = -1 end
   local steps = G.Steps()
   local text = G.TimeToLevel()
-  local remind = (G.reminder and GetTime and GetTime() < G.reminder) and true or false
+  local rl = G.Reminder and G.Reminder() or nil
+  local remind = rl ~= nil
   local members = G.MemberSteps() -- (the list stands until G.memberVer moves: no table and no string a tick)
   if SF.notePending then
     SF.notePending, SF.noteUntil = nil, (GetTime and GetTime() or 0) + NOTE_S
@@ -981,19 +1035,23 @@ function SF.Refresh()
     r:SetShown(i == 1 or s ~= nil)
   end
   f.time:SetText((not STOP and text) or "")
-  f.remind:SetText(remind and "New spells at your class trainer" or "")
-  f.remind:SetShown(remind)
-  -- (the quests under the steps start where nothing above them moves: the time line's row kept for them)
+  -- (the quests under the steps start where nothing above them moves: the time line's row kept for them; the line of
+  -- guidance after the next two steps, before the quests you hold)
   local nq = settings().quests or 0
   local y
   if STOP then y = PAD + ROW1 + 6 + ROW * 2 + 4
   else y = PAD + ROW1 + ROW * 2 + ((text or nq > 0) and ROW or 0) end
-  y = SF.DrawQuests(f, y, steps, nq)
   if remind then
+    drawLine(f.remind, rl)
     f.remind:ClearAllPoints()
     f.remind:SetPoint("TOPLEFT", PAD, -y)
+    f.remind:Show()
     y = y + ROW
+  else
+    f.remind:Hide()
+    f.remind.rec = nil
   end
+  y = SF.DrawQuests(f, y, steps, nq)
   f.note:SetShown(note)
   if note then
     f.note:ClearAllPoints()
@@ -1019,7 +1077,12 @@ function SF.Refresh()
     y = y + ROW
   end
   for i = lines + 1, #f.members do f.members[i]:Hide() end
-  if f:GetHeight() ~= y + PAD then f:SetHeight(y + PAD); arrowFollows() end
+  -- (the hud round) a secure button anchored to the frame (the step's item, a quest's) makes the frame's size anchoring-
+  -- restricted in a fight: it holds still, laid out again at the fight's end (SF.OnRegen)
+  local anchored = fighting() and f.item ~= nil and f.item:IsShown()
+  if fighting() and not anchored then for _, b in ipairs(f.qitems) do if b:IsShown() then anchored = true end end end
+  if anchored then SF.pendingItem = true
+  elseif f:GetHeight() ~= y + PAD then f:SetHeight(y + PAD); arrowFollows() end
   SF.RefreshItem(steps[1])
   SF.RefreshQuestItems()
   SF.MarkReward()
