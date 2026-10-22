@@ -23034,6 +23034,16 @@ do
     assert(not shownCamp(c, "eat"), "Never: Eat")
     local hidden = R.Hidden("camp")
     assert(#hidden == 1 and hidden[1][1] == "eat" and hidden[1][2] == "Eat", "under its row: Hidden: Eat")
+    -- (every Never a reminder can write belongs to a row, so that row's Show brings it back: an elixir's group too)
+    for _, key in ipairs({ "buff:1459", "weapon", "party", "sit", "place", "fire", "wood", "cook", "eat", "sleep", "repair", "bags", "ammo",
+      "hearth", "buy", "talents", "use:9002", "train", "flight", "bagchain", "flask:9187" }) do
+      assert(R.RowOf(key), "the Never " .. key .. " has a row")
+    end
+    for _, pv in ipairs(R.list) do assert(R.RowOf(pv.key), "the reminder " .. pv.key .. " has a row") end
+    R.SetNever("flask:9187", "Elixir of Greater Agility")
+    local fh = R.Hidden("buffs")
+    assert(#fh == 2 and fh[1][1] == "flask:9187" and fh[2][1] == "buff:168", "under Your buffs and weapon: the elixir and Frost Armor: " .. #fh)
+    R.SetNever("flask:9187", nil, false)
     -- a reload, and another character on the account
     local saved = c.env.QuestBankDB
     local r = hud("Choosy", "MAGE", "Mage", 8, { [1459] = true, [168] = true }, { level = 20, bags = { { 2680, 2 } }, saved = saved })

@@ -110,11 +110,12 @@ function R.SetRow(key, v)
   r[key] = v
   R.Dirty("all")
 end
--- the row a Never key belongs to: its provider's, else by its kind (buff:<id> your buffs, use:<id> upkeep)
+-- the row a Never key belongs to: its provider's, else by its kind (buff:<id> and an elixir's group, flask:<id>, your
+-- buffs, the row Before the pull reads; use:<id> upkeep), so the row's Show brings every one back
 local ROW_OF = { weapon = "buffs", party = "party", wood = "camp", cook = "camp", bagchain = "camp" }
 function R.RowOf(key)
   if type(key) ~= "string" then return nil end
-  if key:find("^buff:") then return "buffs" end
+  if key:find("^buff:") or key:find("^flask:") then return "buffs" end
   if key:find("^use:") then return "upkeep" end
   local p = R.byKey[key]
   return (p and p.row) or ROW_OF[key]
