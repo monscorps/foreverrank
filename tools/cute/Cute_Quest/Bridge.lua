@@ -275,12 +275,12 @@ Cute.QuestSetup = {
     local s = E:Settings()
     if p.step ~= nil then s.guide.frame = p.step and true or false; s.arrow = p.step and true or false end
     if p.campOn then
+      -- (the module on: Reminders on screen with it, its only master, PageCamp.lua's Cp.Toggle; an unticked Reminders
+      -- row is the module's to answer, the card's Start choosing it)
       if type(s.cuteOff) == "table" then s.cuteOff.camp = nil end
-      if p.camp ~= nil then
-        local r = E.Remind and E.Remind.Settings() or s.remind
-        r.on = p.camp and true or false
-        s.campBar = r.on
-      end
+      local r = E.Remind and E.Remind.Settings() or s.remind
+      r.on = true
+      s.campBar = true
     end
     -- (the interact light is its own row, whatever the Reminders row says)
     if p.light ~= nil then s.glow.on = p.light and true or false end

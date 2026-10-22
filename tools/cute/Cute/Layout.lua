@@ -229,6 +229,15 @@ local function nudge(mv, key)
   dropped(mv)
   return true
 end
+-- a piece's own switch. (The hud review) Reminders' is the Reminders module (Cute_Quest's camp), Reminders' and Buffs'
+-- only master: Hide turns the module off and Show on, and Buffs shown while it is off turns it on too; every mover
+-- over its piece again after, Buffs going with Reminders
+local function switch(m, on)
+  local mod = C.Modules and C.Modules.byId.camp
+  if mod and (m.key == "camp" or (m.key == "buffs" and on and not mod.active)) then C.Modules.Set(mod.key, on) end
+  if m.key ~= "camp" or not mod then m.switch(on) end
+  syncAll()
+end
 -- its right-click: Reset, four sizes, its own switch
 local function menu(mv)
   local m = mover(mv.key)
@@ -243,7 +252,7 @@ local function menu(mv)
       if root.CreateRadio then root:CreateRadio(pct .. "%", function() return pctOf(m) == pct end, pick)
       else root:CreateButton(pct .. "%" .. (now == pct and "  (now)" or ""), pick) end
     end
-    root:CreateButton(m.on() and "Hide" or "Show", C.Safe(function() m.switch(not m.on()); sync(mv) end, "layout: show " .. m.key))
+    root:CreateButton(m.on() and "Hide" or "Show", C.Safe(function() switch(m, not m.on()) end, "layout: show " .. m.key))
   end)
 end
 local function makeMover(key)

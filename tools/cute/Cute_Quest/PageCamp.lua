@@ -54,10 +54,17 @@ end
 
 -- the switch: Reminders and Buffs on screen (remind.on) with the box; QB.Follow keeps its value across off and on, and
 -- every row keeps its own. The interact light is its own row (and the first-run card's), never the module's. Before
--- the engine's login the flag alone: Remind's first refresh reads it
+-- the engine's login the flag alone: Remind's first refresh reads it. (The hud review) the module is the only master:
+-- on, Reminders are on screen whatever was left off before (a 0.7 save's camp bar switch, the first-run card's
+-- unticked row, a mover's Hide), so the box and the screen never part
 function Cp.Toggle(on)
   if QB.dormant or not E or not QB.ready then return end
-  if not QB.Follow("camp", { "remind.on" }, on) or not E.loginDone then return end
+  local changed = QB.Follow("camp", { "remind.on" }, on)
+  if on and E.Remind and E.Remind.Settings then
+    local r = E.Remind.Settings()
+    if r.on == false then r.on = true; E:Settings().campBar = true; changed = true end
+  end
+  if not changed or not E.loginDone then return end
   if E.Remind and E.Remind.Refresh then E.Remind.Refresh() end
 end
 QB.Toggles.camp = Cp.Toggle

@@ -15291,6 +15291,71 @@ do
   end)
 end
 
+-- The hud review: the Reminders module is Reminders' and Buffs' only master. H5 the module on with remind.on left off
+-- (a 0.7 camp bar switch, a mover's Hide before this): on at the load. H6 the first-run card's Reminders row unticked
+-- with the light ticked: wherever the module ends up, Reminders follow it. H7 a mover's Hide on Reminders turns the
+-- module off and Show on, Buffs shown while it is off turns it on too, and the next Move frames has the mover again
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local said = {}
+    local state = {}
+    local function client(card) return newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true, card = card })) end
+    local function lastMenu(c) return c.contextMenus[#c.contextMenus] end
+    local function entry(list, text) for _, e in ipairs(list or {}) do if e.text == text then return e end end end
+    -- H5
+    local c = client()
+    c.env.CuteQuestDB = { settings = { cuteDefaults = 2, v544 = true, v600 = true, campBar = false, guide = { on = true, frame = true },
+      remind = { v = 2, on = false, never = {} }, glow = { on = false, style = "sparkle" } } }
+    login(c, { chars = { ["Rone-Forever"] = { modules = { ["Cute_Quest:camp"] = true } } } }); tickAll(6)
+    local s = c.env.CuteQuestDB.settings
+    assert(c.C.Modules.byId.camp.active and s.remind.on == true and s.campBar == true, "the module on: Reminders on screen, whatever was left off: " .. tostring(s.remind.on))
+    said[#said + 1] = "the module on: Reminders on, whatever was left off"
+    -- H7
+    local QB = c.addons[2].private
+    QB.Remind.Refresh()
+    local L = c.C.Layout
+    assert(L.Enter() and L.movers.camp:IsShown() and L.movers.buffs:IsShown(), "layout mode: Reminders and Buffs")
+    local mv, bmv = L.movers.camp, L.movers.buffs
+    mv.__scripts.OnClick(mv, "RightButton")
+    entry(lastMenu(c), "Hide").set()
+    assert(not c.C.Modules.byId.camp.active and s.remind.on == false and bmv.scaleText:GetText():find("Hidden", 1, true), "Hide on Reminders: the module off, Buffs' mover says so too")
+    bmv.__scripts.OnClick(bmv, "RightButton")
+    entry(lastMenu(c), "Show").set()
+    assert(c.C.Modules.byId.camp.active and s.remind.on == true and mv.scaleText:GetText() == "100%", "Show on Buffs: the module on, both back")
+    mv.__scripts.OnClick(mv, "RightButton"); entry(lastMenu(c), "Hide").set()
+    mv.__scripts.OnClick(mv, "RightButton"); entry(lastMenu(c), "Show").set()
+    assert(c.C.Modules.byId.camp.active and s.remind.on == true, "Hide and Show on Reminders: the module off and on")
+    mv.__scripts.OnClick(mv, "RightButton"); entry(lastMenu(c), "Hide").set()
+    L.Done()
+    c.C.Modules.Set("Cute_Quest:camp", true); tick(c, 1)
+    assert(s.remind.on == true and L.Enter() and L.movers.camp:IsShown(), "the module on again: Reminders back, its mover at the next Move frames")
+    L.Done()
+    said[#said + 1] = "a mover's Hide and Show are the module's"
+    leave(c)
+    -- H6
+    local d = client(true)
+    login(d); tick(d, 3)
+    local function row(label) return checkBox(d, function(cb) return cb.label and cb.label:GetText() == label end) end
+    local rem = row("Reminders") or row("Camp bar and missing buffs")
+    assert(rem and rem:GetChecked() and row("Interact light"):GetChecked(), "the card: Reminders' row and the light, ticked")
+    click(rem)
+    local start
+    for _, b in ipairs(d.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == "Start" then start = b end end
+    press(start)
+    local db, qdb = d.env.CuteDB, d.env.CuteQuestDB
+    leave(d)
+    local e = client()
+    e.env.CuteQuestDB = qdb
+    login(e, db, true); tickAll(6)
+    local es = e.env.CuteQuestDB.settings
+    assert((e.C.Modules.byId.camp.active == true) == (es.remind.on == true), "after the reload: Reminders follow the module: " .. tostring(e.C.Modules.byId.camp.active) .. " / " .. tostring(es.remind.on))
+    said[#said + 1] = "the card's unticked Reminders: Reminders follow the module"
+    leave(e)
+    print("hud review: " .. table.concat(said, "; "))
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end
