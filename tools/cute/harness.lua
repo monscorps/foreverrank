@@ -19665,6 +19665,44 @@ do
   end)
 end
 
+-- U10. Settings > Modules lists the modules by window: Guild (always) with Runs, Achievements and Records under it;
+--     Quests and Route (always) with the Dungeons and Gear tabs under it; then Map and Reminders. One reload line, at
+--     the top ("Changes here apply on reload.", "Applies on reload." with Reload now and Undo once a change waits); none
+--     in the rows' tooltips
+-- the check rows a Settings section shows, top to bottom: { label, x }
+function UIX.rows(c)
+  local out = {}
+  GEN = GEN + 1
+  for _, fr in ipairs(c.frames) do
+    if fr.checkRow and fr:IsVisible() and fr.label then local r = rectOf(fr); out[#out + 1] = { label = fr.label:GetText(), x = r.l, t = r.t, row = fr } end
+  end
+  table.sort(out, function(a, b) return a.t > b.t end)
+  return out
+end
+do
+  isolated({ UIX.member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    c.C.UI:Open("settings", "modules")
+    local rows, labels, x = UIX.rows(c), {}, {}
+    for _, r in ipairs(rows) do labels[#labels + 1] = r.label; x[r.label] = r.x end
+    local want = { "Guild", "Runs", "Achievements", "Records", "Quests and Route", "Dungeons tab", "Gear tab", "Map", "Reminders" }
+    assert(table.concat(labels, ", ") == table.concat(want, ", "), "Settings > Modules by window: " .. table.concat(labels, ", "))
+    local g, q = x["Guild"], x["Quests and Route"]
+    assert(x.Runs == g + 20 and x.Achievements == g + 20 and x.Records == g + 20, "Runs, Achievements and Records under Guild")
+    assert(q == g and x["Dungeons tab"] == q + 20 and x["Gear tab"] == q + 20 and x.Map == g and x.Reminders == g, "the tabs under Quests and Route; Map and Reminders on their own")
+    local function reloadLines() local n = 0; for l in texts(c):gmatch("[^\n]+") do if l ~= "Reload now" and l:lower():find("reload", 1, true) then n = n + 1 end end return n end
+    assert(reloadLines() == 1 and texts(c):find("Changes here apply on reload.", 1, true), "one reload line:\n" .. texts(c))
+    for _, r in ipairs(rows) do assert(not tipOf(r.row):lower():find("reload", 1, true), "no reload in the tooltip of " .. r.label) end
+    check(sframe(c), "fix-cute-ui U10 Settings > Modules by window")
+    click(UIX.row(c, "Gear tab"))
+    assert(reloadLines() == 1 and texts(c):find("Applies on reload.", 1, true), "a change waiting: still one reload line:\n" .. texts(c))
+    c.C.Modules.Undo()
+    leave(c)
+    print("fix-cute-ui U10: Settings > Modules by window, Guild's modules under Guild and the quest tabs under Quests and Route; one reload line")
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

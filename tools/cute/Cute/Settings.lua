@@ -649,10 +649,11 @@ local function drawColumns(col, officer, ui)
   end
 end
 
--- the modules this character runs: the always-on base (the guild window; a module addon's base, the quests window
--- with its Route tab) greyed, then a box each for the rest, a quests window's tabs indented under it. A change waits:
--- the boxes show it at once, the band line says it applies on reload (Reload now, Undo), and closing Settings asks
--- (Setup.lua); a few words on the right where something is not as the box says, its notes in the tooltip
+-- the modules this character runs, by window: Guild (always) with the built-in modules under it (Runs, Achievements,
+-- Records); the always-on base (a module addon's: the quests window with its Route tab) with the quests window's tabs
+-- under it; then the rest (Map, Reminders, any other module addon's). A change waits: the boxes show it at once, the
+-- one reload line at the top says so with Reload now and Undo, and closing Settings asks (Setup.lua); a few words on
+-- the right where something is not as the box says, its notes in the tooltip
 local function drawModules(col, officer)
   local M = C.Modules
   col:Head("Modules")
@@ -660,27 +661,35 @@ local function drawModules(col, officer)
     col:Note("Applies on reload.")
     col:Buttons({ { "Reload now", not M.InCombat(), function() M.Commit() end, function(tip) tip:AddLine("Reload now", 1, 1, 1); tip:AddLine(M.InCombat() and "After combat." or "Reloads the interface with your changes.", 0.85, 0.85, 0.85, true) end },
       { "Undo", true, function() M.Undo(); redraw() end } })
+  else
+    col:Note("Changes here apply on reload.")
   end
-  col:Check("Guild", true, false, function() end, "always")
   local list = M.Available(officer)
-  local base, rest = {}, {}
-  for _, e in ipairs(list) do if e.base then base[#base + 1] = e else rest[#rest + 1] = e end end
-  if #base > 0 then
-    local names = {}
-    for _, e in ipairs(base) do names[#names + 1] = e.title end
-    col:Check(table.concat(names, " and "), true, false, function() end, "always")
+  local base, guild, tabs, rest = {}, {}, {}, {}
+  for _, e in ipairs(list) do
+    if e.base then base[#base + 1] = e
+    elseif e.def and e.def.builtin then guild[#guild + 1] = e
+    elseif e.def and e.def.page and e.def.window == "quests" then tabs[#tabs + 1] = e
+    else rest[#rest + 1] = e end
   end
-  for _, e in ipairs(rest) do
+  local function box(e, indent)
     local tab = e.def and e.def.page and e.def.window == "quests"
     local on = M.StagedOn(e.key, e.on)
     col:Check(e.title .. (tab and " tab" or ""), on, true, function(v) M.Stage(e.key, v); redraw() end, e.status, function(tip)
       tip:AddLine(e.title, 1, 1, 1)
       if e.notes then tip:AddLine(e.notes, 0.85, 0.85, 0.85, true) end
       if e.status then tip:AddLine(e.status, 0.7, 0.7, 0.7, true) end
-      tip:AddLine("A change applies on reload.", 0.5, 0.5, 0.5, true)
-    end, tab and 20 or 0)
+    end, indent)
   end
-  col:Note("Window and tab changes apply on reload.")
+  col:Check("Guild", true, false, function() end, "always")
+  for _, e in ipairs(guild) do box(e, 20) end
+  if #base > 0 then
+    local names = {}
+    for _, e in ipairs(base) do names[#names + 1] = e.title end
+    col:Check(table.concat(names, " and "), true, false, function() end, "always")
+  end
+  for _, e in ipairs(tabs) do box(e, #base > 0 and 20 or 0) end
+  for _, e in ipairs(rest) do box(e, 0) end
 end
 
 -- the sections, by group: { id, title, group, order, draw(col, officer, ui), officers (officers alone), module }
