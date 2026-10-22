@@ -4147,47 +4147,55 @@ function UI:CreateSettingsView(parent)
   v.glowSetHint:SetHeight(40)
   yl = y0 - 502
 
-  -- the camp bar (Camp.lua): icons under your character, a switch each; and the banner while a buff is missing
+  -- (the hud round) Reminders (Remind.lua): Reminders and Buffs on screen, then one row a kind of reminder, drawn from
+  -- Remind.ROWS, the rows Cute's section draws too; the sixth a choice (the button cycles). A reminder hidden for good
+  -- (Never) is named on one line under the rows, with Show
   y0 = yr
-  head(RIGHT, y0, "Camp bar")
-  local REMIND = { { "food", "Well Fed, and the food that gives it" }, { "fire", "Campfire: Basic Campfire or a kit" }, { "camp", "Camp features I can place, with the cooldown" },
-                   { "bag", "Sleeping bag and Well Rested" }, { "quietInstance", "Hidden in dungeons" }, { "buffs", "Missing buffs, a click to cast them" },
-                   { "party", "Party members' buffs" },
-                   -- (5.4.4: each suggestion of its own)
-                   { "sit", "Sit by a campfire near me" }, { "wood", "Fire burned out: where to buy wood" }, { "bagChain", "Where the sleeping bag's quests are" } }
+  head(RIGHT, y0, "Reminders")
+  local RM = QB.Remind
   v.remind = {}
-  for i, r in ipairs(REMIND) do
-    local row = checkRow(p, RIGHT, y0 - 24 - (i - 1) * 26, r[2], 300)
-    row.key = r[1]
-    row:SetScript("OnClick", function(self)
-      local rm = QB.Camp and QB.Camp.Settings and QB.Camp.Settings() or QB:Settings().remind
-      rm[self.key] = self:GetChecked() and true or false
-      if QB.Camp then QB.Camp.Refresh() end
-    end)
-    v.remind[r[1]] = row
+  local ry = y0 - 24
+  v.remind.on = checkRow(p, RIGHT, ry, RM.ON_LABEL, 300)
+  v.remind.on.key = "on"
+  tooltip(v.remind.on, function(tip)
+    tip:AddLine(RM.ON_LABEL, GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine(RM.ON_NOTE, 1, 1, 1, true)
+  end)
+  for _, row in ipairs(RM.ROWS) do
+    ry = ry - 26
+    if row.choice then
+      v.remindChoice = button(p, row.label .. ": " .. row.choice[1][1], 300)
+      v.remindChoice:SetPoint("TOPLEFT", RIGHT + 4, ry)
+      v.remindChoice:SetScript("OnClick", QB.Safe(function()
+        local now, i = RM.Settings()[row.key], 1
+        for k, c in ipairs(row.choice) do if c[2] == now then i = k end end
+        RM.SetRow(row.key, row.choice[i % #row.choice + 1][2])
+        UI:Refresh()
+      end, "settings: reminders in dungeons"))
+      v.remindChoice.row = row
+      tooltip(v.remindChoice, function(tip)
+        tip:AddLine(row.label, GOLD[1], GOLD[2], GOLD[3])
+        if row.note then tip:AddLine(row.note, 1, 1, 1, true) end
+      end)
+    else
+      local r = checkRow(p, RIGHT + 20, ry, row.label, 280)
+      r.key = row.key
+      v.remind[row.key] = r
+      if row.note then tooltip(r, function(tip) tip:AddLine(row.label, GOLD[1], GOLD[2], GOLD[3]); tip:AddLine(row.note, 1, 1, 1, true) end) end
+    end
   end
-  tooltip(v.remind.sit, function(tip)
-    tip:AddLine("Sit by a campfire", GOLD[1], GOLD[2], GOLD[3])
-    tip:AddLine("Near any fire (yours, another player's, a quest giver's) without Camp Benefits: an icon that sits you down. A minute by it gives Camp Benefits for an hour.", 1, 1, 1, true)
-  end)
-  tooltip(v.remind.wood, function(tip)
-    tip:AddLine("When the fire burns out", GOLD[1], GOLD[2], GOLD[3])
-    tip:AddLine("With no campfire kit, a cook short of Simple Wood or Flint and Tinder is shown the nearest general goods vendor and its minutes. A click puts it on the arrow until you have bought them, then back to your route.", 1, 1, 1, true)
-  end)
-  tooltip(v.remind.bagChain, function(tip)
-    tip:AddLine("The Cozy Sleeping Bag", GOLD[1], GOLD[2], GOLD[3])
-    tip:AddLine("From level 14, with no bag: where its quest chain starts or goes on. A click puts it on the arrow.", 1, 1, 1, true)
-  end)
-  tooltip(v.remind.buffs, function(tip)
-    tip:AddLine("Missing buffs", GOLD[1], GOLD[2], GOLD[3])
-    tip:AddLine("While a buff you can give yourself is missing, a banner above the camp bar shows it: your class's own, Well Fed, a camp feature's. A click casts one or eats the food. Never in a fight; its X hides it for ten minutes.", 1, 1, 1, true)
-    tip:AddLine("/qb buffs shows it any time.", 0.6, 0.6, 0.6, true)
-  end)
-  tooltip(v.remind.party, function(tip)
-    tip:AddLine("Party members' buffs", GOLD[1], GOLD[2], GOLD[3])
-    tip:AddLine("In a party (not a raid), the banner also shows each member missing a buff of yours that can be cast on others, with their name. A click casts it on them; out of range it is dimmed.", 1, 1, 1, true)
-  end)
-  yr = y0 - 24 - #REMIND * 26 - 16
+  for _, r in pairs(v.remind) do
+    r:SetScript("OnClick", function(self) RM.SetRow(self.key, self:GetChecked() and true or false); UI:Refresh() end)
+  end
+  v.remindHidden = para(p, "GameFontNormalSmall", 11, INK_SOFT, 230)
+  v.remindHidden:SetPoint("TOPLEFT", RIGHT + 20, ry - 30)
+  v.remindShow = button(p, "Show", 64)
+  v.remindShow:SetPoint("TOPLEFT", RIGHT + 256, ry - 26)
+  v.remindShow:SetScript("OnClick", QB.Safe(function()
+    for key in pairs(RM.Settings().never) do RM.SetNever(key, nil, false) end
+    UI:Refresh()
+  end, "settings: reminders shown again"))
+  yr = ry - 26 - 34
 
   -- timers (Timer.lua)
   y0 = yr
@@ -4648,8 +4656,20 @@ function UI:RefreshSettingsView(v)
   else
     v.glowSetHint:SetText("The light is off: these are the game's own. Switched on, it sets them and keeps the game's own values to put back.")
   end
-  local rm = QB.Camp and QB.Camp.Settings and QB.Camp.Settings() or (type(set.remind) == "table" and set.remind or {})
-  for key, row in pairs(v.remind) do row:SetChecked(rm[key] == true) end
+  local RM = QB.Remind
+  local rm = RM and RM.Settings() or {}
+  for key, row in pairs(v.remind) do row:SetChecked(rm[key] ~= false) end
+  if v.remindChoice and RM then
+    local row, word = v.remindChoice.row, nil
+    for _, c in ipairs(row.choice) do if c[2] == rm[row.key] then word = c[1] end end
+    v.remindChoice:SetText(row.label .. ": " .. (word or row.choice[1][1]))
+    -- (what is hidden for good, named on one line; Show brings each back)
+    local names = {}
+    for _, name in pairs(rm.never or {}) do names[#names + 1] = type(name) == "string" and name or "?" end
+    table.sort(names)
+    v.remindHidden:SetText(#names > 0 and ("Hidden: " .. table.concat(names, ", ", 1, math.min(4, #names)) .. (#names > 4 and string.format(" and %d more", #names - 4) or "")) or "")
+    v.remindShow:SetShown(#names > 0)
+  end
   v.clockLevelMsg:SetChecked(set.clockLevelMsg ~= false)
   -- the ready-check's tick and cross, drawn inline: the game's font has no check or cross of its own
   local MARK = { [true] = "|T" .. T.ready .. ":14|t", [false] = "|T" .. T.notready .. ":14|t" }
