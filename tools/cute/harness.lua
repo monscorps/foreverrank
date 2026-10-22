@@ -19330,7 +19330,7 @@ end
 --     single window is left (its Guide and Settings tabs, its band's "Tick Quests" line)
 -- W2. Install: Cute_Quest is the base and loads at every login, so no step says it loads only while a module is on; no
 --     clause that says what you switch on or off names a base tab (Quests, Route), on the page or in Changes.lua's
---     lines; every key the setup card binds is named
+--     lines from 0.8.0 on; every key the setup card binds is named
 -- W3. The hero's privacy line: the engine shares your level and quest steps with your party by default (share.party),
 --     so the line names the party and never says nothing leaves the guild
 -- W4. QuestBank loaded: the card asks no Map (M stays the game's) and says the step frame, arrow and Reminders are
@@ -19408,7 +19408,8 @@ do
         end
       end
       noBaseSwitched(installText, "Install")
-      for v, line in pairs(c.C.CHANGES) do noBaseSwitched(line, "Changes.lua's " .. v .. " line") end
+      -- (from 0.8.0, the windows' round, where Quests and Route became the base; 0.7's lines tell 0.7's modules)
+      for v, line in pairs(c.C.CHANGES) do if not c.C.VersionNewer("0.8.0", v) then noBaseSwitched(line, "Changes.lua's " .. v .. " line") end end
       local keyed = {}
       for _, r in ipairs(c.C.Setup.Rows()) do
         if r.key then
