@@ -11511,9 +11511,6 @@ do
   -- (a save from 5.4.4 on, at half size: these cases weigh the pins' art at it; a new install draws the game's own size,
   -- windows D2)
   MQ:Settings().mapIconPct = 50
-  -- (these cases weigh each NPC's and each mark's own pin, so nothing merges here: the merge of pins that would touch
-  -- is windows D8's)
-  QMm.MERGE_PX = 0
   assert(QMm.provider, "on Forever the icons have their own provider on the world map")
   assert(#MQ.Pins.layers == 2 and MQ.Pins.watcher and MQ.Pins.watcher.__parent == M.map:GetCanvas(),
     "no hook on the world map (the mock's HookScript errors): both layers hear it shut as its providers, and a frame of QuestBank's on its canvas watches the keys")
@@ -21147,6 +21144,7 @@ do
   local MD, QMm = QB.Data, QB.QuestMap
   login(c)
   QB:Settings().pins = false
+  QB.thinMap = true -- (a host's: Cute's Bridge sets it; QuestBank alone draws every pin, windows D9)
   -- two of quest 7's spots 10 px apart at the map's zoom (1002 px wide), one of quest 18's far off; both away from the
   -- hand-in at Eagan Peltskinner (a ? near them would stand for them all, its glyph first)
   MD.SN = { [1] = "Kobold Vermin", [2] = "Red Burlap Bandana" }
@@ -21212,6 +21210,63 @@ do
   for _, f in ipairs(pins("obj")) do if f.data.id == 7 then seven = seven + 1 end end
   assert(turn and turn.data.count == 3 and seven == 0 and turn.qbCount:GetText() == "3", "the hand-in's glyph first, its count all three")
   print("windows D8: the game's world map: two pins 10 px apart one with a count, parted zoomed in; none of ours where the game draws its quest POI or its offer")
+end
+
+-- D9. (the review of the windows round) Fewer pins on the game's map is a host's choice (QB.thinMap, which Cute's
+-- Bridge sets): QuestBank alone draws the game's map as 6.1.1 did, two marks 10 px apart two pins and its own mark
+-- where the game draws a POI. Under the flag, a ? whose hand-ins the game draws itself was dropped whole with the
+-- quests its NPC offers, which the game does not draw: it stays as that NPC's ! for them
+do
+  local c = newClient({ name = "Alone", level = 3, cap = 60, faction = "Alliance", className = "Priest", class = "PRIEST", classID = 5, race = "Human",
+    log = { { 7, 0 }, { 18, 0 }, { 33, 1 } }, done = {}, group = false, guild = false, world = { 0, -8914, -133 }, bind = "Northshire Abbey", riding = false,
+    bagSlots = {}, map = 1429 })
+  c.map.id = 1429
+  local QB, env = c.QB, c.env
+  local MD, QMm = QB.Data, QB.QuestMap
+  login(c)
+  QB:Settings().pins = false
+  MD.SN = { [1] = "Kobold Vermin", [2] = "Red Burlap Bandana" }
+  MD.SPOT = { [7] = "k,1,1429,700,200,25,c,1;k,1,1429,710,200,25,c,1", [18] = "c,5,1429,200,700,40,w,2" }
+  MD.SREQ = { [7] = "1:10", [18] = "5:12" }
+  c.objectives = { [7] = { { text = "Kobold Vermin slain: 3/10", finished = false, numFulfilled = 3, numRequired = 10 } },
+    [18] = { { text = "Red Burlap Bandana: 2/12", finished = false, numFulfilled = 2, numRequired = 12 } } }
+  local function redraw() QB:Recompute(true); QB.Model.Finish(); QB.Pins:Update(); QMm:Update() end
+  local function pins(kind) local out = {}; for _, f in ipairs(ours(c, "QuestBankQuestPinTemplate")) do if not kind or f.data.kind == kind then out[#out + 1] = f end end return out end
+  local function marks(id) local n = 0; for _, f in ipairs(pins("obj")) do if f.data.id == id then n = n + 1 end end return n end
+  -- QuestBank alone: every pin, none merged, our mark where the game draws its POI
+  env.C_QuestLog.GetQuestsOnMap = function(m) if m == 1429 then return { { questID = 18, x = 0.2, y = 0.7 } } end return {} end
+  c.cvars = c.cvars or {}; c.cvars.questPOI = "1"
+  redraw()
+  local counted = false
+  for _, f in ipairs(pins()) do if f.data.count then counted = true end end
+  assert(QB.thinMap == nil and marks(7) == 2 and not counted and marks(18) == 1, "QuestBank alone: two marks for quest 7, none merged, quest 18's own mark: " .. marks(7) .. ", " .. marks(18))
+  -- the host's flag: merged, and none of ours where the game draws one
+  QB.thinMap = true
+  redraw()
+  assert(marks(18) == 0 and marks(7) == 1, "under the host's flag: thinned and merged")
+  -- a ? at an NPC who offers a quest too: the game draws the hand-in, the NPC's ! stays for the offer
+  local turn = pins("turn")[1]
+  local give = pins("give")[1]
+  assert(turn and give, "a ? and a ! of ours to begin with")
+  local handin, offer = turn.data.quests[1], give.data.quests[1]
+  local was = offer.give
+  offer.give = handin.turn -- (the offer given by the hand-in's NPC)
+  env.C_QuestLog.GetQuestsOnMap = function(m) if m == 1429 then return { { questID = handin.id } } end return {} end
+  redraw()
+  local found
+  for _, f in ipairs(pins()) do
+    for _, d in ipairs({ f.data, unpack(f.data.merged or {}) }) do
+      if d.kind == "turn" then for _, q in ipairs(d.quests) do assert(q.id ~= handin.id, "no ? of ours for the hand-in the game draws") end end
+      if d.kind == "give" and d.title == handin.turn.n then for _, q in ipairs(d.quests) do if q.id == offer.id then found = d end end end
+    end
+  end
+  assert(found and not found.offers and found.index == nil, "the NPC's ! for its offer, the hand-in left to the game")
+  lines = {}; QMm.TIP.give(env.GameTooltip, found)
+  local tipText = table.concat(lines, "\n")
+  assert(tipText:find(offer.name, 1, true) and not tipText:find(handin.name, 1, true), "its tooltip names the offer alone:\n" .. tipText)
+  offer.give = was
+  env.C_QuestLog.GetQuestsOnMap, c.cvars.questPOI, QB.thinMap = nil, nil, nil
+  print("windows D9: fewer pins on the game's map is the host's: QuestBank alone draws every pin as 6.1.1; under the flag a ? the game draws keeps its NPC's ! for the quests it offers")
 end
 
 local seen = {}

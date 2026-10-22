@@ -12930,6 +12930,19 @@ do
   end)
 end
 
+-- W26 (the review of sub-project D): fewer pins on the game's world map is Cute's, through the host's flag the Bridge
+-- sets (QB.thinMap: QuestMap.lua thins the game's map layer by it; QuestBank alone draws every pin, its windows D9)
+do
+  isolated({ { name = "Rone-Forever", guid = guidOf("Rone"), rank = 1, rankName = "Officer", class = "WARRIOR", level = 5, online = true } }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    local QB = c.addons[2].private
+    assert(QB.thinMap == true and QB.noRaidSync == true and QB.cornerPlace == true, "the Bridge's host flags: thinMap " .. tostring(QB.thinMap))
+    leave(c)
+    print("windows W26: the game's world map thinned under Cute by the Bridge's host flag")
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

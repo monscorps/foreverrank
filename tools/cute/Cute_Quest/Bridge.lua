@@ -33,6 +33,9 @@ E.noRaidSync = true
 -- (the windows round) the on-screen pieces' default places, for the ones never moved: the step frame where the game's
 -- quest tracker stands (it takes that job: StepFrame.lua place), the arrow at the top's middle (Arrow.lua A.Place)
 E.cornerPlace = true
+-- (the windows round) fewer pins on the game's world map: none of ours where the game draws one, touching ones merged with
+-- a count (QuestMap.lua QM.Thin); QuestBank alone draws them all
+E.thinMap = true
 -- the engine's words name the host: "Choose a reward: X is Cute's pick", "Nothing to do: /cute quests", the minimap
 -- menu's "Cute settings"; and they leave out the /qb commands a Cute player is never told of (host: Settings alone)
 E.NAME, E.CMD, E.host = "Cute", "/cute quests", true

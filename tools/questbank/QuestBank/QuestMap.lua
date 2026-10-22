@@ -601,10 +601,14 @@ function QM:Build(m, page)
     end
     if d.offers and #d.offers == 0 then d.offers = nil end
     if d.index == 999 then d.index = nil end
-    -- a ! whose quests are all grey: half bright, as the game draws a trivial offer
+    -- a ! whose quests are all grey: half bright, as the game draws a trivial offer (and a ?'s offers, for the ! it
+    -- becomes where the game draws its hand-ins: QM.Thin)
     if d.kind == "give" and low then
       d.trivial = true
       for _, q in ipairs(d.quests) do if not low[q.id] then d.trivial = nil break end end
+    elseif d.offers and low then
+      d.offersTrivial = true
+      for _, q in ipairs(d.offers) do if not low[q.id] then d.offersTrivial = nil break end end
     end
   end
   -- the ! and ? first: the cap below only ever trims marks and areas
@@ -1095,7 +1099,9 @@ local KIND = { give = QM.OFFER, start = QM.OFFER, turn = QM.POI, obj = QM.POI, d
 -- QuestOfferDataProvider reads it); and QuestBank's pins that would touch at the map's zoom (closer than a pin, 22 px
 -- on screen) merge into one with a count on its corner, the hand-in's first, then in progress, then the offer, its
 -- tooltip naming every one. Zoomed in they part: the layer is drawn again once the zoom settles. QuestBank's own Map
--- page draws them all. QM.gameDrawn says how many quests the game drew this time (the diag lines read it)
+-- page draws them all. QM.gameDrawn says how many quests the game drew this time (the diag lines read it).
+-- (the review of the windows round) A host's choice: QB.thinMap, which Cute's Bridge sets; QuestBank alone draws the game's
+-- map as 6.1.1 did. A ? whose hand-ins the game draws stays as its NPC's ! for the quests it offers there
 ----------------------------------------------------------------------------
 QM.MERGE_PX = 22
 local gameLog, gameOffer = {}, {}
@@ -1151,6 +1157,20 @@ local function without(d, field, set, dropped)
   end
   return #keep > 0
 end
+-- a ? whose hand-ins the game draws, as the NPC's ! for what it offers (less the game's own offers); false when none
+local function asOffer(d)
+  local quests = {}
+  for _, q in ipairs(d.offers or {}) do if not gameOffer[q.id] then quests[#quests + 1] = q end end
+  if #quests == 0 then return false end
+  d.kind, d.quests, d.offers, d.index, d.trivial, d.family = "give", quests, nil, nil, d.offersTrivial, "basic"
+  for _, q in ipairs(quests) do if QB.Pins.Family(q) == "recurring" then d.family = "recurring" end end
+  for _, w in ipairs(d.who or {}) do
+    local k = {}
+    for _, q in ipairs(w.give or {}) do if not gameOffer[q.id] then k[#k + 1] = q end end
+    w.turn, w.give = {}, k
+  end
+  return true
+end
 local RANK = { turn = 1, obj = 2, give = 3 }
 function QM.Thin(list, layer)
   gameDraws(layer.drawnFor or (layer.GetMap and layer:GetMap() and QB.Plain(layer:GetMap():GetMapID())))
@@ -1158,7 +1178,9 @@ function QM.Thin(list, layer)
   for _, d in ipairs(list) do
     local keep = true
     if d.kind == "obj" and gameLog[d.id] then dropped[d.id] = true; keep = false
-    elseif d.kind == "turn" then keep = without(d, "turn", gameLog, dropped)
+    elseif d.kind == "turn" then
+      keep = without(d, "turn", gameLog, dropped)
+      if not keep then keep = asOffer(d) end
     elseif d.kind == "give" then keep = without(d, "give", gameOffer, dropped) end
     if keep then out[#out + 1] = d end
   end
@@ -1207,7 +1229,7 @@ end
 
 function QM:Draw(layer, m)
   local list = self:Build(m, not layer.world)
-  if layer.world then list = QM.Thin(list, layer) end
+  if layer.world and QB.thinMap then list = QM.Thin(list, layer) end
   for _, d in ipairs(list) do
     layer:Add(KIND[d.kind] or QM.POI, d, d.x, d.y, nil, d.index)
   end
@@ -1226,6 +1248,7 @@ function QM:Init()
     local placed = QM.provider.OnCanvasScaleChanged
     QM.provider.OnCanvasScaleChanged = QB.Safe(function(self, ...)
       placed(self, ...)
+      if not QB.thinMap then return end -- (QuestBank alone merges nothing: nothing to part)
       local map = self:GetMap()
       local zoom = map and tonumber(QB.Plain(map.GetCanvasScale and map:GetCanvasScale())) or 1
       if math.floor(zoom * 4 + 0.5) == self.qmZoom or self.qmSoon then return end
