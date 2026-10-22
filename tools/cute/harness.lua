@@ -16208,6 +16208,24 @@ do
     leave(mia); leave(ofa)
     said[#said + 1] = "the officers keep Finds and none is online: the finds wait, then go to the first officer online"
   end)
+  -- K13: "Share finds with the guild" off on an officer's client: its own finds are no voice (one guild mate's find it
+  -- saw too stays one voice, and out of its word), so nothing of where it stood goes out
+  isolated({ fmember("Ofa", 0), fmember("Mia", 3) }, function()
+    local ofa, mia = fchar("Ofa", 0), fchar("Mia", 3)
+    login(ofa, fpol(true, {})); login(mia, fpol())
+    tickAll(130)
+    ofa.C.Settings().shareFinds = false
+    fnoted(ofa, "h", 9201, 1429, 500, 500)
+    fnoted(mia, "h", 9201, 1429, 506, 500)
+    tickAll(65)
+    local e
+    for _, x in ipairs(ofa.env.CuteDB.known.finds.list) do if x.id == 9201 then e = x end end
+    assert(e and e.v[guidOf("Ofa")] == nil and not ofa.C.Finds.Sure(e), "sharing off: the officer's own find no voice, Mia's alone not sure")
+    assert(#ofa.C.Finds:WordParts() == 0, "and nothing of it in the officers' word")
+    ofa.C.Settings().shareFinds = nil
+    leave(ofa); leave(mia)
+    said[#said + 1] = "sharing off: your own finds are no voice, nothing of them in the officers' word"
+  end)
   print("map K: " .. table.concat(said, "; "))
 end
 

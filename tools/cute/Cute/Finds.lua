@@ -177,11 +177,12 @@ local function counts(g, me)
   if untrusted(g) then return false end
   return g == me or C.Roster.byGuid[g] ~= nil
 end
--- a find's voices that count, those of others, and whether yours is one
-local function tally(e)
+-- a find's voices that count, those of others, and whether yours is one (noMe: yours left out, "Share finds with the
+-- guild" off)
+local function tally(e, noMe)
   local me, n, others, mine = C.MyGUID(), 0, 0, false
   for g in pairs(e.v) do
-    if counts(g, me) then
+    if counts(g, me) and not (noMe and g == me) then
       n = n + 1
       if g == me then mine = true else others = others + 1 end
     end
@@ -481,7 +482,8 @@ function F:Noted(kind, id, m, x, y, extra, data)
   local had, others = match(s, en), 0
   if had then local _, o = tally(had); others = o end
   local first = not (had and (others > 0 or said(had)))
-  local e = F.Voice(me, en)
+  -- (sharing off: your find is no voice, so nothing of where you stood goes out in an officer's word either)
+  local e = shareOn() and F.Voice(me, en) or had
   if first and not counted("F" .. groupOf(en) .. ":" .. cell(en)) then bump("finds_first") end
   self:Bump()
   -- the guild's: unless sharing is off, or two others agree on it already
@@ -682,8 +684,9 @@ function F:WordParts()
   local closed, t = C.Policy:FindsRoute() == "self", C.ServerNow()
   -- (what this client's voices prove: another officer's word may have said it too, and this one says it all the same,
   -- for the members who ask while that officer is away)
+  local noMe = not shareOn()
   for _, e in ipairs(s.list) do
-    if (tally(e)) >= 2 and aged(e, closed, t) then
+    if (tally(e, noMe)) >= 2 and aged(e, closed, t) then
       list[#list + 1] = e
       if not e.wx then e.wx, e.wy, e.wx2, e.wy2 = e.x, e.y, e.x2, e.y2 end
     end
