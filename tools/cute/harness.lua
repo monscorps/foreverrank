@@ -12755,6 +12755,8 @@ do
     c.C.UI:Open("settings", "quests")
     assert(row(BD) and row(BD).__disabled, "greyed while the step frame is off")
     s.guide.frame = true; c.addons[2].private.StepFrame.Apply()
+    c.C.UI:Open("settings", "quests")
+    check(c.C.UI.Window("settings").frame, "W21 Settings > Quests with the backdrop row")
     -- the open section's bar
     local K = c.C.UI.COLORS
     local function bar(id)
@@ -12765,7 +12767,6 @@ do
       local col = bar(want[1])
       assert(col and sameColor(col, want[2]), "the open section's bar in its category's colour: " .. want[1] .. " " .. (col and table.concat(col, ",") or "none"))
     end
-    check(c.C.UI.Window("settings").frame, "W21 Settings > Quests with the backdrop row")
     hideAll(c)
     leave(c)
     print("windows W21: Settings > Quests has the backdrop row (off, greyed with the frame off, Cute's flat one at once); the open section's bar in its category's colour")
