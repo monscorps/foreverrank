@@ -275,11 +275,7 @@ function S.Draw()
       end
     end
   end
-  -- (M named where the Map window is on, or ticked on the card)
-  local mapOn = p.on.mapwin
-  if mapOn == nil then mapOn = C.Modules.OnKey("Cute_Quest:map") and not dormant() end
-  local keys = mapOn and "J, L and M" or "J and L"
-  local nh = say(f, PAD, y + 10, inner, keys .. " open Cute's windows; each window has a button to the game's own. Change any of this later in Settings: right-click the minimap button. Window and tab changes reload; the rest applies at once.", DIM, 12)
+  local nh = say(f, PAD, y + 10, inner, S.KeysLine(p) .. " Change any of this later in Settings: right-click the minimap button. Window and tab changes reload; the rest applies at once.", DIM, 12)
   y = y + 10 + nh + 12
   for _, k in ipairs({ "labels", "lines", "checks", "keys" }) do f[k]:HideRest() end
   local fight = inCombat()
@@ -293,6 +289,28 @@ function S.Draw()
   f.start:SetPoint("BOTTOMRIGHT", -PAD - f.later:GetWidth() - 6, PAD)
   f.start:SetOn(not fight)
   f:SetHeight(y + 22 + PAD)
+end
+-- the card's sentence on its keys: the keys its boxes show, for the windows this client has (Guild; Quests where its
+-- addon is; Map where it is on, or ticked here), a box that reads "-" left out (outside a guild the Guild key waits,
+-- Keys.lua). One key names its window; none, and only the buttons to the game's own are said
+local WINDOW_WORD = { guild = "guild", quests = "quest", map = "map" }
+function S.KeysLine(p)
+  local mapOn = p.on.mapwin
+  if mapOn == nil then mapOn = C.Modules.OnKey("Cute_Quest:map") and not dormant() end
+  local list = {}
+  for _, id in ipairs({ "guild", "quests", "map" }) do
+    if id == "guild" or (id == "quests" and hasQuests()) or (id == "map" and mapOn) then
+      local k = S.KeyText(id)
+      if id == "guild" and not C.Keys.InGuild() then k = "-" end
+      if k ~= "-" then list[#list + 1] = { id = id, key = k } end
+    end
+  end
+  local own = "each window has a button to the game's own."
+  if #list == 0 then return "Each window has a button to the game's own." end
+  if #list == 1 then return list[1].key .. " opens Cute's " .. WINDOW_WORD[list[1].id] .. " window; " .. own end
+  local keys = {}
+  for i, e in ipairs(list) do keys[i] = e.key end
+  return table.concat(keys, ", ", 1, #keys - 1) .. " and " .. keys[#keys] .. " open Cute's windows; " .. own
 end
 -- what a key box on the card shows: the card's own choice ("follow": the game's key for that window)
 function S.KeyText(id)

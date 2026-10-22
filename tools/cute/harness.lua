@@ -19419,6 +19419,40 @@ do
   end)
 end
 
+-- U3. The card's sentence names the keys its boxes show, for the windows it shows: J, L and M; a key picked by hand in
+--     its place (Q for the quests); a window whose box reads "-" left out (no Guild key outside a guild, a cleared one);
+--     one key alone names its window ("M opens Cute's map window"); none, and the clause goes
+do
+  local uiMember, uiRow = UIX.member, UIX.row
+  isolated({ uiMember("Rone", 1), uiMember("Pim", 3) }, function()
+    local function says(c, s) return texts(c):find(s, 1, true) ~= nil end
+    local function boxOf(c, id) for _, b in ipairs(c.frames) do if rawget(b, "Bind") and b:IsVisible() and b.id == id then return b end end end
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, card = true }))
+    login(c); tick(c, 3)
+    assert(says(c, "J, L and M open Cute's windows; each window has a button to the game's own."), "the game's keys: J, L and M:\n" .. texts(c))
+    local q = boxOf(c, "quests")
+    press(q); q.__scripts.OnKeyDown(q, "Q")
+    assert(boxOf(c, "quests").label:GetText() == "Q" and says(c, "J, Q and M open Cute's windows") and not says(c, "J, L and M"), "Q picked for the quests: the sentence says Q:\n" .. texts(c))
+    click(uiRow(c, "Map"))
+    assert(says(c, "J and Q open Cute's windows"), "Map unticked: J and Q:\n" .. texts(c))
+    check(c.env.CuteSetupFrame, "fix-cute-ui U3 the card, Q for the quests")
+    leave(c)
+    -- outside a guild: the Guild box reads "-" and the sentence leaves J out
+    local p = newClient(charOf({ "Pim", 3, "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, card = true, inGuild = false }))
+    login(p); tick(p, 3)
+    assert(p.env.CuteSetupFrame and p.env.CuteSetupFrame:IsShown() and boxOf(p, "guild").label:GetText() == "-", "outside a guild: the card, its Guild box '-'")
+    assert(says(p, "L and M open Cute's windows") and not says(p, "J, L and M") and not says(p, "J and"), "outside a guild, no J:\n" .. texts(p))
+    local pq = boxOf(p, "quests")
+    press(pq); pq.__scripts.OnKeyDown(pq, "BACKSPACE")
+    assert(says(p, "M opens Cute's map window; each window has a button to the game's own."), "the quests' key cleared: M alone names its window:\n" .. texts(p))
+    click(uiRow(p, "Map"))
+    assert(says(p, "Each window has a button to the game's own.") and not says(p, "open Cute's") and not says(p, "opens Cute's"), "no key at all: the clause goes:\n" .. texts(p))
+    check(p.env.CuteSetupFrame, "fix-cute-ui U3 the card, no key")
+    leave(p)
+    print("fix-cute-ui U3: the card's sentence names the keys its boxes show, leaving out a '-', one key naming its window, none dropping the clause")
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end
