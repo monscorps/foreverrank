@@ -14254,6 +14254,42 @@ do local function cardsStage()
   end)
   said[#said + 1] = "Publish greyed keeps its label, the reason whole beside it"
 
+  -- Preview shows what goes out (13.2): the text as the wire carries it, commas kept (Cute's own lines have them), a
+  -- title cut where Publish cuts it, a name of twelve letters with a two-byte one in it whole
+  local BJ = "Bj\195\184rnstjerne"
+  isolated({ gmember("Yara", 1, "MAGE"), gmember("Yoyo", 3, "ROGUE"), gmember(BJ, 3, "WARRIOR") }, function()
+    local yara, yoyo = cchar("Yara", 1), cchar("Yoyo", 3, { class = "ROGUE" })
+    login(yara); login(yoyo)
+    tickAll(200)
+    H(yara).OpenChip("queue")
+    press(buttonOf(yara, "New card"))
+    typeInto(edits(yara)[2], "Bj")
+    typeInto(edits(yara)[3], "Kept us up, all night long, again")
+    typeInto(edits(yara)[4], "Framed, signed and hung.")
+    yara.C.UI:Draw()
+    assert(H(yara).draft.cards[1].name == BJ, "the member found: " .. tostring(H(yara).draft.cards[1].name))
+    press(buttonOf(yara, "Preview"))
+    local CF = yara.C.CardFrame
+    local shown = CF.set.cards[1]
+    press(buttonOf(yara, "Publish"))
+    tickAll(5)
+    local got = H(yoyo).Sets()[1] and H(yoyo).Sets()[1].cards[1]
+    assert(got and got.title == shown.title and got.line == shown.line and got.title == "Kept us up, all night lo" and got.line == "Framed, signed and hung.",
+      "the preview's text is what came: " .. tostring(shown.title) .. " / " .. tostring(got and got.title) .. " | " .. tostring(shown.line) .. " / " .. tostring(got and got.line))
+    assert(CF.set.cards[1].name == BJ and CF.cards[1].name:GetText() == BJ, "the officer's own announcement names the member whole: " .. tostring(CF.set.cards[1].name))
+    CF.frame:Hide()
+    -- a Shame hall's second card: Cute's own line, its comma kept
+    yoyo.C.Sample:Set("deaths", 9); yara.C.Sample:Set("falls", 3)
+    tickAll(65)
+    local hall = H(yara):ComputeHall({ kind = "shame", period = "a", stats = { "deaths", "falls" } })
+    assert(#hall.cards == 2 and hall.cards[2].line == H(yara).SHAME_LINES[2] and hall.cards[2].line:find(",", 1, true), "the hall's second card has Cute's line")
+    H(yara).DB().lastSetAt = nil
+    assert(H(yara):Publish(hall, false), "the hall published")
+    tickAll(10)
+    assert(H(yoyo).Sets()[1].cards[2].line == H(yara).SHAME_LINES[2], "its comma kept on the wire: " .. tostring(H(yoyo).Sets()[1].cards[2].line))
+  end)
+  said[#said + 1] = "Preview shows what goes out: commas kept on the wire, a title cut where Publish cuts it, a name with a two-byte letter whole"
+
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end
 

@@ -46,7 +46,8 @@ local LOGIN_WAIT = 180    -- an officer's Publish waits this long into a login f
 local TOAST_SHOW, TOAST_WAIT, TOAST_HOUR = 10, 3, 2
 local ASK_AFTER, ANSWER_AGAIN, ANSWER_SETS = 60, 1800, 5
 local W_HOUR, W_SAME = 4, 600
-local TITLE, LINE, NAME, VALUE, VLABEL = 24, 56, 12, 16, 24
+-- (bytes; a name is twelve letters, two bytes each where the letter is one like o-slash: 24)
+local TITLE, LINE, NAME, VALUE, VLABEL = 24, 56, 24, 16, 24
 local WHITE, INK, DIM, MUTE = { 0.96, 0.96, 0.96 }, { 0.86, 0.86, 0.86 }, { 0.58, 0.58, 0.58 }, { 0.52, 0.52, 0.52 }
 local DOT = " \194\183 " -- (a middle dot in Windows-1252; the file stays ASCII)
 local function now() return C.ServerNow() end
@@ -208,10 +209,12 @@ function H.HeadColor(kind)
   if kind == "s" then return C.Cards.BLOOPER end
   return WHITE
 end
--- text as a card may carry it on the wire: no | ; = and no comma (a comma and the spaces after it one space), cut to max
--- bytes, UTF-8 whole
-local function clean(s, max) return C.Stats.CleanText((tostring(s or ""):gsub(",%s*", " ")), max) end
+-- text as a card may carry it: no | ; = (the wire's own), no tilde (a comma's stand-in on the wire), cut to max bytes,
+-- UTF-8 whole. Commas stay: the wire carries each as a tilde (wire, unwire), so what Preview shows is what comes
+local function clean(s, max) return C.Stats.CleanText((tostring(s or ""):gsub("~", "-")), max) end
 H.Clean = clean
+local function wire(s) return (s:gsub(",", "~")) end
+local function unwire(s) return (tostring(s or ""):gsub("~", ",")) end
 local function bare(s) return (tostring(s or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
 local function copy(t) local o = {}; for k, v in pairs(t) do o[k] = v end return o end
 -- (a draft's tables its own: a draft opened and edited, then cleared, leaves the saved one as it was)
@@ -410,15 +413,17 @@ end
 
 ----------------------------------------------------------------------------
 -- 1C: a set on the wire (13.2). h=<kind>,<title>,<by>,<period>,<ranked>, then a c= part per card: <suffix>,<name>,
--- <class>,<race>,<sex>,<label>,<icon>,<source>,<title>,<line>,<value>,<value label>. Parts packed into messages of
+-- <class>,<race>,<sex>,<label>,<icon>,<source>,<title>,<line>,<value>,<value label>, a comma within a text a tilde
+-- (the text cut and cleaned as Preview shows it, sendable below). Parts packed into messages of
 -- 255 bytes, i of n under one stamp: 1C|<at>|<i>/<n>|... (an answer to 1G: 1C|<at>|a|<i>/<n>|...); 1C|<at>|x withdraws
 ----------------------------------------------------------------------------
 local LIMIT, PARTS_MAX = 255, 8
 function H.Messages(set, answer)
-  local parts = { "h=" .. table.concat({ set.kind or "n", clean(set.title, TITLE), clean(set.by, NAME), set.period or "", tostring(tonumber(set.ranked) or "") }, ",") }
+  local function w(s, max) return wire(clean(s, max)) end
+  local parts = { "h=" .. table.concat({ set.kind or "n", w(set.title, TITLE), w(set.by, NAME), set.period or "", tostring(tonumber(set.ranked) or "") }, ",") }
   for _, c in ipairs(set.cards or {}) do
-    parts[#parts + 1] = "c=" .. table.concat({ (c.sfx or sfxOf(c.guid) or ""):gsub("[^%w]", ""), clean(c.name, NAME), clean(c.class, 12), clean(c.race, 12), tostring(tonumber(c.sex) or ""),
-      CODE[c.kind] or "O", tostring(tonumber(c.icon) or ""), clean(c.source, 24), clean(c.title, TITLE), clean(c.line, LINE), clean(bare(c.value), VALUE), clean(c.valueLabel, VLABEL) }, ",")
+    parts[#parts + 1] = "c=" .. table.concat({ (c.sfx or sfxOf(c.guid) or ""):gsub("[^%w]", ""), w(c.name, NAME), w(c.class, 12), w(c.race, 12), tostring(tonumber(c.sex) or ""),
+      CODE[c.kind] or "O", tostring(tonumber(c.icon) or ""), w(c.source, 24), w(c.title, TITLE), w(c.line, LINE), w(bare(c.value), VALUE), w(c.valueLabel, VLABEL) }, ",")
   end
   local head = "1C|" .. string.format("%.0f", set.at or 0) .. "|" .. (answer and "a|" or "")
   local bodies, cur = {}, nil
@@ -431,7 +436,7 @@ function H.Messages(set, answer)
   for i, b in ipairs(bodies) do out[i] = head .. i .. "/" .. #bodies .. "|" .. b end
   return out
 end
-local function fields(s) local out = {}; for f in ((s or "") .. ","):gmatch("([^,]*),") do out[#out + 1] = f end return out end
+local function fields(s) local out = {}; for f in ((s or "") .. ","):gmatch("([^,]*),") do out[#out + 1] = unwire(f) end return out end
 -- a set's parts read back; nil for one with no known kind or no card
 function H.Parse(at, body)
   local set = { at = at, cards = {} }
@@ -1866,9 +1871,12 @@ function H.Built()
   local set
   if d.mode == "hall" then set = H:ComputeHall(d.hall)
   else
-    set = { kind = d.kind or "n", title = clean(d.title, TITLE), cards = {}, from = d.from }
-    for _, c in ipairs(d.cards or {}) do if c.name and (c.guid or d.mode ~= "card") then set.cards[#set.cards + 1] = copy(c) end end
+    set = { kind = d.kind or "n", cards = {}, from = d.from }
+    for _, c in ipairs(d.cards or {}) do if c.name and (c.guid or d.mode ~= "card") then set.cards[#set.cards + 1] = c end end
   end
+  -- (as the wire will carry it: Preview shows what comes, Publish sends the same)
+  set.title = clean(d.mode == "hall" and set.title or d.title, TITLE)
+  for i, c in ipairs(set.cards) do set.cards[i] = sendable(c) end
   set.chat, set.draftId = d.chat, d.draftId
   return set
 end
