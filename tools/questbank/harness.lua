@@ -21759,8 +21759,9 @@ end
 -- D5. The default places under a host that asks for them (Cute's QB.cornerPlace), for the pieces never moved: the step
 -- frame stands where the game's quest tracker stands, its top right corner on the tracker's (read at the tracker's own
 -- size, the scale step of D3 left out), 8 px left of the tracker while it is kept; the arrow at the top's middle, TOP
--- 0 -190, under the game's error text (UIErrorsFrame, TOP 0 -122, 512 x 60: merge2 moved it from TOP 0 -96, where
--- "Not enough rage" stood on it); the camp bar and its banner where the engine puts them. At 1920 x 1080 and 1366 x 768
+-- 0 -262, under the game's error text (UIErrorsFrame, TOP 0 -122, 512 x 60: merge2 moved it from TOP 0 -96, where
+-- "Not enough rage" stood on it) and the zone banner (the launch audit: the fix-engine stage's S3); the camp bar and its
+-- banner where the engine puts them. At 1920 x 1080 and 1366 x 768
 -- none overlaps another, the error text among them.
 -- A dragged step frame stays where it was put; QuestBank alone keeps its own places (the engine's cases)
 do
@@ -21795,7 +21796,7 @@ do
     local sf = boxOf(env.QuestBankStep)
     assert(math.abs(sf.r - tr.r) < 0.5 and math.abs(sf.t - tr.t) < 0.5, string.format("%dx%d: the step frame on the tracker's corner %d, %d: %s", W, H, tr.r, tr.t, say(sf)))
     local ar = boxOf(env.QuestBankArrow)
-    assert(math.abs((ar.l + ar.r) / 2 - W / 2) < 0.5 and math.abs(ar.t - (H - 190)) < 0.5, string.format("%dx%d: the arrow at TOP 0 -190: %s", W, H, say(ar)))
+    assert(math.abs((ar.l + ar.r) / 2 - W / 2) < 0.5 and math.abs(ar.t - (H - 262)) < 0.5, string.format("%dx%d: the arrow at TOP 0 -262: %s", W, H, say(ar)))
     -- (the game's error text, Blizzard_UIErrorsFrame: TOP 0 -122, 512 x 60)
     local pieces = { { "step frame", sf }, { "arrow", ar }, { "error text", { l = W / 2 - 256, r = W / 2 + 256, t = H - 122, b = H - 182 } } }
     -- (the camp bar where the engine puts it, CENTER 0 -190: its top as Camp.BarTop says, a row of icons under it)
@@ -21819,7 +21820,7 @@ do
     local p = env.QuestBankStep.__points[1]
     assert(p.point == "CENTER" and p.x == 100 and p.y == 50, "a dragged place kept")
   end
-  print("windows D5: Cute's default places: the step frame on the hidden tracker's corner (8 px left of it while kept), the arrow at TOP 0 -190 under the game's error text, the camp bar the engine's; apart at 1920 x 1080 and 1366 x 768")
+  print("windows D5: Cute's default places: the step frame on the hidden tracker's corner (8 px left of it while kept), the arrow at TOP 0 -262 under the game's error text and zone banner, the camp bar the engine's; apart at 1920 x 1080 and 1366 x 768")
 end
 
 -- D6. The journal's list tiles under a host's skin that asks (Cute's QB.Skin.tiles): the level range on a 70% black plate
@@ -22063,16 +22064,16 @@ do
     assert(bx and apart(a, bx, top, bottom, half), string.format("%dx%d: the arrow off the step frame at the tracker's corner", W, H))
     -- the step frame dragged into the top's middle, over the arrow's place: the arrow under it
     local g = QB:Settings().guide
-    g.x, g.y = 0, H / 2 - 230; SF.Apply(); QB.Arrow.Place()
+    g.x, g.y = 0, H / 2 - 290; SF.Apply(); QB.Arrow.Place()
     a = arrow()
     bx, top, bottom, half = SF.Box()
-    assert(bx and top < 190 + TALL and bottom > 190, string.format("%dx%d: the frame dragged onto the arrow's place: %d..%d", W, H, top, bottom))
+    assert(bx and top < 262 + TALL and bottom > 262, string.format("%dx%d: the frame dragged onto the arrow's place: %d..%d", W, H, top, bottom))
     assert(apart(a, bx, top, bottom, half) and a.top >= bottom and a.top >= ERR.bottom,
       string.format("%dx%d: the arrow under the dragged frame (its bottom %d): top %d", W, H, bottom, a.top))
     g.x, g.y = nil, nil; SF.Apply(); QB.Arrow.Place()
-    assert(arrow().top == 190, "the frame back on the tracker's corner: the arrow back at TOP 0 -190")
+    assert(arrow().top == 262, "the frame back on the tracker's corner: the arrow back at TOP 0 -262 (under the zone banner since the launch audit)")
   end
-  print("merge2 M1: under Cute's QB.cornerPlace the arrow stands in the top's middle under the game's error text (TOP 0 -190), off the step frame; a frame dragged there has it under it; 1920 x 1080 and 1366 x 768")
+  print("merge2 M1: under Cute's QB.cornerPlace the arrow stands in the top's middle under the game's error text (TOP 0 -262), off the step frame; a frame dragged there has it under it; 1920 x 1080 and 1366 x 768")
 end
 do
   local c = lookChar("Notewhere")
@@ -24488,6 +24489,27 @@ end
     f.__scripts.OnEvent(f, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-2", 3366)
     assert(#told == 2 and told[2][2] == 9502 and told[2][8] ~= true, "opened with an ordinary key: not secret")
     D.OPEN, c.soft, QB.Finds.host = keep, nil, nil
+  end }
+
+  -- S3 (firsthour). Under a host's corner place (Cute) the arrow stood at TOP 0 -190, on the game's zone banner: at every
+  -- zone or subzone change its puck and the step's name covered the zone's name, the PvP line and the subzone's for the
+  -- banner's 3.5 s. ZoneText.xml: ZoneTextFrame TOP 0 -128, 128 x 128, its 32 px name centred (176 to 208 down), the PvP
+  -- line's 22 px under it, the subzone's 26 px under that: 256 px down at most. The arrow starts under it
+  FECASES[#FECASES + 1] = { "S3: under a host's corner place the arrow stands under the game's zone and subzone banner", function()
+    for _, ui in ipairs({ { 1920, 1080 }, { 1366, 768 } }) do
+      local c = lookChar("Banner" .. ui[1], { ui = ui, host = { cornerPlace = true } })
+      local env, QB = c.env, c.QB
+      QB:Settings().guide.hideTracker = true; QB.StepFrame.Apply()
+      for _, k in ipairs({ 1, 1.5 }) do
+        QB:Settings().arrowScale = k ~= 1 and k or nil
+        QB.Arrow:Set(true); QB.Arrow.Place()
+        local f = env.QuestBankArrow
+        local p = f.__points[1]
+        local top = -p.y * (f:GetScale() or 1)
+        assert(p.point == "TOP" and p.x == 0 and top >= 256 + 4, string.format("%dx%d at %d%%: the arrow's top %d px down, under the banner's 256", ui[1], ui[2], k * 100, top))
+      end
+      QB:Settings().arrowScale = nil
+    end
   end }
   local failed = {}
   for _, case in ipairs(FECASES) do
