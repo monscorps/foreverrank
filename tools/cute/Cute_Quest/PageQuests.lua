@@ -391,7 +391,13 @@ if E then
         tip:AddLine("Tooltips of the items you loot, carry or see, the spells you know, and which creatures and chests dropped what you loot (by id), and where you found them, with no names in them, so foreverrank.com can list them. Unticking forgets what was noted.", 0.85, 0.85, 0.85, true)
       end)
     col:Check("Learn quests from the game", s.survey ~= false, true, function(on) if E.Survey and E.Survey.SetOn then E.Survey.SetOn(on) else s.survey = on end end)
-    col:Check("Share your quests with your party", s.share.party ~= false, true, function(on) s.share.party = on end)
+    -- (the launch audit) what the group share sends, named: the engine's 1S is your level, XP into it, class and the levels
+    -- your plan reaches, its 1Q your quests; to your party or instance group (never a raid under Cute: Bridge.lua's
+    -- E.noRaidSync), whatever Who sees what says
+    col:Check("Share your level, XP and quests with your group", s.share.party ~= false, true, function(on) s.share.party = on end, nil, function(tip)
+      tip:AddLine("Share your level, XP and quests with your group", 1, 1, 1)
+      tip:AddLine("Your level, your XP into it, your class, the levels your plan reaches and the quests in it go to your party or instance group (never a raid), whatever Who sees what says. Group members who run Cute or QuestBank see them.", 0.85, 0.85, 0.85, true)
+    end)
     if F and F.ShareRow then F.ShareRow(col) end
     -- (where it comes from, once Cute's page offers Cute-Uploader.zip at release: build.py check_uploader_note holds
     -- the two together)

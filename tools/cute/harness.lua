@@ -4990,9 +4990,9 @@ do
     assert(rone.env.CuteQuestDB.settings.arrow == false and rone.env.QuestBankArrow and not rone.env.QuestBankArrow:IsShown(), "the arrow's row: off")
     click(boxOf(rone, "Direction arrow"))
     assert(rone.env.CuteQuestDB.settings.arrow == true and rone.env.QuestBankArrow:IsShown(), "and on again")
-    assert(not texts(rone):find("Lock the step frame", 1, true) and not texts(rone):find("Share your quests with your party", 1, true), "Quests: no lock row, the party's share in Data you share")
+    assert(not texts(rone):find("Lock the step frame", 1, true) and not texts(rone):find("Share your level, XP and quests with your group", 1, true), "Quests: no lock row, the party's share in Data you share")
     rone.C.UI:Open("settings", "share")
-    assert(texts(rone):find("Share your quests with your party", 1, true) and texts(rone):find("foreverrank.com", 1, true), "Data you share: the party's share, the notes for the site:\n" .. texts(rone))
+    assert(texts(rone):find("Share your level, XP and quests with your group", 1, true) and texts(rone):find("foreverrank.com", 1, true), "Data you share: the party's share, the notes for the site:\n" .. texts(rone))
     -- the Route tab: the band's summary and run button, the legs numbered; its section with the minimap's rows
     rone.C.UI:Open("route")
     assert(L.page == "route", "the Route tab")
@@ -19561,6 +19561,26 @@ do
       assert(API.noRaidSync == true and API.noGuildSync == true, "QuestBank's sync told off RAID and GUILD")
       assert(settings.share.guild == true and settings.share.party == true, "its saved settings as they were")
       leave(q)
+    end)
+  end }
+
+  -- S10 (trust). Data you share's "Share your quests with your party" named only the quests, with no tooltip; each 1S
+  -- carries your level, XP, class and the plan's levels to PARTY or INSTANCE_CHAT, whatever Who sees what says
+  FECASES[#FECASES + 1] = { "S10: the group share's row names what it sends and says where it goes", function()
+    inGuild({ member("Rone", 1) }, function()
+      local c = quest("Rone")
+      login(c); tickAll(6)
+      c.C.UI:Open("settings", "share")
+      assert(not row(c, "Share your quests with your party"), "the old words gone")
+      local r = row(c, "Share your level, XP and quests with your group")
+      assert(r, "the row:\n" .. texts(c))
+      local tip = tipOf(r)
+      assert(tip:find("party or instance group", 1, true) and tip:find("Who sees what", 1, true), "its tooltip:\n" .. tip)
+      click(r)
+      assert(c.env.CuteQuestDB.settings.share.party == false, "unticked: off")
+      click(r)
+      assert(c.env.CuteQuestDB.settings.share.party == true, "ticked: on")
+      leave(c)
     end)
   end }
 
