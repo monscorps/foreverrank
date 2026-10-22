@@ -1531,8 +1531,8 @@ function H.ExpireWeeks()
   end
 end
 -- the Hall of Shame chip: 0.7's live cards as the core draws them (UI:DrawShame), a weekly one as of this week; with
--- none ticked, the line names where the list is now (the section is the tab's, Halls: the core's own line names the
--- page's old title)
+-- none ticked, the line names where the list is now (Settings > Columns, under the page's head, since the windows
+-- round: the core's own line names the page's old title)
 function H.DrawLive(ui)
   H.ExpireWeeks()
   local ticked = C.UI.Ticked and C.UI.Ticked("shame") or {}
@@ -1540,7 +1540,7 @@ function H.DrawLive(ui)
   for _, def in ipairs(C.Stats.byCat.funny or {}) do if ticked[def.id] then any = true break end end
   if any then if ui.DrawShame then ui:DrawShame() end return end
   ui.rows:Clear()
-  say(ui, 6, 6, ui.scroll:Width() - 12, "No cards ticked. Settings, Halls has the list.")
+  say(ui, 6, 6, ui.scroll:Width() - 12, "No cards ticked. Settings, Columns has the list.")
   ui.scroll:SetContentHeight(38)
 end
 
@@ -2055,7 +2055,7 @@ end
 
 ----------------------------------------------------------------------------
 -- Settings > Halls (14): announcements on my screen, and the test announcement. The live Hall of Shame's checklist
--- of cards follows it in the same section
+-- of cards is in Settings > Columns (the windows design)
 ----------------------------------------------------------------------------
 function H.SettingsSection(_, col)
   col:Head("Announcements")
@@ -2136,18 +2136,20 @@ end, "halls: events"))
 
 ----------------------------------------------------------------------------
 -- the tab: the core's shame page becomes the Halls tab (9.4), its id kept. Its page draws the chips (the Hall of
--- Shame chip is 0.7's own page, UI:DrawShame), its Settings section Halls' rows above the live cards' checklist
+-- Shame chip is 0.7's own page, UI:DrawShame). (merge3) Settings > Halls is a section of its own under Guild (the run
+-- report design's 14, beside the windows design's Settings): Halls' two rows; the live cards' checklist stays the
+-- page's columns, in Settings > Columns under its head (Settings.lua ST.Sections takes a core page's own section)
 ----------------------------------------------------------------------------
 do
+  local section = { id = "halls", title = "Halls", group = "guild", order = 40, draw = function(ui, col) H.SettingsSection(ui, col) end }
   local def = C.Modules and C.Modules.byId and C.Modules.byId.shame
   if def then
-    local cards = def.settings
     def.title, def.tab = "Halls", 64
     def.page = function(ui) H.Draw(ui) end
-    def.settings = function(ui, col) H.SettingsSection(ui, col); if cards then cards(ui, col) end end
+    def.section = section
   else
-    -- (a window without the shame page: the tab registered here under its id, the live cards where the window has them)
+    -- (a window without the shame page: the tab registered here under its id with its section, and no columns)
     C:RegisterModule({ id = "shame", title = "Halls", order = 40, core = true, tab = 64, page = function(ui) H.Draw(ui) end,
-      settings = function(ui, col) H.SettingsSection(ui, col) end })
+      settings = function() end, section = section })
   end
 end

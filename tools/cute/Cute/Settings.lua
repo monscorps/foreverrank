@@ -694,6 +694,10 @@ function ST.Sections(officer)
     if not m.core then
       out[#out + 1] = { id = m.id, title = m.title, module = m, order = m.order or 100,
         group = m.group or ((m.window == "quests") and "quests") or "guild" }
+    elseif type(m.section) == "table" and type(m.section.draw) == "function" then
+      -- (a core page's own section beside its columns, which Columns draws: the Halls tab's, Halls.lua)
+      local s = m.section
+      out[#out + 1] = { id = s.id, title = s.title, extra = s, order = s.order or m.order or 100, group = s.group or "guild" }
     end
   end
   for _, d in ipairs(ST.extra) do

@@ -1230,8 +1230,8 @@ local function cardOf(c, name, officer)
 end
 -- the tabs shown, left to right, and Settings' sections listed, top to bottom, by id. (The Runs, Achievements and
 -- Records modules, on by default, are left out of both lists: the runs and cards stages' scenarios check their own;
--- Settings > Layout too, the hud stage's)
-local ASIDE = { runs = true, ach = true, records = true, layout = true }
+-- Settings > Halls too, the cards stage's, and Settings > Layout, the hud stage's)
+local ASIDE = { runs = true, ach = true, records = true, halls = true, layout = true }
 local function tabsShown(c)
   local out = {}
   for id, b in pairs(c.C.UI.tabs) do if b:IsShown() and not ASIDE[id] then out[#out + 1] = { id = id, x = b.__points[1].x } end end
@@ -13444,7 +13444,8 @@ end
 -- (CuteQuestFrame, Cute_Quest's tabs) and Settings (CuteSettingsFrame) from one builder: a 30 px header that drags the
 -- window, its title, the cog opening the window's group in Settings, the close, the game's size grabber in the corner,
 -- Esc closing each; a place and size kept per window. Settings' section list: rows 22 px and heads 20 px at any size,
--- every section of an officer with every module on fitting unscrolled at 760 x 420. The Statistics page's categories in
+-- every section of an officer with every module on listed, scrolled at 760 x 420 and unscrolled at Settings' own
+-- 800 x 560 (the owner's call, merge3). The Statistics page's categories in
 -- a column of their own; no leader at 0
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
@@ -13488,7 +13489,7 @@ do
     L.head.__scripts.OnDragStart(L.head); L.head.__scripts.OnDragStop(L.head)
     assert(c.env.CuteDB.winPos and c.env.CuteDB.winPos.quests and c.env.CuteDB.winPos.quests.left == 200 and c.env.CuteDB.pos == jpos, "L's place kept apart from J's")
     -- Settings' list at the smallest size: every section of an officer with every module on, rows 22 px and heads 20 px,
-    -- none scrolled out
+    -- each listed (the list scrolls there past thirteen, below)
     sizeAll(c, 760, 420)
     UI.OpenSettings("general")
     local heights, n = {}, 0
@@ -13498,19 +13499,21 @@ do
     assert(sectionsShown(c) == "general keys modules share columns vis rules example quests route map dungeons camp", "the sections by group: " .. sectionsShown(c))
     -- (merge2) Settings > Runs among them, under Guild after the guild's own (sectionsShown sets it aside for the runs
     -- stage); then the harness's own module addon (Cute_Example, the registration API's probe, which no player has) off:
-    -- every section a player can have, the run report's with them, fits unscrolled (16 + 60 + 13 x 22 of the 375 px the
-    -- design gives the list); a fourteenth scrolls, as the design allows
+    -- every section a player can have, the run report's with them (merge2 fitted thirteen unscrolled at 760 x 420: 16 +
+    -- 60 + 13 x 22 of the 375 px the design gives the list)
     local ids = {}
     for _, sec in ipairs(sections) do ids[#ids + 1] = sec.id end
-    assert(table.concat(ids, " "):find("vis rules runs example quests", 1, true), "Settings > Runs under Guild: " .. table.concat(ids, " "))
+    -- (merge3) the cards round's Halls before it and Achievements and Records after it, under Guild
+    assert(table.concat(ids, " "):find("vis rules halls runs ach records example quests", 1, true), "Settings > Halls, Runs, Achievements and Records under Guild: " .. table.concat(ids, " "))
     M.Set("Cute_Example", false); tick(c, 1)
     UI.OpenSettings("general")
-    -- (the hud round) Settings > Layout makes fourteen: at 760 x 420 the list scrolls, its rows still 22 px, as the design
-    -- allows past thirteen; at Settings' own 800 x 560 every section fits unscrolled
-    assert(#c.C.SettingsPage.Sections(true) == 14, "every section a player can have: " .. #c.C.SettingsPage.Sections(true))
+    -- (the hud round) Settings > Layout makes fourteen, and (merge3) the cards round's Halls, Achievements and Records
+    -- seventeen: at 760 x 420 the list scrolls, its rows still 22 px, as the owner allows past thirteen; at Settings' own
+    -- 800 x 560 every section fits unscrolled
+    assert(#c.C.SettingsPage.Sections(true) == 17, "every section a player can have: " .. #c.C.SettingsPage.Sections(true))
     local navList
     for _, f in ipairs(c.frames) do if f.section and f:IsVisible() then navList = f.__parent.__scrollParent end end
-    assert(navList and navList.bar:IsShown(), "fourteen at 760 x 420: the list scrolls")
+    assert(navList and navList.bar:IsShown(), "seventeen at 760 x 420: the list scrolls")
     check(S.frame, "W3 settings at 760x420, every section listed")
     sizeAll(c, 800, 560)
     UI.OpenSettings("general")
@@ -13532,7 +13535,7 @@ do
     for _, e in ipairs(c.env.CuteDB.errors or {}) do if e.stack ~= "" then errs[#errs + 1] = tostring(e.where) .. ": " .. tostring(e.msg) end end
     assert(#(c.env.CuteQuestDB.errors or {}) == 0 and #errs == 0, "no error recorded: " .. table.concat(errs, "; "))
     leave(c)
-    print("windows W3: J, L and Settings from one builder (30 px header, cog to the window's group, close, Esc, the game's size grabber, a place each); a module addon's page in J; Settings' list 22 px rows unscrolled at 760 x 420; the Statistics categories their own column; no leader at 0")
+    print("windows W3: J, L and Settings from one builder (30 px header, cog to the window's group, close, Esc, the game's size grabber, a place each); a module addon's page in J; Settings' list 22 px rows, scrolled at 760 x 420 and unscrolled at 800 x 560; the Statistics categories their own column; no leader at 0")
   end)
 end
 
@@ -13702,10 +13705,12 @@ do
     assert(m[1].kind == "title" and m[1].text == "Cute", "titled Cute")
     local g, q, s = entry(m, "Guild (J)"), entry(m, "Quests (L)"), entry(m, "Settings")
     assert(g and q and s and g.responds and q.responds and s.responds, "Guild (J), Quests (L) and Settings, each opening its window when clicked: " .. names(m))
-    -- (merge2: the run report's Runs tab and its section among them)
-    assert(names(g.sub) == "Race, Prog, Hall of Shame, Runs, Statistics, Officers, Me", "the guild's tabs: " .. names(g.sub))
+    -- (merge2: the run report's Runs tab and its section among them; merge3: the cards round's Halls tab, the Hall of
+    -- Shame retitled)
+    assert(names(g.sub) == "Race, Prog, Halls, Runs, Statistics, Officers, Me", "the guild's tabs: " .. names(g.sub))
     assert(names(q.sub) == "Quests, Route, ---, Step frame, Direction arrow", "the quests' tabs and the on-screen switches: " .. names(q.sub))
-    assert(names(s.sub) == "General, Keys, Layout, Modules, Data you share, Columns, Who sees what, Rules, Runs, Quests, Route", "every section: " .. names(s.sub))
+    -- (merge3: the cards round's Halls before Runs, Achievements and Records after it)
+    assert(names(s.sub) == "General, Keys, Layout, Modules, Data you share, Columns, Who sees what, Rules, Halls, Runs, Achievements, Records, Quests, Route", "every section: " .. names(s.sub))
     assert(entry(m, "Set up Cute...") and not entry(m, "Reload to apply"), "Set up Cute... before Start; no reload to apply")
     -- a click opens: a tab, the window, a section; a switch flips the engine's setting
     entry(g.sub, "Statistics").set()
@@ -13723,7 +13728,7 @@ do
     sw.set()
     -- the member: no Officers, no Rules
     local pm = menuOf(pim, "compartment")
-    assert(names(entry(pm, "Guild").sub) == "Race, Prog, Hall of Shame, Runs, Statistics, Me" and not names(entry(pm, "Settings").sub):find("Rules", 1, true), "the member's menu: no officers' entries: " .. names(entry(pm, "Guild").sub))
+    assert(names(entry(pm, "Guild").sub) == "Race, Prog, Halls, Runs, Statistics, Me" and not names(entry(pm, "Settings").sub):find("Rules", 1, true), "the member's menu: no officers' entries: " .. names(entry(pm, "Guild").sub))
     -- the compartment's click: the guild window
     pim.env.Cute_OnCompartment("Cute", "LeftButton")
     assert(pim.C.UI.frame:IsShown(), "the compartment's click: J")
@@ -15352,10 +15357,10 @@ do local function cardsStage()
     local d = H(ofa).draft
     assert(d and d.mode == "hall" and d.hall.kind == "shame" and d.hall.stats[1] and d.hall.title == "All time", "New hall: a Shame hall from the live cards")
     check(ofa.C.UI.frame, "halls: the composer, a new hall")
-    ofa.C.UI.frame:SetSize(760, 420)
+    sizeAll(ofa, 760, 420)
     ofa.C.UI:Draw()
     check(ofa.C.UI.frame, "halls: the composer, a new hall, 760x420")
-    ofa.C.UI.frame:SetSize(1040, 640)
+    sizeAll(ofa, 1040, 640)
     press(buttonOf(ofa, "Fame"))
     assert(H(ofa).draft.hall.kind == "fame", "Fame chosen")
     press(buttonOf(ofa, "This week"))
@@ -15476,9 +15481,10 @@ do local function cardsStage()
     rex.env.SlashCmdList.CUTE("card test hall")
     assert(CF.frame:IsShown() and CF.label:GetText() == "HALL OF SHAME", "/cute card test hall: a Hall of Shame from the live cards")
     check(CF.frame, "halls: a test Hall of Shame")
-    rex.C.UI:Open("settings", "shame")
+    -- (merge3: Settings is its own window since the windows round, Halls a section of its own in it)
+    rex.C.UI:Open("settings", "halls")
     assert(texts(rex):find("Announcements on my screen", 1, true) and buttonOf(rex, "Test announcement"), "Settings > Halls: the two rows")
-    check(rex.C.UI.frame, "halls: Settings > Halls")
+    check(sframe(rex), "halls: Settings > Halls")
     local d0 = #rex.chat
     rex.env.SlashCmdList.CUTE("diag cards")
     local diag = table.concat(rex.chat, "\n", d0 + 1)
@@ -15535,7 +15541,7 @@ do local function cardsStage()
     typeInto(edits(vala)[3], "Kept us alive")
     assert(H(vala).draft.cards[1].kind == "star" and H(vala).draft.cards[1].title == "Kept us alive", "the label and the title set")
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
-      vala.C.UI.frame:SetSize(size[1], size[2])
+      sizeAll(vala, size[1], size[2])
       vala.C.UI:Draw()
       check(vala.C.UI.frame, string.format("halls: New card, %dx%d", size[1], size[2]))
     end
@@ -15544,14 +15550,14 @@ do local function cardsStage()
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
       for _, c in ipairs({ vala, wynd }) do
         c.C.UI:Open("shame")
-        c.C.UI.frame:SetSize(size[1], size[2])
+        sizeAll(c, size[1], size[2])
         for _, chip in ipairs({ "shame", "news", "queue" }) do
           H(c).OpenChip(chip)
           check(c.C.UI.frame, string.format("halls: %s, %s, %dx%d", c == vala and "officer" or "member", chip, size[1], size[2]))
         end
       end
     end
-    vala.C.UI.frame:SetSize(1040, 640); wynd.C.UI.frame:SetSize(1040, 640)
+    sizeAll(vala, 1040, 640); sizeAll(wynd, 1040, 640)
     -- an announcement of one to five cards, the fifth set a hall's
     local CF = wynd.C.CardFrame
     for n = 1, 5 do
@@ -15785,10 +15791,11 @@ do local function cardsStage()
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
       for _, c in ipairs({ ada, max }) do
         c.C.UI:Open("settings", "ach")
-        c.C.UI.frame:SetSize(size[1], size[2])
+        sizeAll(c, size[1], size[2])
         c.C.UI:Open("settings", "ach")
         assert(texts(c):find("On for the whole guild", 1, true) and (c == ada or texts(c):find("Set by the officers", 1, true)), "Settings > Achievements")
-        check(c.C.UI.frame, string.format("achievements: settings, %s, %dx%d", c == ada and "officer" or "member", size[1], size[2]))
+        -- (merge3: Settings its own window)
+        check(sframe(c), string.format("achievements: settings, %s, %dx%d", c == ada and "officer" or "member", size[1], size[2]))
       end
     end
     ada.C.Policy:SetRule("achGuild", nil)
@@ -15810,11 +15817,11 @@ do local function cardsStage()
       and not diag:find("Mia", 1, true) and not diag:find("Nox", 1, true), "/cute diag cards says the achievements' state, no name:\n" .. diag)
     -- the queue with its rows: the day's row open, a guild card, a locked item, at both sizes
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
-      ada.C.UI.frame:SetSize(size[1], size[2])
+      sizeAll(ada, size[1], size[2])
       H(ada).OpenChip("queue")
       check(ada.C.UI.frame, string.format("achievements: the queue, %dx%d", size[1], size[2]))
     end
-    ada.C.UI.frame:SetSize(1040, 640)
+    sizeAll(ada, 1040, 640)
     -- the guild card, as an announcement shows it: the guild's name, the achievement's icon in the picture
     local CF = ada.C.CardFrame
     local ac = {}
@@ -15903,11 +15910,11 @@ do local function cardsStage()
     -- nothing published by itself; then an officer's click publishes the first, GUILD FIRST on every member's client
     assert(msgs(fay, "1C") == 0 and #H(gil).Sets() == 0, "nothing published without an officer's click")
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
-      fay.C.UI.frame:SetSize(size[1], size[2])
+      sizeAll(fay, size[1], size[2])
       H(fay).OpenChip("queue")
       check(fay.C.UI.frame, string.format("firsts: the queue, %dx%d", size[1], size[2]))
     end
-    fay.C.UI.frame:SetSize(1040, 640)
+    sizeAll(fay, 1040, 640)
     tickAll(90)
     H(fay).ticked[f1.id] = true
     local set = H(fay):Compose(H(fay).Ticked())
@@ -16233,14 +16240,15 @@ do local function cardsStage()
     for _, c in ipairs({ ola, dot }) do
       H(c).OpenChip("records")
       for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
-        c.C.UI.frame:SetSize(size[1], size[2])
+        sizeAll(c, size[1], size[2])
         H(c).OpenChip("records")
         check(c.C.UI.frame, string.format("records: the chip, %s, %dx%d", c == ola and "officer" or "member", size[1], size[2]))
         c.C.UI:Open("settings", "records")
         assert(texts(c):find("On for the whole guild", 1, true) and (c == ola or texts(c):find("Set by the officers", 1, true)), "Settings > Records")
-        check(c.C.UI.frame, string.format("records: settings, %s, %dx%d", c == ola and "officer" or "member", size[1], size[2]))
+        -- (merge3: Settings its own window)
+        check(sframe(c), string.format("records: settings, %s, %dx%d", c == ola and "officer" or "member", size[1], size[2]))
       end
-      c.C.UI.frame:SetSize(1040, 640)
+      sizeAll(c, 1040, 640)
     end
     H(dot).OpenChip("records")
     local mrow = rowLabeled(dot, "The Deadmines")
@@ -16308,12 +16316,12 @@ do local function cardsStage()
     for _, c in ipairs({ nia, nor }) do
       H(c).OpenChip("records")
       for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
-        c.C.UI.frame:SetSize(size[1], size[2])
+        sizeAll(c, size[1], size[2])
         H(c).OpenChip("records")
         assert(texts(c):find("No records yet: they fill in as the guild plays.", 1, true) and (c == nor or rowLabeled(c, "Fastest clears")), "the empty chip; an officer's switch for the fastest clears under it")
         check(c.C.UI.frame, string.format("records: the empty chip, %s, %dx%d", c == nia and "officer" or "member", size[1], size[2]))
       end
-      c.C.UI.frame:SetSize(1040, 640)
+      sizeAll(c, 1040, 640)
     end
   end)
   said[#said + 1] = "the empty Records chip at both sizes"
@@ -16548,19 +16556,23 @@ do local function cardsStage()
   end)
   said[#said + 1] = "Preview's guild line whole on two lines at most, none promised in the chat lockdown"
 
-  -- the Hall of Shame chip with every card unticked names where the list is now: Settings, Halls
+  -- the Hall of Shame chip with every card unticked names where the list is now: Settings, Columns (merge3: the windows
+  -- round keeps each page's list there, under its head; Settings > Halls holds the announcements' two rows)
   isolated({ gmember("Yes", 1, "MAGE") }, function()
     local yes = cchar("Yes", 1)
     login(yes)
     tickAll(20)
     for _, def in ipairs(yes.C.Stats.byCat.funny) do yes.C.UI.SetTicked("shame", def.id, false) end
     H(yes).OpenChip("shame")
-    assert(texts(yes):find("No cards ticked. Settings, Halls has the list.", 1, true) and not texts(yes):find("Settings, Hall of Shame", 1, true), "the empty chip names Settings, Halls:\n" .. texts(yes))
+    assert(texts(yes):find("No cards ticked. Settings, Columns has the list.", 1, true) and not texts(yes):find("Settings, Hall of Shame", 1, true), "the empty chip names Settings, Columns:\n" .. texts(yes))
     check(yes.C.UI.frame, "halls: the Hall of Shame chip, nothing ticked")
-    yes.C.UI:Open("settings", "shame")
-    assert(texts(yes):find("Announcements on my screen", 1, true) and texts(yes):find("Cards", 1, true), "Settings, Halls has the list")
+    yes.C.UI:Open("settings", "columns")
+    assert(texts(yes):find("Hall of Shame cards", 1, true) and not texts(yes):find("Announcements on my screen", 1, true), "Settings, Columns has the list")
+    yes.C.UI:Open("settings", "halls")
+    assert(texts(yes):find("Announcements on my screen", 1, true) and not texts(yes):find("Hall of Shame cards", 1, true), "Settings, Halls: the announcements alone")
+    check(sframe(yes), "halls: Settings > Halls")
   end)
-  said[#said + 1] = "the Hall of Shame chip unticked names Settings, Halls"
+  said[#said + 1] = "the Hall of Shame chip unticked names Settings, Columns"
 
   -- a day's digest full of one sender's entries makes room for another's: the sender with the most gives its oldest
   -- up, so one copy's earns never keep the guild's out; the server's own lines give nothing up
