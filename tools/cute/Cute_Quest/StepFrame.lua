@@ -1,6 +1,7 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- The step frame (6.0): the Guide's current step, the next two greyed beneath, a quest-item button when the step needs
--- one, "about 14 min to level 6", the trainer reminder, and the party's steps. Each step says where (the launch round):
+-- one, "about 14 min to level 6", the one line of guidance that means going somewhere (the hud round: Train, Flight
+-- path, Sleeping bag, Remind.Step), and the party's steps. Each step says where (the launch round):
 -- the kind's game icon, its name, who and where ("Mathrengyl Bearwalker - Darnassus") and the minutes to get there for
 -- the step now; the next two, name and place on one line with the minutes where a new trip starts; every row's tooltip
 -- the whole step, the NPC and place, minutes and XP. Small, movable (a drag;
@@ -19,6 +20,8 @@ local WIDTH, PAD, ROW = 260, 12, 18 -- (PAD: the text sits inside the 12 px bord
 -- the step now's row: its name, then who and where 20 px down (clear of the item button at the frame's top right);
 -- the text starts after the icon (TEXT_X) and leaves the minutes their column (MINS_W)
 local ROW1, TEXT_X, MINS_W = 34, 20, 44
+local LINE_MINS = 38 -- (the reminder line's minutes: "12 min" at 11 px)
+local LINE_TWO = 14 -- (the reminder line's second row, where its words need one: 12 px)
 local INNER = WIDTH - PAD * 2
 -- (the windows round) a host's look, QB.Skin.stop (Cute_Quest's): the frame as a stop of the route, standing on the
 -- world with no backdrop (the setting guide.backdrop brings the host's flat one back) and its text outlined and
@@ -44,6 +47,13 @@ SF.SCALES = SCALES
 
 local function settings() return QB:Settings().guide end
 local function fighting() return InCombatLockdown and InCombatLockdown() or false end
+-- (the layout round) the frame's lock: a host's one lock for the on-screen pieces where it sets one (QB.LayoutLocked:
+-- Cute's, which its Bridge.lua sets), else QuestBank's own, guide.locked (Settings and the frame's menu)
+local function locked()
+  local h = QB.LayoutLocked
+  if type(h) == "function" then return h("step") == true end
+  return settings().locked == true
+end
 local trackerOut, trackerHooked, trackerWait = false, false, false -- (the game's quest tracker: SF.Tracker)
 -- (the windows round) its scale while out of sight, the one it had (kept for the session), and Edit Mode open
 local OUT_SCALE = 0.01
@@ -249,7 +259,7 @@ local function build()
     local gold = tone("GOLD")
     f:SetBackdropBorderColor(gold[1], gold[2], gold[3], 0.5)
   end
-  f:SetScript("OnDragStart", function(self) if not settings().locked then self:StartMoving() end end)
+  f:SetScript("OnDragStart", function(self) if not locked() then self.qbDragging = true; self:StartMoving() end end)
   -- (the review round) a right-click anywhere on the frame is its menu, as on a step: the tracker's note under the steps
   -- says "Right-click here", and only the steps took one (a welcome card's own buttons answer for it)
   f:SetScript("OnMouseUp", QB.Safe(function(self, button)
@@ -258,6 +268,8 @@ local function build()
   -- (the review round) kept by its middle against the screen's, where the drag left it, whatever point the game
   -- anchors a moved frame by (place() anchors it so again); the arrow follows it at once
   f:SetScript("OnDragStop", QB.Safe(function(self)
+    if not self.qbDragging then return end -- (a drag the lock refused: its place left alone)
+    self.qbDragging = nil
     self:StopMovingOrSizing()
     local cx, cy = self:GetCenter()
     local fs, us = self:GetEffectiveScale() or 1, UIParent:GetEffectiveScale() or 1
@@ -340,9 +352,34 @@ local function build()
   f.time = fs(f, small, soft, WIDTH - PAD * 2)
   f.time:SetPoint("TOPLEFT", PAD, -PAD - ROW1 - ROW * 2)
   if STOP then f.time:Hide() end
-  f.remind = fs(f, small, "GOLD", WIDTH - PAD * 2)
-  f.remind:SetPoint("TOPLEFT", PAD, -PAD - ROW * 4)
-  f.remind:Hide()
+  -- (the hud round) the line: a 14 px icon, its words at 12 px in the ink, the minutes at 11 px on the right; a 2 px bar
+  -- at its left in its category's colour (the sleeping bag's quest gold); a click shows its place on the arrow, a
+  -- right-click is Remind's menu (Not now, Never: the line's, the step frame's own menu stays the steps')
+  local line = CreateFrame("Button", nil, f)
+  line:SetSize(INNER, ROW)
+  line:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  line.icon = line:CreateTexture(nil, "ARTWORK")
+  line.icon:SetSize(14, 14)
+  line.icon:SetPoint("TOPLEFT", STOP and 5 or 1, -2)
+  line.bar = line:CreateTexture(nil, "ARTWORK")
+  line.bar:SetSize(2, 14)
+  line.bar:SetPoint("TOPLEFT", STOP and 1 or -4, -2)
+  line.bar:Hide()
+  line.text = fs(line, 12, "INK", INNER - TEXT_X - LINE_MINS)
+  line.text:SetPoint("TOPLEFT", TEXT_X, -2)
+  line.mins = fs(line, 11, "INK", LINE_MINS)
+  line.mins:SetJustifyH("RIGHT")
+  line.mins:SetPoint("TOPRIGHT", 0, -3)
+  line:SetScript("OnClick", QB.Safe(function(self, button)
+    local rec = self.rec
+    if not rec then return end
+    if button == "RightButton" then if QB.Remind and QB.Remind.Menu then QB.Remind.Menu(self) end return end
+    if QB.Remind and QB.Remind.Go then QB.Remind.Go(rec) end
+  end, "step frame: line"))
+  line:SetScript("OnEnter", QB.Safe(function(self) if self.rec and QB.Remind and QB.Remind.Tip then QB.Remind.Tip(self, self.rec) end end, "step frame: line"))
+  line:SetScript("OnLeave", rowLeave)
+  line:Hide()
+  f.remind = line
   -- the once-ever note where the game's quest tracker went (SF.Tracker): two lines, wrapped
   f.note = fs(f, small, soft, WIDTH - PAD * 2)
   f.note:SetWordWrap(true)
@@ -477,10 +514,27 @@ local function itemButton(f)
   b:Hide()
   return b
 end
+-- (the hud round) the step's item: its quest's usable item, else, while the route's first leg is your hearthstone, the
+-- hearthstone you carry (Remind.Hearth: 6948, 243229, 284163, then the single-use 282006), ready: "Use your Hearthstone"
+-- had no button
+local function hearthItem()
+  local r = (QB.Target and QB.Target.Route and QB.Target.Route()) or QB.routeNow
+  local leg = r and r.legs and r.legs[1]
+  if not (leg and leg.kind == "hearth" and QB.Remind and QB.Remind.Hearth) then return nil end
+  local id, left = QB.Remind.Hearth()
+  if not id or left > 0 then return nil end
+  return id, nil, (QB.Data.TEX and QB.Data.TEX.hearth) or 134414
+end
+local function itemFor(s)
+  local id, link, tex = G.ItemFor(s)
+  if id then return id, link, tex end
+  return hearthItem()
+end
+SF.ItemFor = itemFor
 function SF.RefreshItem(s)
   local f = SF.frame
   if not f then return end
-  local id, _, tex = G.ItemFor(s)
+  local id, _, tex = itemFor(s)
   local want = id and ("item:" .. id) or nil
   if not f:IsShown() or (f.card and f.card:IsShown()) then want = nil end -- (the frame away or on a card: no button)
   if fighting() then SF.pendingItem = true return end
@@ -501,6 +555,51 @@ end
 
 -- what the lines were last drawn from (SF.Refresh); -1: draw them again
 local lastVer, lastTime, lastRemind, lastMembers, lastNote, lastMins = -1, nil, false, -1, false, nil
+-- (the hud round) the line's record, its words and its minutes as last drawn: Remind tells after each refresh
+local lineRec, lineText, lineWord
+function SF.RemindChanged(rec)
+  local text, word = rec and rec.text, rec and rec.word
+  if rec == lineRec and text == lineText and word == lineWord then return end
+  lineRec, lineText, lineWord = rec, text, word
+  lastVer = -1
+  if SF.frame and SF.frame:IsShown() then SF.Refresh() end
+end
+-- the line drawn from its record: its icon (an atlas where the client has it, else the file, at its corners; the
+-- corners never set after an atlas, whose own part of its sheet they would replace), desaturated where its record says
+-- (Flight path's), words, minutes and bar
+local function drawLine(line, rec)
+  line.rec = rec
+  if line.qbTex ~= rec.tex or line.qbAtlas ~= rec.atlas then
+    line.qbTex, line.qbAtlas = rec.tex, rec.atlas
+    if not QB.Art(line.icon, rec.atlas, rec.tex or QB.Data.TEX.questGeneric) and rec.tc then
+      line.icon:SetTexCoord(rec.tc[1], rec.tc[2], rec.tc[3], rec.tc[4])
+    end
+  end
+  local grey = rec.desat == true
+  if line.qbGrey ~= grey then line.qbGrey = grey; line.icon:SetDesaturated(grey) end
+  -- (the words take the minutes' room where there are none. The hud review: never cut, since the trainer's or the
+  -- town's name is the line's point and one row is too narrow for many, "Learn the flight path: Sentinel Hill" 181 px
+  -- of the 178: a second row where the words need it, the frame that much taller. The line changes out of a fight only,
+  -- Remind's refresh, so the frame's height with it)
+  local tw = INNER - TEXT_X - (rec.mins and LINE_MINS or 0)
+  local text, t = rec.text or "", line.text
+  if t.qbLine ~= text or t.qbW ~= tw then
+    t.qbLine, t.qbW = text, tw
+    t:SetWidth(tw)
+    t:SetWordWrap(false)
+    t:SetText(text)
+    local two = ((t.GetUnboundedStringWidth or t.GetStringWidth)(t) or 0) > tw
+    t:SetWordWrap(two)
+    t:SetHeight(two and 14 + LINE_TWO or 14)
+    line.rows = two and 2 or 1
+  end
+  line.mins:SetText(rec.mins and rec.word or "")
+  local col = rec.cat == "xp" and QUEST or nil
+  if col then line.bar:SetColorTexture(col[1], col[2], col[3], 1); line.bar:Show() else line.bar:Hide() end
+  local h = ROW + (line.rows == 2 and LINE_TWO or 0)
+  if line:GetHeight() ~= h then line:SetHeight(h) end
+  return h
+end
 
 -- the fight over (PLAYER_REGEN_ENABLED, from Core.lua's frame): a change that waited goes through now. The frame
 -- shown: its next refresh does it all; hidden (Hide in a fight, the Guide turned off): its OnUpdate never runs, so the
@@ -918,7 +1017,8 @@ function SF.Refresh()
   if SF.pendingItem and not fighting() then lastVer = -1 end
   local steps = G.Steps()
   local text = G.TimeToLevel()
-  local remind = (G.reminder and GetTime and GetTime() < G.reminder) and true or false
+  local rl = G.Reminder and G.Reminder() or nil
+  local remind = rl ~= nil
   local members = G.MemberSteps() -- (the list stands until G.memberVer moves: no table and no string a tick)
   if SF.notePending then
     SF.notePending, SF.noteUntil = nil, (GetTime and GetTime() or 0) + NOTE_S
@@ -930,7 +1030,7 @@ function SF.Refresh()
   lastVer, lastTime, lastRemind, lastMembers, lastNote, lastMins = G.ver, text, remind, G.memberVer, note, mins
   -- the first row makes room for the item button only while one shows (in a fight, as the button stands); the stop
   -- look's button stands left of the frame
-  local itemUp = not STOP and (fighting() and (f.item ~= nil and f.item:IsShown()) or (not fighting() and G.ItemFor(steps[1]) ~= nil))
+  local itemUp = not STOP and (fighting() and (f.item ~= nil and f.item:IsShown()) or (not fighting() and itemFor(steps[1]) ~= nil))
   f.rows[1].text:SetWidth(INNER - TEXT_X - (STOP and MINS_W or 0) - (itemUp and 30 or 0))
   f.rows[1].text.qbText, f.rows[1].text.qbA = nil, nil -- (fitted again at the new width)
   for i = 1, 3 do
@@ -981,19 +1081,23 @@ function SF.Refresh()
     r:SetShown(i == 1 or s ~= nil)
   end
   f.time:SetText((not STOP and text) or "")
-  f.remind:SetText(remind and "New spells at your class trainer" or "")
-  f.remind:SetShown(remind)
-  -- (the quests under the steps start where nothing above them moves: the time line's row kept for them)
+  -- (the quests under the steps start where nothing above them moves: the time line's row kept for them; the line of
+  -- guidance after the next two steps, before the quests you hold)
   local nq = settings().quests or 0
   local y
   if STOP then y = PAD + ROW1 + 6 + ROW * 2 + 4
   else y = PAD + ROW1 + ROW * 2 + ((text or nq > 0) and ROW or 0) end
-  y = SF.DrawQuests(f, y, steps, nq)
   if remind then
+    local lh = drawLine(f.remind, rl)
     f.remind:ClearAllPoints()
     f.remind:SetPoint("TOPLEFT", PAD, -y)
-    y = y + ROW
+    f.remind:Show()
+    y = y + lh
+  else
+    f.remind:Hide()
+    f.remind.rec = nil
   end
+  y = SF.DrawQuests(f, y, steps, nq)
   f.note:SetShown(note)
   if note then
     f.note:ClearAllPoints()
@@ -1019,7 +1123,12 @@ function SF.Refresh()
     y = y + ROW
   end
   for i = lines + 1, #f.members do f.members[i]:Hide() end
-  if f:GetHeight() ~= y + PAD then f:SetHeight(y + PAD); arrowFollows() end
+  -- (the hud round) a secure button anchored to the frame (the step's item, a quest's) makes the frame's size anchoring-
+  -- restricted in a fight: it holds still, laid out again at the fight's end (SF.OnRegen)
+  local anchored = fighting() and f.item ~= nil and f.item:IsShown()
+  if fighting() and not anchored then for _, b in ipairs(f.qitems) do if b:IsShown() then anchored = true end end end
+  if anchored then SF.pendingItem = true
+  elseif f:GetHeight() ~= y + PAD then f:SetHeight(y + PAD); arrowFollows() end
   SF.RefreshItem(steps[1])
   SF.RefreshQuestItems()
   SF.MarkReward()
@@ -1252,7 +1361,7 @@ function SF.Apply()
   local f = SF.frame
   if not f then return end
   place(f)
-  f.__dragOff = s.locked and true or nil -- (the drag script reads the setting; the harness reads this flag)
+  f.__dragOff = locked() or nil -- (the drag script reads the lock; the harness reads this flag)
   if STOP and f.qbBackdrop ~= (s.backdrop == true) then
     -- (the stop look stands on the world; "Backdrop behind the step frame" brings the host's flat one back)
     f.qbBackdrop = s.backdrop == true
@@ -1295,7 +1404,12 @@ function SF:Menu(s)
     items[#items + 1] = { "Not now", function() G.Skip(s.qid, "later") end }
     items[#items + 1] = { "Drop " .. name, function() G.Skip(s.qid, "drop") end }
   end
-  items[#items + 1] = { set.locked and "Unlock" or "Lock", function() set.locked = not set.locked; SF.Apply() end }
+  -- (the layout round) a host's one lock where it has one (QB.SetLayoutLocked: Cute's, for every piece on screen)
+  if type(QB.SetLayoutLocked) == "function" then
+    items[#items + 1] = { locked() and "Unlock frames" or "Lock frames", function() QB.SetLayoutLocked(not locked()); SF.Apply() end }
+  else
+    items[#items + 1] = { set.locked and "Unlock" or "Lock", function() set.locked = not set.locked; SF.Apply() end }
+  end
   for _, sc in ipairs(SCALES) do
     items[#items + 1] = { string.format("Scale: %d%%%s", sc * 100, (set.scale or 1) == sc and "  (now)" or ""), function() SF.SetScale(sc) end }
   end
@@ -1331,3 +1445,72 @@ function SF:Init()
   end
   SF.Apply()
 end
+
+-- (the layout round) the frame as a host's layout mode moves it (QB.Movers: Remind.lua says what each part does): kept
+-- by its centre (guide.x/y, in its own units: its scale times them is UIParent's); its scale is SF.SetScale's, its
+-- centre kept; secure, for the quests' item buttons anchored to it
+QB.Movers = QB.Movers or {}
+local function screen() return UIParent:GetWidth() or 1920, UIParent:GetHeight() or 1080 end
+local function frameSize()
+  local f, sc = SF.frame, settings().scale or 1
+  return WIDTH * sc, ((f and f:GetHeight()) or (PAD * 2 + ROW1 + ROW * 3)) * sc
+end
+local function validScale(k)
+  k = tonumber(k) or 1
+  return math.max(0.5, math.min(2, k))
+end
+local function placed()
+  local f = SF.frame
+  if not f then return end
+  place(f)
+  arrowFollows()
+end
+QB.Movers.step = {
+  key = "step", name = "Step frame", order = 1, secure = true,
+  frame = function() return SF.frame end,
+  on = function() local s = settings(); return s.on == true and s.frame == true end,
+  switch = function(on) settings().frame = on and true or false; SF.Apply() end,
+  rect = function()
+    local s, f = settings(), SF.frame
+    local W, H = screen()
+    local w, h = frameSize()
+    local sc = s.scale or 1
+    if type(s.x) == "number" and type(s.y) == "number" then
+      local cx, cy = W / 2 + s.x * sc, H / 2 + s.y * sc
+      return cx - w / 2, cy + h / 2, w, h
+    end
+    -- (its default place, as place() last put it: its middle across, its top down from the screen's top)
+    local mid, top = (f and f.qbX) or 0, (f and f.qbTop) or TOP_Y
+    return W / 2 + mid - w / 2, H - top, w, h
+  end,
+  move = function(left, top)
+    local s = settings()
+    local W, H = screen()
+    local w, h = frameSize()
+    local sc = s.scale or 1
+    s.x, s.y = (left + w / 2 - W / 2) / sc, (top - h / 2 - H / 2) / sc
+    placed()
+  end,
+  scale = function(k)
+    local s = settings()
+    k = validScale(k)
+    local old = s.scale or 1
+    if type(s.x) == "number" and type(s.y) == "number" then s.x, s.y = s.x * old / k, s.y * old / k end
+    SF.SetScale(k)
+    placed()
+  end,
+  get = function()
+    local s = settings()
+    local sc = s.scale or 1
+    if type(s.x) == "number" and type(s.y) == "number" then return { point = "CENTER", x = s.x * sc, y = s.y * sc, scale = sc } end
+    return { scale = sc }
+  end,
+  set = function(p)
+    local s = settings()
+    local sc = validScale(type(p) == "table" and p.scale or 1)
+    local ok = type(p) == "table" and p.point == "CENTER" and tonumber(p.x) and tonumber(p.y)
+    s.x, s.y = ok and p.x / sc or nil, ok and p.y / sc or nil
+    SF.SetScale(sc)
+    placed()
+  end,
+}

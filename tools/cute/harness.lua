@@ -1229,8 +1229,9 @@ local function cardOf(c, name, officer)
   for _, card in ipairs(plan.cards) do if card.d.name == name then return c.C.Guide.CardRows(card, plan), card, plan end end
 end
 -- the tabs shown, left to right, and Settings' sections listed, top to bottom, by id. (The Runs, Achievements and
--- Records modules, on by default, are left out of both lists: the runs and cards stages' scenarios check their own)
-local ASIDE = { runs = true, ach = true, records = true }
+-- Records modules, on by default, are left out of both lists: the runs and cards stages' scenarios check their own;
+-- Settings > Layout too, the hud stage's)
+local ASIDE = { runs = true, ach = true, records = true, layout = true }
 local function tabsShown(c)
   local out = {}
   for id, b in pairs(c.C.UI.tabs) do if b:IsShown() and not ASIDE[id] then out[#out + 1] = { id = id, x = b.__points[1].x } end end
@@ -4920,7 +4921,7 @@ do
     rone.C.UI:Open("settings", "modules")
     local base = boxOf(rone, "Quests and Route")
     assert(base and base:GetChecked() and base.__disabled, "Settings > Modules: Quests and Route, ticked and greyed:\n" .. texts(rone))
-    assert(boxOf(rone, "Dungeons tab") and boxOf(rone, "Gear tab") and boxOf(rone, "Map") and boxOf(rone, "Camp"), "the switchable ones: Dungeons and Gear tabs, Map, Camp:\n" .. texts(rone))
+    assert(boxOf(rone, "Dungeons tab") and boxOf(rone, "Gear tab") and boxOf(rone, "Map") and boxOf(rone, "Reminders"), "the switchable ones: Dungeons and Gear tabs, Map, Reminders:\n" .. texts(rone))
     -- the quest window (L, CuteQuestFrame): Quests and Route; the guild window keeps the guild's pages alone
     rone.C.UI:Open("race")
     assert(tabsShown(rone) == "race prog shame game officers me", "the guild window's tabs: " .. tabsShown(rone))
@@ -5042,19 +5043,22 @@ do
     click(boxOf(rone, "Show low-level quests"))
     assert(rone.env.CuteQuestDB.settings.mapLowLevel == false, "and off again")
     rone.C.UI:Open("settings", "camp")
-    assert(not texts(rone):find("Sleeping bag", 1, true) and not texts(rone):find("Sellers", 1, true) and texts(rone):find("Camp bar", 1, true), "Camp: the bar, the banner and the light alone:\n" .. texts(rone))
-    assert(texts(rone):find("Party members' buffs", 1, true) and texts(rone):find("Missing buffs", 1, true), "Camp: the missing-buffs and party rows:\n" .. texts(rone))
+    local rt = texts(rone)
+    for _, row in ipairs(QB.Remind.ROWS) do assert(rt:find(row.label, 1, true), "Reminders: the engine's row " .. row.label .. ":\n" .. rt) end
+    assert(rt:find("Interact light", 1, true) and rt:find("Light style", 1, true) and not rt:find("Camp bar", 1, true) and not rt:find(QB.Remind.ON_LABEL, 1, true),
+      "Reminders: the engine's six and the light's two, no master row (the module is the switch):\n" .. rt)
     local function rowsOf(id)
       local n = 0
       local col = setmetatable({}, { __index = function(_, k) return function() if k == "Check" or k == "Choice" or k == "Step" or k == "Edit" then n = n + 1 end end end })
       M.byId[id].settings(M.byId[id], col)
       return n
     end
-    assert(rowsOf("camp") <= 6 and rowsOf("map") <= 6, string.format("Camp and Map keep six rows at most: %d, %d", rowsOf("camp"), rowsOf("map")))
+    assert(rowsOf("camp") == 8 and rowsOf("map") <= 6, string.format("Reminders eight rows, Map six at most: %d, %d", rowsOf("camp"), rowsOf("map")))
     local s = rone.env.CuteQuestDB.settings
-    assert(s.mapIcons == true and s.pins == true and s.minimapGivers == true and s.campBar == true and s.glow.on == true, "on: the switches on")
+    assert(s.mapIcons == true and s.pins == true and s.minimapGivers == true and s.remind.on == true and s.glow.on == false, "on: the switches on; the light its own row, off on a fresh install")
     M.Set("Cute_Quest:map", false); M.Set("Cute_Quest:camp", false)
-    assert(s.mapIcons == false and s.pins == false and s.minimapPins ~= false and s.campBar == false and s.glow.on == false, "off: the world map's and the camp's off, the minimap's route kept (the Route tab's)")
+    assert(s.mapIcons == false and s.pins == false and s.minimapPins ~= false and s.remind.on == false and s.remind.buffs == true and s.remind.party == true,
+      "off: the world map's and Reminders off, the minimap's route kept (the Route tab's), the rows as they were")
     for _, key in ipairs({ "Cute_Quest:map", "Cute_Quest:camp" }) do M.Set(key, true) end
     -- every tab and every Quests section at both sizes for an officer with every quest module on
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
@@ -5087,9 +5091,9 @@ do
   isolated({ member("Rone", 1) }, function()
     local state = {}
     local function client() return newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true })) end
-    local function flags(s) return string.format("mapIcons=%s pins=%s minimapPins=%s minimapLines=%s minimapGivers=%s mmExtended=%s campBar=%s buffs=%s glow=%s guide=%s frame=%s arrow=%s",
+    local function flags(s) return string.format("mapIcons=%s pins=%s minimapPins=%s minimapLines=%s minimapGivers=%s mmExtended=%s remind.on=%s buffs=%s glow=%s guide=%s frame=%s arrow=%s",
       tostring(s.mapIcons), tostring(s.pins), tostring(s.minimapPins), tostring(s.minimapLines), tostring(s.minimapGivers), tostring(s.mmExtended),
-      tostring(s.campBar), tostring(s.remind.buffs), tostring(s.glow.on), tostring(s.guide.on), tostring(s.guide.frame), tostring(s.arrow)) end
+      tostring(s.remind.on), tostring(s.remind.buffs), tostring(s.glow.on), tostring(s.guide.on), tostring(s.guide.frame), tostring(s.arrow)) end
     local function stepShown(c) return c.env.QuestBankStep ~= nil and c.env.QuestBankStep:IsShown() end
     -- a saved table from before with more runs than the engine keeps: the prune must run on it, not on a throwaway
     local runs = {}
@@ -5102,8 +5106,8 @@ do
     assert(s.guide.on == true and s.guide.frame == true and stepShown(c), "the base alone: the guide on, the frame up: " .. flags(s))
     assert(s.mapIcons == false and s.pins == false, "Map off: no quest icons, no route pins on the world map: " .. flags(s))
     assert(s.minimapPins ~= false and s.minimapLines ~= false, "the minimap's route is the Route tab's: left on: " .. flags(s))
-    assert(s.campBar == false and s.remind.buffs == false and s.remind.party == false and s.glow.on == false, "Camp off: no camp bar, no buffs banner, no party's buffs, no light: " .. flags(s))
-    assert(s.cuteOff.map.mapIcons == true and s.cuteOff.camp.campBar == true and s.cuteOff.map.minimapPins == nil, "what the flags were is kept for the switch on, the world map's alone")
+    assert(s.remind.on == false and s.remind.buffs == true and s.remind.party == true and s.glow.on == false, "Reminders off: nothing on screen, the rows as they are, no light on a fresh install: " .. flags(s))
+    assert(s.cuteOff.map.mapIcons == true and s.cuteOff.camp["remind.on"] == true and s.cuteOff.map.minimapPins == nil, "what the flags were is kept for the switch on, the world map's alone")
     -- Map on: its flags back as they were (the engine's defaults); a row's choice survives off and on
     c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
     assert(s.mapIcons == true and s.pins == true and s.cuteOff.map == nil, "Map on: both back on: " .. flags(s))
@@ -5113,11 +5117,11 @@ do
     c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
     assert(s.mapIcons == true and s.pins == false, "Map on again: the row's choice kept: " .. flags(s))
     s.pins = true
-    -- Camp on: the bar and the light; the light's switch goes through Glow.Set, which puts the game's settings back
+    -- Reminders on: on screen again; the light is its own row (the card's), never the module's
     c.C.Modules.Set("Cute_Quest:camp", true); tick(c, 1)
-    assert(s.campBar == true and s.remind.buffs == true and s.remind.party == true and s.glow.on == true, "Camp on: the bar, the banner, the party's buffs, the light: " .. flags(s))
+    assert(s.remind.on == true and s.remind.buffs == true and s.remind.party == true and s.glow.on == false, "Reminders on: on screen, the rows as they were, the light untouched: " .. flags(s))
     c.C.Modules.Set("Cute_Quest:camp", false); tick(c, 1)
-    assert(s.campBar == false and s.glow.on == false, "Camp off: off again: " .. flags(s))
+    assert(s.remind.on == false and s.glow.on == false, "Reminders off: off again: " .. flags(s))
     -- the step frame hidden by its row stays hidden over the switches and a login (0.7.0's switch set it shown again)
     s.guide.frame = false; QB.StepFrame.Apply()
     assert(not stepShown(c), "the frame hidden by its row")
@@ -5131,7 +5135,7 @@ do
     login(c2, db); tickAll(6)
     local s2 = c2.env.CuteQuestDB.settings
     assert(c2.addons[2].loaded and c2.C.Modules.byId.quests.active and s2.guide.on == true and s2.guide.frame == false and not stepShown(c2), "the next login: the base on, the frame as its row left it: " .. flags(s2))
-    assert(s2.mapIcons == false and s2.campBar == false and s2.glow.on == false, "Map and Camp still off: " .. flags(s2))
+    assert(s2.mapIcons == false and s2.remind.on == false and s2.glow.on == false, "Map and Reminders still off: " .. flags(s2))
     -- the frame's row ticked again: up at this login and the next
     s2.guide.frame = true; c2.addons[2].private.StepFrame.Apply()
     assert(stepShown(c2), "the frame back by its row")
@@ -13501,11 +13505,17 @@ do
     assert(table.concat(ids, " "):find("vis rules runs example quests", 1, true), "Settings > Runs under Guild: " .. table.concat(ids, " "))
     M.Set("Cute_Example", false); tick(c, 1)
     UI.OpenSettings("general")
-    assert(#c.C.SettingsPage.Sections(true) == 13, "every section a player can have: " .. #c.C.SettingsPage.Sections(true))
+    -- (the hud round) Settings > Layout makes fourteen: at 760 x 420 the list scrolls, its rows still 22 px, as the design
+    -- allows past thirteen; at Settings' own 800 x 560 every section fits unscrolled
+    assert(#c.C.SettingsPage.Sections(true) == 14, "every section a player can have: " .. #c.C.SettingsPage.Sections(true))
     local navList
     for _, f in ipairs(c.frames) do if f.section and f:IsVisible() then navList = f.__parent.__scrollParent end end
-    assert(navList and not navList.bar:IsShown(), "the list fits unscrolled at 760 x 420")
+    assert(navList and navList.bar:IsShown(), "fourteen at 760 x 420: the list scrolls")
     check(S.frame, "W3 settings at 760x420, every section listed")
+    sizeAll(c, 800, 560)
+    UI.OpenSettings("general")
+    assert(not navList.bar:IsShown(), "the list fits unscrolled at 800 x 560")
+    check(S.frame, "W3 settings at 800x560, every section listed")
     sizeAll(c, 1040, 640)
     -- the Statistics page: its categories in a column of their own (shown on that page alone); a leader only above 0
     UI:Open("game")
@@ -13695,7 +13705,7 @@ do
     -- (merge2: the run report's Runs tab and its section among them)
     assert(names(g.sub) == "Race, Prog, Hall of Shame, Runs, Statistics, Officers, Me", "the guild's tabs: " .. names(g.sub))
     assert(names(q.sub) == "Quests, Route, ---, Step frame, Direction arrow", "the quests' tabs and the on-screen switches: " .. names(q.sub))
-    assert(names(s.sub) == "General, Keys, Modules, Data you share, Columns, Who sees what, Rules, Runs, Quests, Route", "every section: " .. names(s.sub))
+    assert(names(s.sub) == "General, Keys, Layout, Modules, Data you share, Columns, Who sees what, Rules, Runs, Quests, Route", "every section: " .. names(s.sub))
     assert(entry(m, "Set up Cute...") and not entry(m, "Reload to apply"), "Set up Cute... before Start; no reload to apply")
     -- a click opens: a tab, the window, a section; a switch flips the engine's setting
     entry(g.sub, "Statistics").set()
@@ -18354,6 +18364,565 @@ do
     said[#said + 1] = "an officer's /reload keeps the half-hour word"
   end)
   print("map K: " .. table.concat(said, "; "))
+end
+
+-- [stage: hud] that stage's tests go right below this line
+-- The hud round: Reminders in Cute (docs/superpowers/specs/2026-10-21-reminders-design.md, section 10, case 17). One
+-- engine, Remind.lua, copied byte for byte; the Reminders module (id camp, its saved state kept) the master switch over
+-- remind.on alone, its section the engine's rows and the light's two.
+-- H1: a fresh character: the interact light off until the first-run card says (the engine's default is on and the
+-- light changes the game's soft-target settings); the card's Reminders row ticked; Start with it: Reminders on screen.
+-- H2: a 0.7 save whose Camp module was off: its kept cuteOff.camp (campBar, the two buffs rows, the light) rewritten,
+-- the module follows remind.on alone and the rows go back as kept; on again, Reminders back.
+-- H3: QuestBank loaded: its reminders are its own: the section greyed, nothing written.
+-- H4: the engine files byte-identical; Reminders eight rows, Quests eight at most.
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local said = {}
+    local state = {}
+    local function client(card) return newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true, card = card })) end
+    -- H1
+    local c = client(true)
+    login(c); tick(c, 3)
+    local s = c.env.CuteQuestDB.settings
+    local QB = c.addons[2].private
+    assert(QB.Remind and s.remind.v == 2 and s.glow.on == false and s.remind.on == false, "fresh: the light off, Reminders off with the module (off until Start): " .. tostring(s.remind.on))
+    local card = c.env.CuteSetupFrame
+    assert(card and card:IsShown(), "the first-run card")
+    local function row(label) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == label end) end
+    assert(row("Camp bar and missing buffs"):GetChecked() and row("Interact light"):GetChecked(), "the card: Reminders' row and the light, ticked")
+    local start
+    for _, b in ipairs(c.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == "Start" then start = b end end
+    press(start)
+    local ch = c.env.CuteDB.chars["Rone-Forever"]
+    assert(ch.modules["Cute_Quest:camp"] == true and s.remind.on == true and s.glow.on == true and (s.cuteOff == nil or s.cuteOff.camp == nil), "Start: the module on, Reminders on screen, the light as its row said")
+    local db, qdb = c.env.CuteDB, c.env.CuteQuestDB
+    leave(c)
+    local d = client()
+    d.env.CuteQuestDB = qdb
+    login(d, db, true); tickAll(6)
+    local ds = d.env.CuteQuestDB.settings
+    assert(d.C.Modules.byId.camp.active and ds.remind.on == true and ds.glow.on == true and d.env.QuestBankCampBar and d.env.QuestBankBuffBanner, "after the reload: on, both pieces made")
+    said[#said + 1] = "a fresh character: the light off until the card, Start puts Reminders on screen"
+    leave(d)
+    -- H2
+    local o = client()
+    o.env.CuteQuestDB = { settings = { cuteDefaults = 2, v544 = true, v600 = true, campBar = false, guide = { on = true, frame = true },
+      remind = { camp = true, food = false, bag = true, fire = true, quietInstance = true, buffs = false, sit = true, wood = true, bagChain = true, party = false },
+      glow = { on = false, style = "sparkle" }, cuteOff = { camp = { campBar = true, ["remind.buffs"] = true, ["remind.party"] = true, ["glow.on"] = true } } } }
+    -- (0.7's Camp module was off by default: a kept light of an account that never chose the module is the engine's
+    -- default, not a choice, and stays off until the first-run card's Interact light row; one that chose it, on some
+    -- character, gets it back as kept)
+    local save07 = o.env.CuteQuestDB
+    local function copy(t) if type(t) ~= "table" then return t end local out = {}; for k, v in pairs(t) do out[k] = copy(v) end; return out end
+    local fresh07 = copy(save07)
+    login(o); tickAll(6)
+    local so = o.env.CuteQuestDB.settings
+    assert(so.remind.buffs == true and so.remind.party == true and so.glow.on == false and so.remind.on == false and so.cuteOff.camp["remind.on"] == true
+      and so.cuteOff.camp.campBar == nil and so.remind.never.eat == "Eat", "0.7's kept switch rewritten: the rows back as kept, Reminders off with the module, the food's switch a Never, the light off until asked")
+    o.C.Modules.Set("Cute_Quest:camp", true); tick(o, 1)
+    assert(so.remind.on == true and so.cuteOff.camp == nil and so.glow.on == false, "the module on: Reminders back, the light its own")
+    o.C.Modules.Set("Cute_Quest:camp", false); tick(o, 1)
+    assert(so.remind.on == false and so.remind.buffs == true and so.glow.on == false, "off again: Reminders alone off")
+    leave(o)
+    local o2 = client()
+    o2.env.CuteQuestDB = fresh07
+    login(o2, { chars = { ["Alt-Forever"] = { modules = { ["Cute_Quest:camp"] = false } } } }); tickAll(6)
+    assert(o2.env.CuteQuestDB.settings.glow.on == true, "a character of the account chose the Camp module once: the light back as kept")
+    said[#said + 1] = "a 0.7 save's kept Camp switch rewritten to remind.on alone, its rows back, the light only where the module was chosen"
+    leave(o2)
+    -- H3
+    local q = client()
+    local isLoaded = q.env.C_AddOns.IsAddOnLoaded
+    q.env.C_AddOns.IsAddOnLoaded = function(x) if x == "QuestBank" then return true, true end return isLoaded(x) end
+    local writes = 0
+    local rset = { on = true, buffs = true, party = true, camp = true, upkeep = true, class = true, instance = "buffs", never = { eat = "Eat" } }
+    local settings = { guide = { on = true, frame = true }, arrow = true, mapIcons = true, pins = true, glow = { on = true, style = "sparkle" }, remind = rset, share = { party = true }, djShow = { boss = true, rare = true, trash = false, other = true } }
+    q.env.QuestBankAPI = {
+      version = "6.2.0", logReady = true, state = { level = 5, log = {} }, routeNow = { legs = {}, xp = 0, level = 5, t = 0 },
+      Settings = function() return settings end, MarkDirty = function() end, Comma = tostring, Short = tostring,
+      Model = { Busy = function() return false end }, Data = { CAT = {} }, Quest = { Get = function() return nil end },
+      Guide = { Steps = function() return {} end, Text = function(st) return st.text end, TimeToLevel = function() return nil end, MemberSteps = function() return {} end },
+      StepFrame = { Menu = function() end, Apply = function() end }, Arrow = { Set = function() end },
+      UI = { PlaceGroups = function() return {}, {}, nil, nil, nil end, Candidates = function() return {} end, QuestClick = function() end, QuestTooltip = function() end },
+      Target = { Route = function() return { legs = {}, xp = 0, level = 5, t = 0 } end }, Run = { Get = function() return nil end },
+      DMap = { Attach = function() end, Refresh = function() end }, Gear = { Attach = function() end, Refresh = function() end, RefreshSoon = function() end },
+      Remind = { ROWS = QB.Remind.ROWS, ON_LABEL = QB.Remind.ON_LABEL, Settings = function() return rset end, Hidden = function() return { { "eat", "Eat" } } end,
+                 SetRow = function() writes = writes + 1 end, SetNever = function() writes = writes + 1 end, Refresh = function() end },
+    }
+    login(q); tickAll(5)
+    q.C.Modules.Set("Cute_Quest", true); tick(q, 6)
+    q.C.Modules.Set("Cute_Quest:camp", true); tick(q, 1)
+    q.C.UI:Open("settings", "camp")
+    local t = texts(q)
+    assert(t:find("QuestBank is loaded: its reminders are its own.", 1, true), "QuestBank loaded: said so:\n" .. t)
+    local box = checkBox(q, function(cb) return cb.label and cb.label:GetText() == "Your buffs and weapon" end)
+    assert(box and box.__disabled, "its rows greyed")
+    click(box)
+    q.C.Modules.Set("Cute_Quest:camp", false); tick(q, 1)
+    assert(writes == 0 and rset.on == true and settings.glow.on == true, "nothing written: QuestBank's own")
+    check(sframe(q), "Reminders, QuestBank loaded")
+    said[#said + 1] = "QuestBank loaded: the section greyed, nothing written"
+    leave(q)
+    -- H4
+    for _, f in ipairs({ "Remind.lua", "Camp.lua", "Guide.lua", "StepFrame.lua", "Glow.lua" }) do
+      local a = assert(io.open(HERE .. "/../questbank/QuestBank/" .. f, "rb")):read("*a")
+      local b = assert(io.open(HERE .. "/Cute_Quest/" .. f, "rb")):read("*a")
+      assert(a == b, f .. ": Cute_Quest's copy is QuestBank's, byte for byte (build.py)")
+    end
+    local r = client()
+    login(r); tickAll(6)
+    local Mr = r.C.Modules
+    for _, key in ipairs({ "Cute_Quest:camp" }) do Mr.Set(key, true) end
+    local function rowsOf(id)
+      local n = 0
+      local col = setmetatable({}, { __index = function(_, k) return function() if k == "Check" or k == "Choice" or k == "Step" or k == "Edit" then n = n + 1 end end end })
+      Mr.byId[id].settings(Mr.byId[id], col)
+      return n
+    end
+    assert(rowsOf("camp") == 8, string.format("Reminders eight rows: %d", rowsOf("camp")))
+    -- (each row's note under it, DIM; under a row that keeps reminders hidden for good, one DIM line naming them with its
+    -- own Show, which brings back that row's alone)
+    local RQ = r.addons[2].private.Remind
+    RQ.SetNever("eat", "Eat"); RQ.SetNever("sit", "Sit"); RQ.SetNever("buff:168", "Frost Armor")
+    r.C.UI:Open("settings", "camp")
+    local rt = texts(r)
+    for _, note in ipairs({ "In a party, not a raid. Thorns only on the tank.", "Each adds XP on Forever. The sleeping bag's quest line too.", "Ammo and the hearthstone with them." }) do
+      assert(rt:find(note, 1, true), "the note under its row: " .. note .. "\n" .. rt)
+    end
+    assert(rt:find("Hidden: Eat, Sit", 1, true) and rt:find("Hidden: Frost Armor", 1, true) and not rt:find("\nEat\n", 1, true), "one Hidden line a row:\n" .. rt)
+    assert(rowsOf("camp") == 8, "still eight rows")
+    -- (the Show beside the camp row's line: the visible one level with it)
+    local function showOf(words)
+      local line
+      for _, o in everything() do if o.__kind == "FontString" and o.__shown and o.__text == words and visible(o) and o.__parent and o.__parent.__client == r then line = o end end
+      for _, b in ipairs(r.frames) do
+        if line and b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == "Show"
+          and math.abs((b.__points[1].y or 0) - (line.__points[1].y or 0)) <= 6 then return b end
+      end
+    end
+    assert(showOf("Hidden: Eat, Sit"), "a Show beside the line")
+    for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+      sizeAll(r, size[1], size[2])
+      r.C.UI:Open("settings", "camp")
+      check(sframe(r), string.format("Settings > Reminders with Hidden lines, %dx%d", size[1], size[2]))
+    end
+    sizeAll(r, 1040, 640)
+    r.C.UI:Open("settings", "camp")
+    press(showOf("Hidden: Eat, Sit"))
+    local nv = RQ.Settings().never
+    assert(nv.eat == nil and nv.sit == nil and nv["buff:168"] == "Frost Armor", "its own Show: the camp row's alone back")
+    for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+      sizeAll(r, size[1], size[2])
+      r.C.UI:Open("settings", "camp")
+      check(sframe(r), string.format("Settings > Reminders, %dx%d", size[1], size[2]))
+    end
+    sizeAll(r, 1040, 640)
+    assert(#(r.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    said[#said + 1] = "the engine's five files byte for byte; Reminders eight rows at both sizes"
+    leave(r)
+    print("hud: " .. table.concat(said, "; "))
+  end)
+end
+
+-- The hud round, part 2: layout mode (the windows design's section 6, its testing's E): the on-screen pieces moved,
+-- scaled, shown and locked from Cute (Layout.lua) over the engine's movers (QB.Movers), each character its own layout.
+-- E1 /cute layout: a mover for every piece that is on (the step frame, the arrow, Reminders, Buffs), none for a window
+--    nor for a piece that is off; each its name and its scale; the bar at the top's middle (Move frames, Snap, Reset
+--    all, Done); the layout checks of the bar and the movers
+-- E2 a drag: the 8 px grid from the screen's middle; another mover's edge within 6 px wins; Shift moves freely; the drop
+--    writes the engine's place and this character's layout
+-- E3 the wheel: 5 % a notch, 50 to 200 %; the arrow's frame in QuestBank's look, its dial (compassSize) in the compass
+-- E4 the arrow keys nudge the mover under the mouse by 1 px and take the key; any other key goes on to the game; Esc is
+--    Done: hidden, saved, locked, and the account's starting layout written
+-- E5 a mover's right-click: Reset, 80 / 100 / 120 / 150 %, Hide and Show (the piece's own switch)
+-- E6 a fight: Move frames refused and greyed in the menu; a fight's start ends layout mode, saved
+-- E7 the lock: locked by default; the engine's drags ask Cute's lock (the step frame stays); the menu's Lock frames and
+--    Settings > Layout's row unlock it (the step frame drags); the minimap always the game's (QB.LayoutLocked)
+-- E8 per character: a new character takes the account's starting layout; another's places never written over its
+--    own; Copy from takes another's; logout writes back a place the engine moved itself
+-- E9 Reset windows: every window at its default size, centred, their kept places gone
+-- E10 the game's Edit Mode opens and closes it, taking no key of the game's
+-- E11 QuestBank loaded: no mover, nothing of QuestBank's settings written, the menu entry and the rows greyed with
+--    "QuestBank is loaded"
+-- E12 Settings > Layout at both sizes; Settings > Keys names the Move frames key (the game's Key Bindings)
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1), member("Pim", 3), member("Quill", 3) }, function()
+    local said = {}
+    local state = {}
+    local function client(name, rank) return newClient(charOf({ name, rank or 1, (rank or 1) <= 1 and "Officer" or "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true })) end
+    local function near(a, b) return a and b and math.abs(a - b) < 0.01 end
+    local function lastMenu(c) return c.contextMenus[#c.contextMenus] end
+    local function entry(list, text) for _, e in ipairs(list or {}) do if e.text == text then return e end end end
+    local function cursorAt(c, x, y) c.env.GetCursorPosition = function() return x, y end end
+    -- a drag of a mover from a point inside it to a point on the screen
+    local function drag(c, mv, toX, toY)
+      cursorAt(c, mv.l + 10, mv.t - 10)
+      mv.__scripts.OnDragStart(mv)
+      cursorAt(c, toX + 10, toY - 10)
+      mv.__scripts.OnUpdate(mv, 0.016)
+      mv.__scripts.OnDragStop(mv)
+    end
+    local function up(c)
+      login(c); tickAll(6)
+      c.C.Modules.Set("Cute_Quest:camp", true); tick(c, 1)
+      local QB = c.addons[2].private
+      QB.Arrow:Set(true)
+      QB.Remind.Refresh()
+      return QB
+    end
+    -- E1
+    local c = client("Rone")
+    local QB = up(c)
+    local L, s = c.C.Layout, c.env.CuteQuestDB.settings
+    assert(QB.LayoutLocked == c.env.Cute.Layout.Locked and QB.SetLayoutLocked == c.env.Cute.Layout.SetLocked and L.pieces == QB.Movers, "the engine's lock and movers are Cute's (Bridge.lua)")
+    c.env.SlashCmdList.CUTE("layout")
+    assert(L.on, "/cute layout: layout mode")
+    local shown = {}
+    for key, mv in pairs(L.movers) do if mv:IsShown() then shown[#shown + 1] = key .. "=" .. mv.name:GetText() end end
+    table.sort(shown)
+    assert(table.concat(shown, ", ") == "arrow=Arrow, buffs=Buffs, camp=Reminders, step=Step frame", "a mover for each piece on, none for a window: " .. table.concat(shown, ", "))
+    for key, mv in pairs(L.movers) do
+      local l, t, w, h = QB.Movers[key].rect()
+      assert(near(mv.l, l) and near(mv.t, t) and near(mv:GetWidth(), w) and mv.scaleText:GetText() == "100%", key .. ": over its piece at 100%")
+      assert(mv.__bdc and near(mv.__bdc[4], 0.88) and mv.__bdb and near(mv.__bdb[1], 0.42), key .. ": PANEL at 0.88, a 1 px EDGE")
+      check(mv, "E1 the " .. key .. " mover")
+    end
+    local bar = c.env.CuteLayoutBar
+    assert(bar and bar:IsShown() and bar.__points[1].point == "TOP" and bar.__points[1].relPoint == "TOP", "the bar at the top's middle")
+    local bt = texts(c)
+    for _, w in ipairs({ "Move frames", "Snap", "Reset all", "Done" }) do assert(bt:find(w, 1, true), "the bar says " .. w) end
+    check(bar, "E1 the layout mode bar")
+    -- (/cute diag: each piece, the lock, the mode and the keys, numbers only)
+    local d0 = #c.chat
+    c.env.SlashCmdList.CUTE("diag")
+    local diag = table.concat(c.chat, "\n", d0 + 1)
+    assert(diag:find("diag layout: step on 100%, arrow on 100%, camp on 100%, buffs on 100%; locked yes; mode on; keys nudged 0, done 0, passed 0", 1, true), "/cute diag's layout line:\n" .. diag)
+    -- (the render pass: the whole screen in layout mode, the movers over their pieces)
+    if LAYOUT_OUT then GEN = GEN + 1; layouts[#layouts + 1] = dumpLayout(c.env.UIParent, "E1 layout mode: the movers over the step frame, the arrow, Reminders and Buffs") end
+    said[#said + 1] = "a mover for each of the four pieces on, none for a window; the bar"
+    -- E2
+    local mv, arrowMv = L.movers.camp, L.movers.arrow
+    -- (a spot no other mover's edge is within 6 px of, off the grid: x across, y up)
+    local function clear(lo, size, axis)
+      for v = lo, lo + 400 do
+        local ok = (v - (axis == "x" and 800 or 500)) % 8 ~= 0
+        for _, o in pairs(L.movers) do
+          if o ~= mv and o:IsShown() then
+            local e1, e2 = axis == "x" and o.l or o.t - o.h, axis == "x" and o.l + o.w or o.t
+            for _, mine in ipairs({ v, v + size }) do if math.abs(mine - e1) <= 6 or math.abs(mine - e2) <= 6 then ok = false end end
+          end
+        end
+        if ok then return v end
+      end
+    end
+    local gx, gb = clear(300, mv.w, "x"), clear(150, mv.h, "y")
+    drag(c, mv, gx, gb + mv.h)
+    assert((mv.l - 800) % 8 == 0 and (mv.t - mv.h - 500) % 8 == 0 and math.abs(mv.l - gx) <= 4 and math.abs(mv.t - mv.h - gb) <= 4,
+      "snapped to the 8 px grid from the middle: " .. mv.l .. ", " .. mv.t .. " from " .. gx .. ", " .. (gb + mv.h))
+    local rp = s.remind.pos
+    local l, t, w, h = QB.Movers.camp.rect()
+    assert(rp and near(l, mv.l) and near(t, mv.t), "dropped: Reminders moved there")
+    local ch = c.env.CuteDB.chars["Rone-Forever"]
+    assert(ch.layout and ch.layout.pieces.camp and ch.layout.pieces.camp.point == "CENTER" and near(ch.layout.pieces.camp.x, rp.x - 800), "the drop in this character's layout")
+    -- (a spot whose left edge is 3 to 5 px off the arrow's, and no other edge near either of its own)
+    local near6
+    for _, d in ipairs({ 4, -4, 3, -3, 5, -5 }) do
+      local v, ok = arrowMv.l + d, true
+      for _, o in pairs(L.movers) do
+        if o ~= mv and o:IsShown() then
+          for _, e in ipairs({ o.l, o.l + o.w }) do
+            for _, mine in ipairs({ v, v + mv.w }) do
+              if not (o == arrowMv and e == o.l and mine == v) and math.abs(mine - e) <= 6 then ok = false end
+            end
+          end
+        end
+      end
+      if ok then near6 = v break end
+    end
+    assert(near6, "a spot beside the arrow's edge alone")
+    drag(c, mv, near6, gb + mv.h)
+    assert(mv.l == arrowMv.l, "an edge within 6 px of the arrow's: on it: " .. mv.l .. " vs " .. arrowMv.l)
+    c.shift = true
+    drag(c, mv, gx, gb + mv.h)
+    c.shift = false
+    assert(mv.l == gx and mv.t == gb + mv.h, "Shift: free: " .. mv.l .. ", " .. mv.t)
+    said[#said + 1] = "a drag snaps to the grid and to an edge within 6 px, Shift frees it; the drop writes the place and the layout"
+    -- E3
+    for _ = 1, 4 do mv.__scripts.OnMouseWheel(mv, 1) end
+    assert(near(s.remind.scale, 1.2) and mv.scaleText:GetText() == "120%" and near(ch.layout.pieces.camp.scale, 1.2), "four notches up: 120%")
+    for _ = 1, 40 do mv.__scripts.OnMouseWheel(mv, 1) end
+    assert(near(s.remind.scale, 2) and mv.scaleText:GetText() == "200%", "200% at most")
+    for _ = 1, 60 do mv.__scripts.OnMouseWheel(mv, -1) end
+    assert(near(s.remind.scale, 0.5) and mv.scaleText:GetText() == "50%", "50% at least")
+    for _ = 1, 10 do mv.__scripts.OnMouseWheel(mv, 1) end
+    assert(s.remind.scale == nil and mv.scaleText:GetText() == "100%", "back at 100%")
+    for _ = 1, 10 do arrowMv.__scripts.OnMouseWheel(arrowMv, 1) end
+    assert(near(s.arrowScale, 1.5) and near(c.env.QuestBankArrow:GetScale(), 1.5) and arrowMv.scaleText:GetText() == "150%", "the arrow at 150%: its frame, in QuestBank's look")
+    s.arrowStyle = "compass"; QB.Arrow:Restyle()
+    for _ = 1, 10 do arrowMv.__scripts.OnMouseWheel(arrowMv, -1) end
+    assert(s.compassSize == 48 and near(c.env.QuestBankArrow:GetScale(), 1), "the compass: its dial by compassSize, its frame at 100%")
+    for _ = 1, 10 do arrowMv.__scripts.OnMouseWheel(arrowMv, 1) end
+    assert(s.compassSize == 72 and arrowMv.scaleText:GetText() == "150%", "the compass at 150%: a 72 px dial")
+    for _ = 1, 10 do arrowMv.__scripts.OnMouseWheel(arrowMv, -1) end
+    s.arrowStyle = "questbank"; QB.Arrow:Restyle()
+    said[#said + 1] = "the wheel 5% a notch from 50 to 200%, the arrow's frame or its compass's dial"
+    -- E4
+    mv.__scripts.OnEnter(mv)
+    local l0, t0 = mv.l, mv.t
+    bar.__scripts.OnKeyDown(bar, "LEFT")
+    assert(mv.l == l0 - 1 and mv.t == t0 and bar.__propagate == false, "LEFT over a mover: 1 px left, the key taken")
+    bar.__scripts.OnKeyDown(bar, "UP")
+    assert(mv.t == t0 + 1 and near(QB.Movers.camp.rect(), l0 - 1), "UP: 1 px up, the piece with it")
+    bar.__scripts.OnKeyDown(bar, "W")
+    assert(bar.__propagate == true, "W goes on to the game")
+    mv.__scripts.OnLeave(mv)
+    bar.__scripts.OnKeyDown(bar, "LEFT")
+    assert(mv.l == l0 - 1 and bar.__propagate == true, "no mover under the mouse: the arrow keys are the game's")
+    L.SetLocked(false)
+    bar.__scripts.OnKeyDown(bar, "ESCAPE")
+    assert(not L.on and not mv:IsShown() and not bar:IsShown() and ch.layout.locked == true, "Esc: Done, hidden, locked")
+    local def = c.env.CuteDB.layoutDefault
+    assert(def and def.pieces.camp and near(def.pieces.camp.x, ch.layout.pieces.camp.x), "Done: the account's starting layout")
+    said[#said + 1] = "the arrow keys nudge the mover under the mouse and the rest go on; Esc is Done, locked, the starting layout written"
+    -- E5
+    L.Enter()
+    local step = L.movers.step
+    step.__scripts.OnClick(step, "RightButton")
+    local m = lastMenu(c)
+    assert(m[1].kind == "title" and m[1].text == "Step frame" and entry(m, "Reset") and entry(m, "80%") and entry(m, "100%  (now)") and entry(m, "120%") and entry(m, "150%") and entry(m, "Hide"),
+      "the mover's menu: Reset, 80/100/120/150%, Hide")
+    entry(m, "120%").set()
+    assert(near(s.guide.scale, 1.2) and step.scaleText:GetText() == "120%", "120%: the step frame's scale")
+    entry(m, "Reset").set()
+    assert(s.guide.x == nil and near(s.guide.scale or 1, 1) and step.scaleText:GetText() == "100%", "Reset: its default place at 100%")
+    entry(m, "Hide").set()
+    assert(s.guide.frame == false and not c.env.QuestBankStep:IsShown() and step:IsShown() and near(step.__alpha, 0.5) and step.scaleText:GetText():find("Hidden", 1, true), "Hide: the piece's own switch off, its mover dimmed")
+    step.__scripts.OnClick(step, "RightButton")
+    entry(lastMenu(c), "Show").set()
+    assert(s.guide.frame == true and c.env.QuestBankStep:IsShown() and near(step.__alpha, 1), "Show: back")
+    said[#said + 1] = "a mover's menu: Reset, four sizes, Hide and Show"
+    -- E6
+    c.combat = true
+    fire(c, "PLAYER_REGEN_DISABLED")
+    assert(not L.on and not step:IsShown(), "a fight's start ends it")
+    local n0 = #c.chat
+    assert(L.Enter() == false and table.concat(c.chat, "\n", n0 + 1):find("after combat", 1, true), "in a fight: refused, said")
+    c.C.UI.mini.__scripts.OnClick(c.C.UI.mini, "RightButton")
+    local mm = lastMenu(c)
+    local move = entry(mm, "Move frames...")
+    assert(move and move.off and entry(mm, "Lock frames"), "the menu: Lock frames, and Move frames... greyed in a fight")
+    c.combat = false
+    said[#said + 1] = "a fight ends it saved; in one it is refused and greyed"
+    -- E7
+    local sf = c.env.QuestBankStep
+    local starts = 0
+    rawset(sf, "StartMoving", function() starts = starts + 1 end)
+    assert(L.Locked("step") and QB.LayoutLocked("step") and QB.LayoutLocked("minimap"), "locked by default; the minimap always the game's")
+    sf.__scripts.OnDragStart(sf)
+    assert(starts == 0, "locked: the step frame stays")
+    c.C.UI.mini.__scripts.OnClick(c.C.UI.mini, "RightButton")
+    local lock = entry(lastMenu(c), "Lock frames")
+    assert(lock.kind == "check" and lock.get() == true, "the menu's Lock frames, ticked")
+    lock.set()
+    assert(not L.Locked("step") and ch.layout.locked == false, "unticked: unlocked")
+    sf.__scripts.OnDragStart(sf); sf.__scripts.OnDragStop(sf)
+    assert(starts == 1, "unlocked: the step frame drags where it stands")
+    s.guide.x, s.guide.y = nil, nil; QB.StepFrame.Apply()
+    c.C.UI:Open("settings", "layout")
+    local row = checkBox(c, function(cb) return cb.label and cb.label:GetText() == "Lock frames" end)
+    assert(row and not row:GetChecked(), "Settings > Layout: Lock frames, unticked")
+    click(row)
+    assert(L.Locked("step"), "ticked in Settings: locked")
+    said[#said + 1] = "locked by default; the engine's drag asks it; the menu and Settings unlock it; the minimap the game's"
+    -- E8
+    local db, qdb = c.env.CuteDB, c.env.CuteQuestDB
+    local ronePos = { x = s.remind.pos.x, y = s.remind.pos.y }
+    leave(c)
+    local p = client("Pim", 3)
+    p.env.CuteQuestDB = qdb
+    login(p, db, true); tickAll(6)
+    local pch = p.env.CuteDB.chars["Pim-Forever"]
+    local ps = p.env.CuteQuestDB.settings
+    assert(pch.layout and pch.layout.locked == true and near(pch.layout.pieces.camp.x, def.pieces.camp.x) and near(ps.remind.pos.x, ronePos.x), "a new character: the account's starting layout, locked")
+    local PL = p.C.Layout
+    p.C.Modules.Set("Cute_Quest:camp", true); tick(p, 1)
+    assert(PL.Enter() and PL.movers.camp:IsShown(), "Pim's layout mode, Reminders on")
+    drag(p, PL.movers.camp, 200, 200)
+    PL.Done()
+    local pimPos = { x = ps.remind.pos.x, y = ps.remind.pos.y }
+    assert(not near(pimPos.x, ronePos.x), "Pim moved Reminders")
+    leave(p)
+    local r2 = client("Rone")
+    r2.env.CuteQuestDB = qdb
+    login(r2, db, true); tickAll(6)
+    local rs = r2.env.CuteQuestDB.settings
+    assert(near(rs.remind.pos.x, ronePos.x) and near(rs.remind.pos.y, ronePos.y), "Rone again: Rone's own places, never Pim's")
+    local others = r2.C.Layout.Others()
+    assert(#others == 1 and others[1][1] == "Pim-Forever", "Copy from: the other characters with a layout")
+    r2.C.Layout.CopyFrom("Pim-Forever")
+    assert(near(rs.remind.pos.x, pimPos.x) and near(r2.env.CuteDB.chars["Rone-Forever"].layout.pieces.camp.x, pimPos.x - 800), "Copy from: Pim's places, kept as Rone's")
+    rs.arrowPos = { "TOP", -333, -444 }
+    fire(r2, "PLAYER_LOGOUT")
+    local ap = r2.env.CuteDB.chars["Rone-Forever"].layout.pieces.arrow
+    assert(ap.point == "TOP" and ap.x == -333 and ap.y == -444, "logout: a place the engine moved itself written back")
+    said[#said + 1] = "a new character takes the starting layout; each keeps its own; Copy from; logout writes back"
+    -- E9
+    r2.C.UI:Open("quests")
+    local Lw = qwin(r2)
+    Lw.frame.__left, Lw.frame.__top = 200, 700
+    Lw.head.__scripts.OnDragStart(Lw.head); Lw.head.__scripts.OnDragStop(Lw.head)
+    Lw.frame:SetSize(900, 500)
+    assert(r2.env.CuteDB.winPos and r2.env.CuteDB.winPos.quests, "L's place kept")
+    r2.C.UI:Open("settings", "layout")
+    local reset
+    for _, b in ipairs(r2.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == "Reset windows" then reset = b end end
+    press(reset)
+    local sp = r2.C.UI.SPEC.quests
+    assert(r2.env.CuteDB.winPos == nil and r2.env.CuteDB.pos == nil and Lw.frame.__w == sp.w and Lw.frame.__h == sp.h and Lw.frame.__points[1].point == "CENTER", "Reset windows: default size, centred, no kept place")
+    said[#said + 1] = "Reset windows: every window at its default size, centred"
+    -- E10
+    r2.env.EventRegistry:TriggerEvent("EditMode.Enter")
+    local RL = r2.C.Layout
+    assert(RL.on and RL.from == "edit" and RL.movers.step:IsShown() and r2.env.CuteLayoutBar.__keyboard == false, "the game's Edit Mode: the movers, no key taken")
+    r2.env.EventRegistry:TriggerEvent("EditMode.Exit")
+    assert(not RL.on and not RL.movers.step:IsShown(), "its exit: done")
+    -- the Move frames key (Bindings.xml, the game's Key Bindings under Cute)
+    local bindings = assert(io.open(HERE .. "/Cute/Bindings.xml")):read("*a")
+    assert(bindings:find('<Binding name="CUTE_LAYOUT" category="BINDING_HEADER_CUTE">Cute.Layout.Toggle()</Binding>', 1, true) and r2.env.BINDING_NAME_CUTE_LAYOUT == "Move frames", "the Move frames key")
+    r2.env.Cute.Layout.Toggle()
+    assert(RL.on and RL.from == nil and r2.env.CuteLayoutBar.__keyboard == true, "the key: layout mode, the bar taking keys")
+    r2.env.Cute.Layout.Toggle()
+    assert(not RL.on, "again: done")
+    said[#said + 1] = "the game's Edit Mode opens and closes it; so does the Move frames key"
+    -- E12
+    for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+      sizeAll(r2, size[1], size[2])
+      r2.C.UI:Open("settings", "layout")
+      local t = texts(r2)
+      assert(t:find("The step frame, the arrow, Reminders and Buffs. Windows always move by their header.", 1, true) and t:find("Snap to the grid", 1, true), "Settings > Layout's rows:\n" .. t)
+      check(sframe(r2), string.format("Settings > Layout, %dx%d", size[1], size[2]))
+      r2.C.UI:Open("settings", "keys")
+      assert(texts(r2):find("Move frames", 1, true), "Settings > Keys: the Move frames key")
+      check(sframe(r2), string.format("Settings > Keys, %dx%d", size[1], size[2]))
+    end
+    sizeAll(r2, 1040, 640)
+    assert(#(r2.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    said[#said + 1] = "Settings > Layout and Keys at both sizes"
+    leave(r2)
+    -- E11
+    local q = client("Quill", 3)
+    local isLoaded = q.env.C_AddOns.IsAddOnLoaded
+    q.env.C_AddOns.IsAddOnLoaded = function(x) if x == "QuestBank" then return true, true end return isLoaded(x) end
+    local settings = { guide = { on = true, frame = true, scale = 1 }, arrow = true, remind = { on = true }, share = { party = true } }
+    local snapshot = {}
+    local function keysOf(t, pre) for k, v in pairs(t) do snapshot[pre .. tostring(k)] = type(v) == "table" and "table" or v; if type(v) == "table" then keysOf(v, pre .. tostring(k) .. ".") end end end
+    keysOf(settings, "")
+    q.env.QuestBankAPI = {
+      version = "6.2.0", logReady = true, state = { level = 5, log = {} }, routeNow = { legs = {}, xp = 0, level = 5, t = 0 },
+      Settings = function() return settings end, MarkDirty = function() end, Comma = tostring, Short = tostring,
+      Model = { Busy = function() return false end }, Data = { CAT = {} }, Quest = { Get = function() return nil end },
+      Guide = { Steps = function() return {} end, Text = function(st) return st.text end, TimeToLevel = function() return nil end, MemberSteps = function() return {} end },
+      StepFrame = { Menu = function() end, Apply = function() end }, Arrow = { Set = function() end },
+      UI = { PlaceGroups = function() return {}, {}, nil, nil, nil end, Candidates = function() return {} end, QuestClick = function() end, QuestTooltip = function() end },
+      Target = { Route = function() return { legs = {}, xp = 0, level = 5, t = 0 } end }, Run = { Get = function() return nil end },
+      DMap = { Attach = function() end, Refresh = function() end }, Gear = { Attach = function() end, Refresh = function() end, RefreshSoon = function() end },
+      Remind = { ROWS = QB.Remind.ROWS, ON_LABEL = QB.Remind.ON_LABEL, Settings = function() return settings.remind end, Hidden = function() return {} end,
+                 SetRow = function() end, SetNever = function() end, Refresh = function() end },
+    }
+    login(q); tickAll(5)
+    local QL = q.C.Layout
+    assert(QL.pieces == nil and QL.Why() == "QuestBank is loaded: its frames are its own.", "QuestBank loaded: no pieces")
+    n0 = #q.chat
+    q.env.SlashCmdList.CUTE("layout")
+    assert(not QL.on and table.concat(q.chat, "\n", n0 + 1):find("QuestBank is loaded", 1, true), "/cute layout says why")
+    n0 = #q.chat
+    q.env.EventRegistry:TriggerEvent("EditMode.Enter")
+    assert(not QL.on and #q.chat == n0, "the game's Edit Mode: nothing to move, nothing said")
+    q.env.EventRegistry:TriggerEvent("EditMode.Exit")
+    q.C.UI.mini.__scripts.OnClick(q.C.UI.mini, "RightButton")
+    assert(entry(lastMenu(q), "Move frames...").off, "the menu's Move frames... greyed")
+    q.C.UI:Open("settings", "layout")
+    assert(texts(q):find("QuestBank is loaded: its frames are its own.", 1, true), "Settings > Layout says so")
+    local qrow = checkBox(q, function(cb) return cb.label and cb.label:GetText() == "Lock frames" end)
+    assert(qrow and qrow.__disabled, "its rows greyed")
+    check(sframe(q), "Settings > Layout, QuestBank loaded")
+    fire(q, "PLAYER_LOGOUT")
+    local after = {}
+    for k in pairs(snapshot) do after[k] = true end
+    local function same(t, pre) for k, v in pairs(t) do local key = pre .. tostring(k); assert(snapshot[key] ~= nil and (type(v) == "table" or snapshot[key] == v), "QuestBank's setting " .. key .. " untouched"); if type(v) == "table" then same(v, key .. ".") end end end
+    same(settings, "")
+    said[#said + 1] = "QuestBank loaded: no mover, nothing of its settings written, the entry and the rows greyed"
+    leave(q)
+    print("hud layout: " .. table.concat(said, "; "))
+  end)
+end
+
+-- The hud review: the Reminders module is Reminders' and Buffs' only master. H5 the module on with remind.on left off
+-- (a 0.7 camp bar switch, a mover's Hide before this): on at the load. H6 the first-run card's Reminders row unticked
+-- with the light ticked: wherever the module ends up, Reminders follow it. H7 a mover's Hide on Reminders turns the
+-- module off and Show on, Buffs shown while it is off turns it on too, and the next Move frames has the mover again
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local said = {}
+    local state = {}
+    local function client(card) return newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true, card = card })) end
+    local function lastMenu(c) return c.contextMenus[#c.contextMenus] end
+    local function entry(list, text) for _, e in ipairs(list or {}) do if e.text == text then return e end end end
+    -- H5
+    local c = client()
+    c.env.CuteQuestDB = { settings = { cuteDefaults = 2, v544 = true, v600 = true, campBar = false, guide = { on = true, frame = true },
+      remind = { v = 2, on = false, never = {} }, glow = { on = false, style = "sparkle" } } }
+    login(c, { chars = { ["Rone-Forever"] = { modules = { ["Cute_Quest:camp"] = true } } } }); tickAll(6)
+    local s = c.env.CuteQuestDB.settings
+    assert(c.C.Modules.byId.camp.active and s.remind.on == true and s.campBar == true, "the module on: Reminders on screen, whatever was left off: " .. tostring(s.remind.on))
+    said[#said + 1] = "the module on: Reminders on, whatever was left off"
+    -- H7
+    local QB = c.addons[2].private
+    QB.Remind.Refresh()
+    local L = c.C.Layout
+    assert(L.Enter() and L.movers.camp:IsShown() and L.movers.buffs:IsShown(), "layout mode: Reminders and Buffs")
+    local mv, bmv = L.movers.camp, L.movers.buffs
+    mv.__scripts.OnClick(mv, "RightButton")
+    entry(lastMenu(c), "Hide").set()
+    assert(not c.C.Modules.byId.camp.active and s.remind.on == false and bmv.scaleText:GetText():find("Hidden", 1, true), "Hide on Reminders: the module off, Buffs' mover says so too")
+    bmv.__scripts.OnClick(bmv, "RightButton")
+    entry(lastMenu(c), "Show").set()
+    assert(c.C.Modules.byId.camp.active and s.remind.on == true and mv.scaleText:GetText() == "100%", "Show on Buffs: the module on, both back")
+    mv.__scripts.OnClick(mv, "RightButton"); entry(lastMenu(c), "Hide").set()
+    mv.__scripts.OnClick(mv, "RightButton"); entry(lastMenu(c), "Show").set()
+    assert(c.C.Modules.byId.camp.active and s.remind.on == true, "Hide and Show on Reminders: the module off and on")
+    mv.__scripts.OnClick(mv, "RightButton"); entry(lastMenu(c), "Hide").set()
+    L.Done()
+    c.C.Modules.Set("Cute_Quest:camp", true); tick(c, 1)
+    assert(s.remind.on == true and L.Enter() and L.movers.camp:IsShown(), "the module on again: Reminders back, its mover at the next Move frames")
+    L.Done()
+    said[#said + 1] = "a mover's Hide and Show are the module's"
+    leave(c)
+    -- H6
+    local d = client(true)
+    login(d); tick(d, 3)
+    local function row(label) return checkBox(d, function(cb) return cb.label and cb.label:GetText() == label end) end
+    local rem = row("Reminders") or row("Camp bar and missing buffs")
+    assert(rem and rem:GetChecked() and row("Interact light"):GetChecked(), "the card: Reminders' row and the light, ticked")
+    click(rem)
+    local start
+    for _, b in ipairs(d.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == "Start" then start = b end end
+    press(start)
+    local db, qdb = d.env.CuteDB, d.env.CuteQuestDB
+    leave(d)
+    local e = client()
+    e.env.CuteQuestDB = qdb
+    login(e, db, true); tickAll(6)
+    local es = e.env.CuteQuestDB.settings
+    assert((e.C.Modules.byId.camp.active == true) == (es.remind.on == true), "after the reload: Reminders follow the module: " .. tostring(e.C.Modules.byId.camp.active) .. " / " .. tostring(es.remind.on))
+    said[#said + 1] = "the card's unticked Reminders: Reminders follow the module"
+    leave(e)
+    print("hud review: " .. table.concat(said, "; "))
+  end)
 end
 
 -- this pass's problems and layouts join the run's; the last pass prints them all

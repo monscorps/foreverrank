@@ -35,4 +35,5 @@ Settings.lua
 Keys.lua
 Windows.lua
 Setup.lua
+Layout.lua
 Bindings.xml

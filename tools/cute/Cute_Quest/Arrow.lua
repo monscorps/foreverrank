@@ -589,14 +589,27 @@ end
 -- header, as the step frame is. (6.1 put the arrow at TOP 0 -170 and the step frame at -140: the arrow sat on the
 -- frame's second and third rows and its time line.) TALL: the arrow at its tallest, its frame and the lines under it
 local GAP_Y, GAP_X, TALL = 6, 8, 143
+-- (the layout round) the arrow's scale (arrowScale, 0.5 to 2; none is 100%, as before): the whole frame in QuestBank's
+-- own look; the compass keeps its frame at 100% and sizes its dial in screen pixels (compassSize, A.DialSize), so its
+-- art stays sharp and its two lines keep their size. Its places stay in UIParent's units: its points are set in its
+-- own, divided by its scale
+local function arrowScale()
+  if A.QT() then return 1 end
+  local v = tonumber(QB:Settings().arrowScale)
+  if v and v >= 0.5 and v <= 2 then return v end
+  return 1
+end
 -- does the arrow, the middle of its top at x, y (across from the screen's middle, down from its top), stand on the
--- step frame's box (SF.Box: bx, top, bottom, half)
-local function onFrame(x, y, bx, top, bottom, half)
-  return bx ~= nil and x - WIDTH / 2 < bx + half and bx - half < x + WIDTH / 2 and y < bottom and top < y + TALL
+-- step frame's box (SF.Box: bx, top, bottom, half), at its scale k
+local function onFrame(x, y, bx, top, bottom, half, k)
+  k = k or 1
+  return bx ~= nil and x - WIDTH * k / 2 < bx + half and bx - half < x + WIDTH * k / 2 and y < bottom and top < y + TALL * k
 end
 function A.Place()
   local f = A.frame
   if not f or f.qbDragging then return end -- (in a drag: left where the cursor has it)
+  local k = arrowScale()
+  if f.qbK ~= k then f.qbK, f.qbPos, f.qbX, f.qbY = k, nil, nil, nil; f:SetScale(k) end
   local SF = QB.StepFrame
   local bx, top, bottom, half = nil, nil, nil, nil
   if SF and SF.Box then bx, top, bottom, half = SF.Box() end
@@ -604,11 +617,11 @@ function A.Place()
   -- (the review round) where it was dragged to, unless the step frame stands there now: a 6.1 save's arrow, dragged out
   -- from under the frame of then to TOP 0 -245, met today's frame 50 px lower and 16 px taller; or the frame grew or
   -- was dragged onto it. Then under the frame, as by default; the place is kept for when the frame goes
-  if pos and not (pos[1] == "TOP" and onFrame(tonumber(pos[2]) or 0, -(tonumber(pos[3]) or 0), bx, top, bottom, half)) then
+  if pos and not (pos[1] == "TOP" and onFrame(tonumber(pos[2]) or 0, -(tonumber(pos[3]) or 0), bx, top, bottom, half, k)) then
     if f.qbPos ~= pos then
       f.qbPos, f.qbX, f.qbY = pos, nil, nil
       f:ClearAllPoints()
-      f:SetPoint(pos[1], UIParent, pos[1], pos[2], pos[3])
+      f:SetPoint(pos[1], UIParent, pos[1], pos[2] / k, pos[3] / k)
     end
     return
   end
@@ -617,16 +630,17 @@ function A.Place()
   -- TOP 0 -122, 512 x 60, ends 182 px down; the windows round's TOP 0 -96 stood on it), unless the step frame stands
   -- there now; then under it, as by default
   local cornerY = (SF and SF.TOP_Y) or 190
-  if QB.cornerPlace and not onFrame(0, cornerY, bx, top, bottom, half) then
+  if QB.cornerPlace and not onFrame(0, cornerY, bx, top, bottom, half, k) then
     if f.qbX == 0 and f.qbY == cornerY and not f.qbPos then return end
     f.qbPos, f.qbX, f.qbY = nil, 0, cornerY
     f:ClearAllPoints()
-    f:SetPoint("TOP", UIParent, "TOP", 0, -cornerY)
+    f:SetPoint("TOP", UIParent, "TOP", 0, -cornerY / k)
     return
   end
   local x, y = bx or 0, bottom and (bottom + GAP_Y) or (SF and SF.TOP_Y or 190)
   local W = UIParent:GetWidth() or 1920
   local lim = (SF and SF.TrackerLeft) and (SF.TrackerLeft(W) - 16) or W
+  local wide = WIDTH * k
   -- (the review round) never past the screen's bottom nor down onto the camp bar's place (Camp.lua, Camp.BarTop: a
   -- tall frame on a short screen, a party's lines at 120%): beside the frame then, on its left, else on its right,
   -- where it fits
@@ -634,18 +648,24 @@ function A.Place()
     local floor = (UIParent:GetHeight() or 768) - 8
     local camp = QB.Camp and QB.Camp.BarTop and QB.Camp.BarTop()
     if camp and camp - 4 < floor then floor = camp - 4 end
-    if y + TALL > floor then
-      local left, right = bx - half - GAP_X - WIDTH / 2, bx + half + GAP_X + WIDTH / 2
-      if W / 2 + left - WIDTH / 2 >= 0 then x, y = left, top
-      elseif W / 2 + right + WIDTH / 2 <= lim then x, y = right, top end
+    if y + TALL * k > floor then
+      local left, right = bx - half - GAP_X - wide / 2, bx + half + GAP_X + wide / 2
+      if W / 2 + left - wide / 2 >= 0 then x, y = left, top
+      elseif W / 2 + right + wide / 2 <= lim then x, y = right, top end
     end
   end
-  local over = W / 2 + x + WIDTH / 2 - lim
+  local over = W / 2 + x + wide / 2 - lim
   if over > 0 then x = x - over end
   if f.qbX == x and f.qbY == y and not f.qbPos then return end
   f.qbPos, f.qbX, f.qbY = nil, x, y
   f:ClearAllPoints()
-  f:SetPoint("TOP", UIParent, "TOP", x, -y)
+  f:SetPoint("TOP", UIParent, "TOP", x / k, -y / k)
+end
+-- (the layout round) a host's one lock for the on-screen pieces (QB.LayoutLocked: Cute's, which its Bridge.lua sets);
+-- QuestBank alone has none for the arrow, which drags as it always did
+local function dragLocked()
+  local h = QB.LayoutLocked
+  return type(h) == "function" and h("arrow") == true
 end
 
 function A:Create()
@@ -674,17 +694,21 @@ function A:Create()
   f:EnableMouse(true)
   f:RegisterForDrag("LeftButton")
   f:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-  f:SetScript("OnDragStart", function(self) self.qbDragging = true; self:StartMoving() end)
+  -- (the layout round) never while a host's lock says no; a drag the lock refused leaves its place alone
+  f:SetScript("OnDragStart", function(self) if dragLocked() then return end self.qbDragging = true; self:StartMoving() end)
   f:SetScript("OnDragStop", function(self)
+    if not self.qbDragging then return end
     self.qbDragging = nil
     self:StopMovingOrSizing()
     local p, _, _, x, y = self:GetPoint()
-    -- kept by its top, so the arrow stays put as the lines under it come and go
+    -- kept by its top, so the arrow stays put as the lines under it come and go; in UIParent's units (its own, at its
+    -- scale k, its points set in its own)
+    local k = self:GetScale() or 1
     local l, top, w = self:GetLeft(), self:GetTop(), self:GetWidth()
     if l and top and w then
-      p, x, y = "TOP", l + w / 2 - UIParent:GetWidth() / 2, top - UIParent:GetHeight()
+      p, x, y = "TOP", (l + w / 2) * k - UIParent:GetWidth() / 2, top * k - UIParent:GetHeight()
       self:ClearAllPoints()
-      self:SetPoint(p, UIParent, p, x, y)
+      self:SetPoint(p, UIParent, p, x / k, y / k)
     end
     QB:Settings().arrowPos = { p, x, y }
     self.qbPos = QB:Settings().arrowPos -- (placed: A.Place leaves it there)
@@ -836,6 +860,9 @@ end
 function A:ApplyLook()
   local f = self.frame
   if not f then return end
+  -- (the layout round: the compass at 100%, QuestBank's own look at its arrowScale; before the dial's size, which
+  -- reads the frame's scale)
+  if f.qbK ~= arrowScale() then A.Place() end
   local set = QB:Settings()
   local qt = A.QT()
   local S = qt and A.DialSize() or 0
@@ -1301,3 +1328,60 @@ function A:Init()
   A.Inside()
   if QB:Settings().arrow then self:Set(true) end
 end
+
+-- (the layout round) the arrow as a host's layout mode moves it (QB.Movers: Remind.lua says what each part does): kept
+-- by its top (arrowPos, in UIParent's units); its scale is QuestBank's own look's whole frame (arrowScale) and the
+-- compass's dial (compassSize = 48 x the scale, 24 to 128 screen pixels: the engine's default and limits, Core.lua)
+QB.Movers = QB.Movers or {}
+local function screenSize() return UIParent:GetWidth() or 1920, UIParent:GetHeight() or 1080 end
+local function arrowSize()
+  local f, k = A.frame, arrowScale()
+  return WIDTH * k, ((f and f:GetHeight()) or 98) * k
+end
+-- the middle of its top, from UIParent's bottom left: where A.Place stood it (the step frame may have it under itself
+-- whatever arrowPos says), else where it would stand
+local function arrowTop()
+  local f, pos = A.frame, QB:Settings().arrowPos
+  local W, H = screenSize()
+  if f and f.qbPos and type(pos) == "table" then return W / 2 + (tonumber(pos[2]) or 0), H + (tonumber(pos[3]) or 0) end
+  if f and f.qbX then return W / 2 + f.qbX, H - (f.qbY or 0) end
+  if type(pos) == "table" and pos[1] == "TOP" then return W / 2 + (tonumber(pos[2]) or 0), H + (tonumber(pos[3]) or 0) end
+  return W / 2, H - ((QB.StepFrame and QB.StepFrame.TOP_Y) or 190)
+end
+local function setScale(k)
+  k = math.max(0.5, math.min(2, tonumber(k) or 1))
+  local s = QB:Settings()
+  s.arrowScale = math.abs(k - 1) >= 0.001 and k or nil
+  s.compassSize = math.floor(math.max(24, math.min(128, ARROW * k)) + 0.5)
+  if A.frame then A.Place(); A:ApplyLook() end
+end
+QB.Movers.arrow = {
+  key = "arrow", name = "Arrow", order = 2, secure = false,
+  frame = function() return A.frame end,
+  on = function() return QB:Settings().arrow == true end,
+  switch = function(on) A:Set(on) end,
+  rect = function()
+    local w, h = arrowSize()
+    local cx, top = arrowTop()
+    return cx - w / 2, top, w, h
+  end,
+  move = function(left, top)
+    local w = arrowSize()
+    local W, H = screenSize()
+    QB:Settings().arrowPos = { "TOP", left + w / 2 - W / 2, top - H }
+    A.Place()
+  end,
+  scale = setScale,
+  get = function()
+    local s = QB:Settings()
+    local pos = s.arrowPos
+    local k = A.QT() and (tonumber(s.compassSize) or ARROW) / ARROW or arrowScale()
+    if type(pos) == "table" and pos[1] == "TOP" then return { point = "TOP", x = tonumber(pos[2]) or 0, y = tonumber(pos[3]) or 0, scale = k } end
+    return { scale = k }
+  end,
+  set = function(p)
+    local ok = type(p) == "table" and p.point == "TOP" and tonumber(p.x) and tonumber(p.y)
+    QB:Settings().arrowPos = ok and { "TOP", p.x, p.y } or nil
+    setScale(type(p) == "table" and p.scale or 1)
+  end,
+}

@@ -485,13 +485,12 @@ function G.Fill(level)
   return n, moved or n > was
 end
 
--- the Train step: your level teaches something (D.SPELL_LV, the levels a class learns a new spell at) that you have
--- not trained yet (QuestBankDB.chars[key].guide.trained, the last level trained at), and a trainer of your class
--- (the seed D.TRAINER, or one learned at its window: QuestBankDB.disc.trainer) stands within TRAIN_MIN minutes'
--- walk of a route stop with a hand-in: "Train at <name>" goes before that stop's hand-in. No trainer known in reach:
--- G.reminder holds a deadline while the frame shows "New spells at your class trainer" (REMIND_S), once a level
-local TRAIN_MIN, REMIND_S = 3, 180
-G.TRAIN_MIN, G.REMIND_S = TRAIN_MIN, REMIND_S
+-- the Train step: something to train (G.Trainable) and a trainer of your class (the seed D.TRAINER, or one learned at
+-- its window: QuestBankDB.disc.trainer) within TRAIN_MIN minutes' walk of a route stop with a hand-in: "Train at <name>"
+-- goes before that stop's hand-in. No trainer known in reach: the step frame's Train line (G.Reminder)
+local TRAIN_MIN = 3
+G.TRAIN_MIN = TRAIN_MIN
+local trainStepWas -- (Replan's last word on the route's Train step)
 
 local function classID()
   if type(UnitClass) ~= "function" then return nil, nil end
@@ -500,8 +499,118 @@ local function classID()
   return plain(id), plain(tok)
 end
 
+-- (the hud round) what there is to train, the spellbook's own answer: a spell of your class's line that the book holds
+-- as not learned yet (Enum.SpellBookItemType.FutureSpell) whose level learned is at or under yours, the client's own
+-- "trainable" (Blizzard_SpellBookItem.lua:234-247 reads C_SpellBook.GetSpellBookItemLevelLearned so). Until 6.1.1 the
+-- Guide asked whether this very level was one a class learns at (D.SPELL_LV) and whether the trainer's window last read
+-- 0 to learn: the step never cleared while one spell stayed unbought, and a level-10 spell left at 10 was forgotten at 11.
+-- Never counted: a spell a quest teaches (QUEST_TAUGHT), one a class trainer's window did not list at a level it could
+-- (learned per character: notSold), and one you left at the trainer (TRAINER_CLOSED: skip, still named in the tooltip).
+-- QUEST_TAUGHT: the class spells CMaNGOS Classic's quest_template (GPL-3.0) rewards, its RewSpell or RewSpellCast taken
+-- through the Forever client's own learn-spell effects (SpellEffect.csv, effect 36, 1.60.1.70338): Summon Voidwalker 697,
+-- Bear Form 5487 and the rest; a reward that only casts a buff on you (Mark of the Wild) teaches nothing and is not here
+G.QUEST_TAUGHT = {
+  [71] = true, [355] = true, [688] = true, [691] = true, [697] = true, [712] = true, [883] = true, [982] = true, [1066] = true,
+  [1122] = true, [1515] = true, [2458] = true, [2641] = true, [2651] = true, [2652] = true, [2842] = true, [3599] = true,
+  [5149] = true, [5394] = true, [5487] = true, [5502] = true, [6795] = true, [6807] = true, [6991] = true, [7328] = true,
+  [7386] = true, [8071] = true, [8946] = true, [9035] = true, [10140] = true, [10797] = true, [13819] = true, [13896] = true,
+  [13908] = true, [18137] = true, [18540] = true, [20252] = true, [23214] = true, [28272] = true, [1277324] = true, [1277331] = true,
+}
+-- the class's line of the spellbook (C_SpellBook.GetClassSkillLineInfo, else the line at Enum.SpellBookSkillLineIndex.Class,
+-- SpellBookConstantsDocumentation.lua): its first slot and how many; nil on a client without the calls
+local function classLine()
+  local SB = C_SpellBook
+  if not (SB and type(SB.GetSpellBookItemInfo) == "function" and type(SB.GetSpellBookItemLevelLearned) == "function") then return nil end
+  local info
+  if type(SB.GetClassSkillLineInfo) == "function" then
+    local ok, v = pcall(SB.GetClassSkillLineInfo)
+    if ok and type(v) == "table" then info = v end
+  end
+  if not info and type(SB.GetSpellBookSkillLineInfo) == "function" then
+    local idx = Enum and Enum.SpellBookSkillLineIndex and Enum.SpellBookSkillLineIndex.Class or 2
+    local ok, v = pcall(SB.GetSpellBookSkillLineInfo, idx)
+    if ok and type(v) == "table" then info = v end
+  end
+  local first, n = info and plain(info.itemIndexOffset), info and plain(info.numSpellBookItems)
+  if type(first) ~= "number" or type(n) ~= "number" then return nil end
+  return first, math.min(n, 400)
+end
+local FUTURE = 2 -- (Enum.SpellBookItemType.FutureSpell)
+local trainBuf, skipBuf, rankNames = {}, {}, {} -- the spells to train and the ones left at the trainer, ids, reused
+local trainFor, trainKnown = nil, nil -- (the level and the reads it was made for: G.TrainDirty)
+G.trainVer = 0
+-- the spells to train now: how many, their ids (a list reused) and the ones left at the trainer (another); a client
+-- without the spellbook's calls: nil, and the Guide goes by D.SPELL_LV as before (NeedsTraining)
+function G.Trainable()
+  local level = QB.state and QB.state.level or 1
+  if trainFor == level and trainKnown ~= nil then return trainKnown and #trainBuf or nil, trainBuf, skipBuf end
+  -- (the hud review: never read in a fight; the last read stands until after it)
+  if trainKnown ~= nil and InCombatLockdown and InCombatLockdown() then return trainKnown and #trainBuf or nil, trainBuf, skipBuf end
+  for k = #trainBuf, 1, -1 do trainBuf[k] = nil end
+  for k = #skipBuf, 1, -1 do skipBuf[k] = nil end
+  trainFor = level
+  local first, n = classLine()
+  if not first then trainKnown = false return nil, trainBuf, skipBuf end
+  trainKnown = true
+  local db = laterDB()
+  local skip, notSold = type(db.skip) == "table" and db.skip or nil, type(db.notSold) == "table" and db.notSold or nil
+  local bank = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player or 0
+  local SB = C_SpellBook
+  -- (a diagnostic for the live client, the design's section 11: whether the book holds higher ranks of spells you know
+  -- as FutureSpell; if none do, Train needs the generated rank table. Counts alone, QuestBankDB.diag.remind)
+  local future, ranks, knownName = 0, 0, rankNames
+  for k in pairs(knownName) do knownName[k] = nil end
+  for slot = first + 1, first + n do
+    local ok, it = pcall(SB.GetSpellBookItemInfo, slot, bank)
+    if ok and type(it) == "table" and plain(it.itemType) ~= FUTURE then
+      local nm = plain(it.name)
+      if type(nm) == "string" then knownName[nm] = true end
+    end
+  end
+  for slot = first + 1, first + n do
+    local ok, it = pcall(SB.GetSpellBookItemInfo, slot, bank)
+    local id = ok and type(it) == "table" and plain(it.spellID) or nil
+    if type(id) == "number" and plain(it.itemType) == FUTURE then
+      future = future + 1
+      local nm = plain(it.name)
+      if type(nm) == "string" and knownName[nm] then ranks = ranks + 1 end
+    end
+    if type(id) == "number" and plain(it.itemType) == FUTURE and not G.QUEST_TAUGHT[id] and not (notSold and notSold[id]) then
+      local okL, lv = pcall(SB.GetSpellBookItemLevelLearned, slot, bank)
+      lv = okL and plain(lv) or nil
+      if type(lv) == "number" and lv > 0 and lv <= level then
+        if skip and skip[id] then skipBuf[#skipBuf + 1] = id else trainBuf[#trainBuf + 1] = id end
+      end
+    end
+  end
+  if QB.Remind and QB.Remind.Diag then QB.Remind.Diag("trainFuture", future); QB.Remind.Diag("trainRanks", ranks) end
+  return #trainBuf, trainBuf, skipBuf
+end
+-- the spellbook changed (a spell learned, a level, the trainer's window shut): read again at the next ask, which is
+-- never in a fight; the plan made again when the count moved, looked at half a second on (the hud review: once for a
+-- burst, a level bringing three of these events and a login a dozen SPELLS_CHANGED, each a read of the whole book
+-- until now) and after a fight where the look fell in one
+local trainSoon, trainWas, trainAfter = false, nil, false
+function G.TrainDirty()
+  if not trainSoon then trainWas = trainKnown and #trainBuf or nil end
+  trainFor = nil
+  if trainSoon then return end
+  trainSoon = true
+  if C_Timer and C_Timer.After then C_Timer.After(0.5, QB.Safe(G.TrainCheck, "guide: train")) else G.TrainCheck() end
+end
+function G.TrainCheck()
+  trainSoon = false
+  if InCombatLockdown and InCombatLockdown() then trainAfter = true return end
+  trainAfter = false
+  local now = G.Trainable()
+  if now ~= trainWas then G.trainVer = G.trainVer + 1; QB:MarkDirty() end
+end
+
 function G.NeedsTraining(level)
   if not level or level <= 1 then return false end -- (a new character holds its first spells)
+  local n = G.Trainable()
+  if n ~= nil then return n > 0 end
+  -- (a client without the spellbook's calls: the levels a class learns at, and the window's last word)
   local _, tok = classID()
   local levels = tok and QB.Data.SPELL_LV and QB.Data.SPELL_LV[tok]
   if not levels then return false end
@@ -558,19 +667,83 @@ local function seeded(key)
   return false
 end
 
--- the trainer's window: the NPC is written down as a trainer of your class (a class trainer's window opens for its
--- class alone; a profession's is told apart by IsTradeskillTrainer), and with nothing left to learn, this level is
--- trained. Nothing said in chat
-local function onTrainer()
+-- (the hud review) the names of your class's line of the spellbook, known and to learn (the book's own, else
+-- C_Spell.GetSpellName of its spell), a set reused; empty where the book gives none
+local nameBuf = {}
+local function classNames()
+  for k in pairs(nameBuf) do nameBuf[k] = nil end
+  local first, n = classLine()
+  if not first then return nameBuf end
+  local SB, getName = C_SpellBook, C_Spell and C_Spell.GetSpellName
+  local bank = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player or 0
+  for slot = first + 1, first + n do
+    local ok, it = pcall(SB.GetSpellBookItemInfo, slot, bank)
+    if ok and type(it) == "table" then
+      local nm, sp = plain(it.name), plain(it.spellID)
+      if type(nm) ~= "string" and type(sp) == "number" and type(getName) == "function" then
+        local okN, v = pcall(getName, sp)
+        nm = okN and plain(v) or nil
+      end
+      if type(nm) == "string" and nm ~= "" then nameBuf[nm] = true end
+    end
+  end
+  return nameBuf
+end
+-- (the hud review) whether the trainer's window open now is your class trainer's: not a profession's
+-- (IsTradeskillTrainer), nor a pet trainer's or any kind but the general one (C_Trainer.GetTrainerType,
+-- TrainerDocumentation.lua:20; Enum.TrainerType General 0, Pet 3, TrainerConstantsDocumentation.lua; the game's own
+-- window tells a pet trainer apart so, Blizzard_TrainerUI_Camelot.lua:4); and of your class: the seed's trainer of it,
+-- else a window whose list names a spell of your class's line (a weapon master's names weapons; one written down by
+-- an earlier window that names none is let go), else one written down at an earlier window when this one lists
+-- nothing. A book that names no spell can't tell: the general kind is enough, as before. Until 6.2 every window but a
+-- profession's counted, and a hunter at a pet trainer had every spell to train marked not sold and left there
+local function classTrainer(key, n)
   if type(IsTradeskillTrainer) == "function" then
     local ok, trade = pcall(IsTradeskillTrainer)
-    if ok and plain(trade) == true then return end
+    if ok and plain(trade) == true then return false end
+  end
+  local CT = C_Trainer
+  if CT and type(CT.GetTrainerType) == "function" then
+    local ok, kind = pcall(CT.GetTrainerType)
+    kind = ok and plain(kind) or nil
+    local general = Enum and Enum.TrainerType and Enum.TrainerType.General or 0
+    if type(kind) == "number" and kind ~= general then return false end
   end
   local id = classID()
+  local npc = tonumber(key and key:match("^c(%d+)$"))
+  if npc and id then
+    for _, t in ipairs(QB.Data.TRAINER or {}) do if t[1] == npc then return t[3] == id end end
+  end
+  local disc = QB.Discover and QB.Discover.DB and QB.Discover.DB()
+  local known = key and disc and type(disc.trainer) == "table" and disc.trainer[key]
+  local names = classNames()
+  if next(names) ~= nil and type(n) == "number" and n > 0 and type(GetTrainerServiceInfo) == "function" then
+    for i = 1, math.min(n, 300) do
+      local ok, sname = pcall(GetTrainerServiceInfo, i)
+      sname = ok and plain(sname) or nil
+      if type(sname) == "string" and names[sname] then return true end
+    end
+    if type(known) == "table" and known.cl then disc.trainer[key] = nil end
+    return false
+  end
+  if type(known) == "table" and known.cl then return known.cl == id end
+  return next(names) == nil
+end
+
+-- the trainer's window: the NPC is written down as a trainer of your class (classTrainer above), and with nothing left
+-- to learn, this level is trained. Nothing said in chat
+local function onTrainer()
+  G.atClassTrainer = false
   local okG, guid, okN, name = false, nil, false, nil
   if type(UnitGUID) == "function" then okG, guid = pcall(UnitGUID, "npc") end
   if type(UnitName) == "function" then okN, name = pcall(UnitName, "npc") end
   local key = okG and QB.Discover and QB.Discover.Key and QB.Discover.Key(guid)
+  local okS, n = false, 0
+  if type(GetNumTrainerServices) == "function" then okS, n = pcall(GetNumTrainerServices) end
+  n = okS and plain(n) or 0
+  if not classTrainer(key or nil, n) then return end
+  G.atClassTrainer = true
+  local id = classID()
   name = okN and plain(name) or nil
   if key and type(name) == "string" and id and not seeded(key) and QB.Discover.DB then
     local m = plain(QB.API.MapID())
@@ -585,9 +758,6 @@ local function onTrainer()
       t.n, t.cl, t.m, t.x, t.y = name, id, m, x * 100, y * 100
     end
   end
-  local okS, n = false, 0
-  if type(GetNumTrainerServices) == "function" then okS, n = pcall(GetNumTrainerServices) end
-  n = okS and plain(n) or 0
   local avail = 0
   if type(n) == "number" and type(GetTrainerServiceInfo) == "function" then
     for i = 1, n do
@@ -596,7 +766,56 @@ local function onTrainer()
     end
   end
   if avail == 0 then laterDB().trained = QB.state.level or 1 end
+  G.LearnSold(n)
   QB:MarkDirty()
+end
+
+-- (the hud round) the class trainer's window lists what it sells (GetTrainerServiceInfo: name, available, unavailable or
+-- used): a spell to train whose name it does not list at all is one no trainer sells this class (a quest's, or one
+-- Forever moved), never counted again for this character (notSold). Only while the window lists what you can learn
+-- (its "available" filter on, GetTrainerServiceTypeFilter, Blizzard_TrainerUI.lua:243), so a filter never hides a spell
+function G.LearnSold(n)
+  if type(n) ~= "number" or n <= 0 or type(GetTrainerServiceInfo) ~= "function" then return end
+  if type(GetTrainerServiceTypeFilter) == "function" then
+    local ok, on = pcall(GetTrainerServiceTypeFilter, "available")
+    if ok and plain(on) == false then return end
+  end
+  local count, list = G.Trainable()
+  if not count or #list == 0 then return end
+  local sold = {}
+  for i = 1, math.min(n, 300) do
+    local ok, name = pcall(GetTrainerServiceInfo, i)
+    name = ok and plain(name) or nil
+    if type(name) == "string" then sold[name] = true end
+  end
+  local db = laterDB()
+  local changed = false
+  for _, id in ipairs(list) do
+    local name = C_Spell and type(C_Spell.GetSpellName) == "function" and plain(select(2, pcall(C_Spell.GetSpellName, id))) or nil
+    if type(name) == "string" and name ~= "" and not sold[name] then
+      if type(db.notSold) ~= "table" then db.notSold = {} end
+      db.notSold[id] = true
+      changed = true
+    end
+  end
+  if changed then G.TrainDirty() end
+end
+-- the window shut (TRAINER_CLOSED, a class trainer's): what stayed to train is skipped (laterDB().skip[id] = level),
+-- no longer counted and still named in the Train line's tooltip; a new level counts it again only if it is new
+function G.TrainerClosed()
+  local count, list = G.Trainable()
+  if not count or #list == 0 then G.TrainDirty() return end
+  local db = laterDB()
+  if type(db.skip) ~= "table" then db.skip = {} end
+  local lvl = QB.state.level or 1
+  for _, id in ipairs(list) do db.skip[id] = lvl end
+  local n = 0
+  for _ in pairs(db.skip) do n = n + 1 end
+  if n > 64 then
+    -- (kept small: the ones you have learned since go)
+    for id in pairs(db.skip) do if QB.Camp and QB.Camp.Knows(id) then db.skip[id] = nil end end
+  end
+  G.TrainDirty()
 end
 
 -- nothing worth taking in reach: where to kill until the next level that opens quests, and where they are. The
@@ -940,8 +1159,9 @@ function G.Replan()
     if s.kind == "objective" then s.stop = spotPlace(s) end
   end
   -- new spells to learn: Train at the trainer nearest a stop with a hand-in to come, before that hand-in; none within
-  -- reach: the reminder line (once a level)
+  -- reach: the step frame's Train line (G.Reminder), until you train
   local level = QB.state.level or 1
+  G.trainStep = false
   if G.NeedsTraining(level) then
     local placed = false
     for i, s in ipairs(G.steps) do
@@ -958,13 +1178,7 @@ function G.Replan()
         end
       end
     end
-    if placed then
-      G.reminder, G.remindedAt = nil, nil
-    elseif G.remindedAt ~= level then
-      G.reminder, G.remindedAt = (GetTime and GetTime() or 0) + REMIND_S, level
-    end
-  else
-    G.reminder, G.remindedAt = nil, nil
+    G.trainStep = placed
   end
   -- a reward to choose in the open window: that first, whatever else stands
   if G.reward then
@@ -992,6 +1206,8 @@ function G.Replan()
   end
   local nowKey = G.FirstKey()
   G.ver = G.ver + 1 -- (the texts may have changed: the frame redraws on any Replan; the key feeds the trace)
+  -- (the step frame's line: the route's Train step or not, looked at again when that changed)
+  if G.trainStep ~= trainStepWas then trainStepWas = G.trainStep; if QB.Remind and QB.Remind.Dirty then QB.Remind.Dirty("class") end end
   if QB.tracing and nowKey ~= wasKey then QB.Trace("guide: first step %s -> %s", wasKey ~= "" and wasKey or "none", nowKey ~= "" and nowKey or "none") end
 end
 
@@ -1058,3 +1274,111 @@ function G.OnEvent(event, a1, a2)
     QB:MarkDirty() -- (Core.lua marks it too: the list is made again after the re-plan)
   end
 end
+
+----------------------------------------------------------------------------
+-- (the hud round) the step frame's line, from here: Train and Flight path, providers of Remind.lua (piece "step"); the
+-- Sleeping bag's is Camp.lua's. One source for QuestBank's step frame and Cute's band: G.Reminder
+----------------------------------------------------------------------------
+local R = QB.Remind
+local DOT = " \194\183 "
+-- the nearest trainer of your class you know of, and its minutes from you
+function G.NearestTrainer(me)
+  local best, bm
+  for _, t in ipairs(trainers()) do
+    local m = R.Minutes(me, t)
+    if m and (not bm or m < bm) then best, bm = t, m end
+  end
+  return best, bm
+end
+local trainText, trainFor2 = nil, nil -- (the words while the count and the trainer stand)
+R.Add({ key = "train", neverName = "Training", piece = "step", order = 210, row = "class", groups = { "class" }, untilLevel = true, timed = true,
+  read = function(add, ctx)
+    if G.trainStep or ctx.level <= 1 then return end -- (the route holds its Train step: one thing, one place)
+    local n = G.Trainable()
+    -- (a client without the spellbook's calls: the levels a class learns at say there is something, not how much)
+    if n == nil and G.NeedsTraining(ctx.level) then n = -1 end
+    if not n or n == 0 then return end
+    local t, m = G.NearestTrainer(ctx.me)
+    local rec = add()
+    local cls = QB.state and QB.state.class
+    local tc = type(CLASS_ICON_TCOORDS) == "table" and cls and CLASS_ICON_TCOORDS[cls] -- (SharedConstants.lua:27)
+    rec.tex = (QB.Data.TEX and QB.Data.TEX.classes) or 131146
+    if type(tc) == "table" and tc[4] then rec.tc = tc end
+    local key = n .. ":" .. tostring(t and t.name)
+    if trainFor2 ~= key then
+      trainFor2 = key
+      local spells = n < 0 and "new spells" or n == 1 and "1 new spell" or (n .. " new spells")
+      trainText = t and ("Train: " .. spells .. DOT .. t.name) or ("Train: " .. spells .. " at your class trainer")
+    end
+    rec.text, rec.lit, rec.name = trainText, false, "Training"
+    if t then
+      rec.mins, rec.word, rec.timed = m, R.MinWord(m), true
+      rec.go = { name = t.name, c = t.c, wx = t.wx, wy = t.wy }
+      rec.clickWord = "show " .. t.name .. " on the arrow"
+    else
+      rec.word = "Train"
+    end
+  end,
+  tip = function(tt)
+    local _, list, skipped = G.Trainable()
+    local name = function(id) return C_Spell and C_Spell.GetSpellName and plain(select(2, pcall(C_Spell.GetSpellName, id))) or nil end
+    for i = 1, math.min(6, #list) do tt:AddLine(name(list[i]) or ("Spell " .. list[i]), 0.86, 0.86, 0.86) end
+    if #skipped > 0 then
+      local names = {}
+      for i = 1, math.min(4, #skipped) do names[#names + 1] = name(skipped[i]) or ("Spell " .. skipped[i]) end
+      tt:AddLine("Left at the trainer: " .. table.concat(names, ", ") .. ".", 0.58, 0.58, 0.58, true)
+    end
+  end,
+})
+-- the trainer's window shut, a spell learned, a new level: the spells to train read again
+R.Hear("TRAINER_CLOSED", function() if G.atClassTrainer then G.atClassTrainer = false; G.TrainerClosed() end end)
+for _, e in ipairs({ "SPELLS_CHANGED", "LEARNED_SPELL_IN_SKILL_LINE", "PLAYER_LEVEL_UP", "PLAYER_LEVEL_CHANGED" }) do
+  R.Hear(e, function() G.TrainDirty() end)
+end
+R.Hear("PLAYER_REGEN_ENABLED", function() if trainAfter then G.TrainCheck() end end)
+
+-- Flight path: a flight master of Travel's graph (D.HUB, world positions) within 300 yards that this character lacks
+-- (TV.Usable), on a continent whose map the client has read (TV.DB().readC), so an old character on a fresh install is
+-- never told to learn what it knows. Forever's map lists only the paths you found (Travel.lua:492-496), so
+-- isUndiscovered is never the source. Looked at as you go; gone once the client names the path (TAXI_NODE_STATUS_CHANGED,
+-- ERR_NEWTAXIPATH: Travel.lua reads them)
+local FLIGHT_YD = 300
+G.FLIGHT_YD = FLIGHT_YD
+local flightText, flightFor = nil, nil
+function G.FlightNear(me)
+  local TV = QB.Travel
+  if not (me and TV and TV.Graph and TV.Usable and TV.DB) then return nil end
+  local fac = QB.faction or (QB.API.Faction and QB.API.Faction())
+  if not fac then return nil end
+  local db = TV.DB()
+  if not (db.readC and db.readC[me.c]) then return nil end
+  local ok, Gr = pcall(TV.Graph, fac)
+  if not ok or not Gr then return nil end
+  local best, bd
+  for i = 1, Gr.h do
+    if Gr.kind[i] == "m" and Gr.c[i] == me.c and (Gr.flag[i] == 0 or Gr.flag[i] == 2) and (Gr.taxi[i] or 0) > 0 then
+      local d = (Gr.wx[i] - me.wx) ^ 2 + (Gr.wy[i] - me.wy) ^ 2
+      if d <= FLIGHT_YD * FLIGHT_YD and (not bd or d < bd) and not TV.Usable(fac, i) then best, bd = i, d end
+    end
+  end
+  if not best then return nil end
+  return { name = Gr.town[best], c = Gr.c[best], wx = Gr.wx[best], wy = Gr.wy[best] }
+end
+R.Add({ key = "flight", neverName = "Flight paths", piece = "step", order = 220, row = "class", groups = { "class" }, timed = true,
+  read = function(add, ctx)
+    if ctx.inst then return end
+    local p = G.FlightNear(ctx.me)
+    if not p then return end
+    local m = R.Minutes(ctx.me, p) or 0
+    local rec = add()
+    rec.tex, rec.atlas, rec.lit, rec.desat = 132239, "FlightPath", false, true
+    if flightFor ~= p.name then flightFor = p.name; flightText = "Learn the flight path: " .. (p.name or "the flight master") end
+    rec.text, rec.name = flightText, "Flight path"
+    rec.mins, rec.word, rec.timed = m, R.MinWord(m), true
+    rec.why = "Talk to the flight master: a flight path learned is a way the route can take."
+    rec.go, rec.clickWord = { name = p.name, c = p.c, wx = p.wx, wy = p.wy }, "show it on the arrow"
+  end,
+})
+
+-- the step frame's line now (Train, Flight path, Sleeping bag): Remind's record, or nil
+function G.Reminder() return R.Step() end

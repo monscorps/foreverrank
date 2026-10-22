@@ -4,9 +4,9 @@
 -- (a heading, a note, a check row, a step down and up, a row of buttons, a text box, a choice of one) and starts with a
 -- heading, so the spacing is the same everywhere and a module's section looks like the core's. Nothing in it is cut:
 -- labels and notes wrap, a choice measures its options, and the list of sections scrolls rather than shrink its rows.
---   Cute    General (display; about you), Keys (Keys.lua: the keys that open Cute's windows), Modules (switched on and
---           off for this character; the change waits for a reload, Modules.lua), and what a module addon adds there
---           (Data you share: Cute_Quest's)
+--   Cute    General (display; about you), Keys (Keys.lua: the keys that open Cute's windows), Layout (Layout.lua: the
+--           pieces on screen moved, locked and reset), Modules (switched on and off for this character; the change
+--           waits for a reload, Modules.lua), and what a module addon adds there (Data you share: Cute_Quest's)
 --   Guild   Columns (Race, Prog, Hall of Shame and, for officers, Officers), Who sees what (per stat, Everyone or Only
 --           you, the officer ranks, Save to Guild Info, Broadcast now, Reset; a member reads one line of it), Rules
 --           (the officers': the thresholds the guild learns by, and the dungeons and gear ones), then the guild
@@ -198,6 +198,22 @@ function Col:Check(text, on, enabled, fn, right, tip, indent)
   tipOn(cb, tip)
   self.y = self.y + rowH
   return cb
+end
+-- (the hud review) under a row, what it keeps hidden: one DIM line at 12 px, indented as the row's label and wrapping
+-- ("Hidden: Eat, Frost Armor"), its Show button on the right, fn the click (Reminders' rows, Cute_Quest's PageCamp.lua)
+function Col:Hidden(text, fn)
+  self.fresh = false
+  local bw = 58
+  local _, h = label(self, self.x + 20, self.y + 4, self.w - 20 - bw - 8, text, DIM, nil, 12)
+  local b = self.p.buttons:Get()
+  b:ClearAllPoints()
+  b:SetPoint("TOPLEFT", self.x + self.w - bw, -self.y - 1)
+  b:SetSize(bw, 20)
+  b:SetLabel("Show")
+  b:SetOn(fn ~= nil)
+  b:SetScript("OnClick", C.Safe(function() if fn then fn(); redraw() end end, "settings: show hidden"))
+  tipOn(b, nil)
+  self.y = self.y + math.max(ROWH, h + 8)
 end
 -- a choice of one among a few: the label in a column of its own, then each option as a box and its word, measured (a
 -- cell is the box, 6 px, the word and 12 px), wrapping under the label where the row is full. A click on the chosen one
@@ -519,8 +535,12 @@ local function drawKeys(col)
   col:Head("Keys")
   for _, w in ipairs(C.Keys.Windows()) do col:Key(w) end
   col:KeyNote("Settings", C.Keys.BindingText("CUTE_SETTINGS"))
+  col:KeyNote("Move frames", C.Keys.BindingText("CUTE_LAYOUT"))
   col:Note("Cleared, the game's own key opens the game's window again.")
 end
+
+-- the pieces on screen: their one lock, the grid, layout mode and the resets (Layout.lua)
+local function drawLayout(col) C.Layout.Draw(col) end
 
 -- who sees what: the policy, the threshold, the buttons and the two headings in the band, the list under them. A
 -- member reads one line of it: the officers decide, and how many values go to everyone
@@ -651,6 +671,7 @@ end
 local CORE = {
   { id = "general", title = "General", group = "cute", order = 1, draw = drawGeneral },
   { id = "keys", title = "Keys", group = "cute", order = 2, draw = drawKeys },
+  { id = "layout", title = "Layout", group = "cute", order = 3, draw = drawLayout },
   { id = "modules", title = "Modules", group = "cute", order = 4, draw = drawModules },
   { id = "columns", title = "Columns", group = "guild", order = 10, draw = drawColumns },
   { id = "vis", title = "Who sees what", group = "guild", order = 11, draw = drawVisibility },

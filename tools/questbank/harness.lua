@@ -3758,16 +3758,16 @@ do
   assert(U.tab == 7 and QB.DMap.Fill and owner.env.QuestBankDungeonMap.cat.key == "d1581" and owner.env.QuestBankDungeonMap.tab == "quests", "a right click opens the Journal on its quests")
   U:ShowTab(1)
 end
--- 5.3: the camp bar (Camp.lua): Well Fed, the campfire kit, camp features with the shared cooldown, the sleeping bag
+-- 5.3: the camp bar (Camp.lua), since the hud round Reminders (Remind.lua): Eat, the fire slot, Place by your own kit's
+-- fire with the shared cooldown, Sleep; a click is the game's secure button (type1)
 do
-  local Camp, env = QB.Camp, owner.env
+  local Camp, env, R = QB.Camp, owner.env, QB.Remind
   c = owner
-  local f = Camp.frame
-  local function ev(e, ...) f.__scripts.OnEvent(f, e, ...) end
+  local function ev(e, ...) local f = R.frame; f.__scripts.OnEvent(f, e, ...) end
   local D = QB.Data
-  assert(f and D.CAMP and D.CAMP[279944] and D.CAMP[279944].sp and D.CAMP[279981].t == "kit" and D.CAMP[279988].base == 279944 and D.FOOD[2888], "the camp and food tables")
-  local set = QB:Settings().remind
-  assert(set.camp and set.food and set.bag and set.fire and set.quietInstance, "defaults: every icon on")
+  assert(Camp.frame == R.frame and D.CAMP and D.CAMP[279944] and D.CAMP[279944].sp and D.CAMP[279981].t == "kit" and D.CAMP[279988].base == 279944 and D.FOOD[2888], "the camp and food tables")
+  local set = R.Settings()
+  assert(set.on and set.camp and set.buffs and set.instance == "buffs" and next(set.never) == nil, "defaults: every row on, nothing hidden")
   c.profs = { { "Blacksmithing", 150 }, { "Alchemy", 10 }, { "Fishing", 0 }, { "Cooking", 60 }, { "First Aid", 30 } }
   local saveBags = owner.o.bagSlots
   owner.o.bagSlots = { { 279944, 1 }, { 279988, 1 }, { 279956, 1 }, { 279968, 1 }, { 2888, 5 }, { 211527, 1 }, { 279981, 2 } }
@@ -3776,68 +3776,75 @@ do
   local pl = Camp.Placeable()
   assert(#pl == 2 and pl[1].e.n == "Anvil" and pl[2].e.n == "First Aid Kit", "placeable: the anvil over the wheel, the kit; no mana well at Alchemy 10")
   c.buffs = {}
-  ev("PLAYER_ENTERING_WORLD")
+  R.Refresh()
   local bar = env.QuestBankCampBar
   local function ic(k) return env["QuestBankCamp_" .. k] end
-  assert(bar and bar:IsShown() and Camp.visible == 4, "the bar is up with four icons: " .. tostring(Camp.visible))
-  -- food: not fed, ribs in the bag: lit, the click eats them
-  local food = ic("food")
-  assert(food:IsShown() and food.state.lit and food:GetAttribute("type") == "item" and food:GetAttribute("item") == "item:2888" and food.count:GetText() == "5", "not fed: the ribs, lit, five of them, a click eats one")
-  -- fed: the buff's own icon with its minutes
-  local saveAura = env.C_UnitAuras.GetAuraDataByIndex
-  env.C_UnitAuras.GetAuraDataByIndex = function(unit, i, filter)
-    if i == 1 then return { name = "Well Fed", applications = 0, expirationTime = env.GetTime() + 600, icon = 136000 } end
-  end
-  Camp.Refresh()
-  assert(food.time:GetText() == "10m" and not food.state.lit and food:GetAttribute("type") == nil, "fed: ten minutes left, nothing to click")
-  env.C_UnitAuras.GetAuraDataByIndex = saveAura
-  -- the campfire kit, then the anvil: lit only with a fire near and the cooldown up
-  local fire, camp = ic("fire"), ic("camp")
-  Camp.Refresh()
-  assert(fire:IsShown() and fire:GetAttribute("item") == "item:279981" and fire.count:GetText() == "2" and fire.state.lit, "two campfire kits; lit while features wait for a fire")
-  assert(camp:IsShown() and camp:GetAttribute("item") == "item:279988" and not camp.state.lit and not camp.state.grey, "the anvil, ready, waiting for a fire")
-  ev("UNIT_SPELLCAST_SUCCEEDED", "player", nil, D.CAMP[279981].sp)
-  assert(camp.state.lit and not fire.state.lit, "the fire lit: the anvil lights up, the kit doesn't")
-  ev("UNIT_SPELLCAST_SUCCEEDED", "player", nil, D.CAMP[279988].sp)
-  assert(camp.state.grey and camp.state.cd and camp.time:GetText() == "1h" and Camp.CooldownLeft() > 3500, "placed: the hour's cooldown sweeps, greyed")
+  local function on(k) local b = ic(k); return b ~= nil and b:IsShown() end
+  -- Eat: not fed, ribs in the bag: lit, the click eats them
+  local food = ic("eat")
+  assert(bar:IsShown() and on("eat") and food.rec.lit and food:GetAttribute("type1") == "item" and food:GetAttribute("item") == "item:2888" and food.count:GetText() == "5",
+    "not fed: the ribs, lit, five of them, a click eats one")
+  -- fed: gone (the game's buff bar shows Well Fed and its minutes)
+  c.buffs = { { name = "Well Fed", spellId = 19705, expirationTime = env.GetTime() + 600 } }
+  R.Refresh()
+  assert(not on("eat"), "fed: no Eat")
+  c.buffs = {}
+  -- the fire slot at Fire's moment: standing still 20 s with a kit, Light; your own kit lit, Place the anvil
+  ev("PLAYER_STOPPED_MOVING"); tick(owner, 21)
+  local fire = ic("fire")
+  assert(on("fire") and fire:GetAttribute("type1") == "item" and fire:GetAttribute("item") == "item:279981" and fire.count:GetText() == "2" and fire.word:GetText() == "Light",
+    "still 20 s, two campfire kits: Light")
+  assert(not on("place"), "no fire of your own: no Place")
+  R.castFrame.__scripts.OnEvent(R.castFrame, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-1", D.CAMP[279981].sp)
+  c.buffs = { { name = "Campfire Nearby", spellId = 1283391 } }
+  R.Refresh()
+  local camp = ic("place")
+  assert(on("place") and camp:GetAttribute("item") == "item:279988" and not on("fire"), "the kit lit: Place the anvil; a fire near, no fire slot")
+  R.castFrame.__scripts.OnEvent(R.castFrame, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-2", D.CAMP[279988].sp)
+  R.Refresh()
+  assert(not on("place") and Camp.CooldownLeft() > 3500, "placed: the hour's cooldown, no Place")
   -- the game's own cooldown wins when it answers
   local saveCD = env.C_Container.GetItemCooldown
   env.C_Container.GetItemCooldown = function(id) if id == 279988 then return env.GetTime() - 3000, 3600, 1 end return 0, 0, 1 end
-  Camp.Refresh()
-  assert(camp.time:GetText() == "10m", "the item's own cooldown: ten minutes left")
+  local st, du = Camp.CampCooldown({ id = 279988 }, env.GetTime())
+  assert(du == 3600 and st + du - env.GetTime() == 600, "the item's own cooldown: ten minutes left")
   env.C_Container.GetItemCooldown = saveCD
-  -- the sleeping bag: lit after 20 s standing still under three stacks
-  local bag = ic("bag")
-  assert(bag:IsShown() and not bag.state.lit and bag:GetAttribute("item") == "item:211527", "the bag, not lit while you move")
-  tick(owner, 25)
-  Camp.Refresh()
-  assert(bag.state.lit, "still for 20 s: the bag lights up")
-  -- a switch off takes its icon away
-  QB:Settings().remind.food = false
-  Camp.Refresh()
-  assert(not food:IsShown() and Camp.visible == 3, "the food switch off: no food icon")
-  QB:Settings().remind.food = true
-  -- in a fight: dimmed, its buttons left alone (the game's secure buttons)
-  c.combat = true; ev("PLAYER_REGEN_DISABLED")
+  -- the sleeping bag: still 20 s away from fires, under three stacks: Sleep
+  c.buffs = {}
+  R.Refresh()
+  local bag = ic("sleep")
+  assert(on("sleep") and bag:GetAttribute("item") == "item:211527" and bag.word:GetText() == "Sleep", "still for 20 s: Sleep")
+  -- Never on Eat takes its icon away
+  R.SetNever("eat", "Eat"); R.Refresh()
+  assert(not on("eat"), "Never: Eat: no food icon")
+  R.SetNever("eat", nil, false)
+  -- in a fight: the holder hidden by the state driver, its buttons left alone (the game's secure buttons)
+  c.combat = true; ev("PLAYER_REGEN_DISABLED"); tick(owner, 1)
   owner.o.bagSlots = {}
-  Camp.Refresh()
-  assert(bar:GetAlpha() < 1 and fire:IsShown() and fire:GetAttribute("item") == "item:279981", "in a fight nothing moves or changes its click")
-  c.combat = false; ev("PLAYER_REGEN_ENABLED")
-  assert(bar:GetAlpha() == 1 and not fire:IsShown() and food:IsShown() and food.state.grey, "after it: the kit is gone, no food is grey")
-  -- in a dungeon: hidden
+  R.Refresh()
+  assert(not bar:IsVisible() and on("fire") and fire:GetAttribute("item") == "item:279981", "in a fight nothing moves or changes its click")
+  c.combat = false; ev("PLAYER_REGEN_ENABLED"); tick(owner, 2.5)
+  assert(env.QuestBankRemindHolder:IsVisible() and fire:GetAttribute("item") == nil and not on("eat"),
+    "2 s after it: back, the kit gone (a cook out of kits: Wood, the seller's minutes), no food: " .. tostring(on("fire") and fire.word:GetText()))
+  -- in a dungeon: no Reminders
   local saveInst = env.IsInInstance
+  owner.o.bagSlots = { { 2888, 5 } }
   env.IsInInstance = function() return true, "party" end
-  Camp.Refresh()
-  assert(not bar:IsShown(), "in a dungeon with quiet on: hidden")
+  R.Refresh()
+  assert(not bar:IsShown(), "in a dungeon (buffs and consumables only): no Reminders")
   env.IsInInstance = saveInst
+  R.Refresh()
   -- Alt-drag moves it and the place is kept
   c.alt = true
+  food = ic("eat")
   food.__scripts.OnMouseDown(food, "LeftButton"); food.__scripts.OnMouseUp(food, "LeftButton")
   c.alt = false
-  assert(type(QB:Settings().remind.pos) == "table" and QB:Settings().remind.pos.x == 500, "Alt-drag moves the bar and keeps its place")
-  QB:Settings().remind.pos = nil
+  assert(type(R.Settings().pos) == "table" and R.Settings().pos.x == 500, "Alt-drag moves Reminders and keeps its place")
+  R.Settings().pos = nil; R.Place()
+  R.Clicked("fire"); R.Clicked("sleep") -- (walking on without a click would snooze the pause reminders for the blocks after)
+  ev("PLAYER_STARTED_MOVING")
   owner.o.bagSlots = saveBags; c.profs = nil; c.buffs = nil
-  Camp.Refresh()
+  R.Refresh()
 end
 -- 5.3: the minimap leads to the work: objectives as the game's cursor icons, the line to an unfinished one, its name in a
 -- label. 5.4.4: the work of the one target (Target.lua): the spot of an objective of stop 1's quest, never another quest's
@@ -5449,63 +5456,52 @@ do
   env.C_Traits = saveTraits
   L.Read()
 
-  -- (d) the camp bar: Field Guide's cooldown and text, Gourmand's minutes on the food
+  -- (d) Reminders: Field Guide's cooldown and text, Gourmand's minutes on the food
   c.legacy[110304], c.legacy[110313] = 1, 1
   L.Read()
-  local cf = Camp.frame
-  local function cev(e, ...) cf.__scripts.OnEvent(cf, e, ...) end
+  local R = QB.Remind
   local function ic(k) return env["QuestBankCamp_" .. k] end
   c.profs = { { "Blacksmithing", 150 }, { "Alchemy", 10 }, { "Fishing", 0 }, { "Cooking", 60 }, { "First Aid", 30 } }
   c.o.bagSlots = { { 279988, 1 }, { 279981, 2 }, { 2888, 5 }, { 211527, 1 } }
   c.buffs = {}
   assert(D.FOOD[2888].g:find("15 min", 1, true), "the ribs' own text says 15 min")
-  cev("PLAYER_ENTERING_WORLD")
-  local bar, food, camp, bag = env.QuestBankCampBar, ic("food"), ic("camp"), ic("bag")
-  assert(bar and bar:IsShown() and food and camp and bag, "the bar with the food, the anvil and the bag")
+  R.Refresh()
+  local food = ic("eat")
+  assert(food and food:IsShown(), "Reminders: Eat")
   assert(Camp.CampCD() == 3312 and Camp.CooldownText() == "All camp features share a 55-minute cooldown (Field Guide).", "Field Guide 1: 55 minutes, said so")
-  assert(food.state.tip[2]:find("20 min", 1, true) and not food.state.tip[2]:find("15 min", 1, true), "Gourmand 1: the ribs say 20 min: " .. food.state.tip[2])
-  cev("UNIT_SPELLCAST_SUCCEEDED", "player", nil, D.CAMP[279981].sp)
-  cev("UNIT_SPELLCAST_SUCCEEDED", "player", nil, D.CAMP[279988].sp)
-  assert(camp.state.grey and camp.state.cd and camp.state.cd[2] == 3312 and camp.time:GetText() == "56m" and camp.state.tip[3] == Camp.CooldownText()
-    and Camp.CooldownLeft() > 3300 and Camp.CooldownLeft() <= 3312, "placed: the 55-minute cooldown sweeps, 56m on the icon: " .. tostring(camp.time:GetText()))
-  -- (the bar is an icon strip with its minutes on the icons' bottom edge, as a WeakAura's: a sheet, not the window check)
-  assert(camp.time:GetStringWidth() < camp:GetWidth() - 4 and camp.time.__points[1].point == "BOTTOM", "56m fits its icon")
-  STAGE_LAYOUTS[#STAGE_LAYOUTS + 1] = dumpLayout(bar, "Camp bar, Field Guide 1: the anvil's 55-minute cooldown")
-  c.legacy[110304] = 2; L.Read(); Camp.Refresh()
-  assert(camp.state.cd[2] == 2988 and camp.time:GetText() == "50m" and camp.state.tip[3]:find("50-minute", 1, true), "Field Guide 2: 2988 s")
-  c.legacy[110304] = 3; L.Read(); Camp.Refresh()
-  assert(camp.state.cd[2] == 2700 and camp.time:GetText() == "45m" and camp.state.tip[3]:find("45-minute", 1, true), "Field Guide 3: 2700 s")
-  c.legacy[110304] = 0; L.Read(); Camp.Refresh()
-  assert(camp.state.cd[2] == 3600 and camp.time:GetText() == "1h" and camp.state.tip[3] == "All camp features share an hour's cooldown.", "no Field Guide: the hour")
-  -- the game's own cooldown still wins when it answers
-  local saveCD = env.C_Container.GetItemCooldown
-  env.C_Container.GetItemCooldown = function(id) if id == 279988 then return env.GetTime() - 3000, 3312, 1 end return 0, 0, 1 end
-  Camp.Refresh()
-  assert(camp.state.cd[2] == 3312 and camp.time:GetText() == "6m", "the item's own cooldown: six minutes left")
-  env.C_Container.GetItemCooldown = saveCD
-  c.legacy[110313] = 3; L.Read(); Camp.Refresh()
-  assert(food.state.tip[2]:find("30 min", 1, true), "Gourmand 3: the ribs say 30 min")
-  -- the missing-buffs banner says the same of the food
-  c.resting = true; cev("PLAYER_UPDATE_RESTING")
-  c.resting = false; cev("PLAYER_UPDATE_RESTING")
-  local B = env.QuestBankBuffBanner
-  assert(B and B:IsShown() and env.QuestBankBuff_1 and env.QuestBankBuff_1.state.tip[2]:find("30 min", 1, true), "the banner: the ribs, 30 min")
-  for _, pr in ipairs(checkLayout(B, "Missing buffs banner, Gourmand")) do STAGE_PROBLEMS[#STAGE_PROBLEMS + 1] = pr end
-  STAGE_LAYOUTS[#STAGE_LAYOUTS + 1] = dumpLayout(B, "Missing buffs banner, Gourmand 3: the ribs' 30 min")
-  Camp.Snooze()
-  c.legacy[110313] = 0; L.Read(); Camp.Refresh()
-  assert(food.state.tip[2]:find("15 min", 1, true), "no Gourmand: 15 min")
+  assert(food.rec.why:find("20 min", 1, true) and not food.rec.why:find("15 min", 1, true), "Gourmand 1: the ribs say 20 min: " .. food.rec.why)
+  R.castFrame.__scripts.OnEvent(R.castFrame, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-1", D.CAMP[279981].sp)
+  R.castFrame.__scripts.OnEvent(R.castFrame, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-2", D.CAMP[279988].sp)
+  local st, du = Camp.CampCooldown({ id = 279988 }, env.GetTime())
+  assert(du == 3312 and Camp.CooldownLeft() > 3300 and Camp.CooldownLeft() <= 3312, "placed: the 55-minute cooldown")
+  STAGE_LAYOUTS[#STAGE_LAYOUTS + 1] = dumpLayout(env.QuestBankCampBar, "Reminders, Gourmand 1: the ribs' Eat")
+  c.legacy[110304] = 2; L.Read()
+  assert(Camp.CampCD() == 2988 and Camp.CooldownText():find("50-minute", 1, true), "Field Guide 2: 2988 s")
+  c.legacy[110304] = 3; L.Read()
+  assert(Camp.CampCD() == 2700 and Camp.CooldownText():find("45-minute", 1, true), "Field Guide 3: 2700 s")
+  c.legacy[110304] = 0; L.Read()
+  assert(Camp.CampCD() == 3600 and Camp.CooldownText() == "All camp features share an hour's cooldown.", "no Field Guide: the hour")
+  c.legacy[110313] = 3; L.Read(); R.Refresh()
+  assert(food.rec.why:find("30 min", 1, true), "Gourmand 3: the ribs say 30 min")
+  for _, pr in ipairs(checkLayout(env.QuestBankCampBar, "Reminders, Gourmand")) do STAGE_PROBLEMS[#STAGE_PROBLEMS + 1] = pr end
+  c.legacy[110313] = 0; L.Read(); R.Refresh()
+  assert(food.rec.why:find("15 min", 1, true), "no Gourmand: 15 min")
 
   -- (e) the sleeping bag's Well Rested by its spell id: 429959 "Well-Rested"; the perk's 1225478 "Well Rested" never
-  tick(c, 25); Camp.Refresh()
+  R.frame.__scripts.OnEvent(R.frame, "PLAYER_STOPPED_MOVING"); tick(c, 21)
   c.buffs = { { name = "Well Rested", spellId = 1225478, applications = 3 } }
-  Camp.Refresh()
-  assert(Camp.Auras()["Well Rested"] == nil and not API.HasWellRested() and bag.state.count == nil and bag.state.tip[1] == "Well Rested 0/3",
+  R.Refresh()
+  local bag = ic("sleep")
+  assert(Camp.Auras()["Well Rested"] == nil and not API.HasWellRested() and bag:IsShown() and bag.rec.count == 0 and bag.rec.why:find("Well-Rested 0/3", 1, true),
     "the Legacy perk's passive is not the bag's buff")
   c.buffs = { { name = "Well-Rested", spellId = 429959, applications = 2, expirationTime = c.clock + 100 } }
-  Camp.Refresh()
+  R.Refresh()
   local a = Camp.Auras()["Well Rested"]
-  assert(a and a.n == 2 and API.HasWellRested() and bag.state.count == 2 and bag.state.tip[1] == "Well Rested 2/3", "the bag's buff by its id: two stacks")
+  assert(a and a.n == 2 and API.HasWellRested() and bag.rec.count == 2 and bag.count:GetText() == "2" and bag.rec.why:find("Well-Rested 2/3", 1, true), "the bag's buff by its id: two stacks")
+  c.buffs = { { name = "Well-Rested", spellId = 429959, applications = 3, expirationTime = c.clock + 100 } }
+  R.Refresh()
+  assert(not bag:IsShown(), "three stacks: no Sleep")
+  R.frame.__scripts.OnEvent(R.frame, "PLAYER_STARTED_MOVING")
   c.buffs = { "Well Rested" }
   assert(Camp.Auras()["Well Rested"] and API.HasWellRested(), "an older client's name without an id counts")
   c.buffs = { "Well-Rested" }
@@ -5868,59 +5864,52 @@ do
   UI.candMemo = nil
   QB:SetLock(lock0); QB:Recompute(true)
 end
--- checklist 4: the camp bar's fire icon: a carried kit first, the Basic Campfire spell only with no kit, one fire icon
+-- checklist 4: the fire slot (Reminders since the hud round): a carried kit first, Classic Era's Basic Campfire only with
+-- no kit and Simple Wood, one fire icon
 do
-  local Camp, env = QB.Camp, owner.env
+  local Camp, env, R = QB.Camp, owner.env, QB.Remind
   local c = owner
-  local f = Camp.frame
-  local function ev(e, ...) f.__scripts.OnEvent(f, e, ...) end
   local function ic(k) return env["QuestBankCamp_" .. k] end
   local saveBags, saveKnown, saveProfs, saveBuffs = owner.o.bagSlots, c.known, c.profs, c.buffs
   local saveTex = env.C_Spell.GetSpellTexture
   env.C_Spell.GetSpellTexture = function(id) return id == 818 and 135805 or 134400 end
-  c.combat = false; ev("PLAYER_REGEN_ENABLED")
-  -- the fire icons on the bar: the ones whose click lights a fire (the kit, or the spell)
+  c.combat = false; R.frame.__scripts.OnEvent(R.frame, "PLAYER_REGEN_ENABLED"); tick(owner, 2.5)
+  R.frame.__scripts.OnEvent(R.frame, "PLAYER_STOPPED_MOVING"); tick(owner, 21)
+  -- the icons on Reminders whose click lights a fire (the kit, or the spell)
   local function fires()
     local n, which = 0, {}
-    for _, k in ipairs({ "food", "fire", "camp", "bag" }) do
-      local b = ic(k)
-      if b and b:IsShown() and (b:GetAttribute("item") == "item:279981" or b:GetAttribute("spell") == 818) then n = n + 1; which[#which + 1] = k end
+    for _, rec in ipairs(R.Shown("reminders")) do
+      local b = ic(rec.key)
+      if b and b:IsShown() and (b:GetAttribute("item") == "item:279981" or b:GetAttribute("spell") == 818) then n = n + 1; which[#which + 1] = rec.key end
     end
     return n, table.concat(which, ",")
   end
-  -- a smith and cook who knows Basic Campfire, with Simple Wood and two kits, nothing to place: the kit, once
+  -- a smith and cook who knows Basic Campfire, with Simple Wood and two kits: the kit, once
   c.profs, c.known, c.buffs = { { "Blacksmithing", 150 }, { "Cooking", 60 } }, { [818] = true }, {}
   owner.o.bagSlots = { { 4470, 3 }, { 279981, 2 } }
-  Camp.Refresh()
+  R.Refresh()
   local fire = ic("fire")
-  assert(fire:IsShown() and fire:GetAttribute("type") == "item" and fire:GetAttribute("item") == "item:279981" and fire:GetAttribute("spell") == nil
+  assert(fire:IsShown() and fire:GetAttribute("type1") == "item" and fire:GetAttribute("item") == "item:279981" and fire:GetAttribute("spell") == nil
     and fire.count:GetText() == "2", "kit and spell both at hand: the kit shows, with its count")
-  assert(fire.state.tip[1] == "Basic Campfire Kit" or fire.state.tip[1]:find("Kit", 1, true), "its tooltip is the kit's: " .. tostring(fire.state.tip[1]))
+  assert(fire.rec.name == "Basic Campfire Kit" or fire.rec.name:find("Kit", 1, true), "its tooltip is the kit's: " .. tostring(fire.rec.name))
   assert(fires() == 1, "one fire icon: " .. select(2, fires()))
-  -- a feature to place too: the kit still, and the camp slot's click is the feature, not a second fire
-  owner.o.bagSlots = { { 279944, 1 }, { 4470, 3 }, { 279981, 2 } }
-  Camp.Refresh()
-  assert(fire:GetAttribute("item") == "item:279981" and fire:GetAttribute("spell") == nil and fire.state.item == 279981, "a feature waiting: the kit")
-  assert(ic("camp"):IsShown() and ic("camp"):GetAttribute("item") == "item:279944" and fires() == 1, "the camp slot is the feature; still one fire icon: " .. select(2, fires()))
-  -- (the sheet alone: the bar is a strip of icons whose count and time sit inside them, as the game's own buttons draw
-  -- theirs, so the pages' window-edge rule is not for it)
-  layouts[#layouts + 1] = dumpLayout(env.QuestBankCampBar, "Camp bar: a kit and Basic Campfire both at hand, the kit shows, the wheel waits")
+  layouts[#layouts + 1] = dumpLayout(env.QuestBankCampBar, "Reminders: a kit and Basic Campfire both at hand, the kit shows")
   -- no kit: the spell, once
   owner.o.bagSlots = { { 279944, 1 }, { 4470, 3 } }
-  Camp.Refresh()
-  assert(fire:GetAttribute("type") == "spell" and fire:GetAttribute("spell") == 818 and fire:GetAttribute("item") == nil and fire.count:GetText() == "3",
+  R.Refresh()
+  assert(fire:GetAttribute("type1") == "spell" and fire:GetAttribute("spell") == 818 and fire:GetAttribute("item") == nil and fire.count:GetText() == "3",
     "no kit: Basic Campfire, with the Simple Wood")
   assert(fires() == 1, "one fire icon: " .. select(2, fires()))
-  -- the spell unknown and no kit, a feature waiting: grey, no click; nothing waiting: no fire icon
+  -- the spell unknown and no kit: no fire icon (a cook who never used a kit is told nothing)
   c.known = {}
-  Camp.Refresh()
-  assert(fire:IsShown() and fire.state.grey and fire:GetAttribute("type") == nil and fire.state.tip[1] == "No campfire kit", "no way to light one: grey")
-  owner.o.bagSlots = {}
-  Camp.Refresh()
-  assert(not fire:IsShown() and fires() == 0, "nothing to light, nothing to place: no fire icon")
+  Camp.CharDB().kitUsed = nil
+  R.Refresh()
+  assert(not fire:IsShown() and fires() == 0, "nothing to light: no fire icon")
+  R.Clicked("fire"); R.Clicked("sleep")
+  R.frame.__scripts.OnEvent(R.frame, "PLAYER_STARTED_MOVING")
   owner.o.bagSlots, c.known, c.profs, c.buffs = saveBags, saveKnown, saveProfs, saveBuffs
   env.C_Spell.GetSpellTexture = saveTex
-  Camp.Refresh()
+  R.Refresh()
 end
 -- checklist 5: Highest XP is sorted by XP alone: the richest candidate that fits is row 1, the gains never rise down the
 -- list, the trip's minutes on the line; the reward finders keep their own order
@@ -12810,13 +12799,13 @@ do
   end
 end
 
--- 5.4: the camp bar's campfire (Cooking's Basic Campfire, or a kit) and the missing-buffs banner when you leave a town
+-- 5.4: the campfire (Cooking's Basic Campfire, or a kit) and the missing-buffs banner (since the hud round the fire
+-- slot on Reminders, and Buffs)
 do
-  local Camp, env, D = owner.QB.Camp, owner.env, owner.QB.Data
+  local Camp, env, D, R = owner.QB.Camp, owner.env, owner.QB.Data, owner.QB.Remind
   c = owner
   c.combat = false
-  local f = Camp.frame
-  local function ev(e, ...) f.__scripts.OnEvent(f, e, ...) end
+  local function ev(e, ...) local f = R.frame; f.__scripts.OnEvent(f, e, ...) end
   local function ic(k) return env["QuestBankCamp_" .. k] end
   local function btn(i) return env["QuestBankBuff_" .. i] end
   local function said() return owner.chat[#owner.chat] or "" end
@@ -12825,7 +12814,6 @@ do
   env.C_Spell.GetSpellTexture = function(id) return ({ [818] = 135805, [1460] = 135932 })[id] or 134400 end
   local spellCD = {}
   env.C_Spell.GetSpellCooldown = function(id) local s = spellCD[id]; return { startTime = s or 0, duration = s and 300 or 0, isEnabled = true, modRate = 1 } end
-  -- the camp features' shared hour from the camp bar's own test runs out first
   tick(owner, 60 + 3600)
   local SMITH = { { "Blacksmithing", 150 }, { "Alchemy", 10 }, { "Fishing", 0 }, { "Cooking", 60 }, { "First Aid", 30 } }
   assert(Camp.FIRE_SPELL == 818 and Camp.WOOD == 4470 and D.CAMP[Camp.BASIC_KIT] and D.CAMP[Camp.BASIC_KIT].t == "kit", "Basic Campfire, Simple Wood, the Basic Campfire Kit")
@@ -12841,164 +12829,142 @@ do
   end
   assert(not Camp.SELF.WARRIOR and not Camp.SELF.ROGUE, "Battle Shout is short: nothing for a warrior or a rogue")
 
-  -- (a) the fire: a cook who knows Basic Campfire, with Simple Wood and the sharpening wheel to place, no kit
+  -- (a) the fire: a cook who knows Basic Campfire, with Simple Wood, no kit, standing still: the spell lights it
   c.profs, c.known, c.buffs = SMITH, { [818] = true }, {}
   owner.o.bagSlots = { { 279944, 1 }, { 4470, 3 } }
-  ev("PLAYER_ENTERING_WORLD")
-  local fire, camp = ic("fire"), ic("camp")
-  assert(fire:IsShown() and fire:GetAttribute("type") == "spell" and fire:GetAttribute("spell") == 818 and fire:GetAttribute("item") == nil,
+  ev("PLAYER_STOPPED_MOVING"); tick(owner, 21)
+  local fire = ic("fire")
+  assert(fire:IsShown() and fire:GetAttribute("type1") == "spell" and fire:GetAttribute("spell") == 818 and fire:GetAttribute("item") == nil,
     "Basic Campfire known: a click casts the spell")
-  assert(fire.icon.__tex == 135805 and fire.count:GetText() == "3" and fire.state.lit and fire.state.tip[2] == "Click to light a campfire.",
-    "the spell's own icon, the Simple Wood, lit while the wheel waits for a fire")
-  assert(camp:IsShown() and camp:GetAttribute("item") == "item:279944" and not camp.state.lit, "the wheel, waiting")
+  assert(fire.icon.__tex == 135805 and fire.count:GetText() == "3" and fire.rec.lit and fire.word:GetText() == "Light", "the spell's own icon, the Simple Wood")
   spellCD[818] = env.GetTime() - 60
-  Camp.Refresh()
-  assert(fire.state.cd and fire.cd.__cd[2] == 300 and fire.time:GetText() == "4m" and not fire.state.lit, "the spell's own cooldown: four minutes left, not lit")
+  R.Refresh()
+  assert(not fire:IsShown(), "the spell on its cooldown: no Light")
   spellCD[818] = nil
-  ev("UNIT_SPELLCAST_SUCCEEDED", "player", nil, 818)
-  assert(camp.state.lit and not fire.state.lit, "the fire cast: the wheel lights up, the fire doesn't")
-  owner.o.bagSlots = { { 279944, 1 } }
-  Camp.Refresh()
-  assert(fire.state.grey and fire.state.tip[2] == "Needs Simple Wood.", "no Simple Wood: grey")
-  -- a kit too: the kit, a feature waiting or not (a kit's fire holds camp features; on Forever the kit is the fire)
+  -- a kit too: the kit (a kit's fire holds camp features; on Forever the kit is the fire)
   owner.o.bagSlots = { { 279944, 1 }, { 4470, 3 }, { 279981, 2 } }
-  Camp.Refresh()
-  assert(fire:GetAttribute("type") == "item" and fire:GetAttribute("item") == "item:279981" and fire:GetAttribute("spell") == nil, "a feature to place: the kit")
-  owner.o.bagSlots = { { 4470, 3 }, { 279981, 2 } }
-  Camp.Refresh()
-  assert(fire:GetAttribute("type") == "item" and fire:GetAttribute("item") == "item:279981" and fire:GetAttribute("spell") == nil, "nothing to place: the kit still")
-  c.known = {}
-  Camp.Refresh()
-  assert(fire:GetAttribute("type") == "item" and fire:GetAttribute("item") == "item:279981" and fire.count:GetText() == "2", "the spell unknown: the kit, as before")
-  -- a feature to place and no way to light a fire: grey, with where a kit comes from, no click
-  owner.o.bagSlots = { { 279944, 1 } }
-  Camp.Refresh()
-  assert(fire:IsShown() and fire.state.grey and fire:GetAttribute("type") == nil and fire.state.tip[1] == "No campfire kit"
-    and fire.state.tip[2]:find("Simple Wood", 1, true), "no kit, no spell: grey, saying how to get one")
-  owner.o.bagSlots = {}
-  Camp.Refresh()
-  assert(not fire:IsShown(), "nothing to place, nothing to light: no fire icon")
+  R.Refresh()
+  assert(fire:GetAttribute("type1") == "item" and fire:GetAttribute("item") == "item:279981" and fire:GetAttribute("spell") == nil, "a kit: the kit")
   -- in a fight the click stays as it was; after it, the new one
   c.known, owner.o.bagSlots = { [818] = true }, { { 4470, 3 } }
-  Camp.Refresh()
+  R.Refresh()
   c.combat = true; ev("PLAYER_REGEN_DISABLED")
   owner.o.bagSlots = { { 279981, 1 } }; c.known = {}
-  Camp.Refresh()
-  assert(fire:GetAttribute("type") == "spell" and fire:GetAttribute("spell") == 818, "in a fight the fire's click stays")
-  c.combat = false; ev("PLAYER_REGEN_ENABLED")
-  assert(fire:GetAttribute("type") == "item" and fire:GetAttribute("item") == "item:279981" and fire:GetAttribute("spell") == nil, "after the fight: the kit")
+  R.Refresh()
+  assert(fire:GetAttribute("type1") == "spell" and fire:GetAttribute("spell") == 818, "in a fight the fire's click stays")
+  c.combat = false; ev("PLAYER_REGEN_ENABLED"); tick(owner, 2.5)
+  assert(fire:GetAttribute("type1") == "item" and fire:GetAttribute("item") == "item:279981" and fire:GetAttribute("spell") == nil, "after the fight: the kit")
+  R.Clicked("fire")
+  ev("PLAYER_STARTED_MOVING")
 
-  -- (b) the banner (6.1.1: up whenever a buff you can give yourself is missing, out of a fight; 6.1.0 showed it once as
-  -- you left a town, for 12 seconds): a mage who knows two ranks of Arcane Intellect, ribs in the bag, nothing on
+  -- (b) Buffs (6.1.1: up whenever a buff you can give yourself is missing, out of a fight): a mage who knows two ranks
+  -- of Arcane Intellect, ribs in the bag, nothing on. The food is Reminders' Eat alone: each reminder in one place
   owner.o.class, c.profs, c.buffs = "MAGE", nil, {}
   c.known = { [1459] = true, [1460] = true }
   owner.o.bagSlots = { { 2888, 5 } }
-  local shows = Camp.shows
+  local shows = R.bannerShows or 0
   c.resting = true
-  ev("PLAYER_ENTERING_WORLD")
+  ev("PLAYER_ENTERING_WORLD"); tick(owner, 0)
   local B = env.QuestBankBuffBanner
-  assert(B and B:IsShown() and Camp.shows == shows + 1 and B.title:GetText() == "Missing buffs", "buffs missing: the banner, in town too")
-  assert(btn(1):IsShown() and btn(1):GetAttribute("type") == "item" and btn(1):GetAttribute("item") == "item:2888" and btn(1).count:GetText() == "5",
-    "Well Fed missing: the ribs, a click eats one")
-  assert(btn(2):IsShown() and btn(2):GetAttribute("type") == "spell" and btn(2):GetAttribute("spell") == 1460 and btn(2):GetAttribute("unit") == "player"
-    and btn(2):GetAttribute("item") == nil and btn(2).icon.__tex == 135932, "Arcane Intellect missing: the highest rank known, cast on yourself, its own icon")
-  assert(not (btn(3) and btn(3):IsShown()), "two icons")
-  for _, pr in ipairs(checkLayout(B, "Missing buffs banner")) do problems[#problems + 1] = pr end
-  layouts[#layouts + 1] = dumpLayout(B, "Missing buffs banner")
-  c.resting = false; ev("PLAYER_UPDATE_RESTING")
-  assert(B:IsShown() and Camp.shows == shows + 1, "out of town: the same banner")
-  -- a buff cast takes its icon away; all on, the banner goes
+  assert(B and B:IsShown() and (R.bannerShows or 0) == shows + 1 and B.title:GetText() == "Missing buffs", "buffs missing: Buffs, in town too")
+  assert(btn(1):IsShown() and btn(1):GetAttribute("type1") == "spell" and btn(1):GetAttribute("spell") == 1460 and btn(1):GetAttribute("unit") == "player"
+    and btn(1):GetAttribute("item") == nil and btn(1).icon.__tex == 135932, "Arcane Intellect missing: the highest rank known, cast on yourself, its own icon")
+  assert(not (btn(2) and btn(2):IsShown()), "one icon: the food is not on Buffs")
+  for _, pr in ipairs(checkLayout(B, "Buffs")) do problems[#problems + 1] = pr end
+  layouts[#layouts + 1] = dumpLayout(B, "Buffs: Arcane Intellect")
+  c.resting = false; ev("PLAYER_UPDATE_RESTING"); tick(owner, 0)
+  assert(B:IsShown() and (R.bannerShows or 0) == shows + 1, "out of town: the same Buffs")
+  -- a buff cast takes its icon away; all on, Buffs goes
   c.buffs = { "Arcane Intellect" }
-  ev("UNIT_AURA", "player")
-  assert(B:IsShown() and btn(1):GetAttribute("item") == "item:2888" and not btn(2):IsShown(), "Arcane Intellect on: only the food is left")
-  c.buffs = { "Well Fed", "Arcane Intellect" }
-  ev("UNIT_AURA", "player")
-  assert(not B:IsShown(), "everything on: the banner goes")
-  -- they run out: back at once, and it stays
+  R.auraFrame.__scripts.OnEvent(R.auraFrame, "UNIT_AURA", "player"); tick(owner, 0)
+  assert(not B:IsShown(), "everything on: Buffs goes")
+  -- it runs out: back at once, and it stays
   c.buffs = {}
-  ev("UNIT_AURA", "player")
-  assert(B:IsShown() and Camp.shows == shows + 2, "the buffs gone: the banner again")
+  R.auraFrame.__scripts.OnEvent(R.auraFrame, "UNIT_AURA", "player"); tick(owner, 0)
+  assert(B:IsShown() and (R.bannerShows or 0) == shows + 2, "the buff gone: Buffs again")
   tick(owner, 30)
   assert(B:IsShown(), "and it stays up")
-  -- its X: ten minutes; /qb buffs: any time
-  B.close.__scripts.OnClick(B.close, "LeftButton")
-  assert(not B:IsShown(), "the X closes it")
+  -- right-click, Not now: ten minutes; /qb buffs: any time
+  local n0 = #owner.contextMenus
+  btn(1).__scripts.OnClick(btn(1), "RightButton")
+  local menu = owner.contextMenus[n0 + 1]
+  assert(menu and menu[1].text == "Not now", "a right-click: the game's menu")
+  menu[1].set(); tick(owner, 0)
+  assert(not B:IsShown(), "Not now hides it")
   tick(owner, 60)
-  assert(not B:IsShown(), "a minute on: still closed")
+  assert(not B:IsShown(), "a minute on: still hidden")
   env.SlashCmdList.QUESTBANK("buffs")
-  assert(B:IsShown() and Camp.shows == shows + 3 and btn(2):GetAttribute("spell") == 1460, "/qb buffs shows it")
+  assert(B:IsShown() and btn(1):GetAttribute("spell") == 1460, "/qb buffs shows it")
   -- in a fight: hidden by the game's state driver, its buttons left alone; after it, back
   c.combat = true; ev("PLAYER_REGEN_DISABLED"); tick(owner, 1)
-  assert(not B:IsVisible() and btn(2):GetAttribute("spell") == 1460, "in a fight: not shown, its buttons kept")
+  assert(not B:IsVisible() and btn(1):GetAttribute("spell") == 1460, "in a fight: not shown, its buttons kept")
   local n = #owner.chat
   env.SlashCmdList.QUESTBANK("buffs")
   assert(not B:IsVisible() and #owner.chat == n + 1 and said():find("Not in a fight", 1, true), "/qb buffs in a fight: says so")
-  c.combat = false; ev("PLAYER_REGEN_ENABLED"); tick(owner, 1)
+  c.combat = false; ev("PLAYER_REGEN_ENABLED"); tick(owner, 2.5)
   assert(B:IsVisible(), "the fight over: back")
-  -- not in a dungeon
+  -- a dungeon: buffs and consumables (remind.instance's default): Buffs stays, Reminders goes
   env.IsInInstance = function() return true, "party" end
-  Camp.Refresh()
-  assert(not B:IsShown(), "in a dungeon: no banner")
+  R.Refresh()
+  assert(B:IsShown() and not env.QuestBankCampBar:IsShown(), "in a dungeon: Buffs, no Reminders")
   env.IsInInstance = saveInst
   -- everything on: nothing to say
   c.buffs = { "Well Fed", "Arcane Brilliance" }
-  Camp.Refresh()
-  assert(not B:IsShown(), "all on (Arcane Brilliance counts): no banner")
+  R.Refresh()
+  assert(not B:IsShown(), "all on (Arcane Brilliance counts): no Buffs")
   n = #owner.chat
   env.SlashCmdList.QUESTBANK("buffs")
   assert(not B:IsShown() and said():find("No buffs missing.", 1, true), "/qb buffs with all on: says so")
   -- the switch in Settings
   c.buffs = {}
-  local v5 = owner.QB.UI.views[5]
   owner.QB.UI:Open(5)
-  assert(v5.remind.buffs and v5.remind.buffs:GetChecked() and v5.remind.buffs.label:GetText() == "Missing buffs, a click to cast them", "the switch, on")
+  local v5 = owner.QB.UI.views[5]
+  assert(v5.remind.buffs and v5.remind.buffs:GetChecked() and v5.remind.buffs.label:GetText() == "Your buffs and weapon", "the row, on")
   v5.remind.buffs:SetChecked(false); v5.remind.buffs.__scripts.OnClick(v5.remind.buffs, "LeftButton")
-  assert(owner.QB:Settings().remind.buffs == false, "switched off")
-  Camp.Refresh()
-  assert(not B:IsShown(), "switched off: no banner")
+  assert(R.Settings().buffs == false, "switched off")
+  R.Refresh()
+  assert(not B:IsShown(), "switched off: no Buffs")
   v5.remind.buffs:SetChecked(true); v5.remind.buffs.__scripts.OnClick(v5.remind.buffs, "LeftButton")
+  for _, pr in ipairs(checkLayout(owner.QB.UI.frame, "Settings, Reminders")) do problems[#problems + 1] = pr end
+  owner.QB.UI.frame:Hide()
   -- the armor: Ice Armor before Frost Armor; the one last seen on you first; any rank, by name or id
   c.known = { [1459] = true, [168] = true, [7300] = true, [7302] = true, [6117] = true }
   local m = Camp.SelfMissing({}, {})
   assert(#m == 2 and m[1].id == 1459 and m[2].id == 7302 and m[2].name == "Ice Armor", "the armor: Ice Armor first")
-  c.buffs = { "Mage Armor" }; Camp.Refresh(); c.buffs = {}
+  c.buffs = { "Mage Armor" }; R.Refresh(); c.buffs = {}
   m = Camp.SelfMissing({}, {})
   assert(m[2].id == 6117 and m[2].name == "Mage Armor", "the armor last seen on you: Mage Armor")
   assert(#Camp.SelfMissing({}, { [10157] = true }) == 1 and #Camp.SelfMissing({ ["Frost Armor"] = true }, {}) == 1, "any rank counts, by name or by spell id")
+  assert(#Camp.SelfMissing({}, { [23028] = true }) == 1, "Arcane Brilliance by its id counts as Arcane Intellect (a localised client)")
   owner.o.class, c.known = "WARRIOR", {}
   assert(#Camp.SelfMissing({}, {}) == 0, "a warrior: no class buffs")
-  -- a camp feature ready and no fire near: the click lights the kit, then places the feature
+  -- a camp feature is Reminders' Place, never on Buffs
   owner.o.bagSlots, c.profs, c.buffs = { { 279944, 1 }, { 279981, 1 } }, SMITH, { "Well Fed" }
-  tick(owner, 301)
-  env.SlashCmdList.QUESTBANK("buffs")
-  assert(B:IsShown() and btn(1):GetAttribute("item") == "item:279981" and btn(1).state.tip[1] == "Sharpening Wheel" and btn(1).state.tip[2] == "Needs a campfire first."
-    and not btn(2):IsShown(), "the wheel ready, no fire: the kit first")
-  ev("UNIT_SPELLCAST_SUCCEEDED", "player", nil, D.CAMP[279981].sp)
-  assert(B:IsShown() and btn(1):GetAttribute("item") == "item:279944" and btn(1).state.tip[3] == "Click to place it.", "the fire lit: the wheel")
-  for _, pr in ipairs(checkLayout(B, "Missing buffs banner, one icon")) do problems[#problems + 1] = pr end
+  R.castFrame.__scripts.OnEvent(R.castFrame, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3", D.CAMP[279981].sp)
+  R.Refresh()
+  assert(not B:IsShown() and ic("place") and ic("place"):IsShown() and ic("place"):GetAttribute("item") == "item:279944", "the wheel: Place on Reminders, not on Buffs")
   -- the wheel's aura is its buff's own spell, Extra Strength: the feature's name on you is no buff
   assert(D.CAMP[279944].b == 1230172 and D.CAMP[279944].bn == "Extra Strength" and D.CAMP[279955].b == 1230172, "the wheel's buff, and the Master Forge's (its base)")
-  c.buffs = { "Well Fed", "Sharpening Wheel" }
-  ev("UNIT_AURA", "player")
-  assert(B:IsShown() and btn(1):GetAttribute("item") == "item:279944", "an aura named after the wheel is not its buff")
-  c.buffs = { "Well Fed", "Extra Strength" }
-  ev("UNIT_AURA", "player")
-  assert(not B:IsShown(), "the wheel's buff on: gone")
-  -- a feature that gives no buff (the Repair Bot: repairs and reagents) is no missing buff
+  c.buffs = { "Well Fed", "Sharpening Wheel" }; R.Refresh()
+  assert(ic("place"):IsShown(), "an aura named after the wheel is not its buff")
+  c.buffs = { "Well Fed", "Extra Strength" }; R.Refresh()
+  assert(not ic("place"):IsShown(), "the wheel's buff on: gone")
+  -- a feature that gives no buff (the Repair Bot: repairs and reagents) is no Place
   assert(D.CAMP[279949] and not D.CAMP[279949].b, "the Repair Bot gives no aura")
   owner.o.bagSlots, c.profs, c.buffs = { { 279949, 1 }, { 279981, 1 } }, { { "Engineering", 150 } }, { "Well Fed" }
-  tick(owner, 60 + 3601)
-  env.SlashCmdList.QUESTBANK("buffs")
-  assert(not B:IsShown() and said():find("No buffs missing.", 1, true), "an engineer's Repair Bot: nothing missing")
-  -- the Expert Campfire Kit ("Builds an expert campfire") is a kit too: the fire icon uses it
+  R.Refresh()
+  assert(not ic("place"):IsShown(), "an engineer's Repair Bot: no Place")
+  -- the Expert Campfire Kit ("Builds an expert campfire") is a kit too: Light uses it
   assert(D.CAMP[279974] and D.CAMP[279974].t == "kit" and D.CAMP[279974].cap == 10 and D.CAMP[279974].sp == 1307237, "the Expert Campfire Kit")
-  owner.o.bagSlots, c.profs = { { 279974, 2 } }, { { "Cooking", 225 } }
-  Camp.Refresh()
-  assert(ic("fire"):IsShown() and ic("fire"):GetAttribute("item") == "item:279974" and ic("fire").count:GetText() == "2", "an Expert Campfire Kit on the fire icon")
+  owner.o.bagSlots, c.profs, c.buffs = { { 279974, 2 } }, { { "Cooking", 225 } }, {}
+  ev("BAG_UPDATE_DELAYED"); ev("PLAYER_STOPPED_MOVING"); tick(owner, 21)
+  assert(ic("fire"):IsShown() and ic("fire"):GetAttribute("item") == "item:279974" and ic("fire").count:GetText() == "2", "an Expert Campfire Kit on the fire slot")
+  R.Clicked("fire")
+  ev("PLAYER_STARTED_MOVING")
   owner.o.bagSlots, owner.o.class, c.profs, c.known, c.buffs, c.resting = saveBags, saveClass, nil, nil, nil, nil
   env.C_Spell.GetSpellTexture, env.C_Spell.GetSpellCooldown = saveTex, saveCD
-  Camp.Refresh()
-  print(string.format("camp bar and banner: Basic Campfire and kits on the fire icon; the banner %d times, %d classes with buffs", Camp.shows, (function() local k = 0 for _ in pairs(Camp.SELF) do k = k + 1 end return k end)()))
+  R.Refresh()
+  print(string.format("Reminders and Buffs: Basic Campfire and kits on the fire slot; Buffs %d times, %d classes with buffs", R.bannerShows or 0, (function() local k = 0 for _ in pairs(Camp.SELF) do k = k + 1 end return k end)()))
 end
 
 ----------------------------------------------------------------------------
@@ -14672,89 +14638,75 @@ end)()
       "softened over an icon on its way, not over the one it starts at")
   end }
 
-  -- 8. the missing-buffs banner: a click on one keeps the others, through the cast and the meal
+  -- 8. Buffs: a click on one keeps the others, through the cast
   B3CASES[#B3CASES + 1] = { "the missing-buffs banner kept while you use it", function()
     local c = mage("Hungry")
-    local QB, env, Camp = c.QB, c.env, c.QB.Camp
+    local QB, env, R = c.QB, c.env, c.QB.Remind
     c.known = { [1459] = true, [168] = true }
     c.o.bagSlots = { { 2888, 1 } }
     c.buffs = {}
-    local f = Camp.frame
-    local function ev(e, ...) f.__scripts.OnEvent(f, e, ...) end
-    c.resting = true; ev("PLAYER_ENTERING_WORLD")
-    c.resting = false; ev("PLAYER_UPDATE_RESTING")
+    R.Refresh()
     local B = env.QuestBankBuffBanner
     local function icons()
       local out = {}
       for i = 1, 6 do
         local b = env["QuestBankBuff_" .. i]
-        if b and b:IsShown() then out[#out + 1] = b.state.key end
+        if b and b:IsShown() then out[#out + 1] = b.rec.never end
       end
       return table.concat(out, ",")
     end
-    assert(B:IsShown() and icons() == "food,self1,self2", "left town: food, Arcane Intellect, Frost Armor: " .. icons())
-    -- Arcane Intellect clicked: its cast under way, 13 seconds on the banner's clock
-    local ai = env.QuestBankBuff_2
+    assert(B:IsShown() and icons() == "buff:1459,buff:168", "Arcane Intellect and Frost Armor: " .. icons())
+    -- Arcane Intellect clicked: its cast under way, 13 seconds on
+    local ai = env.QuestBankBuff_1
     if ai.__scripts.OnClick then ai.__scripts.OnClick(ai, "LeftButton") end -- (the game's own click; QuestBank's hook on it)
     env.UnitCastingInfo = function(unit) return unit == "player" and "Arcane Intellect" or nil end
     tick(c, 13)
-    assert(B:IsShown() and icons() == "food,self1,self2", "13 seconds on, the cast under way: every icon still there: " .. icons())
+    assert(B:IsShown() and icons() == "buff:1459,buff:168", "13 seconds on, the cast under way: every icon still there: " .. icons())
     env.UnitCastingInfo = nil
     c.buffs = { "Arcane Intellect" }
-    ev("UNIT_AURA", "player")
-    assert(B:IsShown() and icons() == "food,self1", "Arcane Intellect on: that one gone, the others stay: " .. icons())
-    -- the food: the last piece eaten, the meal under way
-    local food = env.QuestBankBuff_1
-    if food.__scripts.OnClick then food.__scripts.OnClick(food, "LeftButton") end
-    c.o.bagSlots = {}
-    c.buffs = { "Arcane Intellect", "Food" }
-    ev("UNIT_AURA", "player")
-    tick(c, 20)
-    assert(B:IsShown() and icons() == "food,self1", "eating it, the last one: the food stays until Well Fed: " .. icons())
-    c.buffs = { "Arcane Intellect", "Well Fed" }
-    ev("UNIT_AURA", "player")
-    assert(B:IsShown() and icons() == "self1", "Well Fed: the food gone, Frost Armor left: " .. icons())
-    -- untouched, it stays while Frost Armor is missing (6.1.1; 6.1.0 took it away after its 12 seconds)
+    R.auraFrame.__scripts.OnEvent(R.auraFrame, "UNIT_AURA", "player"); tick(c, 0)
+    assert(B:IsShown() and icons() == "buff:168", "Arcane Intellect on: that one gone, Frost Armor stays: " .. icons())
     tick(c, 13)
-    assert(B:IsShown() and icons() == "self1", "untouched: still up for Frost Armor: " .. icons())
+    assert(B:IsShown() and icons() == "buff:168", "untouched: still up for Frost Armor: " .. icons())
     c.known, c.buffs = nil, nil
   end }
 
-  -- 9. sellers of camp goods: learned at their window; a grey fire or no sleeping bag names the nearest with its minutes,
-  -- and a click shows it on the arrow until the item is in your bags
+  -- 9. sellers of camp goods: learned at their window; the fire slot's Wood names the nearest with its minutes, and a click
+  -- shows it on the arrow until the item is in your bags
   B3CASES[#B3CASES + 1] = { "sellers of camp goods, learned", function()
-    -- (the bag's quest chain done: a seller of the bag is named only then, B4CASES)
-    local chain = {}
-    for _, id in ipairs({ 79007, 79008, 79192, 79980, 79974, 79975, 79976 }) do chain[id] = true end
-    local c = mage("Camper", nil, chain)
-    local QB, env, Camp, A = c.QB, c.env, c.QB.Camp, c.QB.Arrow
+    local c = mage("Camper")
+    local QB, env, Camp, A, R = c.QB, c.env, c.QB.Camp, c.QB.Arrow, c.QB.Remind
     local f = Camp.frame
     local here = QB.API.WorldPosition()
     c.npcGUID, c.npcName = "Creature-0-4455-0-12-5814-0000A1B2C3", "Innkeeper Farley"
-    c.merchant = { 159, 4470, 211527 }
+    c.merchant = { 159, 4470, 4471, 211527 }
     f.__scripts.OnEvent(f, "MERCHANT_SHOW")
     local sell = env.QuestBankDB.disc.sell
     local e = sell and sell.c5814
-    assert(e and e.n == "Innkeeper Farley" and #e.i == 2 and e.i[1] == 4470 and e.i[2] == 211527 and e.c == here.c and math.abs(e.wx - here.wx) <= 1,
-      "a merchant with Simple Wood and the bag: noted, with where it stands, the water left out")
-    -- 600 yards on, knowing Basic Campfire and no wood: the fire grey, its seller named
+    assert(e and e.n == "Innkeeper Farley" and #e.i == 3 and e.i[1] == 4470 and e.i[2] == 4471 and e.i[3] == 211527 and e.c == here.c and math.abs(e.wx - here.wx) <= 1,
+      "a merchant with Simple Wood, the flint and the bag: noted, with where it stands, the water left out")
+    f.__scripts.OnEvent(f, "MERCHANT_CLOSED")
+    -- 600 yards on, a cook who has used a kit, none left, no wood: at Fire's moment, Wood, the seller named
     standAt(c, 0, here.wx + 600, here.wy)
-    c.known = { [818] = true }
-    Camp.Refresh()
-    local fire, bag = env.QuestBankCamp_fire, env.QuestBankCamp_bag
-    assert(fire and fire:IsShown() and fire.state.grey and (fire.state.tip[3] or ""):find("^Sold by Innkeeper Farley, %d+ min away"), "the grey fire names the seller: " .. tostring(fire and fire.state.tip[3]))
-    assert(bag and bag:IsShown() and bag.state.grey and bag.state.tip[2]:find("sold by Innkeeper Farley", 1, true), "no bag: shown grey, its seller named: " .. tostring(bag and bag.state.tip[2]))
-    -- a click: shown on the arrow for now; the wood in the bags, over
+    c.profs = { { "Cooking", 15 } }
+    Camp.CharDB().kitUsed = true
+    f.__scripts.OnEvent(f, "PLAYER_STOPPED_MOVING"); tick(c, 21)
+    local fire = env.QuestBankCamp_fire
+    assert(fire and fire:IsShown() and fire.rec.never == "wood" and fire.rec.why:find("Innkeeper Farley sells", 1, true) and fire.word:GetText():find(" min$"),
+      "Wood names the seller: " .. tostring(fire and fire.rec.why))
+    -- a click: shown on the arrow for now; the wood and the flint in the bags, over
     fire.__scripts.OnClick(fire, "LeftButton")
-    assert(A.temp and A.temp.item == 4470 and A.temp.name == "Innkeeper Farley", "a click: the seller on the arrow, for now")
-    c.o.bagSlots = { { 4470, 2 } }
+    assert(A.temp and A.temp.items and A.temp.name == "Innkeeper Farley", "a click: the seller on the arrow, for now")
+    c.o.bagSlots = { { 4470, 2 }, { 4471, 1 } }
     A:Update()
-    assert(not A.temp, "the wood in your bags: over")
+    assert(not A.temp, "the wood and the flint in your bags: over")
     -- a merchant who sells none of them: nothing noted
     c.npcGUID, c.merchant = "Creature-0-4455-0-12-999-0000A1B2C3", { 159 }
     f.__scripts.OnEvent(f, "MERCHANT_SHOW")
     assert(sell.c999 == nil, "a merchant with no camp goods: not noted")
-    c.known, c.merchant = nil, {}
+    f.__scripts.OnEvent(f, "MERCHANT_CLOSED")
+    f.__scripts.OnEvent(f, "PLAYER_STARTED_MOVING")
+    c.known, c.merchant, c.profs = nil, {}, nil
   end }
 
   -- 10. Skip this quest: from the arrow's menu; out of the route for good, and never back through Accept for me, Now,
@@ -14955,165 +14907,150 @@ end)()
   local function aura(name, id, c, secs) return { name = name, spellId = id, icon = 134400 + id % 7, expirationTime = c.clock + secs } end
   local function quiet(c, n0) assert(#c.chat == n0, "nothing said in chat: " .. tostring(c.chat[#c.chat])) end
 
-  -- 1. by any fire (no kit of yours lit: a quest giver's): sit for a minute, the countdown, Camp Benefits' hour
+  local function rev(c, e, ...) local f = c.QB.Remind.frame; f.__scripts.OnEvent(f, e, ...) end
+  local function auras(c) local f = c.QB.Remind.auraFrame; f.__scripts.OnEvent(f, "UNIT_AURA", "player"); tick(c, 0) end
+
+  -- 1. by any fire (no kit of yours lit: a quest giver's): Sit, the countdown of the minute by it, then Camp Benefits
   B4CASES[#B4CASES + 1] = { "a fire near you: sit by it, stay put, Camp Benefits", function()
     local c = camper("Sitter")
-    local QB, env, Camp = c.QB, c.env, c.QB.Camp
+    local QB, env, Camp, R = c.QB, c.env, c.QB.Camp, c.QB.Remind
     local n0 = #c.chat
-    assert(Camp.Settings().sit and Camp.Settings().wood and Camp.Settings().bagChain, "each suggestion on by default")
+    assert(next(R.Settings().never) == nil, "nothing hidden by default")
     c.buffs = { NEARBY }
-    Camp.Refresh()
+    R.Refresh()
     local sit = env.QuestBankCamp_sit
-    assert(sit and sit:IsShown() and sit.state.lit and sit:GetAttribute("type") == "macro" and sit:GetAttribute("macrotext") == "/sit"
-      and sit.state.tip[1] == "Sit by the fire for a minute" and sit.icon.__tex == 4620680, "Campfire Nearby, no Camp Benefits: the /sit button, lit")
+    assert(sit and sit:IsShown() and sit.rec.lit and sit:GetAttribute("type1") == "macro" and sit:GetAttribute("macrotext") == "/sit"
+      and sit.word:GetText() == "Sit" and sit.icon.__tex == 4620680, "Campfire Nearby, no Camp Benefits: the /sit button, lit")
     -- a click is the game's: QuestBank's own hook shows nothing on the arrow
     if sit.__scripts.OnClick then sit.__scripts.OnClick(sit, "LeftButton") end
     assert(not QB.Arrow.temp, "the click sits you down, nothing else")
-    -- in a fight: the aura unread, the button left as it was, no fire gone out
-    c.combat = true; Camp.frame.__scripts.OnEvent(Camp.frame, "PLAYER_REGEN_DISABLED")
+    -- in a fight: the aura unread, the button left as it was
+    c.combat = true; rev(c, "PLAYER_REGEN_DISABLED")
     c.buffs = {}
-    Camp.Refresh()
-    assert(sit:IsShown() and sit:GetAttribute("macrotext") == "/sit" and Camp.FireOut() == nil, "in a fight nothing changes")
+    R.Refresh()
+    assert(sit:GetAttribute("macrotext") == "/sit", "in a fight nothing changes")
     c.combat = false
     c.buffs = { NEARBY, aura("Welcoming Campfire", 1229739, c, 42) }
-    Camp.frame.__scripts.OnEvent(Camp.frame, "PLAYER_REGEN_ENABLED")
-    assert(sit.state.tip[1] == "Stay put: 42 s" and sit.time:GetText() == "42s" and sit.state.lit, "sitting: the game's own countdown: " .. tostring(sit.state.tip[1]))
+    rev(c, "PLAYER_REGEN_ENABLED"); tick(c, 2.5)
+    assert(sit.word:GetText():find("^0:%d%d$") and sit.rec.lit, "sitting: the game's own countdown: " .. tostring(sit.word:GetText()))
     c.buffs = { NEARBY, aura("Welcoming Campfire", 1289723, c, 9) }
-    Camp.Refresh()
-    assert(sit.state.tip[1] == "Stay put: 9 s", "its newer form counts the same")
+    R.Refresh()
+    assert(sit.word:GetText() == "0:09", "its newer form counts the same")
     c.buffs = { NEARBY, aura("Camp Benefits", 1229741, c, 3540) }
-    Camp.Refresh()
-    assert(sit:IsShown() and not sit.state.lit and sit.state.tip[1] == "Camp Benefits" and sit.time:GetText() == "59m" and sit:GetAttribute("type") == nil,
-      "Camp Benefits on: its hour, nothing to click: " .. tostring(sit.time:GetText()))
-    -- the UNIT_AURA of the game: the bar looks again within a moment
+    R.Refresh()
+    assert(not sit:IsShown(), "Camp Benefits on: gone (the game's buff bar shows its hour)")
     c.buffs = { NEARBY }
-    Camp.frame.__scripts.OnEvent(Camp.frame, "UNIT_AURA", "player")
-    Camp.frame.__scripts.OnUpdate(Camp.frame, 0.35)
-    assert(sit.state.tip[1] == "Sit by the fire for a minute", "a moment after the aura changed")
-    Camp.Settings().sit = false
-    Camp.Refresh()
-    assert(not sit:IsShown(), "its switch off: no sit button")
-    Camp.Settings().sit = true
+    auras(c)
+    assert(sit:IsShown() and sit.word:GetText() == "Sit", "the UNIT_AURA of the game: one look on the next frame")
+    R.SetNever("sit", "Sit"); tick(c, 0)
+    assert(not sit:IsShown(), "Never: Sit")
+    R.SetNever("sit", nil, false)
     quiet(c, n0)
   end }
 
-  -- 2. the fire went out where you sat: a cook with no kit and no wood is shown the nearest seller, a seller seen in
-  -- play before the Classic seed, and the arrow goes back to the route once both are bought
+  -- 2. at Fire's moment (standing still 20 s out of town), a cook who has used a kit and has none and no wood is shown
+  -- the nearest seller, a seller seen in play before the Classic seed, and the arrow goes back to the route once both
+  -- are bought; both in the bags, Make
   B4CASES[#B4CASES + 1] = { "the fire burned out: the nearest seller of wood, and back to the route", function()
     local c = camper("Cook")
-    local QB, env, Camp, A = c.QB, c.env, c.QB.Camp, c.QB.Arrow
+    local QB, env, Camp, A, R = c.QB, c.env, c.QB.Camp, c.QB.Arrow, c.QB.Remind
     local n0 = #c.chat
     c.profs = { { "Cooking", 15 } }
+    c.known = { [1229737] = true, [2550] = true }
+    Camp.CharDB().kitUsed = true
     local here = QB.API.WorldPosition()
-    -- walking away from a fire is not its going out
-    c.buffs = { NEARBY }
-    Camp.Refresh()
-    for i = 1, 3 do standAt(c, 0, here.wx + 15 * i, here.wy); c.clock = c.clock + 1.5; Camp.Refresh() end
-    c.buffs = {}
-    standAt(c, 0, here.wx + 60, here.wy); c.clock = c.clock + 1.5
-    Camp.Refresh()
-    assert(Camp.FireOut() == nil and not (env.QuestBankCamp_fire and env.QuestBankCamp_fire:IsShown()), "walked away: no fire gone out")
-    -- sat by it, then it went out
-    standAt(c, 0, here.wx, here.wy)
-    c.buffs = { NEARBY }
-    Camp.Refresh(); tick(c, 6)
-    c.buffs = {}
-    Camp.Refresh()
+    rev(c, "PLAYER_STOPPED_MOVING"); tick(c, 21)
     local fire = env.QuestBankCamp_fire
-    assert(Camp.FireOut() and fire and fire:IsShown() and fire.state.tip[1] == "The fire burned out" and fire.state.tip[2]:find("you have neither", 1, true),
-      "the fire out where you sat: said so: " .. tostring(fire and fire.state.tip[2]))
-    assert(fire.state.seller and fire.state.seller.n == "Lindsay Ashlock" and fire.state.seller.seed and fire.state.tip[4] == Camp.SEED_NOTE
-      and fire.state.tip[3]:find("^Lindsay Ashlock sells both, "), "none seen in play: the Classic seed's nearest, said to be Classic data: " .. tostring(fire.state.tip[3]))
-    for _, l in ipairs(fire.state.tip) do assert(not l:lower():find("sold by", 1, true), "never a seller of the kit itself: " .. l) end
+    assert(fire and fire:IsShown() and fire.rec.never == "wood" and fire.rec.why:find("you have neither", 1, true),
+      "still, no kit, no wood: said so: " .. tostring(fire and fire.rec.why))
+    assert(fire.rec.why:find("Lindsay Ashlock sells both, ", 1, true) and fire.rec.why:find(Camp.SEED_NOTE, 1, true), "none seen in play: the Classic seed's nearest, said to be Classic data: " .. fire.rec.why)
     -- a seller seen in play, twice as far: before the seed's
     c.npcGUID, c.npcName, c.merchant = "Creature-0-4455-0-12-5814-0000A1B2C3", "Innkeeper Farley", { 159, 4470, 4471 }
     standAt(c, 0, here.wx + 150, here.wy)
-    Camp.frame.__scripts.OnEvent(Camp.frame, "MERCHANT_SHOW")
+    rev(c, "MERCHANT_SHOW"); rev(c, "MERCHANT_CLOSED")
     standAt(c, 0, here.wx, here.wy)
-    Camp.Refresh()
-    assert(fire.state.seller.n == "Innkeeper Farley" and not fire.state.seller.seed and fire.state.tip[4] == nil, "seen in play beats the seed: " .. tostring(fire.state.tip[3]))
+    R.Refresh()
+    assert(fire.rec.why:find("Innkeeper Farley sells both", 1, true) and not fire.rec.why:find(Camp.SEED_NOTE, 1, true), "seen in play beats the seed: " .. fire.rec.why)
     -- Lindsay's own window: the seed's seller confirmed, seen in play, no longer "Classic data"
     c.npcGUID, c.npcName, c.merchant = "Creature-0-4455-0-12-791-0000A1B2C3", "Lindsay Ashlock", { 4470, 4471, 4496 }
     standAt(c, 0, -9260, -2195)
-    Camp.frame.__scripts.OnEvent(Camp.frame, "MERCHANT_SHOW")
+    rev(c, "MERCHANT_SHOW"); rev(c, "MERCHANT_CLOSED")
     standAt(c, 0, here.wx, here.wy)
-    Camp.Refresh()
-    assert(fire.state.seller.n == "Lindsay Ashlock" and not fire.state.seller.seed and fire.state.tip[4] == nil, "the seed's seller seen: in play")
+    R.Refresh()
+    assert(fire.rec.why:find("Lindsay Ashlock sells both", 1, true) and not fire.rec.why:find(Camp.SEED_NOTE, 1, true), "the seed's seller seen: in play")
     -- a click: shown on the arrow for now, until both are in your bags; then back to the route
     fire.__scripts.OnClick(fire, "LeftButton")
     assert(A.temp and A.temp.name == "Lindsay Ashlock" and A.temp.items and #A.temp.items == 2, "a click: the seller on the arrow, for now")
     c.o.bagSlots = { { 4470, 4 } }
     A:Update()
     assert(A.temp, "the wood alone: still shown")
-    Camp.Refresh()
-    assert(fire.state.tip[2]:find("no Flint and Tinder", 1, true) and fire.state.sellItem[1] == 4471, "and the fire still asks for the flint")
+    R.Refresh()
+    assert(fire.rec.why:find("no Flint and Tinder", 1, true), "and the fire still asks for the flint")
     c.o.bagSlots = { { 4470, 4 }, { 4471, 1 } }
     A:Update()
     assert(not A.temp and (A.back or not QB:Settings().arrow), "both bought: back to your route")
-    Camp.Refresh()
-    assert(fire:IsShown() and fire.state.tip[2]:find("make a Basic Campfire Kit", 1, true) and not fire.state.seller, "both in your bags: make the kit")
-    -- its switch off
-    Camp.Settings().wood = false
-    Camp.Refresh()
-    assert(not fire:IsShown(), "the wood switch off: nothing")
-    Camp.Settings().wood = true
-    -- the offer goes when you walk on
-    c.o.bagSlots = {}
-    standAt(c, 0, here.wx + Camp.OUT_YD + 20, here.wy)
-    Camp.Refresh()
-    assert(not fire:IsShown(), "walked on past " .. Camp.OUT_YD .. " yards: gone")
+    R.Refresh()
+    assert(fire:IsShown() and fire.word:GetText() == "Make" and fire:GetAttribute("type1") == "spell" and fire:GetAttribute("spell") == 2550, "both in your bags: Make the kit")
+    R.SetNever("wood", "Wood")
+    c.o.bagSlots = {}; R.Refresh()
+    assert(not fire:IsShown(), "Never: Wood: nothing")
+    R.SetNever("wood", nil, false)
+    rev(c, "PLAYER_STARTED_MOVING")
     quiet(c, n0)
     c.npcGUID, c.merchant = nil, {}
   end }
 
-  -- 3. no Cooking: no kit offer and no seller named; your kit's fire out after its 15 minutes
-  B4CASES[#B4CASES + 1] = { "no Cooking: no offer; a kit's fire out after 15 minutes", function()
+  -- 3. no Cooking: Cook, once; a cooking trainer's window is noted and its click shows it on the arrow
+  B4CASES[#B4CASES + 1] = { "no Cooking: Cook once, the trainer learned at its window", function()
     local c = camper("Nocook")
-    local QB, env, Camp, D = c.QB, c.env, c.QB.Camp, c.QB.Data
-    c.buffs = { NEARBY }
-    Camp.Refresh(); tick(c, 6)
-    c.buffs = {}
-    Camp.Refresh()
-    local st = Camp.State()
-    assert(Camp.FireOut() and st.fire == nil, "the fire out, no Cooking: nothing offered, no seller named")
-    -- a cook who lights a kit (its fire's aura never read here): out after 15 minutes, still by it
-    c.profs = { { "Cooking", 1 } }
-    Camp.ForgetFire()
-    c.o.bagSlots = { { 279981, 1 } }
-    Camp.frame.__scripts.OnEvent(Camp.frame, "UNIT_SPELLCAST_SUCCEEDED", "player", nil, D.CAMP[279981].sp)
-    c.o.bagSlots = {}
-    tick(c, 60)
-    assert(Camp.FireOut() == nil, "a minute on: still burning")
-    tick(c, 845)
+    local QB, env, R = c.QB, c.env, c.QB.Remind
+    c.profs = {}
+    env.IsTradeskillTrainer = function() return true end
+    env.GetNumTrainerServices = function() return 1 end
+    env.GetTrainerServiceSkillLine = function() return "Cooking" end
+    env.GetTrainerServiceInfo = function() return "Cooking", "available", 0, 5 end
+    c.npcGUID, c.npcName = "Creature-0-4455-0-12-1355-0000A1B2C3", "Cook Ghilm"
+    c.ev(QB.eventFrame, "TRAINER_SHOW"); rev(c, "TRAINER_SHOW")
+    local t = QB.Discover.DB().trainer and QB.Discover.DB().trainer.c1355
+    assert(t and t.p == "Cooking" and t.n == "Cook Ghilm" and not t.cl, "the cooking trainer noted, no class")
+    env.IsTradeskillTrainer = nil
+    standAt(c, 0, -9300, -2150)
+    rev(c, "PLAYER_STOPPED_MOVING"); tick(c, 21)
     local fire = env.QuestBankCamp_fire
-    assert(Camp.FireOut() and fire and fire:IsShown() and fire.state.tip[1] == "The fire burned out" and fire.state.seller, "15 minutes: the kit's fire out, the seller shown")
+    assert(fire and fire:IsShown() and fire.word:GetText() == "Cook" and fire.rec.never == "cook", "a non-cook: Cook")
+    fire.__scripts.OnClick(fire, "LeftButton")
+    assert(QB.Arrow.temp and QB.Arrow.temp.name == "Cook Ghilm", "a click: the trainer on the arrow")
+    QB.Arrow:EndTemp("back")
+    rev(c, "PLAYER_STARTED_MOVING")
+    c.npcGUID = nil
   end }
 
-  -- 4. the Cozy Sleeping Bag: from level 14 with none, where the chain starts (one quest a side, 79007 and 79008); with
-  -- one, lit only where and when the game unfurls it
+  -- 4. the Cozy Sleeping Bag: from level 14 with none, where the chain starts (one quest a side, 79007 and 79008) on the
+  -- step frame's line, one step at a time; with one, Sleep only where and when the game unfurls it
   B4CASES[#B4CASES + 1] = { "the sleeping bag's chain from level 14, and the bag lit where it can be used", function()
     local c = camper("Bagless", { level = 14 })
-    local QB, env, Camp, A = c.QB, c.env, c.QB.Camp, c.QB.Arrow
+    local QB, env, Camp, A, R, G = c.QB, c.env, c.QB.Camp, c.QB.Arrow, c.QB.Remind, c.QB.Guide
     local D = QB.Data
+    -- (trained at their levels: the line is the bag's, Train's would come first)
+    local function trained(cl) cl.QB.Guide.DB().trained = cl.o.level end
+    trained(c)
     assert(D.SLEEP_CHAIN[1].id == 79007 and D.SLEEP_CHAIN[1].alt == 79008 and D.SLEEP_CHAIN[1].name == "... and that note you found"
       and D.SLEEP_CHAIN[2].id == 79192, "the chain starts with ... and that note you found, then Stepping Stones")
     local young = camper("Young", { level = 13 })
-    assert(young.QB.Camp.State().bag == nil, "level 13: nothing yet")
+    trained(young); young.QB.Remind.Refresh()
+    assert(young.QB.Guide.Reminder() == nil, "level 13: nothing yet")
     local n0 = #c.chat
-    Camp.Refresh()
-    local bag = env.QuestBankCamp_bag
-    assert(bag and bag:IsShown() and bag.state.grey and bag.state.tip[2]:find("starts at the Nailed Plank, Westfall (37.4, 50.9)", 1, true),
-      "level 14, Alliance, no bag: the Nailed Plank in Westfall: " .. tostring(bag and bag.state.tip[2]))
-    local rix = false
-    for _, l in ipairs(bag.state.tip) do if l:find("Rix Xizzix", 1, true) and l:find("once the chain is done", 1, true) then rix = true end end
-    assert(rix and not bag.state.seller, "Rix Xizzix only as may sell it once the chain is done")
-    bag.__scripts.OnClick(bag, "LeftButton")
+    R.Refresh()
+    local line = G.Reminder()
+    assert(line and line.key == "bagchain" and line.text == "Sleeping bag: the Nailed Plank" and line.word:find("min$"),
+      "level 14, Alliance, no bag: the Nailed Plank: " .. tostring(line and line.text))
+    assert(not line.why:find("Stepping Stones", 1, true) and not line.why:find("Rix", 1, true), "one step at a time: " .. line.why)
+    R.Go(line)
     assert(A.temp and A.temp.name == "the Nailed Plank" and (A.temp.qid == 79007 or A.temp.qid == 79008) and A.temp.what == "give", "a click: the plank on the arrow, until you take its quest")
     A:EndTemp("back")
-    Camp.Settings().bagChain = false
-    Camp.Refresh()
-    assert(not bag:IsShown(), "its switch off: nothing")
-    Camp.Settings().bagChain = true
+    R.SetNever("bagchain", "Sleeping bag quests"); R.Refresh()
+    assert(G.Reminder() == nil, "Never: nothing")
+    R.SetNever("bagchain", nil, false)
     -- the window's card: from its first step, what the bag gives
     c.env.SlashCmdList.QUESTBANK("")
     local U = QB.UI
@@ -15128,29 +15065,36 @@ end)()
     U.frame:Hide()
     -- the Horde's start
     local h = camper("Bagless", { level = 14, faction = "Horde", world = { 1, -400, -2600 } })
-    h.QB.Camp.Refresh()
-    local hb = h.env.QuestBankCamp_bag
-    assert(hb and hb:IsShown() and hb.state.tip[2]:find("the Burned-Out Remains, The Barrens (46.4, 73.8)", 1, true), "the Horde: the Burned-Out Remains in the Barrens: " .. tostring(hb and hb.state.tip[2]))
-    -- the chain done, the bag gone and no seller seen: Rix, no click
+    trained(h); h.QB.Remind.Refresh()
+    local hl = h.QB.Guide.Reminder()
+    assert(hl and hl.text == "Sleeping bag: the Burned-Out Remains", "the Horde: the Burned-Out Remains in the Barrens: " .. tostring(hl and hl.text))
+    -- every step but the last done: its words, no place to click; all done, nothing
     local done = {}
-    for _, s in ipairs(D.SLEEP_CHAIN) do done[s.id] = true end
+    for i, st in ipairs(D.SLEEP_CHAIN) do if i < #D.SLEEP_CHAIN then done[st.id] = true; if st.alt then done[st.alt] = true end end end
     local d = camper("Lostbag", { level = 30, done = done })
-    d.QB.Camp.Refresh()
-    local db = d.env.QuestBankCamp_bag
-    assert(db and db:IsShown() and db.state.tip[2]:find("Rix Xizzix", 1, true) and not db.state.seller and not db.state.dest, "the chain done, no bag: Rix may sell it")
-    -- with the bag: lit standing still out of a rested place with its cooldown up
+    trained(d); d.QB.Remind.Refresh()
+    local dl = d.QB.Guide.Reminder()
+    assert(dl and dl.text == "Sleeping bag: " .. Camp.RIX and not dl.go and not dl.mins, "the last step: Rix Xizzix, Booty Bay, no click: " .. tostring(dl and dl.text))
+    done[D.SLEEP_CHAIN[#D.SLEEP_CHAIN].id] = true
+    local z = camper("Allbag", { level = 30, done = done })
+    trained(z); z.QB.Remind.Refresh()
+    assert(z.QB.Guide.Reminder() == nil, "the chain done: nothing")
+    -- with the bag: Sleep standing still out of a rested place with its cooldown up
     c.o.bagSlots = { { 211527, 1 } }
-    Camp.Refresh()
     c.resting = true
-    tick(c, 25); Camp.Refresh()
-    assert(bag:IsShown() and not bag.state.lit and bag.state.tip[3]:find("rested place", 1, true), "in a town: not lit, said why")
+    rev(c, "PLAYER_STOPPED_MOVING"); tick(c, 21)
+    local bag = env.QuestBankCamp_sleep
+    assert(not (bag and bag:IsShown()), "in a town: no Sleep")
     c.resting = false
     c.hearthCD = c.clock - 600 -- (the mock's item cooldowns: the bag's hour, 50 minutes left)
-    Camp.Refresh()
-    assert(not bag.state.lit and bag.state.cd and bag.state.tip[3]:find("^Ready in"), "its cooldown: not lit")
+    R.Refresh()
+    bag = env.QuestBankCamp_sleep
+    assert(not (bag and bag:IsShown()), "its cooldown: no Sleep")
     c.hearthCD = nil
-    Camp.Refresh()
-    assert(bag.state.lit and bag:GetAttribute("item") == "item:211527", "out of town, still, the cooldown up: lit, a click unfurls it")
+    R.Refresh()
+    bag = env.QuestBankCamp_sleep
+    assert(bag and bag:IsShown() and bag.rec.lit and bag:GetAttribute("item") == "item:211527", "out of town, still, the cooldown up: Sleep, a click unfurls it")
+    rev(c, "PLAYER_STARTED_MOVING")
     quiet(c, n0)
   end }
 
@@ -16903,7 +16847,8 @@ end)()
     end
     assert(train and handin and train < handin, "Train before the Goldshire hand-in: " .. tostring(train) .. " / " .. tostring(handin))
     assert(G.Text(G.steps[train]) == "Train at Lyria Du Lac", G.Text(G.steps[train]))
-    assert(not G.reminder, "a step, so no reminder")
+    local function line() QB.Remind.Refresh(); local r = G.Reminder(); return r and r.key == "train" and r or nil end
+    assert(not line(), "a step, so no line")
     -- the window: everything learned
     c.env.IsTradeskillTrainer = function() return false end
     c.env.GetNumTrainerServices = function() return 1 end
@@ -16921,7 +16866,8 @@ end)()
     G.DB().trained = 0
     settle(c)
     for _, s in ipairs(G.steps) do assert(s.kind ~= "train", "no trainer known: no step") end
-    assert(G.reminder and G.reminder > c.clock, "a reminder line instead")
+    local l = line()
+    assert(l and l.text == "Train: new spells at your class trainer" and not l.go, "the step frame's line instead, no trainer to show: " .. tostring(l and l.text))
     -- learned in play: the window at an unknown trainer notes it, and the step is back
     c.npcGUID = "Creature-0-4455-0-12-999999-0000A1B2C3"
     c.env.GetTrainerServiceInfo = function() return "Rend", "available", 0, 10 end
@@ -16933,7 +16879,7 @@ end)()
     local back = false
     for _, s in ipairs(G.steps) do if s.kind == "train" then back = true end end
     assert(back, "a learned trainer gives the step")
-    assert(not G.reminder, "and the reminder goes")
+    assert(not line(), "and the line goes")
     D.TRAINER = keep
     assert(#c.chat == 0 or not c.chat[#c.chat]:lower():find("train", 1, true), "nothing said in chat")
   end }
@@ -17479,7 +17425,7 @@ end)()
     assert(order[1] == "Guide" and order[2] == "Map and minimap" and order[#order] == "Banking", "the order: " .. table.concat(order, " > "))
     local seen = {}
     for _, h in ipairs(order) do seen[h] = true end
-    assert(seen["Data you share"] and seen["Interact light"] and seen["Camp bar"] and seen["Timers"], "the module and data sections are there")
+    assert(seen["Data you share"] and seen["Interact light"] and seen["Reminders"] and seen["Timers"], "the module and data sections are there")
     local iData, iBank = 0, 0
     for i, h in ipairs(order) do if h == "Data you share" then iData = i end if h == "Banking" then iBank = i end end
     assert(iData < iBank and iData > 2, "Data you share before Banking, after the modules")
@@ -18272,7 +18218,8 @@ end)()
     -- bar's place; beside the frame, clear of it, the tracker's header and the screen's edges
     env.UIParent:SetSize(1024, 768)
     SF.SetScale(1.2)
-    G.reminder = env.GetTime() + 600
+    local realLine = G.Reminder
+    G.Reminder = function() return { key = "train", text = "Train: 3 new spells", word = "4 min", mins = 4, tex = 134400 } end
     grow(party)
     SF.Apply()
     sr, ar = placed(sf), placed(af, 143)
@@ -18281,7 +18228,7 @@ end)()
     local hr = rectOf(env.ObjectiveTrackerFrame.Header)
     assert(apart(sr, ar) and ar.b >= campTop + 4 and ar.l >= 0 and apart(ar, hr), "beside the frame, above the camp bar's place (top " .. campTop .. "): " .. box(ar) .. " against " .. box(sr))
     assert(sr.b - 6 - 143 < campTop + 4, "(a frame this tall: under it the arrow would reach the camp bar: " .. box(sr) .. ")")
-    G.reminder = nil
+    G.Reminder = realLine
     env.UIParent:SetSize(1600, 1000)
     SF.SetScale(1); grow(none)
     G.MemberSteps = real
@@ -18646,12 +18593,13 @@ end)()
     -- 668 px of screen at 120% with the trainer's line: the frame and the arrow on the screen, clear of each other
     env.UIParent:SetSize(1024, 668)
     SF.SetScale(1.2)
-    G.reminder = env.GetTime() + 600
+    local realLine = G.Reminder
+    G.Reminder = function() return { key = "train", text = "Train: 3 new spells", word = "4 min", mins = 4, tex = 134400 } end
     G.memberVer = G.memberVer + 1; SF.Apply(); SF.Refresh()
     local sr, ar = placed(f), placed(env.QuestBankArrow, 143)
     assert(apart(sr, ar) and sr.b >= 0 and ar.b >= 0, "a short screen: both on it, apart: " .. box(sr) .. ", " .. box(ar))
     for _, pr in ipairs(checkLayout(f, "step frame, a raid's steps at 1.2")) do STAGE_PROBLEMS[#STAGE_PROBLEMS + 1] = pr end
-    G.reminder = nil
+    G.Reminder = realLine
     env.UIParent:SetSize(1600, 1000); SF.SetScale(1)
     G.MemberSteps = real
   end }
@@ -18681,56 +18629,60 @@ end)()
     login(c)
     return c
   end
-  local function campEv(c, e, ...) local f = c.QB.Camp.frame; f.__scripts.OnEvent(f, e, ...) end
+  local function campEv(c, e, ...) local f = c.QB.Remind.frame; f.__scripts.OnEvent(f, e, ...) end
 
   -- A. "I did not get the notification bar about missing buffs and options to click them on me": 6.1.0 showed the
   -- banner once when you left an inn or a city (PLAYER_UPDATE_RESTING, Camp.lua's departed), for 12 seconds; a
   -- character who logs in out in the world, or rides out without the rested state changing, never saw it
-  F61CASES[#F61CASES + 1] = { "missing buffs: up whenever one is missing, out of a fight; its X hides it ten minutes", function()
+  F61CASES[#F61CASES + 1] = { "missing buffs: up whenever one is missing, out of a fight; Not now hides it ten minutes", function()
     local c = char("Ilsa", "MAGE", "Mage", 8, { [1459] = true, [1460] = true })
-    local env, Camp = c.env, c.QB.Camp
+    local env, R = c.env, c.QB.Remind
     local B = env.QuestBankBuffBanner
-    assert(B and B:IsVisible(), "out in the world with Arcane Intellect missing: the banner is up")
+    assert(B and B:IsVisible(), "out in the world with Arcane Intellect missing: Buffs is up")
     local ai = env.QuestBankBuff_1
-    assert(ai:IsShown() and ai:GetAttribute("type") == "spell" and ai:GetAttribute("spell") == 1460 and ai:GetAttribute("unit") == "player",
+    assert(ai:IsShown() and ai:GetAttribute("type1") == "spell" and ai:GetAttribute("spell") == 1460 and ai:GetAttribute("unit") == "player",
       "Arcane Intellect, the highest rank, cast on yourself")
     tick(c, 60)
     assert(B:IsVisible(), "a minute on: still up")
-    B.close.__scripts.OnClick(B.close, "LeftButton")
-    assert(not B:IsShown(), "the X hides it")
+    local n = #c.contextMenus
+    ai.__scripts.OnClick(ai, "RightButton")
+    c.contextMenus[n + 1][1].set(); tick(c, 0)
+    assert(not B:IsShown(), "Not now hides it")
     tick(c, 9 * 60)
     assert(not B:IsShown(), "nine minutes on: still hidden")
-    tick(c, 62)
+    tick(c, 62); tick(c, 0)
     assert(B:IsVisible(), "ten minutes on and still missing: back")
     -- a fight: never shown in one (the game's state driver hides what holds the buttons), its buttons left alone
     c.combat = true; campEv(c, "PLAYER_REGEN_DISABLED")
     tick(c, 1)
     assert(not B:IsVisible() and ai:GetAttribute("spell") == 1460, "in a fight: not shown, its button as it was")
     c.combat = false; campEv(c, "PLAYER_REGEN_ENABLED")
-    tick(c, 1)
-    assert(B:IsVisible(), "the fight over: up again")
+    tick(c, 2.5)
+    assert(B:IsVisible(), "the fight over: up again, 2 s later")
     -- on a flight or dead: not shown
-    c.taxi = true; tick(c, 3)
+    c.taxi = true; campEv(c, "PLAYER_CONTROL_LOST"); tick(c, 0)
     assert(not B:IsShown(), "on a flight: hidden")
-    c.taxi, c.ghost = false, true; tick(c, 3)
+    c.taxi, c.ghost = false, true; campEv(c, "PLAYER_CONTROL_GAINED"); campEv(c, "PLAYER_DEAD"); tick(c, 0)
     assert(not B:IsShown(), "dead: hidden")
-    c.ghost = false; tick(c, 3)
+    c.ghost = false; campEv(c, "PLAYER_ALIVE"); tick(c, 0)
     assert(B:IsShown(), "alive again: up")
     -- the buff on: nothing missing, gone; off again: back
-    c.buffs = { "Arcane Intellect" }; campEv(c, "UNIT_AURA", "player")
+    c.buffs = { "Arcane Intellect" }; R.auraFrame.__scripts.OnEvent(R.auraFrame, "UNIT_AURA", "player"); tick(c, 0)
     assert(not B:IsShown(), "Arcane Intellect on: gone")
-    c.buffs = {}; campEv(c, "UNIT_AURA", "player")
+    c.buffs = {}; R.auraFrame.__scripts.OnEvent(R.auraFrame, "UNIT_AURA", "player"); tick(c, 0)
     assert(B:IsShown(), "it ran out: back at once")
-    -- /qb buffs shows it within the X's ten minutes
-    B.close.__scripts.OnClick(B.close, "LeftButton")
+    -- /qb buffs shows it within Not now's ten minutes
+    n = #c.contextMenus
+    ai.__scripts.OnClick(ai, "RightButton")
+    c.contextMenus[n + 1][1].set(); tick(c, 0)
     env.SlashCmdList.QUESTBANK("buffs")
     assert(B:IsShown(), "/qb buffs: shown at once")
-    -- the switch off: never
-    c.QB:Settings().remind.buffs = false; tick(c, 3)
+    -- the row off: never
+    R.SetRow("buffs", false); tick(c, 0)
     assert(not B:IsShown(), "switched off: hidden")
-    c.QB:Settings().remind.buffs = true; tick(c, 3)
+    R.SetRow("buffs", true); tick(c, 0)
     assert(B:IsShown(), "on again: up")
-    for _, pr in ipairs(checkLayout(B, "Missing buffs banner, out in the world")) do problems[#problems + 1] = pr end
+    for _, pr in ipairs(checkLayout(B, "Buffs, out in the world")) do problems[#problems + 1] = pr end
   end }
 
   -- A. 1.1 "Same options to click on missing buffs I can do on party members if I'm not in a raid": a priest in a party
@@ -18744,12 +18696,12 @@ end)()
       { "Wren", "DRUID", 20, buffs = {}, dead = true },
     }
     local c = char("Anselm", "PRIEST", "Priest", 5, { [1243] = true, [1244] = true, [588] = true }, { party = party })
-    local env, Camp = c.env, c.QB.Camp
+    local env, Camp, R = c.env, c.QB.Camp, c.QB.Remind
     assert(Camp.SELF.PRIEST[1].other and not Camp.SELF.PRIEST[2].other and Camp.SELF.MAGE[1].other and not Camp.SELF.MAGE[2].other
       and Camp.SELF.DRUID[1].other and not Camp.SELF.WARLOCK[1].other and not Camp.SELF.SHAMAN[1].other and not Camp.SELF.HUNTER[1].other
       and Camp.SELF.PALADIN[1].other, "the buffs cast on others: Intellect, Fortitude, Mark of the Wild, Thorns, the blessings")
     local B = env.QuestBankBuffBanner
-    assert(B and B:IsVisible(), "the banner is up")
+    assert(B and B:IsVisible(), "Buffs is up")
     local function member(i) return env["QuestBankBuffParty_" .. i] end
     local function shown()
       local out = {}
@@ -18759,7 +18711,7 @@ end)()
     -- Brom (in range) and Kett (out of range: shown, dimmed); Sela has it; Wren is dead
     assert(shown() == "Brom,Kett", "Brom and Kett: " .. shown())
     local brom, kett = member(1), member(2)
-    assert(brom:GetAttribute("type") == "spell" and brom:GetAttribute("spell") == 1244 and brom:GetAttribute("unit") == "party1",
+    assert(brom:GetAttribute("type1") == "spell" and brom:GetAttribute("spell") == 1244 and brom:GetAttribute("unit") == "party1",
       "Brom: Fortitude's highest rank known, cast on party1")
     local wr = env.RAID_CLASS_COLORS.WARRIOR
     local r, g, b2 = brom.label:GetTextColor()
@@ -18767,20 +18719,20 @@ end)()
     assert(brom:GetAlpha() == 1 and kett:GetAlpha() < 1 and kett:GetAttribute("unit") == "party3", "Kett out of range: dimmed, still a click")
     -- the priest's own: Fortitude and Inner Fire, on yourself
     assert(env.QuestBankBuff_1:GetAttribute("unit") == "player" and env.QuestBankBuff_2:GetAttribute("spell") == 588, "your own row: Fortitude and Inner Fire")
-    for _, pr in ipairs(checkLayout(B, "Missing buffs banner, a party")) do problems[#problems + 1] = pr end
-    layouts[#layouts + 1] = dumpLayout(B, "Missing buffs banner, a priest and two party members")
-    -- Brom gets it: his icon goes; Kett comes in range: lit
+    for _, pr in ipairs(checkLayout(B, "Buffs, a party")) do problems[#problems + 1] = pr end
+    layouts[#layouts + 1] = dumpLayout(B, "Buffs, a priest and two party members")
+    -- Brom gets it: his icon goes; Kett comes in range: lit (the 1 s clock while in a party)
     party[1].buffs = { { name = "Power Word: Fortitude", spellId = 1244 } }
     party[3].far = nil
-    tick(c, 3)
+    tick(c, 2); tick(c, 0)
     assert(shown() == "Kett" and member(1):GetAttribute("unit") == "party3" and member(1):GetAlpha() == 1, "Brom buffed, Kett in range: " .. shown())
     -- offline, and auras the game hides (secret): not offered
     party[3].offline = true
     party[4].dead, party[4].buffs = nil, { SECRET.str() }
-    tick(c, 3)
+    campEv(c, "UNIT_CONNECTION"); tick(c, 0)
     assert(shown() == "", "offline, and a member whose auras can't be read: none: " .. shown())
     party[3].offline = nil
-    tick(c, 3)
+    campEv(c, "UNIT_CONNECTION"); tick(c, 0)
     assert(shown() == "Kett", "online again: " .. shown())
     -- in a fight the buttons stay as they are; after it they are made again
     c.combat = true; campEv(c, "PLAYER_REGEN_DISABLED")
@@ -18788,28 +18740,28 @@ end)()
     tick(c, 3)
     assert(shown() == "Kett" and not B:IsVisible(), "in a fight: hidden, nothing set")
     c.combat = false; campEv(c, "PLAYER_REGEN_ENABLED")
-    tick(c, 1)
+    tick(c, 2.5)
     assert(shown() == "Brom,Kett" and B:IsVisible(), "the fight over: made again: " .. shown())
     -- a raid: your own buffs only
-    c.raid = true; tick(c, 3)
+    c.raid = true; campEv(c, "GROUP_ROSTER_UPDATE"); tick(c, 0)
     assert(shown() == "" and env.QuestBankBuff_1:IsShown(), "in a raid: no party icons: " .. shown())
-    c.raid = false; tick(c, 3)
+    c.raid = false; campEv(c, "GROUP_ROSTER_UPDATE"); tick(c, 0)
     assert(shown() == "Brom,Kett", "out of the raid: " .. shown())
-    -- the setting, in QuestBank's camp section
+    -- the setting, in QuestBank's Reminders section
     c.QB.UI:Open(5)
     local v5 = c.QB.UI.views[5]
     assert(v5.remind.party and v5.remind.party:GetChecked() and v5.remind.party.label:GetText() == "Party members' buffs", "the Party members' buffs row, on")
     v5.remind.party:SetChecked(false); v5.remind.party.__scripts.OnClick(v5.remind.party, "LeftButton")
-    tick(c, 3)
-    assert(c.QB:Settings().remind.party == false and shown() == "", "unticked: no party icons: " .. shown())
+    tick(c, 0)
+    assert(R.Settings().party == false and shown() == "", "unticked: no party icons: " .. shown())
     v5.remind.party:SetChecked(true); v5.remind.party.__scripts.OnClick(v5.remind.party, "LeftButton")
-    tick(c, 3)
+    tick(c, 0)
     assert(shown() == "Brom,Kett", "ticked again: " .. shown())
     -- only party members missing: up all the same
-    c.buffs = { "Power Word: Fortitude", "Inner Fire" }; campEv(c, "UNIT_AURA", "player")
-    tick(c, 3)
+    c.buffs = { "Power Word: Fortitude", "Inner Fire" }; R.auraFrame.__scripts.OnEvent(R.auraFrame, "UNIT_AURA", "player")
+    tick(c, 0)
     assert(B:IsShown() and not env.QuestBankBuff_1:IsShown() and shown() == "Brom,Kett", "your own on, theirs missing: up with their icons")
-    for _, pr in ipairs(checkLayout(B, "Missing buffs banner, the party alone")) do problems[#problems + 1] = pr end
+    for _, pr in ipairs(checkLayout(B, "Buffs, the party alone")) do problems[#problems + 1] = pr end
     -- a mage's party: Arcane Intellect for them, never the armor
     local m = char("Ivo", "MAGE", "Mage", 8, { [1459] = true, [168] = true }, { party = { { "Tam", "PRIEST", 20, buffs = {} } } })
     local mb = m.env.QuestBankBuffParty_1
@@ -19171,13 +19123,15 @@ end)()
     assert(npc(q8[6])[1] == "Burned-Out Remains" and npc(q8[6])[2] == 1413 and npc(q8[6])[3] == 46.4 and npc(q8[6])[4] == 73.8,
       "and is handed in at the Burned-Out Remains in the Barrens: " .. tostring(npc(q8[6])[2]))
     assert(q7[7] == q8[6] and q7[6] == q8[7] and q8[6] ~= q8[7], "the Horde's the other way round, two entries")
-    local bag = a.QB.Camp.State().bag
-    assert(bag and bag.dest and bag.dest.c == 1 and bag.tip[2]:find("Burned-Out Remains (46.4, 73.8)", 1, true),
-      "an Alliance player holding it: to the Barrens: " .. tostring(bag and bag.tip[2]))
+    local step, held = a.QB.Camp.SleepNext()
+    local bag = a.QB.Camp.ChainPlace(step, held)
+    assert(held and bag.go and bag.go.c == 1 and bag.where == "Burned-Out Remains" and bag.x == 46.4 and bag.y == 73.8,
+      "an Alliance player holding it: to the Barrens: " .. tostring(bag.where))
     local h = char("Notekeeper", "WARRIOR", "Warrior", 1, {}, { level = 20, faction = "Horde", race = "Orc", world = { 1, -400, -2600 }, map = 1413, log = { { 79007, 0 } } })
-    local hb = h.QB.Camp.State().bag
-    assert(hb and hb.dest and hb.dest.c == 0 and hb.tip[2]:find("Nailed Plank (37.4, 50.9)", 1, true),
-      "a Horde player holding 79007: to Westfall: " .. tostring(hb and hb.tip[2]))
+    local hstep, hheld = h.QB.Camp.SleepNext()
+    local hb = h.QB.Camp.ChainPlace(hstep, hheld)
+    assert(hheld and hb.go and hb.go.c == 0 and hb.where == "Nailed Plank" and hb.x == 37.4 and hb.y == 50.9,
+      "a Horde player holding 79007: to Westfall: " .. tostring(hb.where))
     local r = D.Q[79093]
     assert(npc(r[6])[1] == "Garion Wendell" and r[6] == r[7], "Rumi of Gnomeregan handed in to Garion Wendell, who gives it: " .. tostring(npc(r[6])[1]))
   end }
@@ -21074,7 +21028,7 @@ end)()
   assert(Walk.builds == builds0 and points() > p0 + 300, "the trails' graph grew point by point: never built whole while walking")
 
   -- 3. every frame, standing still with nothing changing: each OnUpdate that always runs (the minimap's, the arrow's,
-  -- the trails', the camp bar's) allocates next to nothing. 5.4.1: 2.3 KB a frame on the minimap's, 565 B on the
+  -- the trails'; and Reminders' clock while it runs) allocates next to nothing. 5.4.1: 2.3 KB a frame on the minimap's, 565 B on the
   -- arrow's, about 260 B on the others (the error wrapper alone)
   speed = 0
   for _ = 1, 40 do frame(0.05) end
@@ -21092,13 +21046,14 @@ end)()
       for _ = 1, 120 do mc.clock = mc.clock + 1 / 60; u(f, 1 / 60) end
     end) / 120
     measured[#measured + 1] = string.format("%s %.0f", f.__name == "QuestBankMinimap" and "minimap" or f == QB.Arrow.frame and "arrow"
-      or f == QB.Walk.frame and "trails" or f == QB.Camp.frame and "camp" or tostring(f.__where), per)
+      or f == QB.Walk.frame and "trails" or f == QB.Remind.clock and "reminders" or tostring(f.__where), per)
   end
   for i, f in ipairs(runners) do
     local per = tonumber(measured[i]:match("(%S+)$"))
     assert(per < IDLE_MAX, string.format("an OnUpdate allocates %.0f bytes a frame standing still (at most %d): %s", per, IDLE_MAX, table.concat(measured, ", ")))
   end
-  assert(#runners >= 4, "the minimap's, the arrow's, the trails' and the camp bar's OnUpdate run: " .. #runners)
+  -- (the hud round: Reminders have no OnUpdate unless a word changes as time goes, so the camp bar's every-2-s look is gone)
+  assert(#runners >= 3, "the minimap's, the arrow's and the trails' OnUpdate run: " .. #runners)
   -- the wrapper that keeps errors out of the game's way (QB.Safe): no table or closure a call any more, the arguments
   -- in upvalues, exactly as many as given (an event handler counts them), and a call within a call its own
   for n = 0, 8 do
@@ -22862,6 +22817,1454 @@ do
   print("map R: " .. table.concat(said, "; "))
 end
 
+
+-- [stage: hud] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The hud round: Reminders (docs/superpowers/specs/2026-10-21-reminders-design.md). One engine (Remind.lua) draws two
+-- pieces, Reminders (QuestBankCampBar) and Buffs (QuestBankBuffBanner), from providers; the step frame carries one
+-- line (Train, Flight path, Sleeping bag). The design's section 10, one case each: a client per case, out in the world
+-- (never rested), the game's answers mocked on the client as the API documents them.
+----------------------------------------------------------------------------
+do
+  local HUD = {}
+  -- a character out in the world who knows `known`; o: level, faction, world, map, bags, party, saved, resting, before
+  -- (a function of the client, run before its login)
+  local function hud(name, class, className, classID, known, o)
+    o = o or {}
+    local c = newClient({ name = name, level = o.level or 20, cap = 60, faction = o.faction or "Alliance", className = className, class = class,
+      classID = classID, race = o.race or "Human", log = o.log or {}, done = o.done or {}, world = o.world or { 0, -9200, -2150 }, map = o.map or 1433,
+      bagSlots = o.bags or {}, bind = o.bind or "Lakeshire", book = o.book })
+    if o.saved then c.env.QuestBankDB = o.saved end
+    c.known, c.buffs, c.resting = known or {}, {}, o.resting or false
+    if o.party then c.party, c.o.group = o.party, true end
+    local env = c.env
+    -- the player's auras with every field the client gives (sourceUnit, duration: the habit's)
+    env.C_UnitAuras.GetAuraDataByIndex = function(unit, i, filter)
+      if filter ~= "HELPFUL" then return nil end
+      local pi = type(unit) == "string" and unit:match("^party(%d)$")
+      local list
+      if pi then local pm = (c.party or {})[tonumber(pi)]; list = pm and pm.buffs or {} else list = c.buffs or {} end
+      local a = list[i]
+      if a == nil then return nil end
+      if type(a) == "string" then return { name = a, spellId = 0 } end
+      if getmetatable(a) == SECRET_MT then return { name = a, spellId = 0 } end
+      return { name = a.name, spellId = a.spellId or 0, applications = a.applications, expirationTime = a.expirationTime, icon = a.icon,
+               sourceUnit = a.sourceUnit, duration = a.duration }
+    end
+    -- in sight (UnitIsVisible), the role the group gave (UnitGroupRolesAssigned): a member's .hidden and .role
+    env.UnitIsVisible = function(unit)
+      local i = type(unit) == "string" and unit:match("^party(%d)$")
+      local pm = i and (c.party or {})[tonumber(i)]
+      if pm then return not pm.hidden end
+      return true
+    end
+    env.UnitGroupRolesAssigned = function(unit)
+      local i = type(unit) == "string" and unit:match("^party(%d)$")
+      local pm = i and (c.party or {})[tonumber(i)]
+      return pm and pm.role or "NONE"
+    end
+    -- what the game keeps secret (C_Secrets): c.secretAuras, c.secretIdentity
+    env.C_Secrets = { ShouldAurasBeSecret = function() return c.secretAuras or false end,
+                      ShouldUnitIdentityBeSecret = function() return c.secretIdentity or false end }
+    -- an item's own facts (GetItemInfoInstant's class and subclass, GetItemSpell's spell, GetItemInfo's sell price and
+    -- item level): c.items[id] = { class, sub, spell, price, ilvl, name, icon }
+    c.items = o.items or {}
+    env.C_Item.GetItemInfoInstant = function(id)
+      local it = c.items[id]
+      if not it then return id, "Miscellaneous", "Junk", "", 134400, 15, 0 end
+      return id, "Item", "Item", "", it.icon or 134400, it.class, it.sub
+    end
+    env.C_Item.GetItemSpell = function(id) local it = c.items[id]; if it and it.spell then return "Spell " .. it.spell, it.spell end end
+    local baseInfo = env.C_Item.GetItemInfo
+    env.C_Item.GetItemInfo = function(id)
+      local it = c.items[id]
+      if not it then return baseInfo(id) end
+      return it.name or ("Item " .. id), "|cffffffff|Hitem:" .. id .. "::::::::20:::::::|h[Item " .. id .. "]|h|r", 1, it.ilvl or 10, 1, "Consumable", "Food", 20, "", it.icon or 134400, it.price or 0
+    end
+    env.C_Item.IsUsableItem = function(id) local it = c.items[id]; return it and it.usable or false end
+    -- a temporary enchant on a hand (C_Item.GetWeaponEnchantInfo(Enum.WeaponSlot), a list): c.enchant[16 or 17]
+    env.Enum.WeaponSlot = { MainHand = 0, OffHand = 1, Ranged = 2 }
+    c.enchant = {}
+    env.C_Item.GetWeaponEnchantInfo = function(ws)
+      local slot = ws == 0 and 16 or 17
+      if c.enchant[slot] then return { { hasEnchant = true, enchantType = 1, timeLeft = 1800000, charges = 0, enchantID = 1, enchantIconID = 0 } } end
+      return {}
+    end
+    -- your gear's durability (GetInventoryAlertStatus: 1 low, 2 broken): c.alert[index]; bags' free slots and their family
+    -- (C_Container.GetContainerNumFreeSlots): c.free[bag], c.family[bag]; ammo (UnitUsesAmmo, GetInventoryItemCount): c.ammo
+    c.alert, c.free, c.family = {}, { [0] = 10 }, {}
+    env.GetInventoryAlertStatus = function(i) return c.alert[i] or 0 end
+    env.C_Container.GetContainerNumFreeSlots = function(bag) return c.free[bag] or 0, c.family[bag] or 0 end
+    env.UnitUsesAmmo = function() return c.ammo ~= nil end
+    env.GetInventoryItemCount = function(_, slot) if slot == 0 then return c.ammo or 0 end return 1 end
+    env.GetInventoryItemTexture = function() return nil end
+    env.CanMerchantRepair = function() return c.repairs or false end
+    env.MainMenuBarBackpackButton = env.CreateFrame("Button", "MainMenuBarBackpackButton", env.UIParent)
+    if o.before then o.before(c) end
+    login(c)
+    -- (trained at its level, as the levels a class learns at count it on a client without the spellbook's calls: the
+    -- step frame's line is the case's own, Train's would come first; the Train case reads the spellbook)
+    if not o.book then c.QB.Guide.DB().trained = o.level or 20 end
+    return c
+  end
+  HUD.hud = hud
+  local function ev(c, e, ...) local f = c.QB.Remind.frame; f.__scripts.OnEvent(f, e, ...) end
+  local function aura(c, name, id, secs, extra)
+    local a = { name = name, spellId = id, icon = 134400 + id % 7, expirationTime = c.clock + (secs or 600) }
+    for k, v in pairs(extra or {}) do a[k] = v end
+    return a
+  end
+  local function auraEv(c) local f = c.QB.Remind.auraFrame; f.__scripts.OnEvent(f, "UNIT_AURA", "player"); tick(c, 0) end
+  local function shownKeys(c, which)
+    local out = {}
+    for _, rec in ipairs(c.QB.Remind.Shown(which)) do out[#out + 1] = rec.never or rec.key end
+    return table.concat(out, ",")
+  end
+  local function buffIcons(c)
+    local out = {}
+    for i = 1, 8 do local b = c.env["QuestBankBuff_" .. i]; if b and b:IsShown() then out[#out + 1] = tostring(b:GetAttribute("spell") or b:GetAttribute("item")) end end
+    return table.concat(out, ",")
+  end
+  local function quiet(c, n0) assert(#c.chat == n0, "nothing said in chat: " .. tostring(c.chat[#c.chat])) end
+  local CASES = {}
+
+  -- 1. a level-1 mage outside a town: Arcane Intellect and Frost Armor on Buffs, a click casts each on you. Water
+  -- Breathing cast once never joins; recast twice within 2 minutes of running out, it joins; two lapses, gone.
+  -- Righteous Fury never
+  CASES[#CASES + 1] = { "your buffs: a click casts each on you; a buff learned from your habit, and forgotten", function()
+    local c = hud("Mira", "MAGE", "Mage", 8, { [1459] = true, [168] = true }, { level = 1 })
+    local env, R = c.env, c.QB.Remind
+    local n0 = #c.chat
+    tick(c, 1)
+    local B = env.QuestBankBuffBanner
+    assert(B:IsShown() and B.title:GetText() == "Missing buffs", "Buffs up: " .. tostring(B.title:GetText()))
+    local ai, fa = env.QuestBankBuff_1, env.QuestBankBuff_2
+    assert(ai:GetAttribute("type1") == "spell" and ai:GetAttribute("spell") == 1459 and ai:GetAttribute("unit") == "player"
+      and ai:GetAttribute("type") == nil, "Arcane Intellect: type1 (a left click alone), cast on you")
+    assert(fa:GetAttribute("type1") == "spell" and fa:GetAttribute("spell") == 168, "Frost Armor: its own rank")
+    assert(not ai.word and ai.bar:IsShown() and ai:GetWidth() == 32, "pattern D: 32 px, the WHITE bar, no word on Buffs")
+    -- Water Breathing (a spell you know, 10 minutes, your own): once, nothing
+    c.known[7178] = true
+    c.buffs = { aura(c, "Water Breathing", 7178, 600, { sourceUnit = "player", duration = 600 }) }
+    auraEv(c)
+    c.buffs = {}; auraEv(c)
+    tick(c, 30)
+    c.buffs = { aura(c, "Water Breathing", 7178, 600, { sourceUnit = "player", duration = 600 }) }; auraEv(c)
+    assert(not buffIcons(c):find("7178", 1, true), "cast again after running out, once: not yet a habit")
+    c.buffs = {}; auraEv(c)
+    tick(c, 60)
+    c.buffs = { aura(c, "Water Breathing", 7178, 600, { sourceUnit = "player", duration = 600 }) }; auraEv(c)
+    c.buffs = {}; auraEv(c)
+    assert(buffIcons(c):find("7178", 1, true), "recast twice within 2 minutes of running out: it joins: " .. buffIcons(c))
+    -- two lapses not cast again: forgotten
+    tick(c, 130); auraEv(c)
+    c.buffs = { aura(c, "Water Breathing", 7178, 600, { sourceUnit = "player", duration = 600 }) }; auraEv(c)
+    c.buffs = {}; auraEv(c)
+    tick(c, 130); auraEv(c)
+    assert(not buffIcons(c):find("7178", 1, true), "two lapses not recast: gone: " .. buffIcons(c))
+    -- a single swim, a long time ago: one cast never teaches
+    local p = hud("Pala", "PALADIN", "Paladin", 2, { [25780] = true, [19740] = true, [465] = true }, { level = 20 })
+    for _ = 1, 3 do
+      p.buffs = { aura(p, "Righteous Fury", 25780, 1800, { sourceUnit = "player", duration = 1800 }) }; auraEv(p)
+      p.buffs = {}; auraEv(p)
+      tick(p, 30)
+    end
+    p.buffs = { aura(p, "Righteous Fury", 25780, 1800, { sourceUnit = "player", duration = 1800 }) }; auraEv(p)
+    p.buffs = {}; auraEv(p)
+    assert(not buffIcons(p):find("25780", 1, true), "Righteous Fury: never offered nor learned: " .. buffIcons(p))
+    assert(buffIcons(p):find("19740", 1, true) and buffIcons(p):find("465", 1, true), "the paladin: a blessing and Devotion Aura: " .. buffIcons(p))
+    p.buffs = { aura(p, "Retribution Aura", 7294, 0) }; auraEv(p)
+    assert(not buffIcons(p):find("465", 1, true), "any aura of yours counts: " .. buffIcons(p))
+    for _, pr in ipairs(checkLayout(B, "Buffs, a level-1 mage")) do problems[#problems + 1] = pr end
+    layouts[#layouts + 1] = dumpLayout(B, "Buffs: Arcane Intellect and Frost Armor")
+    quiet(c, n0)
+  end }
+
+  -- 2. a fight: the holder hidden by the game's state driver, no secure attribute set in it, secret auras leave the
+  -- layout as it was; after it the pieces come back 2 s later (a new pull in between: still hidden), one refresh
+  CASES[#CASES + 1] = { "a fight: hidden, nothing set; back 2 s after it, a new pull in between keeps it hidden", function()
+    local c = hud("Fenn", "MAGE", "Mage", 8, { [1459] = true }, { level = 10 })
+    local env, R = c.env, c.QB.Remind
+    tick(c, 1)
+    local H, B = env.QuestBankRemindHolder, env.QuestBankBuffBanner
+    assert(B:IsShown() and H:IsVisible(), "Buffs up")
+    c.combat = true; ev(c, "PLAYER_REGEN_DISABLED"); tick(c, 1)
+    assert(not B:IsVisible(), "in a fight: the state driver hides the holder")
+    -- the buff gone and back in the fight: nothing set (the mock errors on a protected call in a fight)
+    c.buffs = { "Arcane Intellect" }; auraEv(c); tick(c, 3)
+    c.secretAuras = true
+    c.buffs = {}; auraEv(c); tick(c, 3)
+    assert(env.QuestBankBuff_1:GetAttribute("spell") == 1459, "its button as it was")
+    local r0 = R.refreshes
+    c.combat = false; ev(c, "PLAYER_REGEN_ENABLED")
+    c.secretAuras = false
+    -- (the client's restriction ends just after the fight, its Combat type Inactive: the wait still brings them back,
+    -- never a flash before it)
+    ev(c, "ADDON_RESTRICTION_STATE_CHANGED", 0, 0)
+    tick(c, 1)
+    assert(not B:IsShown(), "a second after the fight: not back yet")
+    c.combat = true; ev(c, "PLAYER_REGEN_DISABLED"); tick(c, 2)
+    c.combat = false; ev(c, "PLAYER_REGEN_ENABLED"); tick(c, 1.5)
+    assert(not B:IsShown(), "a new pull in between: the wait starts again")
+    tick(c, 1)
+    assert(B:IsShown() and B:IsVisible(), "2 s after the last fight: back")
+    assert(R.refreshes - r0 <= 2, "one fresh look after it: " .. (R.refreshes - r0))
+  end }
+
+  -- 3. a party of three with a druid: Mark of the Wild on each, Thorns only on the member marked TANK, and on nobody with
+  -- no tank; a member out of sight gets nothing; range unknown bright, out of range dimmed; in a raid no party row
+  CASES[#CASES + 1] = { "party members' buffs: in sight only, Thorns on the tank, the range dims, no raid", function()
+    local party = {
+      { "Brom", "WARRIOR", 20, buffs = {}, role = "TANK" },
+      { "Sela", "MAGE", 20, buffs = {}, rangeUnknown = true },
+      { "Kett", "ROGUE", 20, buffs = {}, far = true },
+    }
+    local c = hud("Oaken", "DRUID", "Druid", 11, { [1126] = true, [5232] = true, [467] = true }, { level = 20, party = party })
+    local env, R = c.env, c.QB.Remind
+    tick(c, 1)
+    local function members()
+      local out = {}
+      for i = 1, 6 do
+        local b = env["QuestBankBuffParty_" .. i]
+        if b and b:IsShown() then out[#out + 1] = b.label:GetText() .. ":" .. tostring(b:GetAttribute("spell")) .. ":" .. (b:GetAlpha() < 1 and "dim" or "lit") end
+      end
+      return table.concat(out, ",")
+    end
+    assert(members() == "Brom:5232,Sela:5232,Kett:5232:dim" or members() == "Brom:5232:lit,Sela:5232:lit,Kett:5232:dim", "Mark on each: " .. members())
+    party[1].buffs, party[2].buffs, party[3].buffs = { "Mark of the Wild" }, { "Mark of the Wild" }, { "Mark of the Wild" }
+    tick(c, 2)
+    assert(members() == "Brom:467:lit", "Mark on all: Thorns on the tank alone: " .. members())
+    party[1].role = "NONE"; tick(c, 2)
+    assert(members() == "", "no tank marked: Thorns on nobody else: " .. members())
+    party[1].role, party[1].hidden = "TANK", true; tick(c, 2)
+    assert(members() == "", "the tank out of sight: no icon at all: " .. members())
+    party[1].hidden = false
+    party[2].buffs = {}
+    tick(c, 2)
+    assert(members():find("Sela:5232:lit", 1, true), "range unknown (nil): an ordinary icon: " .. members())
+    -- party auras by their own frame: one refresh for a member's UNIT_AURA
+    party[2].buffs = { "Gift of the Wild" }
+    local pf = R.partyFrame
+    pf.__scripts.OnEvent(pf, "UNIT_AURA", "party2"); tick(c, 0)
+    assert(not members():find("Sela", 1, true), "Gift of the Wild counts as Mark, heard by the party's own UNIT_AURA: " .. members())
+    c.raid = true; ev(c, "GROUP_ROSTER_UPDATE"); tick(c, 2)
+    assert(members() == "", "in a raid: no party row")
+    c.raid = false; ev(c, "GROUP_ROSTER_UPDATE"); tick(c, 2)
+    assert(members() == "Brom:467:lit", "out of the raid: " .. members())
+    for _, pr in ipairs(checkLayout(env.QuestBankBuffBanner, "Buffs, a druid's party")) do problems[#problems + 1] = pr end
+    c.o.group = false
+  end }
+
+
+  -- 4. a ready check in a dungeon, its initiator secret: "Before the pull" with a flask and two elixirs (all three, they
+  -- stack), food and a stone (item:<id>, target-slot 16); finished, gone 10 s later; elixir B taking A's place, one icon
+  -- for the pair from then on; a kind carried none: nothing there, Buy in town
+  CASES[#CASES + 1] = { "before the pull: flasks, elixirs, food and the weapon's stone; a pair learned; Buy in town", function()
+    local FLASK, E1, E2, STONE, RIBS = 13510, 9187, 13452, 2862, 2685
+    local items = {
+      [FLASK] = { class = 0, sub = 3, spell = 17626, name = "Flask of the Titans" },
+      [E1] = { class = 0, sub = 2, spell = 11334, name = "Elixir of Greater Agility" },
+      [E2] = { class = 0, sub = 2, spell = 17538, name = "Elixir of the Mongoose" },
+      [STONE] = { class = 0, sub = 8, spell = 2828, name = "Rough Sharpening Stone" },
+      [RIBS] = { class = 0, sub = 5, spell = 6410, ilvl = 25, price = 50, name = "Succulent Pork Ribs" },
+    }
+    local c = hud("Grom", "WARRIOR", "Warrior", 1, {}, { level = 30, items = items, bags = { { FLASK, 1 }, { E1, 2 }, { E2, 1 }, { STONE, 5 }, { RIBS, 4 } } })
+    local env, R = c.env, c.QB.Remind
+    c.o.gear = { [16] = 2488 }
+    -- the stone on the sword twice: a habit
+    for _ = 1, 2 do
+      local cf = R.castFrame
+      cf.__scripts.OnEvent(cf, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-1", 2828)
+      c.enchant[16] = true; ev(c, "WEAPON_ENCHANT_CHANGED")
+      tick(c, 5)
+      c.enchant[16] = nil; ev(c, "WEAPON_ENCHANT_CHANGED")
+      tick(c, 5)
+    end
+    c.buffs = { "Well Fed" }
+    env.IsInInstance = function() return true, "party" end
+    ev(c, "PLAYER_ENTERING_WORLD"); tick(c, 6)
+    local B = env.QuestBankBuffBanner
+    assert(B:IsShown() and B.title:GetText() == "Missing buffs", "a dungeon: Buffs only, the weapon's stone on it")
+    assert(not env.QuestBankCampBar:IsShown(), "inside: no Reminders")
+    local st = env.QuestBankBuff_1
+    assert(st:GetAttribute("type1") == "item" and st:GetAttribute("item") == "item:" .. STONE and st:GetAttribute("target-slot") == 16,
+      "the stone: item:<id> onto the main hand (target-slot 16), never a bag and slot")
+    -- the ready check: its initiator secret, never read
+    c.buffs = {}
+    ev(c, "READY_CHECK", SECRET.str(), 30); tick(c, 0)
+    assert(B.title:GetText() == "Before the pull", "a ready check: Before the pull")
+    -- (what Before the pull shows, for a host's reader: Cute's Ready column; R.StartPull starts it)
+    local pl, pon = R.Pull()
+    assert(pon == true and type(pl) == "table" and #pl >= 4, "R.Pull(): Before the pull's records and that it is on: " .. tostring(pl and #pl))
+    local list = buffIcons(c)
+    for _, id in ipairs({ FLASK, E1, E2, RIBS, STONE }) do assert(list:find("item:" .. id, 1, true), "Before the pull offers " .. id .. ": " .. list) end
+    for _, pr in ipairs(checkLayout(B, "Buffs, before the pull")) do problems[#problems + 1] = pr end
+    layouts[#layouts + 1] = dumpLayout(B, "Before the pull: a flask, two elixirs, food and the stone")
+    ev(c, "READY_CHECK_FINISHED"); tick(c, 5)
+    assert(B.title:GetText() == "Before the pull", "finished: still up 5 s on")
+    tick(c, 6)
+    assert(B.title:GetText() == "Missing buffs", "10 s after it: back to Missing buffs")
+    -- elixir B takes elixir A's aura away in the same second: one group from then on
+    c.buffs = { aura(c, "Greater Agility", 11334, 3600) }; auraEv(c)
+    local cf = R.castFrame
+    cf.__scripts.OnEvent(cf, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-2", 17538)
+    c.buffs = { aura(c, "Mongoose", 17538, 3600) }; auraEv(c)
+    c.buffs = {}; auraEv(c)
+    ev(c, "READY_CHECK", SECRET.str(), 30); tick(c, 0)
+    list = buffIcons(c)
+    local n = 0
+    for _, id in ipairs({ E1, E2 }) do if list:find("item:" .. id, 1, true) then n = n + 1 end end
+    assert(n == 1 and list:find("item:" .. FLASK, 1, true), "the pair: one icon, the flask beside it: " .. list)
+    ev(c, "READY_CHECK_FINISHED"); tick(c, 11)
+    -- none of a kind carried: nothing there; in town with a seller of it known, Buy
+    c.o.bagSlots = {}
+    ev(c, "BAG_UPDATE_DELAYED"); tick(c, 1)
+    env.IsInInstance = function() return false end
+    ev(c, "PLAYER_ENTERING_WORLD")
+    c.npcGUID, c.npcName, c.merchant = "Creature-0-4455-0-12-5512-0000A1B2C3", "Kaita Deepforge", { FLASK }
+    c.resting = true
+    ev(c, "MERCHANT_SHOW"); ev(c, "MERCHANT_CLOSED"); ev(c, "PLAYER_UPDATE_RESTING"); tick(c, 1)
+    local buy = env.QuestBankCamp_buy
+    assert(buy and buy:IsShown() and buy:GetAttribute("type1") == nil and buy.word:GetText():find("min", 1, true), "in town: Buy, waiting, the seller's minutes")
+    buy.__scripts.OnClick(buy, "LeftButton")
+    assert(c.QB.Arrow.temp and c.QB.Arrow.temp.name == "Kaita Deepforge", "a click: the seller on the arrow")
+    c.QB.Arrow:EndTemp("back")
+  end }
+
+  -- 5. entering a raid: Before the pull once, 5 s after; a dungeon: buffs and consumables only; "Nothing" hides Buffs too
+  CASES[#CASES + 1] = { "raid entry: Before the pull after 5 s; dungeons as Settings says", function()
+    local c = hud("Raida", "PRIEST", "Priest", 5, { [1243] = true }, { level = 60, bags = { { 2685, 3 } } })
+    local env, R = c.env, c.QB.Remind
+    env.IsInInstance = function() return true, "raid" end
+    ev(c, "PLAYER_ENTERING_WORLD"); tick(c, 1)
+    local B = env.QuestBankBuffBanner
+    assert(B:IsShown() and B.title:GetText() == "Missing buffs", "a second in: your buffs, no pull yet")
+    tick(c, 5)
+    assert(B.title:GetText() == "Before the pull" and buffIcons(c):find("item:2685", 1, true), "5 s after the entry: Before the pull, food in it: " .. buffIcons(c))
+    tick(c, 61)
+    assert(B.title:GetText() == "Missing buffs", "60 s after the entry: over")
+    env.IsInInstance = function() return true, "party" end
+    ev(c, "PLAYER_ENTERING_WORLD"); tick(c, 6)
+    assert(B:IsShown() and B.title:GetText() == "Missing buffs" and not env.QuestBankCampBar:IsShown(), "a dungeon: buffs and consumables only")
+    R.SetRow("instance", "none"); tick(c, 0)
+    assert(not B:IsShown(), "Nothing: Buffs hidden too")
+    R.SetRow("instance", "all"); tick(c, 0)
+    assert(B:IsShown(), "Everything: back")
+    R.SetRow("instance", "buffs")
+    env.IsInInstance = function() return false end
+  end }
+
+  local NEARBY, WELCOME, BENEFITS = 1283391, 1229739, 1229741
+  local function camp(c, k) return c.env["QuestBankCamp_" .. k] end
+  local function shownCamp(c, k) local b = camp(c, k); return b ~= nil and b:IsShown() and b:IsVisible() end
+  local function still(c) local f = c.QB.Remind.frame; f.__scripts.OnEvent(f, "PLAYER_STOPPED_MOVING"); tick(c, 21) end
+  local function walk(c) local f = c.QB.Remind.frame; f.__scripts.OnEvent(f, "PLAYER_STARTED_MOVING"); tick(c, 0) end
+
+  -- 6. a campfire: Campfire Nearby on you, "Sit", a /sit; Welcoming Campfire on, its countdown; Camp Benefits, gone. A
+  -- Cooking Fire object under your Interact key without the aura: "Sit" for 15 s, then that object kept as giving
+  -- nothing; its identity secret: no fallback. Place lit at your own kit's fire only
+  CASES[#CASES + 1] = { "campfire: sit, the countdown, Camp Benefits; a Cooking Fire object; Place at your own kit's fire", function()
+    local c = hud("Embers", "WARRIOR", "Warrior", 1, {}, { level = 20 })
+    local env, R, D = c.env, c.QB.Remind, c.QB.Data
+    local n0 = #c.chat
+    c.buffs = { aura(c, "Campfire Nearby", NEARBY, 0) }; auraEv(c)
+    local sit = camp(c, "sit")
+    assert(shownCamp(c, "sit") and sit:GetAttribute("type1") == "macro" and sit:GetAttribute("macrotext") == "/sit" and sit.word:GetText() == "Sit",
+      "Campfire Nearby: Sit, a /sit")
+    assert(sit.bar:IsShown() and sit.bar.__color[1] == 1 and sit.bar.__color[2] == 0.82, "the XP category's bar, the quest gold")
+    c.buffs = { aura(c, "Campfire Nearby", NEARBY, 0), aura(c, "Welcoming Campfire", WELCOME, 42) }; auraEv(c)
+    assert(sit.word:GetText() == "0:42", "sitting: the Welcoming aura's countdown: " .. sit.word:GetText())
+    tick(c, 2); tick(c, 0) -- (the clock's look runs on the next frame)
+    assert(sit.word:GetText() ~= "0:42" and sit.word:GetText():find("^0:%d%d$"), "the clock runs it down: " .. sit.word:GetText())
+    c.buffs = { aura(c, "Campfire Nearby", NEARBY, 0), aura(c, "Camp Benefits", BENEFITS, 3600) }; auraEv(c)
+    assert(not shownCamp(c, "sit"), "Camp Benefits on: gone")
+    -- a Cooking Fire object, no aura: Sit for 15 s
+    c.buffs = {}; auraEv(c)
+    c.soft = { name = "Campfire", guid = "GameObject-0-4455-0-12-1798-0000A1B2C3" }
+    ev(c, "PLAYER_SOFT_INTERACT_CHANGED"); tick(c, 0)
+    assert(shownCamp(c, "sit"), "a Cooking Fire under the Interact key: Sit")
+    -- (its 15 s end by themselves, with nothing else happening)
+    tick(c, 16)
+    assert(not shownCamp(c, "sit"), "15 s on, no event: gone")
+    ev(c, "PLAYER_SOFT_INTERACT_CHANGED"); tick(c, 0)
+    assert(shownCamp(c, "sit"), "the object again: Sit again")
+    sit.__scripts.OnClick(sit, "LeftButton")
+    tick(c, 11)
+    assert(not shownCamp(c, "sit"), "a /sit by it and no Welcoming Campfire 10 s later: gone")
+    ev(c, "PLAYER_SOFT_INTERACT_CHANGED"); tick(c, 0)
+    assert(not shownCamp(c, "sit"), "that object gives nothing, for the session")
+    c.soft = { name = "Campfire", guid = "GameObject-0-4455-0-12-1799-0000A1B2C3" }
+    c.secretIdentity = true
+    ev(c, "PLAYER_SOFT_INTERACT_CHANGED"); tick(c, 0)
+    assert(not shownCamp(c, "sit"), "its identity secret: no fallback")
+    c.secretIdentity, c.soft = nil, nil
+    -- Place: by your own kit's fire, a feature whose buff you lack
+    c.profs = { { "Blacksmithing", 150 } }
+    c.o.bagSlots = { { 279944, 1 }, { 279981, 1 } }
+    c.buffs = { aura(c, "Campfire Nearby", NEARBY, 0) }
+    R.Refresh()
+    assert(not shownCamp(c, "place"), "another's fire: no Place")
+    local cf = R.castFrame
+    cf.__scripts.OnEvent(cf, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3", D.CAMP[279981].sp); tick(c, 0)
+    local place = camp(c, "place")
+    assert(shownCamp(c, "place") and place:GetAttribute("type1") == "item" and place:GetAttribute("item") == "item:279944" and place.word:GetText() == "Place",
+      "your own kit lit: Place, the wheel")
+    c.buffs = { aura(c, "Campfire Nearby", NEARBY, 0), aura(c, "Extra Strength", 1230172, 3600) }; auraEv(c)
+    assert(not shownCamp(c, "place"), "its buff on: gone")
+    assert(not c.env.QuestBankBuffBanner:IsShown() or not buffIcons(c):find("279944", 1, true), "Buffs never repeats Place")
+    for _, pr in ipairs(checkLayout(env.QuestBankCampBar, "Reminders, by a fire")) do problems[#problems + 1] = pr end
+    c.profs = nil
+    quiet(c, n0)
+  end }
+
+  -- 7. Redridge, the owner's case: a cook's last kit used, standing still 20 s out of town: "Wood" with the seller's
+  -- minutes; walking on, snoozed; a non-cook at the same moment: "Cook" with the trainer, once; a seller over 10 min
+  -- away: nothing; a kit carried: "Light"; wood and flint: "Make"
+  CASES[#CASES + 1] = { "the fire slot: Wood for a cook out of kits, Cook for a non-cook, Light and Make", function()
+    local c = hud("Redridge", "WARRIOR", "Warrior", 1, { [1229737] = true, [2550] = true }, { level = 18, world = { 0, -9200, -2150 }, map = 1433 })
+    local env, R, D = c.env, c.QB.Remind, c.QB.Data
+    local n0 = #c.chat
+    c.profs = { { "Cooking", 15 } }
+    -- the last kit lit: a cook who has used one
+    c.o.bagSlots = { { 279981, 1 } }; R.Refresh()
+    local cf = R.castFrame
+    cf.__scripts.OnEvent(cf, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-4", D.CAMP[279981].sp)
+    c.o.bagSlots = {}; ev(c, "BAG_UPDATE_DELAYED"); tick(c, 1)
+    tick(c, 301)
+    still(c)
+    local fire = camp(c, "fire")
+    assert(shownCamp(c, "fire") and fire:GetAttribute("type1") == nil and fire.word:GetText():find(" min$"), "still 20 s, no kit, no wood: Wood, waiting, the minutes: " .. tostring(fire and fire.word:GetText()))
+    assert(fire.rec.never == "wood" and fire.rec.why:find("Lindsay Ashlock", 1, true), "the nearest seller of both, Classic data: " .. tostring(fire.rec.why))
+    walk(c)
+    assert(not shownCamp(c, "fire"), "walking on: gone")
+    still(c)
+    assert(not shownCamp(c, "fire"), "and snoozed: not back at the next stop")
+    tick(c, 600); walk(c); still(c)
+    assert(shownCamp(c, "fire"), "ten minutes on, the next stop: back")
+    fire.__scripts.OnClick(fire, "LeftButton")
+    assert(c.QB.Arrow.temp and c.QB.Arrow.temp.name == "Lindsay Ashlock", "a click: the seller on the arrow")
+    c.QB.Arrow:EndTemp("back")
+    walk(c); still(c)
+    assert(shownCamp(c, "fire"), "clicked, then on: no snooze")
+    -- a non-cook at the same moment: Cook, the cooking trainer, once
+    local n = hud("Nocook", "WARRIOR", "Warrior", 1, {}, { level = 18 })
+    n.profs = {}
+    still(n)
+    local cook = camp(n, "fire")
+    assert(shownCamp(n, "fire") and cook.word:GetText() == "Cook" and cook.rec.never == "cook" and cook:GetAttribute("type1") == nil, "a non-cook: Cook")
+    tick(n, 601); n.QB.Remind.Refresh()
+    assert(not shownCamp(n, "fire"), "once: ten minutes of it, then never again")
+    -- the seller over 10 minutes away: nothing
+    local far = hud("Faraway", "WARRIOR", "Warrior", 1, { [1229737] = true }, { level = 18, world = { 0, -3000, 3000 } })
+    far.profs = { { "Cooking", 15 } }
+    far.o.bagSlots = { { 279981, 1 } }; far.QB.Remind.Refresh()
+    far.QB.Remind.castFrame.__scripts.OnEvent(far.QB.Remind.castFrame, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-5", D.CAMP[279981].sp)
+    far.o.bagSlots = {}; ev(far, "BAG_UPDATE_DELAYED"); tick(far, 301); still(far)
+    assert(not shownCamp(far, "fire"), "the seller more than 10 minutes away: nothing")
+    -- a kit carried: Light; wood and flint and the recipe: Make (your Cooking spell opens its window)
+    local k = hud("Kitted", "WARRIOR", "Warrior", 1, { [1229737] = true, [2550] = true }, { level = 18, bags = { { 279981, 2 } } })
+    k.profs = { { "Cooking", 15 } }
+    still(k)
+    local light = camp(k, "fire")
+    assert(shownCamp(k, "fire") and light.word:GetText() == "Light" and light:GetAttribute("type1") == "item" and light:GetAttribute("item") == "item:279981"
+      and light.count:GetText() == "2", "a kit carried: Light, a click lights it")
+    k.o.bagSlots = { { 4470, 2 }, { 4471, 1 } }; k.QB.Remind.Refresh()
+    assert(light.word:GetText() == "Make" and light:GetAttribute("type1") == "spell" and light:GetAttribute("spell") == 2550 and light:GetAttribute("item") == nil,
+      "wood and flint: Make, Cooking's spell")
+    for _, pr in ipairs(checkLayout(k.env.QuestBankCampBar, "Reminders, the fire slot")) do problems[#problems + 1] = pr end
+    quiet(c, n0)
+  end }
+
+  -- 8. food: water and bread carried, no Eat; Spiced Wolf Meat, Eat; eaten from the bags, Well Fed on, gone; a localised
+  -- Well Fed's name, gone; in a capital, nothing
+  CASES[#CASES + 1] = { "Eat: never on water and bread; gone once Well Fed, by id or by the client's own name; never in a capital", function()
+    local items = { [2680] = { class = 0, sub = 5, spell = 1127, name = "Spiced Wolf Meat", price = 6 }, [159] = { class = 0, sub = 5, spell = 430 }, [4540] = { class = 0, sub = 5, spell = 433 } }
+    local c = hud("Hungry", "WARRIOR", "Warrior", 1, {}, { level = 10, items = items, bags = { { 159, 5 }, { 4540, 5 } } })
+    local env, R = c.env, c.QB.Remind
+    tick(c, 1); R.Refresh()
+    assert(not shownCamp(c, "eat"), "water and bread: no Eat")
+    c.o.bagSlots = { { 159, 5 }, { 4540, 5 }, { 2680, 1 } }; R.Refresh()
+    local eat = camp(c, "eat")
+    assert(shownCamp(c, "eat") and eat:GetAttribute("type1") == "item" and eat:GetAttribute("item") == "item:2680" and eat.word:GetText() == "Eat", "Spiced Wolf Meat: Eat")
+    -- eaten, the last piece: the icon stays through the meal, then Well Fed
+    eat.__scripts.OnClick(eat, "LeftButton")
+    R.castFrame.__scripts.OnEvent(R.castFrame, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-6", 1127)
+    c.o.bagSlots = { { 159, 5 }, { 4540, 5 } }; ev(c, "BAG_UPDATE_DELAYED")
+    c.buffs = { "Food" }; auraEv(c); tick(c, 1)
+    assert(shownCamp(c, "eat"), "through the meal: the icon stays")
+    c.buffs = { aura(c, "Well Fed", 1248420, 900) }; auraEv(c)
+    assert(not shownCamp(c, "eat"), "Well Fed: gone")
+    -- (water drunk while Well Fed: that Well Fed was the meat's, never the water's)
+    R.castFrame.__scripts.OnEvent(R.castFrame, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-8", 430)
+    c.buffs = { aura(c, "Well Fed", 1248420, 900), aura(c, "Drink", 430, 18) }; auraEv(c); tick(c, 18)
+    c.buffs = { aura(c, "Well Fed", 1248420, 880) }; auraEv(c)
+    local food = c.env.QuestBankDB.remind.food or {}
+    assert(food[159] == nil, "water drunk while Well Fed: never learned as a food: " .. tostring(food[159]))
+    c.buffs = {}; auraEv(c)
+    assert(not shownCamp(c, "eat"), "Well Fed over, water and bread carried: still no Eat")
+    -- (a drink with the meal: Well Fed after the two tells nothing of the water)
+    c.o.bagSlots = { { 159, 5 }, { 4540, 5 }, { 2680, 1 } }; ev(c, "BAG_UPDATE_DELAYED"); tick(c, 1)
+    R.castFrame.__scripts.OnEvent(R.castFrame, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-11", 1127)
+    R.castFrame.__scripts.OnEvent(R.castFrame, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-12", 430)
+    c.buffs = { aura(c, "Food", 1127, 20), aura(c, "Drink", 430, 20) }; auraEv(c); tick(c, 10)
+    c.buffs = { aura(c, "Food", 1127, 10), aura(c, "Drink", 430, 10), aura(c, "Well Fed", 1248420, 900) }; auraEv(c)
+    food = c.env.QuestBankDB.remind.food or {}
+    assert(food[159] == nil, "water drunk with the meal: never learned as a food: " .. tostring(food[159]))
+    c.buffs = {}; auraEv(c)
+    -- a localised client: the client's own name of a Well Fed aura
+    c.o.bagSlots = { { 2680, 3 } }; R.Refresh()
+    local getName = env.C_Spell.GetSpellName
+    env.C_Spell.GetSpellName = function(id) if id == 1248422 then return "Bien nourri" end return getName and getName(id) end
+    c.buffs = { "Bien nourri" }; auraEv(c)
+    assert(not shownCamp(c, "eat"), "a localised Well Fed: gone")
+    env.C_Spell.GetSpellName = getName
+    c.buffs = {}; auraEv(c)
+    assert(shownCamp(c, "eat"), "hungry again")
+    c.resting = true; ev(c, "PLAYER_UPDATE_RESTING"); tick(c, 0)
+    assert(not shownCamp(c, "eat"), "in a capital: nothing")
+    c.resting = false
+    -- a meal of bread that ended without Well Fed: never offered
+    local b = hud("Breadman", "WARRIOR", "Warrior", 1, {}, { level = 10, items = { [4541] = { class = 0, sub = 5, spell = 434 } }, bags = { { 4541, 2 } } })
+    b.QB.Remind.castFrame.__scripts.OnEvent(b.QB.Remind.castFrame, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-7", 434)
+    b.buffs = { "Food" }; auraEv(b); tick(b, 20)
+    b.buffs = {}; auraEv(b); tick(b, 5); auraEv(b)
+    assert(c.QB.Camp.AcctDB().food == nil or true, "")
+    assert(b.env.QuestBankDB.remind.food[4541] == false and not shownCamp(b, "eat"), "a meal with no Well Fed after it: that food dropped")
+    -- (a localised client: the meal told by its own aura, the item's spell, never by the English "Food": Well Fed ten
+    -- seconds on keeps that food. A meal cut short at 5 s tells nothing of its food)
+    local de = hud("Hungrig", "WARRIOR", "Warrior", 1, {}, { level = 10, items = { [990001] = { class = 0, sub = 5, spell = 990002, name = "Gebratener Eber", price = 30 },
+      [990003] = { class = 0, sub = 5, spell = 990004, name = "Altes Brot", price = 2 } }, bags = { { 990001, 3 }, { 990003, 2 } } })
+    local dc = de.QB.Remind.castFrame
+    dc.__scripts.OnEvent(dc, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-9", 990002)
+    de.buffs = { aura(de, "Essen", 990002, 30) }; auraEv(de); tick(de, 5); auraEv(de)
+    de.buffs = { aura(de, "Essen", 990002, 25), aura(de, "Satt", 1248420, 900) }; auraEv(de)
+    local dfood = de.env.QuestBankDB.remind.food or {}
+    assert(dfood[990001] == true, "a localised meal followed by Well Fed: that food kept: " .. tostring(dfood[990001]))
+    de.buffs = {}; auraEv(de); tick(de, 60)
+    dc.__scripts.OnEvent(dc, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-10", 990004)
+    de.buffs = { aura(de, "Essen", 990004, 30) }; auraEv(de); tick(de, 5)
+    de.buffs = {}; auraEv(de); tick(de, 5); auraEv(de)
+    dfood = de.env.QuestBankDB.remind.food or {}
+    assert(dfood[990003] == nil, "a meal cut short at 5 s: nothing learned of it: " .. tostring(dfood[990003]))
+  end }
+
+  -- 9. the Cozy Sleeping Bag: held, still 20 s out of town, "Sleep" lit; walking away, snoozed; in an inn, nothing. Not
+  -- held at level 14: the step frame's line, one step only; the step frame off: the last icon on Reminders
+  CASES[#CASES + 1] = { "the sleeping bag: Sleep when still; the quest chain on the step frame's line, one step at a time", function()
+    local c = hud("Sleepy", "WARRIOR", "Warrior", 1, {}, { level = 20, bags = { { 211527, 1 } } })
+    local env, R = c.env, c.QB.Remind
+    still(c)
+    local sleep = camp(c, "sleep")
+    assert(shownCamp(c, "sleep") and sleep:GetAttribute("type1") == "item" and sleep:GetAttribute("item") == "item:211527" and sleep.word:GetText() == "Sleep", "still: Sleep")
+    walk(c)
+    assert(not shownCamp(c, "sleep"), "walking off without its click: gone")
+    still(c)
+    assert(not shownCamp(c, "sleep"), "snoozed: not back at the next stop")
+    local inn = hud("Innkeep", "WARRIOR", "Warrior", 1, {}, { level = 20, bags = { { 211527, 1 } }, resting = true })
+    still(inn)
+    assert(not shownCamp(inn, "sleep"), "in an inn: nothing")
+    -- level 14, no bag: the chain's first step on the step frame's line
+    local q = hud("Bagless", "WARRIOR", "Warrior", 1, {}, { level = 14 })
+    local s = q.QB:Settings()
+    s.guide.on, s.guide.frame, s.welcome = true, true, nil
+    q.QB.StepFrame.Apply(); q.QB.Remind.Refresh()
+    local line = q.env.QuestBankStep.remind
+    assert(line:IsShown() and line.text:GetText():find("^Sleeping bag: the Nailed Plank$") and line.mins:GetText():find("min$"), "the line: the chain's first step: " .. tostring(line.text:GetText()))
+    lines = {}; line.__scripts.OnEnter(line)
+    local tip = table.concat(lines, "\n")
+    assert(not tip:find("Stepping Stones", 1, true) and not tip:find("of 6", 1, true), "one step at a time: no later step, no length:\n" .. tip)
+    line.__scripts.OnClick(line, "LeftButton")
+    assert(q.QB.Arrow.temp and q.QB.Arrow.temp.name == "the Nailed Plank", "a click: on the arrow")
+    q.QB.Arrow:EndTemp("back")
+    for _, pr in ipairs(checkLayout(q.env.QuestBankStep, "step frame, the sleeping bag's line")) do problems[#problems + 1] = pr end
+    s.guide.frame = false; q.QB.StepFrame.Apply(); q.QB.Remind.Refresh()
+    local last = q.QB.Remind.Shown("reminders")
+    assert(last[#last] and last[#last].key == "bagchain" and camp(q, "bagchain"):GetAttribute("type1") == nil and camp(q, "bagchain").word:GetText():find("min$"),
+      "the step frame off: the last icon on Reminders, waiting, its minutes")
+  end }
+
+  -- a merchant's window at the player's spot, opened and shut: what it sells (merchant), whether it repairs
+  local function merchant(c, guid, name, items, repairs)
+    c.npcGUID, c.npcName, c.merchant, c.repairs = guid, name, items or {}, repairs
+    ev(c, "MERCHANT_SHOW"); ev(c, "MERCHANT_CLOSED"); tick(c, 0)
+    c.npcGUID, c.merchant, c.repairs = nil, {}, nil
+  end
+
+  -- 10. repair: low away from town, nothing; in town a minute from a known repairer, waiting, "1 min"; broken away,
+  -- "Broken" in BAD with Hearth beside it, and no Hearth with a hearth step planned; a merchant open, hidden
+  CASES[#CASES + 1] = { "repair: in town by a repairer, Broken anywhere with the hearthstone; hidden at a merchant", function()
+    local c = hud("Dented", "WARRIOR", "Warrior", 1, {}, { level = 30, bags = { { 6948, 1 } } })
+    local env, R = c.env, c.QB.Remind
+    merchant(c, "Creature-0-4455-0-12-1103-0000A1B2C3", "Eldrin", {}, true)
+    local home = c.o.world
+    standAt(c, 0, -3000, 3000)
+    c.alert[5] = 1; ev(c, "UPDATE_INVENTORY_ALERTS"); tick(c, 0)
+    assert(not shownCamp(c, "repair"), "low, away from town and the repairer: nothing")
+    c.o.world = home
+    c.resting = true; ev(c, "PLAYER_UPDATE_RESTING"); tick(c, 0)
+    local rep = camp(c, "repair")
+    assert(shownCamp(c, "repair") and rep.word:GetText() == "1 min" and rep:GetAttribute("type1") == nil and rep.icon.__tex == 136241, "in town by the repairer: waiting, 1 min")
+    rep.__scripts.OnClick(rep, "LeftButton")
+    assert(c.QB.Arrow.temp and c.QB.Arrow.temp.name == "Eldrin", "a click: the repairer on the arrow")
+    c.QB.Arrow:EndTemp("back")
+    standAt(c, 0, -3000, 3000)
+    c.resting = false; c.alert[5] = 2; ev(c, "PLAYER_UPDATE_RESTING"); ev(c, "UPDATE_INVENTORY_ALERTS"); tick(c, 0)
+    local col = rep.word.__color
+    assert(rep.word:GetText() == "Broken" and math.abs(col[1] - 0.88) < 0.01 and math.abs(col[2] - 0.36) < 0.01, "broken: Broken in BAD")
+    -- (no hearth step on the route: a fresh install's plan may hold one, which the next check is about)
+    local route = c.QB.Target.Route
+    c.QB.Target.Route, c.QB.routeNow = function() return nil end, nil
+    R.Refresh()
+    local hearth = camp(c, "hearth")
+    assert(shownCamp(c, "hearth") and hearth:GetAttribute("type1") == "item" and hearth:GetAttribute("item") == "item:6948", "beside it, the hearthstone, item:6948")
+    lines = {}; hearth.__scripts.OnEnter(hearth)
+    assert(table.concat(lines, "\n"):find("To Lakeshire: repair and sell there.", 1, true), "its tooltip: where it takes you")
+    c.QB.routeNow = { bind = { town = "Lakeshire" } }
+    c.QB.Target.Route = function() return c.QB.routeNow end
+    R.Refresh()
+    assert(not shownCamp(c, "hearth"), "a hearth step planned on the route: no Hearth")
+    c.QB.Target.Route, c.QB.routeNow = route, nil
+    c.hearthCD = c.clock - 60; ev(c, "BAG_UPDATE_COOLDOWN"); tick(c, 0)
+    assert(not shownCamp(c, "hearth"), "on its cooldown: no Hearth")
+    c.hearthCD = nil
+    c.npcGUID = "Creature-0-4455-0-12-1103-0000A1B2C3"; c.repairs = true
+    ev(c, "MERCHANT_SHOW"); tick(c, 0)
+    assert(not shownCamp(c, "repair"), "a merchant open: hidden (its Repair All is the game's)")
+    ev(c, "MERCHANT_CLOSED"); tick(c, 0)
+    assert(shownCamp(c, "repair"), "shut: back")
+    for _, pr in ipairs(checkLayout(env.QuestBankCampBar, "Reminders, broken")) do problems[#problems + 1] = pr end
+    layouts[#layouts + 1] = dumpLayout(env.QuestBankCampBar, "Reminders: Broken, with the hearthstone beside it")
+  end }
+
+  -- 11. bags and ammo: 2 free in town; full away, "Full" in BAD, a click opens your bags; the reagent bag never counts;
+  -- a merchant open, hidden. A hunter with 150 arrows in town by a known seller, then none away
+  CASES[#CASES + 1] = { "bags: 2 free in town, Full anywhere; ammo by a seller, None anywhere", function()
+    local c = hud("Packrat", "WARRIOR", "Warrior", 1, {}, { level = 30 })
+    local env, R = c.env, c.QB.Remind
+    c.free = { [0] = 2 }; c.resting = true; ev(c, "PLAYER_UPDATE_RESTING"); tick(c, 0)
+    local bags = camp(c, "bags")
+    assert(shownCamp(c, "bags") and bags.word:GetText() == "2 free" and bags:GetAttribute("type1") == "click"
+      and bags:GetAttribute("clickbutton") == env.MainMenuBarBackpackButton, "2 free in town, no merchant known: a click opens your bags")
+    c.resting = false; ev(c, "PLAYER_UPDATE_RESTING"); tick(c, 0)
+    assert(not shownCamp(c, "bags"), "2 free away: nothing")
+    c.free = { [0] = 0, [4] = 12 }; c.family = { [4] = 2048 }; ev(c, "BAG_UPDATE_DELAYED"); tick(c, 1)
+    assert(shownCamp(c, "bags") and bags.word:GetText() == "Full" and bags.word.__color[1] > 0.85, "full away (the herb bag's room not counted): Full in BAD")
+    c.npcGUID, c.repairs = "Creature-0-4455-0-12-1104-0000A1B2C3", false
+    ev(c, "MERCHANT_SHOW"); tick(c, 0)
+    assert(not shownCamp(c, "bags"), "a merchant open: hidden (nothing here sells)")
+    ev(c, "MERCHANT_CLOSED"); tick(c, 0)
+    -- a hunter's arrows
+    local items = { [2512] = { class = 6, sub = 2, name = "Rough Arrow" }, [2504] = { class = 2, sub = 2 } }
+    local h = hud("Archer", "HUNTER", "Hunter", 3, {}, { level = 20, items = items })
+    h.o.gear = { [0] = 2512, [18] = 2504 }
+    h.ammo = 150
+    merchant(h, "Creature-0-4455-0-12-1105-0000A1B2C3", "Fletcher", { 2512 })
+    h.resting = true; ev(h, "PLAYER_UPDATE_RESTING"); tick(h, 0)
+    local ammo = camp(h, "ammo")
+    assert(shownCamp(h, "ammo") and ammo.word:GetText() == "1 min" and ammo.count:GetText() == "150", "150 arrows in town by their seller: the minutes")
+    h.ammo = 0; h.resting = false; h.o.world = { 0, -3000, 3000 }; ev(h, "PLAYER_UPDATE_RESTING"); ev(h, "UNIT_INVENTORY_CHANGED", "player"); tick(h, 0)
+    h.QB.Remind.Refresh()
+    assert(shownCamp(h, "ammo") and ammo.word:GetText() == "None", "none away from the seller: None")
+  end }
+
+  -- 12. talents: a point at level 10 with the game's talent button on screen, nothing; that button hidden by another
+  -- addon, your class's icon, a click is the button's; spent, gone
+  CASES[#CASES + 1] = { "talents: only while the game's own button is not on screen; a click is its", function()
+    local c = hud("Tally", "WARRIOR", "Warrior", 1, {}, { level = 10 })
+    local env, R = c.env, c.QB.Remind
+    env.TalentMicroButton = env.CreateFrame("Button", "TalentMicroButton", env.UIParent)
+    c.talents = true
+    env.C_ClassTalents = { HasUnspentTalentPoints = function() return c.talents end }
+    ev(c, "PLAYER_TALENT_UPDATE"); tick(c, 0)
+    assert(not shownCamp(c, "talents"), "the game's own button on screen: nothing")
+    env.TalentMicroButton:Hide(); ev(c, "PLAYER_TALENT_UPDATE"); tick(c, 0)
+    local t = camp(c, "talents")
+    assert(shownCamp(c, "talents") and t:GetAttribute("type1") == "click" and t:GetAttribute("clickbutton") == env.TalentMicroButton and t.word:GetText() == "Talents"
+      and t.icon.__tc ~= nil, "hidden by another addon: the class icon, a click is the button's")
+    assert(c.QB.API.UnspentTalents() == true and c.env.QuestBankDB.diag.remind.talent == true, "the shared read, and the diagnostic")
+    -- (Not now on Talents: until the next level, kept on this character across a reload)
+    local n = #c.contextMenus
+    t.__scripts.OnClick(t, "RightButton")
+    local m = c.contextMenus[n + 1]
+    assert(m and m[1].text == "Not now", "its menu: Not now")
+    m[1].set(); tick(c, 0)
+    assert(not shownCamp(c, "talents"), "Not now: gone")
+    local r = hud("Tally", "WARRIOR", "Warrior", 1, {}, { level = 10, saved = c.env.QuestBankDB })
+    r.env.TalentMicroButton = r.env.CreateFrame("Button", "TalentMicroButton", r.env.UIParent); r.env.TalentMicroButton:Hide()
+    r.talents = true
+    r.env.C_ClassTalents = { HasUnspentTalentPoints = function() return r.talents end }
+    ev(r, "PLAYER_TALENT_UPDATE"); tick(r, 0)
+    assert(not shownCamp(r, "talents"), "a reload at the same level: still not now")
+    r.level = 11; r.QB.state.level = 11; ev(r, "PLAYER_LEVEL_UP", 11); tick(r, 1)
+    assert(shownCamp(r, "talents"), "the next level: back")
+    c.talents = false; ev(c, "PLAYER_TALENT_UPDATE"); tick(c, 0)
+    assert(not shownCamp(c, "talents"), "spent: gone")
+  end }
+
+  -- 13. Train: a level-10 warrior with spells the book holds as not learned (FutureSpell), the line; learned
+  -- (SPELLS_CHANGED), gone without a trainer's window; at 11 a level-10 spell never seen at a trainer still counts; one
+  -- left at a trainer, not counted after TRAINER_CLOSED; Summon Voidwalker never; Glow lights the trainer from the same
+  -- answer; a trainer near a hand-in: the route's step and no line
+  CASES[#CASES + 1] = { "Train from the spellbook: counted until learned, kept past a level, skipped at the trainer, quests' never", function()
+    local book = { { spellID = 6603, itemType = 1 }, { spellID = 20598, itemType = 1 }, { spellID = 78, itemType = 1 }, { spellID = 772, itemType = 2 },
+                   { spellID = 6343, itemType = 2 }, { spellID = 284, itemType = 2 } }
+    local c = hud("Learner", "WARRIOR", "Warrior", 1, {}, { level = 10, book = book })
+    local env, R, G = c.env, c.QB.Remind, c.QB.Guide
+    local lvl = { [4] = 4, [5] = 10, [6] = 16 } -- (slot: the level it is learned at)
+    env.C_SpellBook.GetSpellBookItemLevelLearned = function(slot) return lvl[slot] or 0 end
+    G.TrainDirty()
+    local n = G.Trainable()
+    assert(n == 2, "Rend at 4 and Thunder Clap at 10, not Heroic Strike's rank at 16: " .. tostring(n))
+    local s = c.QB:Settings()
+    s.guide.on, s.guide.frame, s.welcome = true, true, nil
+    c.QB.StepFrame.Apply(); R.Refresh()
+    local line = env.QuestBankStep.remind
+    assert(line:IsShown() and line.text:GetText():find("^Train: 2 new spells"), "the line: " .. tostring(line.text:GetText()))
+    -- learned: gone, with no new trainer's window
+    book[4].itemType, book[5].itemType = 1, 1
+    ev(c, "SPELLS_CHANGED"); tick(c, 1)
+    assert(not line:IsShown(), "learned: the line goes")
+    -- at 11, a level-10 spell never trained still counts
+    book[5].itemType = 2
+    c.level = 11; c.QB.state.level = 11; ev(c, "PLAYER_LEVEL_UP", 11); tick(c, 1)
+    assert(G.Trainable() == 1 and line:IsShown(), "a level on, the level-10 spell still counts")
+    -- left at the trainer: the window shut with it still to learn
+    env.IsTradeskillTrainer = function() return false end
+    env.GetNumTrainerServices = function() return 1 end
+    env.GetTrainerServiceInfo = function() return "Thunder Clap", "available", 0, 10 end
+    env.C_Spell.GetSpellName = function(id) return ({ [6343] = "Thunder Clap", [772] = "Rend" })[id] end
+    c.npcName, c.npcGUID = "Lyria Du Lac", "Creature-0-4455-0-12-913-0000A1B2C3"
+    c.ev(c.QB.eventFrame, "TRAINER_SHOW")
+    ev(c, "TRAINER_CLOSED"); tick(c, 1)
+    assert(G.Trainable() == 0 and not line:IsShown() and G.DB().skip[6343] == 11, "left at the trainer: not counted, kept as skipped")
+    lines = {}
+    local _, _, skipped = G.Trainable()
+    assert(#skipped == 1 and skipped[1] == 6343, "still named as left at the trainer")
+    -- a warlock's Summon Voidwalker (a quest's): never
+    local wb = { { spellID = 6603, itemType = 1 }, { spellID = 20598, itemType = 1 }, { spellID = 686, itemType = 1 }, { spellID = 697, itemType = 2 } }
+    local w = hud("Voidcaller", "WARLOCK", "Warlock", 9, {}, { level = 12, book = wb })
+    w.env.C_SpellBook.GetSpellBookItemLevelLearned = function(slot) return slot == 4 and 10 or 0 end
+    w.QB.Guide.TrainDirty()
+    assert(w.QB.Guide.Trainable() == 0 and not w.QB.Guide.NeedsTraining(12), "Summon Voidwalker, a quest's: never counted")
+    -- a spell the class trainer's window does not list, at a level it could: never counted again
+    local nb = { { spellID = 6603, itemType = 1 }, { spellID = 20598, itemType = 1 }, { spellID = 78, itemType = 1 }, { spellID = 1234567, itemType = 2 } }
+    local x = hud("Oddone", "WARRIOR", "Warrior", 1, {}, { level = 12, book = nb })
+    x.env.C_SpellBook.GetSpellBookItemLevelLearned = function(slot) return slot == 4 and 10 or 0 end
+    -- (the class trainer's window lists a spell of the class: Heroic Strike, learned)
+    x.env.C_Spell.GetSpellName = function(id) return ({ [1234567] = "Forever's Own", [78] = "Heroic Strike" })[id] end
+    x.env.IsTradeskillTrainer = function() return false end
+    x.env.GetNumTrainerServices = function() return 1 end
+    x.env.GetTrainerServiceInfo = function() return "Heroic Strike", "used", 0, 1 end
+    x.QB.Guide.TrainDirty()
+    assert(x.QB.Guide.Trainable() == 1, "before the trainer: counted")
+    x.npcName, x.npcGUID = "Lyria Du Lac", "Creature-0-4455-0-12-913-0000A1B2C3"
+    x.ev(x.QB.eventFrame, "TRAINER_SHOW")
+    assert(x.QB.Guide.Trainable() == 0 and G.DB ~= nil, "the trainer does not list it: not a trainer's spell")
+    -- Glow lights the class trainer from the same answer
+    local Glow = c.QB.Glow
+    book[6].itemType = 2; lvl[6] = 11; G.TrainDirty()
+    c.soft = { name = "Test Warrior", guid = "Creature-0-4455-0-12-913-0000A1B2C3" }
+    local sub = Glow.Subtitle
+    Glow.Subtitle = function() return "Warrior Trainer" end
+    assert(Glow.Useful("Test Warrior", c.soft.guid) == "npc", "something to train: the trainer is lit")
+    book[6].itemType = 1; G.TrainDirty()
+    assert(Glow.Useful("Test Warrior", c.soft.guid) == nil, "nothing to train: no light")
+    Glow.Subtitle, c.soft = sub, nil
+  end }
+
+  -- 13b. a hunter at a pet trainer and at a weapon master: neither window is the class trainer's, so nothing is marked as
+  -- not sold nor left at the trainer, and neither is noted as the class's trainer; at the hunter trainer, both as before
+  CASES[#CASES + 1] = { "Train: a pet trainer's or a weapon master's window is never the class trainer's", function()
+    local book = { { spellID = 6603, itemType = 1 }, { spellID = 20598, itemType = 1 }, { spellID = 2973, itemType = 1 }, { spellID = 1978, itemType = 2 },
+                   { spellID = 3044, itemType = 2 }, { spellID = 1130, itemType = 2 } }
+    local c = hud("Petkeeper", "HUNTER", "Hunter", 3, {}, { level = 12, book = book })
+    local env, G = c.env, c.QB.Guide
+    local lvl = { [4] = 4, [5] = 6, [6] = 6 }
+    env.C_SpellBook.GetSpellBookItemLevelLearned = function(slot) return lvl[slot] or 0 end
+    local NAMES = { [2973] = "Raptor Strike", [1978] = "Serpent Sting", [3044] = "Arcane Shot", [1130] = "Hunter's Mark" }
+    env.C_Spell.GetSpellName = function(id) return NAMES[id] end
+    -- (TrainerConstantsDocumentation.lua's Enum.TrainerType; C_Trainer.GetTrainerType, TrainerDocumentation.lua:20)
+    env.Enum.TrainerType = { General = 0, TalentsObsolete = 1, Tradeskills = 2, Pet = 3 }
+    env.C_Trainer = { GetTrainerType = function() return c.trainerType end }
+    env.IsTradeskillTrainer = function() return false end
+    local services = {}
+    env.GetNumTrainerServices = function() return #services end
+    env.GetTrainerServiceInfo = function(i) local sv = services[i]; if sv then return sv[1], sv[2], 0, sv[3] end end
+    G.TrainDirty()
+    assert(G.Trainable() == 3, "three to train: " .. tostring(G.Trainable()))
+    local function visit(kind, guid, name, list)
+      c.trainerType, services = kind, list
+      c.npcName, c.npcGUID = name, guid
+      c.ev(c.QB.eventFrame, "TRAINER_SHOW")
+      ev(c, "TRAINER_CLOSED"); tick(c, 1)
+    end
+    local function marked() local db = G.DB(); return (db.notSold and next(db.notSold)) or (db.skip and next(db.skip)) end
+    visit(3, "Creature-0-4455-0-12-3688-0000A1B2C3", "Reban Freerunner", { { "Growl", "available", 10 }, { "Bite", "available", 1 } })
+    local disc = c.QB.Discover.DB()
+    assert(G.Trainable() == 3 and not marked(), "a pet trainer: nothing marked, three still to train")
+    assert(not (disc.trainer and disc.trainer.c3688), "a pet trainer is never noted as the hunter's")
+    visit(0, "Creature-0-4455-0-12-11867-0000A1B2C3", "Woo Ping", { { "Staves", "available", 1 }, { "Two-Handed Swords", "available", 1 } })
+    assert(G.Trainable() == 3 and not marked() and not (disc.trainer and disc.trainer.c11867), "a weapon master: neither")
+    -- the hunter's own trainer: noted, and what stays to learn is left at it
+    visit(0, "Creature-0-4455-0-12-987654-0000A1B2C3", "Hunter Trainer", { { "Serpent Sting", "available", 4 }, { "Arcane Shot", "available", 6 }, { "Hunter's Mark", "available", 6 } })
+    assert(disc.trainer and disc.trainer.c987654 and disc.trainer.c987654.cl == 3 and G.Trainable() == 0, "the class trainer's window: noted, and left at it")
+    -- (the spellbook read once for a burst of its events, and never in a fight: once after it)
+    local reads, get = 0, env.C_SpellBook.GetSpellBookItemInfo
+    env.C_SpellBook.GetSpellBookItemInfo = function(...) reads = reads + 1; return get(...) end
+    local once = 2 * (#book - 2)
+    for _ = 1, 5 do ev(c, "SPELLS_CHANGED") end
+    tick(c, 1); G.Trainable()
+    assert(reads > 0 and reads <= once, string.format("five SPELLS_CHANGED: the book read once (%d reads, one read is %d)", reads, once))
+    reads = 0
+    c.combat = true; ev(c, "PLAYER_REGEN_DISABLED")
+    for _ = 1, 5 do ev(c, "SPELLS_CHANGED") end
+    tick(c, 1); G.Trainable()
+    assert(reads == 0, "in a fight: the book not read: " .. reads)
+    c.combat = false; ev(c, "PLAYER_REGEN_ENABLED"); tick(c, 3)
+    assert(reads > 0 and reads <= once, "after the fight: read once: " .. reads)
+    -- (a cast in a fight never walks the bags: their read waits for the fight's end)
+    c.o.bagSlots = { { 2512, 20 } }
+    local bagReads, getID = 0, env.C_Container.GetContainerItemID
+    env.C_Container.GetContainerItemID = function(...) bagReads = bagReads + 1; return getID(...) end
+    c.combat = true; ev(c, "PLAYER_REGEN_DISABLED")
+    ev(c, "BAG_UPDATE_DELAYED"); tick(c, 1)
+    local cf = c.QB.Remind.castFrame
+    bagReads = 0
+    cf.__scripts.OnEvent(cf, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-13", 1978)
+    assert(bagReads == 0, "in a fight: a cast reads no bag: " .. bagReads)
+    c.combat = false; ev(c, "PLAYER_REGEN_ENABLED"); tick(c, 3)
+    env.C_Container.GetContainerItemID = getID
+  end }
+
+  -- 14. Flight path: in Lakeshire and at Sentinel Hill (no rest area) beside a flight master you lack, the line;
+  -- ERR_NEWTAXIPATH, gone; a known node, nothing; a continent never read, nothing
+  CASES[#CASES + 1] = { "the flight path line: beside a master you lack on a continent read; gone once learned", function()
+    for _, town in ipairs({ "Lakeshire", "Sentinel Hill" }) do
+      local c = hud("Flier" .. town:sub(1, 3), "WARRIOR", "Warrior", 1, {}, { level = 20 })
+      local env, R, TV = c.env, c.QB.Remind, c.QB.Travel
+      local h = hubOf(c, town)
+      local sw = hubOf(c, "Stormwind")
+      c.taxiKnown = { [sw[6]] = true }
+      TV.Learn()
+      standAt(c, h[2], h[3] + 60, h[4])
+      ev(c, "ZONE_CHANGED"); tick(c, 0)
+      local rec = c.QB.Guide.Reminder()
+      assert(rec and rec.key == "flight" and rec.text == "Learn the flight path: " .. town and rec.word:find("min$"), town .. ": the line: " .. tostring(rec and rec.text))
+      -- (its icon the game's FlightPath atlas whole, desaturated, on the line and on Reminders with the step frame off:
+      -- no texture corners set after the atlas, which the client sets with it, as the stand-in here does)
+      local function clientAtlas(t) rawset(t, "SetAtlas", function(self, a) self.__atlas = a; self.__tex = "atlas:" .. tostring(a); self.__tc = nil end) end
+      local s = c.QB:Settings()
+      s.guide.on, s.guide.frame, s.welcome = true, true, nil
+      c.QB.StepFrame.Apply()
+      local line = env.QuestBankStep.remind
+      clientAtlas(line.icon); line.qbTex, line.qbAtlas = nil, nil
+      c.QB.StepFrame.Apply()
+      assert(line:IsShown() and line.icon.__atlas == "FlightPath" and line.icon.__tc == nil and line.icon.__desat, town .. ": the line's icon the FlightPath atlas whole, desaturated")
+      s.guide.frame = false; c.QB.StepFrame.Apply(); R.Refresh()
+      local bi = env.QuestBankCamp_flight
+      assert(bi and bi:IsShown(), town .. ": the step frame off, the flight path on Reminders")
+      clientAtlas(bi.icon); bi.qbTex, bi.qbAtlas = nil, nil
+      R.Refresh()
+      assert(bi.icon.__atlas == "FlightPath" and bi.icon.__tc == nil, town .. ": its icon there the atlas whole too")
+      c.taxiKnown[h[6]] = true
+      fireTV(c, "UI_INFO_MESSAGE", 0, env.ERR_NEWTAXIPATH); ev(c, "UI_INFO_MESSAGE", 0, env.ERR_NEWTAXIPATH); tick(c, 0)
+      rec = c.QB.Guide.Reminder()
+      assert(not (rec and rec.key == "flight"), town .. ": learned (ERR_NEWTAXIPATH): gone")
+    end
+    -- a continent the client never named: nothing (an old character on a fresh install knows paths QuestBank has not read)
+    local c = hud("Fresh", "WARRIOR", "Warrior", 1, {}, { level = 40 })
+    local h = hubOf(c, "Lakeshire")
+    standAt(c, h[2], h[3] + 60, h[4])
+    c.QB.Travel.DB().readC = {}
+    ev(c, "ZONE_CHANGED"); tick(c, 0)
+    local rec = c.QB.Guide.Reminder()
+    assert(not (rec and rec.key == "flight"), "a continent never read: nothing")
+    -- (the line's words whole, on a second row where one is too narrow: every flight master's town of both sides and
+    -- every trainer of the seed, in the line's two forms; the longest laid out)
+    local w = hud("Wordy", "WARRIOR", "Warrior", 1, {}, { level = 20 })
+    local ws = w.QB:Settings()
+    ws.guide.on, ws.guide.frame, ws.welcome = true, true, nil
+    w.QB.StepFrame.Apply()
+    local G, SFw = w.QB.Guide, w.QB.StepFrame
+    local real = G.Reminder
+    local wline, wf = w.env.QuestBankStep.remind, w.env.QuestBankStep
+    local all = {}
+    for _, side in ipairs({ "A", "H" }) do for _, h in ipairs(w.QB.Data.HUB[side]) do all[#all + 1] = "Learn the flight path: " .. h[1] end end
+    for _, t in ipairs(w.QB.Data.TRAINER) do all[#all + 1] = "Train: 12 new spells \194\183 " .. t[2] end
+    local fake = { key = "flight", lit = false, tex = 132239, mins = 12, word = "12 min" }
+    G.Reminder = function() return fake end
+    fake.text = "Learn the flight path: Goldshire"; SFw.RemindChanged(fake)
+    local h1 = wf:GetHeight()
+    for _, text in ipairs(all) do
+      fake.text = text
+      SFw.RemindChanged(fake)
+      assert(wline:IsShown() and wline.text:GetText() == text, "never cut: '" .. text .. "' drawn as '" .. tostring(wline.text:GetText()) .. "'")
+    end
+    table.sort(all, function(a, b) return textWidth(a, 12) > textWidth(b, 12) end)
+    for i = 1, 3 do
+      fake.text = all[i]; SFw.RemindChanged(fake)
+      assert(wf:GetHeight() == h1 + 14, "two rows: the frame 14 px taller: " .. wf:GetHeight() .. " for " .. h1)
+      for _, pr in ipairs(checkLayout(wf, "step frame, the line on two rows: " .. all[i])) do problems[#problems + 1] = pr end
+    end
+    layouts[#layouts + 1] = dumpLayout(wf, "the step frame: the line's longest words on two rows")
+    G.Reminder = real
+  end }
+
+  -- 15. Use: a quest starter not taken, then a clam, then a blueprint; a locked box (an ErrorLine) left out; Never on
+  -- one item; the click is item:<id>, never a bag and slot, so a sort never equips anything
+  CASES[#CASES + 1] = { "Use: a quest to start, something to open, something to learn; a locked box never", function()
+    local items = { [9001] = { class = 9, sub = 0, usable = true, name = "Plans: Copper Chain Belt" }, [9002] = { class = 15, sub = 0, name = "Small Barnacled Clam" },
+                    [9003] = { class = 15, sub = 0, name = "Ornate Bronze Lockbox" }, [9004] = { class = 12, sub = 0, name = "A Mysterious Message" } }
+    local c = hud("Pockets", "WARRIOR", "Warrior", 1, {}, { level = 20, items = items, bags = { { 9001, 1 }, { 9002, 3 }, { 9003, 1 }, { 9004, 1, 4200 } } })
+    local env, R = c.env, c.QB.Remind
+    env.Enum.TooltipDataLineType.ErrorLine, env.Enum.TooltipDataLineType.ItemSpellTriggerLearn = 41, 38
+    local tips = { [1] = { { leftText = "Plans: Copper Chain Belt" }, { leftText = "Use: Teaches you how to make a Copper Chain Belt.", type = 38 } },
+                   [2] = { { leftText = "Small Barnacled Clam" }, { leftText = "<Right Click to Open>" } },
+                   [3] = { { leftText = "Ornate Bronze Lockbox" }, { leftText = "Locked", type = 41 }, { leftText = "<Right Click to Open>" } } }
+    env.C_TooltipInfo.GetBagItem = function(bag, slot) return { lines = bag == 0 and tips[slot] or {} } end
+    R.ForgetUse(); R.Refresh()
+    local use = camp(c, "use")
+    assert(shownCamp(c, "use") and use:GetAttribute("type1") == "item" and use:GetAttribute("item") == "item:9004" and use.word:GetText() == "Use"
+      and use.count:GetText() == "3", "the quest starter first, three to use in all")
+    assert(use:GetAttribute("bag") == nil and use:GetAttribute("slot") == nil and use:GetAttribute("target-slot") == nil, "item:<id>, never a bag and slot")
+    lines = {}; use.__scripts.OnEnter(use)
+    local tip = table.concat(lines, "\n")
+    assert(tip:find("Small Barnacled Clam", 1, true) and tip:find("Plans: Copper Chain Belt", 1, true) and not tip:find("Lockbox", 1, true), "the tooltip lists them, the locked box left out:\n" .. tip)
+    c.log = { { 4200, 0 } }; c.QB:ReadState(); R.Refresh()
+    assert(use:GetAttribute("item") == "item:9002", "the quest taken: the clam")
+    R.SetNever("use:9002", "Small Barnacled Clam"); tick(c, 0)
+    assert(use:GetAttribute("item") == "item:9001", "Never on the clam: the blueprint")
+    R.SetNever("use:9002", nil, false); tick(c, 0)
+    assert(use:GetAttribute("item") == "item:9002", "shown again")
+  end }
+
+  -- 16. Not now and Never: a right-click on any icon of Buffs and Reminders and on the line; Not now hides the piece,
+  -- Never names the one; kept across a reload and on another character; "Hidden: Eat [Show]" under its row puts it
+  -- back; 6.1.1's per-icon switches left off arrive as Nevers
+  CASES[#CASES + 1] = { "Not now and Never: the game's menu on every piece; account-wide; 6.1.1's switches as Nevers", function()
+    local c = hud("Choosy", "MAGE", "Mage", 8, { [1459] = true, [168] = true }, { level = 20, bags = { { 2680, 2 } } })
+    local env, R = c.env, c.QB.Remind
+    tick(c, 1)
+    local function menu(b)
+      local n = #c.contextMenus
+      b.__scripts.OnClick(b, "RightButton")
+      assert(#c.contextMenus == n + 1, "a right-click opens the game's menu")
+      local m = c.contextMenus[#c.contextMenus]
+      local words = {}
+      for _, e in ipairs(m) do words[#words + 1] = e.text end
+      return m, table.concat(words, " | ")
+    end
+    local fa = env.QuestBankBuff_2
+    assert(fa:GetAttribute("spell") == 168, "Frost Armor on Buffs")
+    local m, words = menu(fa)
+    assert(words == "Not now | Never: Frost Armor | Settings...", "its menu: " .. words)
+    assert(fa:GetAttribute("type1") == "spell" and fa:GetAttribute("type2") == nil, "a right-click never casts (type1 alone)")
+    m[2].set(); tick(c, 0)
+    assert(buffIcons(c) == "1459", "Never: Frost Armor gone, Arcane Intellect stays: " .. buffIcons(c))
+    local eat = camp(c, "eat")
+    m = menu(eat)
+    m[1].set(); tick(c, 0)
+    assert(not env.QuestBankCampBar:IsShown() and env.QuestBankBuffBanner:IsShown(), "Not now on Reminders: that piece alone")
+    tick(c, 601); tick(c, 0)
+    assert(env.QuestBankCampBar:IsShown(), "ten minutes on: back")
+    m = menu(eat)
+    m[2].set(); tick(c, 0)
+    assert(not shownCamp(c, "eat"), "Never: Eat")
+    local hidden = R.Hidden("camp")
+    assert(#hidden == 1 and hidden[1][1] == "eat" and hidden[1][2] == "Eat", "under its row: Hidden: Eat")
+    -- (every Never a reminder can write belongs to a row, so that row's Show brings it back: an elixir's group too)
+    for _, key in ipairs({ "buff:1459", "weapon", "party", "sit", "place", "fire", "wood", "cook", "eat", "sleep", "repair", "bags", "ammo",
+      "hearth", "buy", "talents", "use:9002", "train", "flight", "bagchain", "flask:9187" }) do
+      assert(R.RowOf(key), "the Never " .. key .. " has a row")
+    end
+    for _, pv in ipairs(R.list) do assert(R.RowOf(pv.key), "the reminder " .. pv.key .. " has a row") end
+    R.SetNever("flask:9187", "Elixir of Greater Agility")
+    local fh = R.Hidden("buffs")
+    assert(#fh == 2 and fh[1][1] == "flask:9187" and fh[2][1] == "buff:168", "under Your buffs and weapon: the elixir and Frost Armor: " .. #fh)
+    R.SetNever("flask:9187", nil, false)
+    -- a reload, and another character on the account
+    local saved = c.env.QuestBankDB
+    local r = hud("Choosy", "MAGE", "Mage", 8, { [1459] = true, [168] = true }, { level = 20, bags = { { 2680, 2 } }, saved = saved })
+    tick(r, 1)
+    assert(buffIcons(r) == "1459" and not shownCamp(r, "eat"), "after a reload: kept")
+    local o = hud("Otherone", "MAGE", "Mage", 8, { [1459] = true, [168] = true }, { level = 20, bags = { { 2680, 2 } }, saved = saved })
+    tick(o, 1)
+    assert(buffIcons(o) == "1459" and not shownCamp(o, "eat"), "another character on the account: kept")
+    o.QB.Remind.SetNever("eat", nil, false); tick(o, 0)
+    assert(shownCamp(o, "eat") and #o.QB.Remind.Hidden("camp") == 0, "[Show]: back")
+    -- the step frame's line: Not now hides it
+    local q = hud("Liner", "WARRIOR", "Warrior", 1, {}, { level = 14 })
+    local s = q.QB:Settings()
+    s.guide.on, s.guide.frame, s.welcome = true, true, nil
+    q.QB.StepFrame.Apply(); q.QB.Remind.Refresh()
+    local line = q.env.QuestBankStep.remind
+    assert(line:IsShown(), "the line")
+    local n = #q.contextMenus
+    line.__scripts.OnClick(line, "RightButton")
+    local lm = q.contextMenus[n + 1]
+    assert(lm and lm[1].text == "Not now" and lm[2].text == "Never: Sleeping bag quests", "the line's menu: " .. tostring(lm and lm[2].text))
+    lm[1].set(); tick(q, 0)
+    assert(not line:IsShown(), "Not now: the line hidden")
+    -- 6.1.1's switches
+    local old = hud("Oldsave", "MAGE", "Mage", 8, { [1459] = true }, { level = 20, saved = { settings = { v544 = true, v600 = true, campBar = false,
+      remind = { camp = false, food = false, bag = true, fire = true, quietInstance = false, buffs = true, sit = false, wood = true, bagChain = false, party = true } } } })
+    local rs = old.QB.Remind.Settings()
+    assert(rs.on == false and rs.never.eat and rs.never.place and rs.never.sit and rs.never.bagchain and not rs.never.wood and rs.instance == "all"
+      and rs.camp == true and rs.food == nil, "6.1.1: the bar off, the switches left off as Nevers, quietInstance false as Everything")
+  end }
+
+  -- 16b. QuestBank's Settings: under a row, while it keeps reminders hidden for good, one DIM line naming them with its
+  -- own Show, which brings back that row's alone; the rows and the sections under them move down, nothing overlaps
+  CASES[#CASES + 1] = { "Settings > Reminders: Hidden under each row, its own Show; nothing overlaps", function()
+    local c = hud("Settler", "MAGE", "Mage", 8, { [1459] = true, [168] = true }, { level = 20 })
+    local R, UI = c.QB.Remind, c.QB.UI
+    R.SetNever("eat", "Eat"); R.SetNever("sit", "Sit"); R.SetNever("buff:168", "Frost Armor"); R.SetNever("use:9002", "Small Barnacled Clam")
+    R.SetNever("flask:9187", "Elixir of the Mongoose")
+    c.env.SlashCmdList.QUESTBANK(""); UI:ShowTab(5); UI:Refresh()
+    local v5 = UI.views[5]
+    local hid = v5.remindHid
+    assert(hid and hid.camp.text:IsShown() and hid.camp.text:GetText() == "Hidden: Eat, Sit" and hid.camp.show:IsShown(), "under Camp: Hidden: Eat, Sit [Show]: " .. tostring(hid and hid.camp.text:GetText()))
+    assert(hid.buffs.text:GetText() == "Hidden: Elixir of the Mongoose, Frost Armor" and hid.upkeep.text:GetText() == "Hidden: Small Barnacled Clam"
+      and not hid.class.text:IsShown() and not hid.party.text:IsShown(), "each row its own: " .. tostring(hid.buffs.text:GetText()))
+    local sf = v5.scroll
+    local _, hi = sf.bar:GetMinMaxValues()
+    sf.bar:SetValue(math.min(hi, math.max(0, v5.remindAt - 10))); UI:Refresh()
+    local lay = checkLayout(UI.frame, "settings, Reminders with three rows' Hidden lines")
+    assert(#lay == 0, "the lines and the sections under them: nothing overlaps: " .. table.concat(lay, "; "))
+    hid.camp.show.__scripts.OnClick(hid.camp.show, "LeftButton")
+    local nv = R.Settings().never
+    assert(nv.eat == nil and nv.sit == nil and nv["buff:168"] and nv["use:9002"] and nv["flask:9187"], "its own Show: that row's alone back")
+    assert(not hid.camp.text:IsShown() and not hid.camp.show:IsShown(), "the line gone with them")
+    lay = checkLayout(UI.frame, "settings, Reminders after a Show")
+    assert(#lay == 0, "laid out again: " .. table.concat(lay, "; "))
+    sf.bar:SetValue(0); UI:ShowTab(1); UI:Refresh(); UI.frame:Hide()
+  end }
+
+  -- 16c. /qb buffs: Buffs now even inside where the dungeons' choice is Nothing, nothing said when it shows some; with
+  -- Buffs' rows or Reminders on screen off it says where they are; never "No buffs missing." unless your buffs were read
+  CASES[#CASES + 1] = { "/qb buffs: Buffs now, inside too; off, it says so; no false all-clear", function()
+    local c = hud("Asker", "MAGE", "Mage", 8, { [1459] = true }, { level = 20 })
+    local env, R = c.env, c.QB.Remind
+    env.IsInInstance = function() return true, "party" end
+    R.SetRow("instance", "none"); ev(c, "PLAYER_ENTERING_WORLD"); tick(c, 6)
+    local B = env.QuestBankBuffBanner
+    assert(not B:IsShown(), "Nothing inside: no Buffs")
+    local n0 = #c.chat
+    R.Command()
+    assert(B:IsShown() and buffIcons(c):find("1459", 1, true) and #c.chat == n0, "/qb buffs inside: Buffs now, nothing said: " .. tostring(c.chat[#c.chat]))
+    R.SetRow("buffs", false); R.SetRow("party", false); tick(c, 0)
+    R.Command()
+    assert(#c.chat == n0 + 1 and c.chat[#c.chat]:find("Settings", 1, true) and not c.chat[#c.chat]:find("No buffs missing", 1, true), "its rows off: where they are: " .. tostring(c.chat[#c.chat]))
+    R.SetRow("buffs", true); R.SetRow("party", true)
+    R.Settings().on = false
+    R.Command()
+    assert(#c.chat == n0 + 2 and c.chat[#c.chat]:find("Settings", 1, true), "Reminders on screen off: said so: " .. tostring(c.chat[#c.chat]))
+    R.Settings().on = true
+    c.buffs = { "Arcane Intellect" }; auraEv(c)
+    R.Command()
+    assert(c.chat[#c.chat]:find("No buffs missing", 1, true), "nothing missing: No buffs missing.")
+    R.SetRow("instance", "buffs"); env.IsInInstance = function() return false end
+  end }
+
+  -- 18. layout: Reminders with six icons and Buffs with six and four members, apart and within the screen; Reminders
+  -- grows both ways from its middle, Buffs upward from its bottom; a moved Buffs keeps its own point; past six, the last
+  -- wait, a BAD status takes the last camp icon's place; a step frame holding a secure button keeps its size in a fight
+  CASES[#CASES + 1] = { "layout: six and six and four, apart; a BAD past six takes a slot; a secure button holds the step frame still", function()
+    local c = hud("Layout", "WARRIOR", "Warrior", 1, {}, { level = 20 })
+    local env, R = c.env, c.QB.Remind
+    local WORDS = { "Sit", "Place", "Light", "Eat", "Sleep", "Broken", "Full" }
+    for i = 1, 7 do
+      R.Add({ key = "t" .. i, piece = "reminders", order = 10 * i, row = i <= 5 and "camp" or "upkeep", cat = i <= 5 and "xp" or nil, groups = { "camp" },
+        read = function(add) local rec = add(); rec.tex, rec.lit, rec.word, rec.name = 134400, i ~= 6, WORDS[i], WORDS[i]; if i >= 6 then rec.status = "bad" end end })
+    end
+    for i = 1, 6 do
+      R.Add({ key = "b" .. i, piece = "buffs", order = 300 + i, row = "buffs", cat = "buffs", groups = { "buffs" },
+        read = function(add) local rec = add(); rec.tex, rec.lit, rec.name = 134400, true, "Buff " .. i; rec.click = { type = "spell", spell = 100 + i, unit = "player" } end })
+    end
+    local NAMES = { "Brommelwick", "Sela", "Kettleblack", "Wren" }
+    R.Add({ key = "pfake", piece = "party", order = 400, row = "party", cat = "group", groups = { "party" },
+      read = function(add) for i = 1, 4 do local rec = add(); rec.key = "pf" .. i; rec.tex, rec.lit, rec.who, rec.class, rec.name = 134400, true, NAMES[i], "MAGE", "Buff" end end })
+    R.Refresh()
+    local keys = {}
+    for _, rec in ipairs(R.Shown("reminders")) do keys[#keys + 1] = rec.key end
+    assert(table.concat(keys, ",") == "t1,t2,t3,t4,t6,t7", "six: Full (BAD) took the last camp icon's place: " .. table.concat(keys, ","))
+    local bar, ban = env.QuestBankCampBar, env.QuestBankBuffBanner
+    assert(bar:IsShown() and ban:IsShown(), "both up")
+    GEN = GEN + 1
+    local br, nr = rectOf(bar), rectOf(ban)
+    assert(nr.b >= br.t + 7 and nr.b <= br.t + 9 and br.l >= 0 and br.r <= 1600 and nr.l >= 0 and nr.r <= 1600, "Buffs 8 px above Reminders, apart, on the screen")
+    for _, pr in ipairs(checkLayout(bar, "Reminders, six icons")) do problems[#problems + 1] = pr end
+    for _, pr in ipairs(checkLayout(ban, "Buffs, six icons and four members")) do problems[#problems + 1] = pr end
+    layouts[#layouts + 1] = dumpLayout(bar, "Reminders: six icons, Full past six in the last camp icon's place")
+    layouts[#layouts + 1] = dumpLayout(ban, "Buffs: six of yours and four members")
+    -- Alt-drag on Buffs: its own point, kept
+    c.alt = true
+    local b1 = env.QuestBankBuff_1
+    b1.__scripts.OnMouseDown(b1, "LeftButton"); b1.__scripts.OnMouseUp(b1, "LeftButton")
+    c.alt = false
+    local bp = R.Settings().bannerPos
+    assert(type(bp) == "table" and bp.x == 500 and ban.__points[1].point == "BOTTOM" and ban.__points[1].rel == env.UIParent, "a moved Buffs keeps its own point")
+    R.Settings().bannerPos = nil; R.Place()
+    -- (an Alt-drag a fight interrupts: stopped once the fight is over, the piece back at its own place, nothing written;
+    -- StopMovingOrSizing is protected, SimpleFrameAPIDocumentation.lua:1571, so never in the fight)
+    local starts, stops = 0, 0
+    rawset(ban, "StartMoving", function() starts = starts + 1 end)
+    rawset(ban, "StopMovingOrSizing", function() if c.combat then error("ADDON_ACTION_BLOCKED: StopMovingOrSizing in a fight", 2) end stops = stops + 1 end)
+    c.alt = true; b1.__scripts.OnMouseDown(b1, "LeftButton"); c.alt = false
+    c.combat = true; ev(c, "PLAYER_REGEN_DISABLED")
+    b1.__scripts.OnMouseUp(b1, "LeftButton")
+    assert(starts == 1 and stops == 0, "in the fight: nothing stopped yet")
+    c.combat = false; ev(c, "PLAYER_REGEN_ENABLED"); tick(c, 3)
+    assert(stops == 1 and R.Settings().bannerPos == nil and ban.__points[1].rel == bar, "after it: stopped, back at its own place, nothing written")
+    -- (the mouse let go in the fight never came, the holder hidden under it: stopped all the same)
+    c.alt = true; b1.__scripts.OnMouseDown(b1, "LeftButton"); c.alt = false
+    c.combat = true; ev(c, "PLAYER_REGEN_DISABLED")
+    c.combat = false; ev(c, "PLAYER_REGEN_ENABLED"); tick(c, 3)
+    assert(starts == 2 and stops == 2 and R.Settings().bannerPos == nil, "no mouse-up: stopped after the fight")
+    rawset(ban, "StartMoving", nil); rawset(ban, "StopMovingOrSizing", nil)
+    -- a fight with a secure button on the step frame: its size holds still, laid out after
+    local s = c.QB:Settings()
+    s.guide.on, s.guide.frame, s.welcome = true, true, nil
+    c.QB.StepFrame.Apply()
+    local f = env.QuestBankStep
+    f.item = env.CreateFrame("Button", "QuestBankStepItem", env.UIParent, "SecureActionButtonTemplate"); f.item:Show()
+    local G = c.QB.Guide
+    local real = G.Reminder
+    G.Reminder = function() return nil end
+    c.QB.StepFrame.RemindChanged(nil)
+    local h0 = f:GetHeight()
+    assert(not f.remind:IsShown(), "no line")
+    c.combat = true
+    G.Reminder = function() return { key = "train", text = "Train: 2 new spells", word = "4 min", mins = 4, tex = 134400 } end
+    c.QB.StepFrame.RemindChanged(G.Reminder())
+    assert(f:GetHeight() == h0, "in a fight, a secure button anchored to it: the frame's size holds still")
+    c.combat = false
+    c.QB.StepFrame.OnRegen()
+    assert(f:GetHeight() > h0, "the fight over: laid out with the line")
+    G.Reminder = real
+    f.item:Hide()
+    -- the route's first leg your hearthstone: the step frame's item button is it (item:<id>), ready; on its cooldown, none
+    local hc = hud("Homeward", "WARRIOR", "Warrior", 1, {}, { level = 20, bags = { { 6948, 1 } } })
+    local hs = hc.QB:Settings()
+    hs.guide.on, hs.guide.frame, hs.welcome = true, true, nil
+    hc.QB.StepFrame.Apply(); hc.QB.Remind.Refresh()
+    local realRoute = hc.QB.Target.Route
+    hc.QB.Target.Route = function() return { legs = { { kind = "hearth" } } } end
+    hc.QB.StepFrame.RefreshItem(hc.QB.Guide.Steps()[1])
+    local hb = hc.env.QuestBankStepItem
+    assert(hb and hb:IsShown() and hb:GetAttribute("type") == "item" and hb:GetAttribute("item") == "item:6948", "Use your Hearthstone: its button, item:6948")
+    hc.hearthCD = hc.clock - 60
+    hc.QB.StepFrame.RefreshItem(hc.QB.Guide.Steps()[1])
+    assert(not hb:IsShown(), "on its cooldown: no button")
+    hc.hearthCD = nil
+    hc.QB.Target.Route = realRoute
+    hc.QB.StepFrame.RefreshItem(hc.QB.Guide.Steps()[1])
+    assert(not hb:IsShown(), "no hearth on the route: no button")
+  end }
+
+  -- 19. budgets: an idle minute out of a party with nothing timed, no refresh and no clock; one refresh for a burst of 50
+  -- UNIT_AURA; a full refresh under 2 KB of its own
+  CASES[#CASES + 1] = { "budgets: idle, a burst, a full refresh", function()
+    local c = hud("Idle", "WARRIOR", "Warrior", 1, {}, { level = 12 }) -- (under the sleeping bag's level: no line, nothing timed)
+    local env, R = c.env, c.QB.Remind
+    tick(c, 2)
+    assert(not R.clock or not R.clock.__scripts.OnUpdate, "nothing timed: no clock")
+    local r0 = R.refreshes
+    tick(c, 60)
+    assert(R.refreshes == r0, "an idle minute: no refresh: " .. (R.refreshes - r0))
+    for _, f in ipairs(c.frames) do
+      if f == (R.clock or false) then assert(not f.__scripts.OnUpdate, "no clock running") end
+    end
+    local af = R.auraFrame
+    for _ = 1, 50 do af.__scripts.OnEvent(af, "UNIT_AURA", "player") end
+    tick(c, 0)
+    assert(R.refreshes == r0 + 1, "50 UNIT_AURA: one refresh: " .. (R.refreshes - r0))
+    -- a full refresh's own allocations, with a few reminders up (the mock's widget calls not counted)
+    local m = hud("Busy", "MAGE", "Mage", 8, { [1459] = true, [168] = true }, { level = 20, bags = { { 2680, 2 }, { 6948, 1 } } })
+    m.alert[5] = 2
+    m.QB.Remind.Refresh(); m.QB.Remind.Refresh()
+    local getinfo, count = debug.getinfo, collectgarbage
+    local acc, mine, last = 0, false, 0
+    local function hook(evn)
+      local nowc = count("count")
+      if mine then acc = acc + (nowc - last) end
+      local info = getinfo(evn == "call" and 2 or 3, "S")
+      if info and info.what ~= "C" then mine = info.source:find("/QuestBank/", 1, true) ~= nil end
+      last = count("count")
+    end
+    if jit then jit.off(); jit.flush() end
+    collectgarbage("collect"); collectgarbage("stop")
+    last = count("count")
+    debug.sethook(hook, "cr")
+    for _ = 1, 10 do m.QB.Remind.Refresh() end
+    debug.sethook()
+    collectgarbage("restart")
+    if jit then jit.on() end
+    local per = acc * 1024 / 10
+    assert(per < 2048, string.format("a full refresh: %.0f bytes of its own (at most 2 KB)", per))
+    print(string.format("hud: a full refresh with four reminders up: %.0f bytes of its own", per))
+  end }
+
+  -- 19b. what a session costs: a cook out of kits walking out of town never looks up the nearest seller; with Reminders
+  -- off nothing is read but the step frame's line (QuestBank's row) or nothing at all (a host's module, QB.remindAll),
+  -- and no clock runs, in a party too; the party's range and connection events are the party's units' alone, the
+  -- vehicle's yours, and in a raid they refresh nothing
+  CASES[#CASES + 1] = { "costs: no seller looked up on the move, nothing read with Reminders off, a raid's range changes nothing", function()
+    local function spy(c)
+      local make = c.env.CreateFrame
+      c.env.CreateFrame = function(...)
+        local f = make(...)
+        rawset(f, "RegisterEvent", function(self, e) self.__reg = self.__reg or {}; self.__reg[e] = "all" end)
+        rawset(f, "RegisterUnitEvent", function(self, e, ...) self.__reg = self.__reg or {}; self.__reg[e] = table.concat({ ... }, ",") end)
+        return f
+      end
+    end
+    local c = hud("Costly", "WARRIOR", "Warrior", 1, { [1229737] = true, [2550] = true }, { level = 12, before = spy, party = { { "Brom", "WARRIOR", 12, buffs = {} } } })
+    local env, R = c.env, c.QB.Remind
+    local function reg(f, e) return f and f.__reg and f.__reg[e] end
+    for _, e in ipairs({ "UNIT_IN_RANGE_UPDATE", "UNIT_CONNECTION" }) do
+      assert(not reg(R.frame, e) and reg(R.partyFrame, e) == "party1,party2,party3,party4", e .. ": the party's units alone: " .. tostring(reg(R.partyFrame, e)))
+    end
+    for _, e in ipairs({ "UNIT_ENTERED_VEHICLE", "UNIT_EXITED_VEHICLE" }) do
+      assert(not reg(R.frame, e) and reg(R.awayFrame, e) == "player", e .. ": yours alone: " .. tostring(reg(R.awayFrame, e)))
+    end
+    tick(c, 2)
+    -- a raid: a member's range or connection changing refreshes nothing
+    c.raid = true; ev(c, "GROUP_ROSTER_UPDATE"); tick(c, 2)
+    local r0 = R.refreshes
+    local pf = R.partyFrame
+    for _ = 1, 20 do pf.__scripts.OnEvent(pf, "UNIT_IN_RANGE_UPDATE", "party1", true); pf.__scripts.OnEvent(pf, "UNIT_CONNECTION", "party1", true) end
+    tick(c, 0)
+    assert(R.refreshes == r0, "a raid's range and connection changes: no refresh: " .. (R.refreshes - r0))
+    c.raid = false; ev(c, "GROUP_ROSTER_UPDATE"); tick(c, 2)
+    -- a cook who has used a kit, out of kits and wood, walking out of town: no seller looked up
+    c.profs = { { "Cooking", 15 } }
+    c.QB.Camp.CharDB().kitUsed = true
+    local looks, near = 0, c.QB.Camp.NearestSeller
+    c.QB.Camp.NearestSeller = function(...) looks = looks + 1; return near(...) end
+    for _ = 1, 10 do R.Refresh() end
+    assert(looks == 0, "on the move out of town: no seller looked up: " .. looks)
+    c.QB.Camp.NearestSeller = near
+    -- Reminders off: QuestBank's row, the step frame's line alone read; a host's module, nothing; no clock in the party
+    local reads, all = 0, 0
+    for _, pv in ipairs(R.list) do
+      local f0 = pv.safeRead
+      pv.safeRead = function(...) all = all + 1; if pv.piece ~= "step" then reads = reads + 1 end; return f0(...) end
+    end
+    R.Settings().on = false
+    R.Refresh(); tick(c, 2)
+    assert(reads == 0 and not (R.clock and R.clock.__scripts.OnUpdate), "Reminders off in a party: nothing read but the line's, no clock: " .. reads)
+    c.QB.remindAll, all = true, 0
+    R.Refresh(); tick(c, 2)
+    assert(all == 0, "a host's module off: nothing read at all: " .. all)
+    c.QB.remindAll = nil
+    R.Settings().on = true
+    c.o.group = false
+  end }
+
+  -- (each case on its own: a failing one is named and the rest still run; the block fails at its end)
+  local failed = {}
+  for _, case in ipairs(CASES) do
+    local ok, err = pcall(case[2])
+    if ok then print("hud: " .. case[1] .. ": ok")
+    else failed[#failed + 1] = case[1] .. ": " .. tostring(err); print("hud: " .. case[1] .. ": FAILED: " .. tostring(err)) end
+  end
+  assert(#failed == 0, #failed .. " hud case(s) failed:\n" .. table.concat(failed, "\n"))
+end
+
+----------------------------------------------------------------------------
+-- The hud round, part 2: layout mode's engine side (the windows design's section 6, QuestBank's side). The on-screen
+-- pieces as movers for a host's layout mode (QB.Movers: step, arrow, camp, buffs) and a host's one lock for them all
+-- (QB.LayoutLocked, QB.SetLayoutLocked; QB.Locked is Core.lua's quest lock). QuestBank alone sets neither: its players
+-- see no change.
+-- HL1 QuestBank alone: the arrow drags (it has no lock), the step frame keeps guide.locked, Reminders Alt-drag; the
+--     movers write nothing at login (no arrowScale, remind.scale, remind.bannerScale)
+-- HL2 a host's lock: the arrow's drag start refused, the step frame's lock read through it whatever guide.locked says,
+--     Reminders' Alt-drag refused; the step frame's menu says the host's "Unlock frames" and its click is the host's
+-- HL3 the movers: each named and secure where it holds the game's secure buttons; rect where the piece stands, shown
+--     or not; move puts its top left there and writes the engine's own place (guide.x/y, arrowPos, remind.pos,
+--     remind.bannerPos); get gives { point, x, y, scale } against UIParent's own; set of a kept one puts it back; set
+--     of nil is the default place at 100%
+-- HL4 scale: the step frame's centre kept; QuestBank's arrow at 150% (its frame scaled, its points in UIParent's units
+--     divided by it), the compass at 150% (compassSize 72, its frame at 100%), past 200% and under 50% clamped (96 and
+--     24 px); Reminders and Buffs at their scales, their places kept
+-- HL5 (the reminders design's case 18 at its scales) Reminders and Buffs at 80, 100 and 150%, Buffs at its default:
+--     8 px over Reminders, apart, on the screen; their movers at their largest (six icons; six and four members)
+----------------------------------------------------------------------------
+do
+  local c = lookChar("Layouts", { log = { { 7, 0 } } })
+  local env, QB, SF, A, R = c.env, c.QB, c.QB.StepFrame, c.QB.Arrow, c.QB.Remind
+  local s = QB:Settings()
+  A:Set(true)
+  for i = 1, 3 do
+    R.Add({ key = "lay" .. i, piece = "reminders", order = 900 + i, row = "upkeep", groups = { "camp" },
+      read = function(add) local rec = add(); rec.tex, rec.lit, rec.word, rec.name = 134400, false, "Lay", "Lay " .. i end })
+  end
+  R.Refresh()
+  local af, sf, bar, ban = env.QuestBankArrow, env.QuestBankStep, env.QuestBankCampBar, env.QuestBankBuffBanner
+  local said = {}
+  -- HL1
+  assert(QB.LayoutLocked == nil and QB.SetLayoutLocked == nil, "QuestBank alone sets no host lock")
+  assert(s.arrowScale == nil and R.Settings().scale == nil and R.Settings().bannerScale == nil, "nothing written by the movers")
+  local moved = {}
+  local function spy(f) moved[f] = 0; rawset(f, "StartMoving", function() moved[f] = moved[f] + 1 end) end
+  spy(af); spy(sf); spy(bar)
+  af.__scripts.OnDragStart(af); af.__scripts.OnDragStop(af); s.arrowPos = nil; A.Place()
+  assert(moved[af] == 1, "the arrow drags: QuestBank has no lock for it")
+  s.guide.locked = true; SF.Apply()
+  sf.__scripts.OnDragStart(sf)
+  assert(moved[sf] == 0 and sf.__dragOff, "the step frame keeps guide.locked")
+  s.guide.locked = false; SF.Apply()
+  sf.__scripts.OnDragStart(sf)
+  assert(moved[sf] == 1 and not sf.__dragOff, "unlocked, it drags")
+  local icon = env.QuestBankCamp_lay1
+  assert(icon and bar:IsShown(), "Reminders up with its icons")
+  c.alt = true
+  icon.__scripts.OnMouseDown(icon, "LeftButton"); icon.__scripts.OnMouseUp(icon, "LeftButton")
+  c.alt = false
+  assert(moved[bar] == 1, "Reminders: Alt-drag as before")
+  R.Settings().pos = nil; R.Place()
+  said[#said + 1] = "alone: the arrow drags, the step frame keeps guide.locked, Reminders Alt-drags, nothing written"
+  -- HL2
+  local lockedKeys, setTo = {}, nil
+  QB.LayoutLocked = function(key) lockedKeys[key] = true; return true end
+  QB.SetLayoutLocked = function(on) setTo = on end
+  af.__scripts.OnDragStart(af)
+  assert(moved[af] == 1 and not af.qbDragging, "the host's lock: the arrow stays")
+  s.guide.locked = false; SF.Apply()
+  sf.__scripts.OnDragStart(sf)
+  assert(moved[sf] == 1 and sf.__dragOff, "the host's lock: the step frame stays, whatever guide.locked says")
+  c.alt = true
+  icon.__scripts.OnMouseDown(icon, "LeftButton"); icon.__scripts.OnMouseUp(icon, "LeftButton")
+  c.alt = false
+  assert(moved[bar] == 1 and lockedKeys.arrow and lockedKeys.step and lockedKeys.camp, "the host's lock: Reminders stays")
+  SF:Menu(nil)
+  local item
+  for _, it in ipairs(QB.UI.lastMenu or {}) do if it[1] == "Unlock frames" then item = it end end
+  assert(item, "the step frame's menu: the host's lock, Unlock frames")
+  item[2]()
+  assert(setTo == false and s.guide.locked == false, "its click is the host's: guide.locked untouched")
+  QB.LayoutLocked = function() return false end
+  s.guide.locked = true; SF.Apply()
+  sf.__scripts.OnDragStart(sf)
+  assert(moved[sf] == 2 and not sf.__dragOff, "the host unlocked: the step frame drags, whatever guide.locked says")
+  s.guide.locked = false
+  QB.LayoutLocked, QB.SetLayoutLocked = nil, nil
+  SF.Apply()
+  said[#said + 1] = "a host's lock: the arrow, the step frame and Reminders stay; the frame's menu says the host's"
+  -- HL3
+  local M = QB.Movers
+  local W, H = 1600, 1000
+  local NAME = { step = "Step frame", arrow = "Arrow", camp = "Reminders", buffs = "Buffs" }
+  for key, name in pairs(NAME) do
+    local m = M[key]
+    assert(m and m.key == key and m.name == name, "a mover for " .. key)
+    for _, fn in ipairs({ "frame", "on", "switch", "rect", "move", "scale", "get", "set" }) do assert(type(m[fn]) == "function", key .. "." .. fn) end
+    assert(m.on() == true, key .. " on")
+  end
+  assert(M.step.secure and M.camp.secure and M.buffs.secure and not M.arrow.secure, "secure where it holds the game's secure buttons")
+  assert(M.step.frame() == sf and M.arrow.frame() == af and M.camp.frame() == bar and M.buffs.frame() == ban, "their frames")
+  local function near(a, b) return math.abs(a - b) < 0.01 end
+  -- the step frame: its top left to (100, 900), its centre kept by guide.x/y
+  local l, t, w, h = M.step.rect()
+  assert(near(w, sf:GetWidth()) and near(h, sf:GetHeight()), "the step frame's rect at its size: " .. tostring(w) .. " x " .. tostring(h))
+  M.step.move(100, 900)
+  l, t = M.step.rect()
+  assert(near(l, 100) and near(t, 900) and near(s.guide.x, 100 + w / 2 - W / 2) and near(s.guide.y, 900 - h / 2 - H / 2), "moved: guide.x/y " .. tostring(s.guide.x) .. " " .. tostring(s.guide.y))
+  local p = sf.__points[1]
+  assert(p.point == "CENTER" and p.rel == env.UIParent and near(p.x, s.guide.x), "placed at once")
+  local kept = M.step.get()
+  assert(kept.point == "CENTER" and near(kept.x, s.guide.x) and near(kept.y, s.guide.y) and kept.scale == 1, "get: CENTER against UIParent's centre")
+  M.step.set(nil)
+  assert(s.guide.x == nil and s.guide.y == nil and (s.guide.scale or 1) == 1, "set nil: the default place at 100%")
+  M.step.set(kept)
+  assert(near(s.guide.x, kept.x) and near(s.guide.y, kept.y), "set: back where it was kept")
+  -- the arrow: kept by its top
+  local aw, ah = select(3, M.arrow.rect())
+  M.arrow.move(300, 700)
+  local pos = s.arrowPos
+  assert(pos and pos[1] == "TOP" and near(pos[2], 300 + aw / 2 - W / 2) and near(pos[3], 700 - H), "the arrow moved: arrowPos by its top")
+  p = af.__points[1]
+  assert(p.point == "TOP" and near(p.x, pos[2]) and near(p.y, pos[3]), "placed at once")
+  local la, ta = M.arrow.rect()
+  assert(near(la, 300) and near(ta, 700), "its rect there")
+  kept = M.arrow.get()
+  M.arrow.set(nil)
+  assert(s.arrowPos == nil and af.__points[1].y ~= pos[3], "set nil: the default place")
+  M.arrow.set(kept)
+  assert(s.arrowPos[2] == pos[2] and s.arrowPos[3] == pos[3], "set: back")
+  -- Reminders by its centre, Buffs by its bottom (both in UIParent's units from its bottom left)
+  local bw, bh = select(3, M.camp.rect())
+  assert(bw >= bar:GetWidth() and bh == bar:GetHeight(), "Reminders' rect: at least its size")
+  M.camp.move(600, 400)
+  local rp = R.Settings().pos
+  assert(near(rp.x, 600 + bw / 2) and near(rp.y, 400 - bh / 2), "Reminders moved: remind.pos its centre")
+  local nw, nh = select(3, M.buffs.rect())
+  M.buffs.move(620, 600)
+  local bp = R.Settings().bannerPos
+  assert(near(bp.x, 620 + nw / 2) and near(bp.y, 600 - nh), "Buffs moved: remind.bannerPos its bottom")
+  assert(ban.__points[1].point == "BOTTOM" and near(ban.__points[1].x, bp.x), "Buffs placed at once")
+  kept = M.camp.get()
+  assert(kept.point == "CENTER" and near(kept.x, rp.x - W / 2) and near(kept.y, rp.y - H / 2), "Reminders' get against UIParent's centre")
+  local kb = M.buffs.get()
+  assert(kb.point == "BOTTOM" and near(kb.x, bp.x - W / 2) and near(kb.y, bp.y), "Buffs' get against UIParent's bottom")
+  M.camp.set(nil); M.buffs.set(nil)
+  assert(R.Settings().pos == nil and R.Settings().bannerPos == nil, "set nil: their defaults")
+  M.camp.set(kept); M.buffs.set(kb)
+  assert(near(R.Settings().pos.x, rp.x) and near(R.Settings().bannerPos.y, bp.y), "set: back")
+  -- hidden: a rect all the same, where it would stand
+  s.guide.frame = false; SF.Apply()
+  assert(not sf:IsShown() and M.step.on() == false and M.step.rect() ~= nil, "the step frame off: not on, its rect kept")
+  s.guide.frame = true; SF.Apply()
+  said[#said + 1] = "four movers named; rect, move, get and set against UIParent's own points, shown or not"
+  -- HL4
+  M.step.scale(1.5)
+  local l2, t2, w2, h2 = M.step.rect()
+  assert(near(s.guide.scale, 1.5) and near(sf:GetScale(), 1.5) and near(l2 + w2 / 2, 100 + w / 2) and near(t2 - h2 / 2, 900 - h / 2), "the step frame at 150%: its centre kept")
+  M.step.scale(1)
+  M.arrow.move(300, 700)
+  M.arrow.scale(1.5)
+  local la2, ta2 = M.arrow.rect()
+  assert(near(s.arrowScale, 1.5) and near(af:GetScale(), 1.5) and near(ta2, 700), "QuestBank's arrow at 150%: its frame scaled, its top kept")
+  p = af.__points[1]
+  assert(near(p.x * 1.5, s.arrowPos[2]) and near(p.y * 1.5, s.arrowPos[3]), "its points in its own units: UIParent's divided by its scale")
+  assert(near(M.arrow.get().scale, 1.5), "get: 150%")
+  s.arrowStyle = "compass"; A:Restyle()
+  M.arrow.scale(1.5)
+  assert(s.compassSize == 72 and near(af:GetScale(), 1), "the compass at 150%: compassSize 72, its frame at 100% (DialSize keeps the dial sharp)")
+  M.arrow.scale(3)
+  assert(s.compassSize == 96 and near(M.arrow.get().scale, 2), "past 200%: 200%, a 96 px dial")
+  M.arrow.scale(0.4)
+  assert(s.compassSize == 24 and near(M.arrow.get().scale, 0.5), "under 50%: 50%, a 24 px dial")
+  M.arrow.scale(1)
+  s.arrowStyle = "questbank"; A:Restyle()
+  M.arrow.scale(1)
+  assert(near(af:GetScale(), 1), "back at 100%")
+  M.camp.scale(1.2)
+  assert(near(R.Settings().scale, 1.2) and near(bar:GetScale(), 1.2) and near(bar.__points[1].x * 1.2, R.Settings().pos.x), "Reminders at 120%, its centre kept")
+  M.buffs.scale(0.8)
+  assert(near(R.Settings().bannerScale, 0.8) and near(ban:GetScale(), 0.8) and near(ban.__points[1].y * 0.8, R.Settings().bannerPos.y), "Buffs at 80%, its bottom kept")
+  -- HL5
+  M.camp.set(nil); M.buffs.set(nil)
+  for _, k in ipairs({ 0.8, 1, 1.5 }) do
+    M.camp.scale(k); M.buffs.scale(k)
+    local cl, ct, cw, ch = M.camp.rect()
+    local bl, bt, bw2, bh2 = M.buffs.rect()
+    assert(near(cw, 250 * k) and near(ch, bar:GetHeight() * k) and near(bw2, 332 * k) and near(bh2, 124 * k),
+      string.format("%d%%: the movers at their largest (six icons; six and four members), whatever shows: %.0f x %.0f, %.0f x %.0f", k * 100, cw, ch, bw2, bh2))
+    assert(bt - bh2 >= ct + 7.99 and bt - bh2 <= ct + 8.01 and cl >= 0 and cl + cw <= W and bl >= 0 and bl + bw2 <= W and bt <= H and ct - ch >= 0,
+      string.format("%d%%: Buffs 8 px over Reminders, apart, on the screen", k * 100))
+    local pb = ban.__points[1]
+    assert(near(bar:GetScale(), k) and near(ban:GetScale(), k) and pb.rel == bar and near(pb.y * k, 8) and near(bar.__points[1].y * k, -190),
+      string.format("%d%%: the pieces at their scale, Buffs on Reminders 8 px up, Reminders' centre at -190", k * 100))
+  end
+  said[#said + 1] = "Reminders and Buffs at 80, 100 and 150%: apart, on the screen, their movers at their largest"
+  M.camp.set(nil); M.buffs.set(nil); M.step.set(nil); M.arrow.set(nil)
+  assert(R.Settings().scale == nil and R.Settings().bannerScale == nil and s.arrowScale == nil and near(bar:GetScale(), 1), "set nil: 100% again")
+  said[#said + 1] = "scale: the step frame's centre kept, QuestBank's arrow scaled and the compass's dial by compassSize (24 to 96 px), Reminders and Buffs"
+  assert(#(env.QuestBankDB.errors or {}) == 0, "no error recorded")
+  print("hud layout: " .. table.concat(said, "; "))
+end
 
 local seen = {}
 local unique = {}

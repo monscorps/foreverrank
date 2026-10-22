@@ -42,7 +42,7 @@ QUEST_TOC = os.path.join(QUEST, "Cute_Quest.toc")
 ENGINE_KNOWN = {
     "Data.lua", "Core.lua", "Lists.lua", "Discover.lua", "Survey.lua", "Game.lua", "Loot.lua", "Finds.lua", "Observe.lua", "Timer.lua",
     "Link.lua", "MinimapTiles.lua", "MinimapView.lua", "MinimapRoute.lua", "Minimap.lua", "DungeonMap.lua", "Glow.lua",
-    "Walk.lua", "Camp.lua", "Model.lua", "Legacy.lua", "Travel.lua", "Pins.lua", "QuestMap.lua", "Pins.xml", "Arrow.lua",
+    "Walk.lua", "Remind.lua", "Camp.lua", "Model.lua", "Legacy.lua", "Travel.lua", "Pins.lua", "QuestMap.lua", "Pins.xml", "Arrow.lua",
     "Target.lua", "Sync.lua", "Auto.lua", "Guide.lua", "MapPage.lua", "Gear.lua", "StepFrame.lua", "Tips.lua",
 }
 # Cute_Quest's own files, in the toc's order after the engine

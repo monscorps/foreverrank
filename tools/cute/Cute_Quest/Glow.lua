@@ -821,6 +821,11 @@ function Glow.Useful(name, guid)
   local lvl = UnitLevel and plain(UnitLevel("player")) or 0
   if type(lvl) ~= "number" then lvl = 0 end
   if what == className then
+    -- (the hud round) the Guide's own answer, from the spellbook (Guide.lua G.Trainable): the light on the trainer and
+    -- the step frame's Train line agree. A client without the spellbook's calls: its window's last word, as before
+    local G = QB.Guide
+    local n = G and G.Trainable and G.Trainable()
+    if n ~= nil then return n > 0 and "npc" or nil end
     local t = trainerDB(false)
     if t and t.level then
       if (t.avail or 0) > 0 and lvl >= t.level then return "npc" end

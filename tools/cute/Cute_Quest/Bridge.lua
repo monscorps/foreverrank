@@ -46,6 +46,9 @@ E.mapWindow, E.kindMarks = true, true
 -- the engine's words name the host: "Choose a reward: X is Cute's pick", "Nothing to do: /cute quests", the minimap
 -- menu's "Cute settings"; and they leave out the /qb commands a Cute player is never told of (host: Settings alone)
 E.NAME, E.CMD, E.host = "Cute", "/cute quests", true
+-- (the hud round) the Reminders module is Reminders' only master switch: off, the step frame's line goes with the two
+-- pieces (QuestBank alone keeps the line to its rows when "Reminders on screen" is off: Remind.lua)
+E.remindAll = true
 -- the minimap is the engine's only while Cute's Map module is on (Minimap.lua, Mini.Owned): its wheel, Ctrl-wheel,
 -- Alt-drag, right-click menu, size and place, and the tracking menu's Target; off, the game's own
 function E.MapOn() return Cute.ModuleOn("map") end
@@ -158,6 +161,8 @@ end
 local TITLE = { quests = "Quests", route = "Route", settings = "Settings", journal = "Dungeons", gear = "Gear", map = "Map" }
 function UI.PageName(tab) return TITLE[pageOf(tab)] or "Quests" end
 function UI:ShowTab(tab) self:Open(tab) end
+-- (the hud round) Settings from a reminder's menu: Cute's Reminders section
+function UI.OpenReminders() Cute.Open("settings", "camp") end
 function UI:TogglePage(tab) self:Open(tab) end
 function UI:Toggle() Cute.Open("quests") end
 function UI:Refresh() Cute.Refresh() end
@@ -222,8 +227,36 @@ UI.frame, UI.tab, UI.lastTab, UI.postFrame, UI.scrollToQuest = nil, nil, nil, ni
 -- the Map module's keeping: they are the Route tab's rows now (QB.MAP_FLAGS, the Map module's, is the world map's two)
 QB.MAP_FLAGS = { "mapIcons", "pins" }
 local MINI_FLAGS = { "minimapPins", "minimapLines", "minimapGivers", "mmExtended" }
+-- (the hud review) whether this account chose the Camp module on some character (its box saved, Cute's own
+-- CuteDB.chars[*].modules, Cute/Modules.lua): 0.7's module was off by default, so a light 0.7 kept while it was off is
+-- the engine's default unless someone ticked it once
+local function campChosen()
+  local chars = type(CuteDB) == "table" and type(CuteDB.chars) == "table" and CuteDB.chars or nil
+  for _, rec in pairs(chars or {}) do
+    if type(rec) == "table" and type(rec.modules) == "table" and rec.modules[ADDON .. ":camp"] ~= nil then return true end
+  end
+  return false
+end
 local function firstRun()
   local s = E:Settings()
+  -- (the hud round) the engine's reminders' settings as they are now (Remind.Settings: 6.1.1's switches become Nevers,
+  -- campBar remind.on), before any module's switch reads them; and a kept cuteOff.camp of 0.7 (the Camp module's
+  -- switch then followed campBar, the two buffs rows and the light) rewritten: the module follows remind.on alone, and
+  -- the rows it kept go back to them as kept; the light only where the account chose the module once (campChosen),
+  -- else it stays off until the first-run card's Interact light row, as on a fresh install (the light changes the
+  -- game's soft-target settings, Glow.lua)
+  local fresh = not s.cuteDefaults
+  if E.Remind and E.Remind.Settings then E.Remind.Settings() end
+  local kept = type(s.cuteOff) == "table" and s.cuteOff.camp or nil
+  if type(kept) == "table" and kept["remind.on"] == nil and (kept.campBar ~= nil or kept["remind.buffs"] ~= nil or kept["glow.on"] ~= nil) then
+    if kept["remind.buffs"] ~= nil then s.remind.buffs = kept["remind.buffs"] end
+    if kept["remind.party"] ~= nil then s.remind.party = kept["remind.party"] end
+    if kept["glow.on"] ~= nil and type(s.glow) == "table" and campChosen() then s.glow.on = kept["glow.on"] end
+    s.cuteOff.camp = { ["remind.on"] = kept.campBar ~= false }
+  end
+  -- (a fresh install: the interact light off until the first-run card's row says, since the engine's default is on and
+  -- the light changes the game's soft-target settings, Glow.lua)
+  if fresh and type(s.glow) == "table" then s.glow.on = false end
   s.cuteGuildOff = true
   if type(s.share) == "table" then s.share.guild = false end
   if not s.cuteDefaults then
@@ -251,8 +284,8 @@ local function firstRun()
 end
 
 -- the setup card's door (Cute/Setup.lua): the engine's settings this copy keeps (never QuestBank's), whether this account
--- saved any before this load, and the card's Start written into them. Camp on: the switch's keeping cleared, so the
--- flags the card set stay as set when the module comes on at the reload (Bridge's QB.Follow)
+-- saved any before this load, and the card's Start written into them. Reminders on: the switch's keeping cleared, so
+-- remind.on stays as the card set it when the module comes on at the reload (Bridge's QB.Follow); the light its own
 local savedBefore = false -- (read at ADDON_LOADED, before the engine fills its defaults in)
 Cute.QuestSetup = {
   Settings = function() return E:Settings() end,
@@ -261,10 +294,15 @@ Cute.QuestSetup = {
     local s = E:Settings()
     if p.step ~= nil then s.guide.frame = p.step and true or false; s.arrow = p.step and true or false end
     if p.campOn then
+      -- (the module on: Reminders on screen with it, its only master, PageCamp.lua's Cp.Toggle; an unticked Reminders
+      -- row is the module's to answer, the card's Start choosing it)
       if type(s.cuteOff) == "table" then s.cuteOff.camp = nil end
-      if p.camp ~= nil then s.campBar = p.camp and true or false; s.remind.buffs = p.camp and true or false end
-      if p.light ~= nil then s.glow.on = p.light and true or false end
+      local r = E.Remind and E.Remind.Settings() or s.remind
+      r.on = true
+      s.campBar = true
     end
+    -- (the interact light is its own row, whatever the Reminders row says)
+    if p.light ~= nil then s.glow.on = p.light and true or false end
     if p.accept then s.autoAccept = p.accept end
     if p.handin ~= nil then s.autoTurnIn = p.handin and true or false end
   end,
@@ -309,6 +347,14 @@ f:SetScript("OnEvent", E.Safe(function(self, _, name)
   firstRun()
   -- the modules' switches, now on the saved table (before the engine's login: its files read the flags as they start)
   for id, fn in pairs(QB.Toggles) do fn(Cute.ModuleOn(id)) end
+  -- (the layout round) the on-screen pieces under Cute's layout (Cute/Layout.lua): one lock for them all, which the
+  -- pieces' own drags and the step frame's menu ask and set (QB.LayoutLocked, QB.SetLayoutLocked), and their movers
+  -- (QB.Movers); this character's layout into the engine's settings before the login places them
+  local layout = Cute.Layout
+  if type(layout) == "table" then
+    E.LayoutLocked, E.SetLayoutLocked = layout.Locked, layout.SetLocked
+    layout.Attach(E.Movers)
+  end
   E:Login()
   -- (sub-project G) the guild's finds: Cute's door (Cute/Finds.lua) is the engine's host (Finds.lua Finds.host), told what
   -- you find and drawn with yours on the map; attached after the engine's login, once the data file's rows are in, so

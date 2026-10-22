@@ -3,4 +3,5 @@
   <Binding name="CUTE_QUESTS" category="BINDING_HEADER_CUTE">Cute.Open("quests")</Binding>
   <Binding name="CUTE_MAP" category="BINDING_HEADER_CUTE">Cute.Open("map")</Binding>
   <Binding name="CUTE_SETTINGS" category="BINDING_HEADER_CUTE">Cute_Settings()</Binding>
+  <Binding name="CUTE_LAYOUT" category="BINDING_HEADER_CUTE">Cute.Layout.Toggle()</Binding>
 </Bindings>
