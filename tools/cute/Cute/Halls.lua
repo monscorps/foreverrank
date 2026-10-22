@@ -4,7 +4,8 @@
 --   Queue    each officer's own (CuteDB.halls[club].queue): a row for what an officer is likely to publish (a GOLD STAR
 --            from a run, a hall, a card by hand, a draft) and one digest row a day per source for the rest (the run
 --            cards that are no GOLD STAR); 100 rows at most, 10 from one sender (a full digest of 60 makes room from
---            the sender with the most), none older than 30 days, the oldest out first and never a draft (6 at most)
+--            the sender with the most; 300 digest entries in all), none older than 30 days, the oldest out first and
+--            never a draft (6 at most)
 --   Publish  an officer's set of one to five cards goes on GUILD as 1C, with its sources (a<id> an achievement,
 --            r<run>.<CODE> a run's award, s<stat> a hall's or a record's stat), and shows on the officer's own screen
 --            as everyone sees it; one guild chat line in the same click where the officer ticked it. Greyed for 60 s
@@ -39,6 +40,7 @@ local H = { parts = {}, toasts = {}, ticked = {}, open = {}, answered = {}, wait
 C.Halls = H
 
 local QUEUE_MAX, PER_SENDER, QUEUE_DAYS, DRAFTS, DIGEST_MAX = 100, 10, 30, 6, 60
+local DIGEST_ALL = 300    -- digest entries in all rows (a month of full digests is 5400 cards, megabytes saved)
 local SETS = 30           -- sets kept, newest first
 local GAP, HOUR = 60, 3600
 local PUBLISH_HOUR = 10   -- sets an officer publishes in an hour; past it from a sender, News alone
@@ -300,6 +302,18 @@ local function prune()
     local gone = false
     for i = #q, 1, -1 do if nonDraft(q[i]) then table.remove(q, i); gone = true break end end
     if not gone then break end
+  end
+  -- (300 digest entries in all: the oldest row's oldest first, a row emptied going with it)
+  local total = 0
+  for _, r in ipairs(q) do if r.entries then total = total + #r.entries end end
+  local i = #q
+  while total > DIGEST_ALL and i >= 1 do
+    local r = q[i]
+    if r.entries and #r.entries > 0 then
+      H.ticked[table.remove(r.entries).id] = nil
+      total = total - 1
+      if #r.entries == 0 then table.remove(q, i); i = i - 1 end
+    else i = i - 1 end
   end
 end
 -- room in a full digest for an entry from a sender: the oldest entry of the sender with the most goes, where that one

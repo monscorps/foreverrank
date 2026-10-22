@@ -14356,6 +14356,32 @@ do local function cardsStage()
   end)
   said[#said + 1] = "a full digest makes room from the sender with the most"
 
+  -- the queue's digests at their caps: a month of full digest rows (three a day, sixty entries each) keeps 300 entries
+  -- in all, the oldest out first, so the saved queue stays bounded
+  isolated({ gmember("Yolk", 1, "MAGE") }, function()
+    local yolk = cchar("Yolk", 1)
+    login(yolk)
+    tickAll(20)
+    local t0 = yolk.env.GetServerTime()
+    for d = 1, 30 do
+      for _, dg in ipairs({ "ach", "run", "first" }) do
+        for k = 1, 60 do
+          local g = string.format("Player-4242-%08X", 0x0B000000 + d * 1000 + k)
+          H(yolk):Queue({ id = "cap:" .. dg .. ":" .. d .. ":" .. k, src = dg, from = "S" .. d .. "x" .. k .. "-Forever", digest = dg, day = string.format("2026-09-%02d", d),
+            at = t0 - (31 - d) * 3600, what = string.rep("w", 40), mark = "server", t = t0, card = { guid = g, sfx = g:match("([^%-]+)$"), name = "Abcdefghijkl", class = "WARRIOR",
+            kind = "ach", title = string.rep("t", 24), line = string.rep("l", 80), value = "Earned 21 Oct", valueLabel = string.rep("v", 24), icon = 236544, source = "a150021" } })
+        end
+      end
+    end
+    local entries, rows = 0, 0
+    for _, r in ipairs(H(yolk).Rows()) do rows = rows + 1; entries = entries + #(r.entries or {}) end
+    local bytes = #json(yolk.env.CuteDB.halls)
+    assert(entries <= 300 and rows <= 100, "300 digest entries in all: " .. entries .. " in " .. rows .. " rows")
+    assert(H(yolk).Item("cap:first:30:60") and not H(yolk).Item("cap:ach:1:1"), "the oldest out first")
+    assert(bytes < 250000, "the saved queue bounded: " .. bytes)
+    said[#said + 1] = string.format("a month of full digests: 300 entries kept, the oldest out first, the queue %d KB", math.ceil(bytes / 1024))
+  end)
+
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end
 
