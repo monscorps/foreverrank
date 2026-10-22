@@ -17,7 +17,7 @@
 --            entry out
 --   Falls    a higher value for "most", a lower one for "fastest". A fastest clear needs two voices: two members'
 --            values within five seconds (everyone in a run sets the same time); the record is the larger of the
---            fastest agreeing pair, so no one voice lowers it, its holder the member it is (ties to the smaller GUID).
+--            fastest agreeing pair, so no one voice lowers it, its holder the member it is (ties to the first heard).
 --            Live only: a delta (1D) 90 s into a login,
 --            or your own value changing; a full record (1F) and what changed while you were away update it quietly
 --   On       every record ships off. The officers' list, CuteDB.halls[club].recOn, travels as 1O|<at>|<code>.<code>...
@@ -312,7 +312,10 @@ end
 -- one group's where they came together
 Rec.came = {}
 local function came(id, g) local t = Rec.came[id]; if not t then t = {}; Rec.came[id] = t end t[g] = gtime() end
--- the voices for a clear: every member with a value for it that counts, smallest first, ties to the smaller GUID
+-- the voices for a clear: every member with a value for it that counts, smallest first. Equal times go to the one that
+-- came live first this session (Rec.came), before any that did not come live, those by the smaller GUID (the launch
+-- audit: ties went to the smaller GUID alone, so an edited copy repeating a group's exact time, its GUID sorting first,
+-- took the holder's name and the NEW RECORD)
 local function voices(id)
   local out = {}
   local R = C.Roster
@@ -323,7 +326,14 @@ local function voices(id)
       out[#out + 1] = { g = g, v = v, row = row }
     end
   end
-  table.sort(out, function(a, b) if a.v ~= b.v then return a.v < b.v end return C.Comm.Before(a.g, b.g) end)
+  local at = Rec.came[id] or {}
+  table.sort(out, function(a, b)
+    if a.v ~= b.v then return a.v < b.v end
+    local ta, tb = at[a.g], at[b.g]
+    if ta and tb then if ta ~= tb then return ta < tb end
+    elseif ta or tb then return ta ~= nil end
+    return C.Comm.Before(a.g, b.g)
+  end)
   return out
 end
 Rec.Voices = voices
@@ -336,7 +346,7 @@ function Rec.RangeTop(n)
 end
 -- a clear's record (11.3): the smallest time another member's backs from at or under it within five seconds, the
 -- larger of the agreeing pair, so no one voice can lower it (an edited copy's a few seconds under a real clear backs
--- the real one); its holder the member with that time, ties to the smaller GUID
+-- the real one); its holder the member with that time, ties to the one heard first (voices)
 function Rec:Clear(n, live)
   if type(n) ~= "number" then return end
   local id = "c" .. n

@@ -17150,6 +17150,24 @@ do local function cardsStage()
       rok.C.Policy.ver = rok.C.Policy.ver + 1
       assert(recOf(rok, "jumps") == nil, "a saved one past the bound dropped")
     end)
+
+    -- a fastest clear's holder among equal times is the voice that came live first, not the smaller GUID: an edited copy
+    -- repeating a group's exact time took its holder's name (and a NEW RECORD) where its GUID sorted first
+    case("a clear's tie to the voice that came first", { gmember("Tia", 1), gmember("Tub", 3, "ROGUE"), gmember("Tey", 3, "PRIEST") }, function()
+      local tia, tub, tey = cchar("Tia", 1), cchar("Tub", 3, { class = "ROGUE" }), cchar("Tey", 3, { class = "PRIEST" })
+      for _, c in ipairs({ tia, tub, tey }) do login(c) end
+      tickAll(100)
+      -- (the larger GUID's time comes first; the smaller's, the same time, after it)
+      local first, second = tub, tey
+      if tia.C.Comm.Before(tub.o.guid, tey.o.guid) then first, second = tey, tub end
+      assert(Rc(first).OwnClear(36, 1500), "the first clear")
+      tickAll(125)
+      assert(recOf(tia, "c36") == nil, "one voice is no record")
+      assert(Rc(second).OwnClear(36, 1500), "the same time again")
+      tickAll(125)
+      local e = recOf(tia, "c36")
+      assert(e and e.v == 1500 and e.g == first.o.guid, "the record is the voice that came first: " .. tostring(e and (e.g == second.o.guid and "the later one" or e.g)))
+    end)
     assert(#failed == 0, "fix-cards: " .. #failed .. " case(s) failed:\n  " .. table.concat(failed, "\n  "))
     said[#said + 1] = "the launch audit's cards findings: " .. table.concat(passed, "; ")
   end
