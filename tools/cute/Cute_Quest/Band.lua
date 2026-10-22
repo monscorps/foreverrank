@@ -174,6 +174,26 @@ Cute.QuestArt = {
     end
   end,
 }
+-- the cover of a dungeon or a raid for a run report's header (Cute's CardFrame.lua CF:Report, its 130 x 72 cover): the
+-- Encounter Journal art or loading screen as DM.SetCover cuts it for w x h, as { texture, texcoords }; nil where the
+-- engine knows no cover for the place (the report shows the Dungeon atlas then). By the place's name as the instance
+-- gave it, the catalog holding no instance ids; inst, the instance's id, is the report's and kept for a later lookup
+local function cutCover(cat, data, w, h)
+  local out = {}
+  local probe = {
+    SetTexture = function(_, file) out.texture = file end,
+    SetTexCoord = function(_, a, b, c, d) out.texcoords = { a, b, c, d } end,
+  }
+  E.DMap.SetCover(probe, data, cat, w, h)
+  return out.texture and out or nil
+end
+Cute.QuestCover = function(inst, place, w, h)
+  if type(place) ~= "string" or place == "" or not (E.DMap and E.DMap.SetCover) then return nil end
+  local cat = catOf({ name = place })
+  local data = cat and E.DMap.Data(cat.key)
+  if not (data and (data.cover or cat.bg)) then return nil end
+  return cutCover(cat, data, w or 130, h or 72)
+end
 Cute.QuestBand = {
   On = function() return Cute.ModuleOn("quests") and E.logReady == true end,
   -- why not, in a line (the engine reads the log at the game's first QUEST_LOG_UPDATE)

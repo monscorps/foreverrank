@@ -12958,12 +12958,10 @@ do local function runsStage()
     gus.C.UI:Open("settings", "runs")
     assert(texts(gus):find("Show the report when a run ends", 1, true) and texts(gus):find("Long groups outside instances", 1, true), "Settings > Runs: its rows")
     check(gus.C.UI.frame, "runs: Settings > Runs")
-    -- the cover, where Cute_Quest gives one, and a raid's mentions
-    gus.env.Cute.QuestCover = function() return { texture = 1530011, texcoords = { 0, 0.684, 0, 0.742 } } end
+    -- the cover where Cute_Quest gives one, through its own door (merge2 M6: the stand-in door this round had hid that
+    -- none was there); without Cute_Quest the Dungeon atlas. And a raid's mentions
     CF:Report(CF.rep)
-    assert(CF.cover:IsShown() and CF.label.__points[1].x == 146 and CF.title:GetText() == "The Deadmines", "the cover, the label beside it, the place whole: " .. CF.title:GetText())
-    check(CF.frame, "runs: the report, a cover")
-    gus.env.Cute.QuestCover = nil
+    assert(not CF.cover:IsShown() and CF.atlas:IsShown() and CF.title:GetText() == "The Deadmines", "no Cute_Quest: the Dungeon atlas, the place whole: " .. CF.title:GetText())
     local raid = gus.C.RunsUI.Test(true)
     assert(CF.frame:GetHeight() == 662 and #raid.mentions >= 5 and CF.label:GetText() == "TEST RECAP", "a raid's test: 662 high, the mentions: " .. CF.frame:GetHeight())
     check(CF.frame, "runs: a raid's test report")
@@ -14835,6 +14833,8 @@ end
 -- there on its own, as it drew the retired Guide page: Rule 0's verdict (Rules.lua R:Checked), the model built again
 -- (R:Dirty), a mate online or off in the roster, and a new member's values (Roster.lua R:Apply). Hidden, it waits
 -- (it draws as it opens).
+-- M6: a run report's header shows the dungeon's cover through Cute_Quest's door (Band.lua Cute.QuestCover: the
+-- Encounter Journal art as DM.SetCover cuts it for the 130 x 72 cover), the Dungeon atlas where it knows no cover.
 do
   local CASES = {}
   local function member(name, rank, o)
@@ -14883,6 +14883,44 @@ do
     R:Dirty(true); GUILD[2].online = false; fire(c, "GUILD_ROSTER_UPDATE"); tick(c, 6)
     assert(draws == 0, "hidden: nothing drawn: " .. draws)
     win.Draw = nil
+    leave(c)
+  end) end }
+
+  -- (one client with Cute_Quest for M6 and M9, the guild's officer)
+  local function questClient()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, log = { [7] = 2 } }))
+    login(c); tickAll(6)
+    return c, c.addons[2].private
+  end
+
+  CASES[#CASES + 1] = { "M6 a run report's cover through Cute_Quest's door", function() iso({ member("Rone", 1) }, function()
+    local c, QB = questClient()
+    local CF = c.C.CardFrame
+    local function errs()
+      local out = {}
+      for _, db in ipairs({ c.env.CuteDB, c.env.CuteQuestDB }) do for _, e in ipairs(db.errors or {}) do out[#out + 1] = tostring(e.where) .. ": " .. tostring(e.msg) end end
+      return out
+    end
+    local before = #errs()
+    assert(type(c.env.Cute.QuestCover) == "function", "Cute_Quest gives the run report its cover door")
+    -- (a report of the Deadmines with no cards: the cover is the header's; the cards' pictures are the runs stage's)
+    local rep = { id = "m2-cover", kind = "d", inst = 36, place = "The Deadmines", start = c.C.ServerNow() - 1800, dur = 1800, bosses = 2, known = 6,
+      wipes = 0, deaths = 0, cards = {}, mentions = {}, gone = {}, members = {}, n = 2 }
+    CF:Report(rep)
+    local D = QB.Data.DMAP.d1581
+    assert(D and D.coverKind == "DUNGEONBUTTON", "the Deadmines' cover is the EJ's art")
+    local tc = CF.cover.__tc or {}
+    assert(CF.cover:IsShown() and CF.cover.__tex == D.cover and not CF.atlas:IsShown() and CF.label.__points[1].x == 146,
+      "the Deadmines' cover on the report, the label beside it: " .. tostring(CF.cover.__tex))
+    assert(tc[1] and tc[2] <= 0.68359375 + 1e-9 and tc[4] <= 0.7421875 + 1e-9 and tc[1] >= 0 and tc[3] >= 0, "as the EJ cuts it: " .. table.concat(tc, ", "))
+    check(CF.frame, "merge2: the report, the Deadmines' cover through Cute_Quest")
+    rep.place = "Nowhere Keep"
+    CF:Report(rep)
+    assert(not CF.cover:IsShown() and CF.atlas:IsShown(), "a place with no cover: the Dungeon atlas")
+    CF.frame:Hide()
+    local after = errs()
+    assert(#after == before, "no error recorded by the reports: " .. table.concat(after, " | ", before + 1))
+    if before > 0 then print("merge2 M6: recorded at the login, before the reports: " .. table.concat(after, " | ", 1, before)) end
     leave(c)
   end) end }
 

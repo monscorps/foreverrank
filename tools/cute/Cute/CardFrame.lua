@@ -137,8 +137,13 @@ function CF:Report(rep, opts)
   rep = C.Runs.Visible(rep)
   self.rep, self.test = rep, opts.test
   local cards = rep.cards or {}
-  -- the header: the cover (a dungeon's or a raid's, where Cute_Quest gives one) or the atlas beside the label
-  local cover = rep.kind ~= "g" and rep.inst and Cute and type(Cute.QuestCover) == "function" and Cute.QuestCover(rep.inst) or nil
+  -- the header: the cover (a dungeon's or a raid's, where Cute_Quest gives one: Band.lua Cute.QuestCover, by the
+  -- place's name, cut for the 130 x 72 cover) or the atlas beside the label
+  local cover
+  if rep.kind ~= "g" and rep.inst and Cute and type(Cute.QuestCover) == "function" then
+    local okC, c = pcall(Cute.QuestCover, rep.inst, rep.place, 130, 72)
+    cover = okC and type(c) == "table" and c or nil
+  end
   local x0 = 16
   if cover then
     local ok = pcall(function()
