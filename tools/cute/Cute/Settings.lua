@@ -173,10 +173,11 @@ function Col:Head(s)
   local _, h = label(self, self.x, self.y, self.w, s, WHITE, nil, 13)
   self.y = self.y + math.max(HEAD, h + 5)
 end
--- a line of explanation, dim, wrapping to the column
-function Col:Note(s)
+-- a line of explanation, dim, wrapping to the column; indent: room on the left (a note under an indented row)
+function Col:Note(s, indent)
   self.fresh = false
-  local _, h = label(self, self.x, self.y + 1, self.w, s, DIM, nil, 12)
+  indent = indent or 0
+  local _, h = label(self, self.x + indent, self.y + 1, self.w - indent, s, DIM, nil, 12)
   self.y = self.y + math.max(NOTE, h + 4)
 end
 -- a check row: the box with its label, one button the width of the column (up to the right-hand words), so a click
@@ -706,7 +707,7 @@ local function drawModules(col, officer)
       col:Check(e.title .. " for the whole guild", gs.on(), officer, function(v) gs.set(v); redraw() end,
         not officer and "Set by the officers" or nil, gs.tip, indent + 20)
       local note = officer and gs.note and gs.note()
-      if note then col:Note(note) end
+      if note then col:Note(note, indent + 40) end
     end
   end
   col:Check("Guild", true, false, function() end, "always")

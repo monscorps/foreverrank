@@ -19733,6 +19733,13 @@ do
         else
           assert(not sw.row.__disabled, "the officer's to click")
         end
+        -- (an officer's note under a switch, why guild news cannot vouch here: under the switch's label)
+        local why = c == o and t == "Achievements" and c.C.Achievements and c.C.Achievements.NewsWords and c.C.Achievements.NewsWords()
+        if why then
+          local f = UIX.text(c, why)
+          GEN = GEN + 1
+          assert(f and rectOf(f).l >= sw.x + 18, "the switch's note under its label: " .. tostring(f and rectOf(f).l) .. " against " .. sw.x)
+        end
       end
       check(sframe(c), "fix-cute-ui U11 Settings > Modules with the guild switches, " .. (c == o and "officer" or "member"))
     end
