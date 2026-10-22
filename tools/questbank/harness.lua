@@ -22941,6 +22941,35 @@ do
     ev(c, "ZONE_CHANGED"); tick(c, 0)
     local rec = c.QB.Guide.Reminder()
     assert(not (rec and rec.key == "flight"), "a continent never read: nothing")
+    -- (the line's words whole, on a second row where one is too narrow: every flight master's town of both sides and
+    -- every trainer of the seed, in the line's two forms; the longest laid out)
+    local w = hud("Wordy", "WARRIOR", "Warrior", 1, {}, { level = 20 })
+    local ws = w.QB:Settings()
+    ws.guide.on, ws.guide.frame, ws.welcome = true, true, nil
+    w.QB.StepFrame.Apply()
+    local G, SFw = w.QB.Guide, w.QB.StepFrame
+    local real = G.Reminder
+    local wline, wf = w.env.QuestBankStep.remind, w.env.QuestBankStep
+    local all = {}
+    for _, side in ipairs({ "A", "H" }) do for _, h in ipairs(w.QB.Data.HUB[side]) do all[#all + 1] = "Learn the flight path: " .. h[1] end end
+    for _, t in ipairs(w.QB.Data.TRAINER) do all[#all + 1] = "Train: 12 new spells \194\183 " .. t[2] end
+    local fake = { key = "flight", lit = false, tex = 132239, mins = 12, word = "12 min" }
+    G.Reminder = function() return fake end
+    fake.text = "Learn the flight path: Goldshire"; SFw.RemindChanged(fake)
+    local h1 = wf:GetHeight()
+    for _, text in ipairs(all) do
+      fake.text = text
+      SFw.RemindChanged(fake)
+      assert(wline:IsShown() and wline.text:GetText() == text, "never cut: '" .. text .. "' drawn as '" .. tostring(wline.text:GetText()) .. "'")
+    end
+    table.sort(all, function(a, b) return textWidth(a, 12) > textWidth(b, 12) end)
+    for i = 1, 3 do
+      fake.text = all[i]; SFw.RemindChanged(fake)
+      assert(wf:GetHeight() == h1 + 14, "two rows: the frame 14 px taller: " .. wf:GetHeight() .. " for " .. h1)
+      for _, pr in ipairs(checkLayout(wf, "step frame, the line on two rows: " .. all[i])) do problems[#problems + 1] = pr end
+    end
+    layouts[#layouts + 1] = dumpLayout(wf, "the step frame: the line's longest words on two rows")
+    G.Reminder = real
   end }
 
   -- 15. Use: a quest starter not taken, then a clam, then a blueprint; a locked box (an ErrorLine) left out; Never on

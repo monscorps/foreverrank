@@ -21,6 +21,7 @@ local WIDTH, PAD, ROW = 260, 12, 18 -- (PAD: the text sits inside the 12 px bord
 -- the text starts after the icon (TEXT_X) and leaves the minutes their column (MINS_W)
 local ROW1, TEXT_X, MINS_W = 34, 20, 44
 local LINE_MINS = 38 -- (the reminder line's minutes: "12 min" at 11 px)
+local LINE_TWO = 14 -- (the reminder line's second row, where its words need one: 12 px)
 local INNER = WIDTH - PAD * 2
 -- (the windows round) a host's look, QB.Skin.stop (Cute_Quest's): the frame as a stop of the route, standing on the
 -- world with no backdrop (the setting guide.backdrop brings the host's flat one back) and its text outlined and
@@ -576,13 +577,28 @@ local function drawLine(line, rec)
   end
   local grey = rec.desat == true
   if line.qbGrey ~= grey then line.qbGrey = grey; line.icon:SetDesaturated(grey) end
-  -- (the words take the minutes' room where there are none)
+  -- (the words take the minutes' room where there are none. The hud review: never cut, since the trainer's or the
+  -- town's name is the line's point and one row is too narrow for many, "Learn the flight path: Sentinel Hill" 181 px
+  -- of the 178: a second row where the words need it, the frame that much taller. The line changes out of a fight only,
+  -- Remind's refresh, so the frame's height with it)
   local tw = INNER - TEXT_X - (rec.mins and LINE_MINS or 0)
-  if line.text:GetWidth() ~= tw then line.text:SetWidth(tw); line.text.qbText, line.text.qbA = nil, nil end
-  rowText(line.text, rec.text or "", nil)
+  local text, t = rec.text or "", line.text
+  if t.qbLine ~= text or t.qbW ~= tw then
+    t.qbLine, t.qbW = text, tw
+    t:SetWidth(tw)
+    t:SetWordWrap(false)
+    t:SetText(text)
+    local two = ((t.GetUnboundedStringWidth or t.GetStringWidth)(t) or 0) > tw
+    t:SetWordWrap(two)
+    t:SetHeight(two and 14 + LINE_TWO or 14)
+    line.rows = two and 2 or 1
+  end
   line.mins:SetText(rec.mins and rec.word or "")
   local col = rec.cat == "xp" and QUEST or nil
   if col then line.bar:SetColorTexture(col[1], col[2], col[3], 1); line.bar:Show() else line.bar:Hide() end
+  local h = ROW + (line.rows == 2 and LINE_TWO or 0)
+  if line:GetHeight() ~= h then line:SetHeight(h) end
+  return h
 end
 
 -- the fight over (PLAYER_REGEN_ENABLED, from Core.lua's frame): a change that waited goes through now. The frame
@@ -1072,11 +1088,11 @@ function SF.Refresh()
   if STOP then y = PAD + ROW1 + 6 + ROW * 2 + 4
   else y = PAD + ROW1 + ROW * 2 + ((text or nq > 0) and ROW or 0) end
   if remind then
-    drawLine(f.remind, rl)
+    local lh = drawLine(f.remind, rl)
     f.remind:ClearAllPoints()
     f.remind:SetPoint("TOPLEFT", PAD, -y)
     f.remind:Show()
-    y = y + ROW
+    y = y + lh
   else
     f.remind:Hide()
     f.remind.rec = nil
