@@ -1298,7 +1298,8 @@ function P:Purge(ready)
   -- (the halls' store, CuteDB.halls[club]: each member's weekly values as the roster took them, kept for Last week,
   -- go where the officers keep that stat; and what an officer's client alone gathers goes from one that is no
   -- officer's: the Queue's run cards, earns and firsts, a card locked to the officers, the firsts ledger and the earns
-  -- it remembered. A demoted officer kept them all, and a member the weekly values heard before a stat was closed)
+  -- it remembered. A demoted officer kept them all, and a member the weekly values heard before a stat was closed.
+  -- The weekly store then goes whole below, H.PurgeWeeks: a member's client keeps none of it)
   local halls = type(CuteDB.halls) == "table" and C.Halls and C.Halls.DB and C.Halls.DB() or nil
   if halls then
     for _, rec in pairs(halls.weeks) do
@@ -1344,6 +1345,8 @@ function P:Purge(ready)
   -- (the Readys a policy change took: each sender's next read says it again, and an offline member's Ready unchanged
   -- would never come with what changed since this client's last session: Comm.lua M:Unheld)
   if readyGone and C.Comm and C.Comm.Unheld then C.Comm:Unheld() end
+  -- (the halls' weekly store, which only an officer's hall composer reads: a member's client keeps none, Halls.lua)
+  if C.Halls and C.Halls.PurgeWeeks then traces = traces + C.Halls.PurgeWeeks() end
   if n > 0 then
     R:Changed()
     if C.Rules then C.Rules:Dirty(true) end

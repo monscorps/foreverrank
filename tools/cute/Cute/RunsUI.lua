@@ -130,9 +130,11 @@ local function placeLine(rep)
   if rep.kind ~= "g" then s = s .. DOT .. (rep.bosses or 0) .. "/" .. math.max(rep.known or 0, rep.bosses or 0) end
   return s
 end
--- the band's line for the run on now: "Now: The Deadmines, 12:30, 3 bosses, scribe Brann" (dots between)
+-- the band's line for the run on now: "Now: The Deadmines, 12:30, 3 bosses, report by Brann" (dots between); who
+-- writes the report left out where it is you or nobody known (the launch audit: "scribe you", the protocol's word)
 function RU.BandText(snap)
-  return "Now: " .. snap.place .. DOT .. A().Clock(snap.t) .. (snap.kind ~= "g" and (DOT .. snap.bosses .. (snap.bosses == 1 and " boss" or " bosses")) or "") .. DOT .. "scribe " .. snap.scribe
+  local by = (type(snap.scribe) == "string" and snap.scribe ~= "you" and snap.scribe ~= "?") and (DOT .. "report by " .. snap.scribe) or ""
+  return "Now: " .. snap.place .. DOT .. A().Clock(snap.t) .. (snap.kind ~= "g" and (DOT .. snap.bosses .. (snap.bosses == 1 and " boss" or " bosses")) or "") .. by
 end
 -- the band's clock: one timer at a time, a second apart, while the Runs tab shows its run (it stops by itself)
 function RU.Tick()
@@ -199,7 +201,7 @@ function RU.Draw(ui)
       b:SetWidth(70)
       b:SetLabel("End run")
       b:SetOn(true)
-      b:SetScript("OnClick", function() R():EndRun(); C.UI:Draw() end)
+      b:SetScript("OnClick", C.Safe(function() R():EndRun(); C.UI:Draw() end, "runs: end run"))
       b:SetScript("OnEnter", nil); b:SetScript("OnLeave", nil)
     end
     y = y + 24
@@ -215,7 +217,7 @@ function RU.Draw(ui)
     b:SetWidth(150)
     b:SetLabel("Show a test report")
     b:SetOn(true)
-    b:SetScript("OnClick", function() RU.Test(false) end)
+    b:SetScript("OnClick", C.Safe(function() RU.Test(false) end, "runs: test"))
     b:SetScript("OnEnter", nil); b:SetScript("OnLeave", nil)
     y = y + 24
   end

@@ -137,28 +137,34 @@ H.Prefs = settings
 -- week moves what was held to p; a value that falls within a week is the member's own Monday (a client's week turns
 -- by its own clock) and moves to p as last week's. Yours are Sample's (CuteDB.chars[me].lastWeek, the week a reset
 -- replaced)
+-- (The launch audit) only the officers' hall composer reads it (H.ThisWeek, H.LastWeek: H.ValueOf), and only what goes
+-- to Everyone (H.Statable), so only an officer's client keeps it, only such values, under the GUID the sender string
+-- bears out (R:GuidOf: never the message's own guid, which an edited copy may make another member's). 0.9 kept every
+-- member's week on every client, closed ones and whispered ones too, for good: a member's client deletes what it holds
+-- when the officers close a stat (Policy.lua P:Purge), an officer's when it is one no more and when it leaves the guild
+-- (Roster.lua R:LeftGuild: H.PurgeWeeks), and a member the roster no longer lists or a week no hall reads goes (hourly,
+-- H.PruneWeeks)
 ----------------------------------------------------------------------------
-local function guidOfSender(sender, kv)
-  local R = C.Roster
-  local g = R and R.GuidOf and R:GuidOf(sender) or nil
-  if not g and type(kv.guid) == "string" and R and R.byGuid and R.byGuid[kv.guid] then g = kv.guid end
-  return g
-end
 function H:Seen(sender, kv)
   if type(kv) ~= "table" then return end
   local weekly = C.Sample.WEEKLY
+  local R, P = C.Roster, C.Policy
   local any = false
   for id, v in pairs(kv) do if weekly[id] and type(v) == "number" then any = true break end end
+  if not (any and R and R:OfficerStill()) then return end
+  any = false
+  for id, v in pairs(kv) do if weekly[id] and type(v) == "number" and P:Route(id) == "all" then any = true break end end
   if not any then return end
-  local g = guidOfSender(sender, kv)
+  local g = R:GuidOf(sender)
   local n = H.WeekNow()
   if not (g and n) then return end
+  if not H.weeksPruned or gtime() - H.weeksPruned >= HOUR then H.weeksPruned = gtime(); H.PruneWeeks() end
   local weeks = H.DB().weeks
   local rec = weeks[g]
-  if type(rec) ~= "table" or type(rec.v) ~= "table" then rec = { n = n, v = {} }; weeks[g] = rec end
-  if rec.n ~= n and rec.n < n then rec.p = { n = rec.n, v = rec.v }; rec.n, rec.v = n, {} end
+  if type(rec) ~= "table" or type(rec.v) ~= "table" or type(rec.n) ~= "number" then rec = { n = n, v = {} }; weeks[g] = rec end
+  if rec.n < n then rec.p = { n = rec.n, v = rec.v }; rec.n, rec.v = n, {} end
   for id, v in pairs(kv) do
-    if weekly[id] and type(v) == "number" then
+    if weekly[id] and type(v) == "number" and P:Route(id) == "all" then
       local cur = rec.v[id]
       if type(cur) == "number" and v < cur then
         if not (type(rec.p) == "table" and rec.p.n == n - 1) then rec.p = { n = n - 1, v = {} } end
@@ -190,6 +196,29 @@ function H.ThisWeek(guid, id)
   local rec = H.DB().weeks[guid]
   if type(rec) == "table" and rec.n == H.WeekNow() and type(rec.v) == "table" then return rec.v[id] end
   return nil
+end
+-- the weeks no hall reads: a member's held from before last week (Last week reads n - 1 at most), and one the roster no
+-- longer lists, where its last read was whole (a member who left: the roster prunes their record too). The number gone
+function H.PruneWeeks()
+  local n = H.WeekNow()
+  if not n then return 0 end
+  local R = C.Roster
+  local whole = R and R.trusted and R.listedWhole and R.byGuid or nil
+  local weeks, gone = H.DB().weeks, 0
+  for g, rec in pairs(weeks) do
+    if type(rec) ~= "table" or type(rec.n) ~= "number" or rec.n < n - 1 or (whole and not whole[g]) then weeks[g] = nil; gone = gone + 1 end
+  end
+  return gone
+end
+-- every week held of a guild (club, else this one's) deleted: a member's client, whose halls read none (Policy.lua
+-- P:Purge), and an officer's that leaves the guild (Roster.lua R:LeftGuild). The number gone
+function H.PurgeWeeks(club)
+  local d
+  if club ~= nil then d = type(CuteDB.halls) == "table" and CuteDB.halls[tostring(club)] or nil else d = H.DB() end
+  if type(d) ~= "table" or type(d.weeks) ~= "table" then return 0 end
+  local gone = 0
+  for g in pairs(d.weeks) do d.weeks[g] = nil; gone = gone + 1 end
+  return gone
 end
 
 ----------------------------------------------------------------------------
@@ -1147,7 +1176,7 @@ function H.PickStat(period, onPick, owner, allow)
 end
 
 ----------------------------------------------------------------------------
--- showing (9.6): a set first as a toast, one row 420 x 48 at the top centre, 100 below the screen's top: the label in
+-- showing (9.6): a set first as a toast, one row 420 x 48 at the top centre, 20 below the screen's top: the label in
 -- its colour, the title, up to three names in class colour; a click opens the set; it goes after 10 s unless the
 -- mouse is on it. One at a time, three waiting, two an hour, the rest to News quietly; never in combat, an encounter,
 -- a loading screen or a dungeon or raid: waiting ones show after PLAYER_REGEN_ENABLED and out of the instance
@@ -1179,24 +1208,62 @@ local function names(set, max)
   local more = #(set.cards or {}) - max
   return table.concat(out, ", ") .. (more > 0 and (" and " .. more .. " more") or "")
 end
--- the toast's place: the top's middle, 100 below the top. (The merge3 review) under the engine's clock strip where the
--- strip stands there now (Timer.lua: TOP 0 -80, 24 px tall, up to 200% from its mover; Cute_Quest's Band.lua door
--- Cute.QuestClock), 6 below it, so the clock's text is never covered
-local TOAST_W, TOAST_H, TOAST_Y = 420, 48, -100
-local function placeToast(f)
-  local y = TOAST_Y
+-- the toast's place: the top's middle, 20 below the top, so 20 to 68 px down. (The launch audit) 0.9's 100 stood on the
+-- game's error and progress text for the toast's 10 s ("Kobold Vermin slain: 3/8" as a fight ends, when a waiting toast
+-- shows): UIErrorsFrame (Blizzard_UIErrorsFrame: TOP 0 -122, 512 x 60, DIALOG, its newest line on top) is 122 to 182 px
+-- down, and the toast never stands there, nor under it, where the engine's arrow stands under Cute (Arrow.lua A.Place:
+-- TOP 0 -190, the step frame's SF.TOP_Y). 20 clears the engine's clock strip at its default too (Timer.lua: TOP 0 -80,
+-- 24 px tall, up to 200% from its mover; Cute_Quest's Band.lua door Cute.QuestClock). What stands in the toast's column
+-- now, the strip where it was dragged and the game's top-centre widgets where they show (a contested zone's score:
+-- UIWidgetTopCenterContainerFrame, Blizzard_UIWidgets, TOP 0 -15, as tall as what it shows), is kept clear: the place
+-- nearest 20 above the error text that touches none of them, 6 px apart (above a dragged strip before under it, where
+-- that is nearer); where none does, the one over the least of them
+local TOAST_W, TOAST_H, TOAST_Y, TOAST_GAP = 420, 48, -20, 6
+local ERRORS_TOP = 122
+-- (each thing in the toast's column as { top, bottom }, px down from the screen's top)
+local function inColumn()
+  local out = {}
+  local W, Ht = UIParent:GetWidth() or 1920, UIParent:GetHeight() or 1080
+  local tl = (W - TOAST_W) / 2
   local door = C.API and C.API.QuestClock
   if type(door) == "function" then
     local ok, l, t, w, h = pcall(door)
     l, t, w, h = tonumber(l), tonumber(t), tonumber(w), tonumber(h)
-    if ok and l and t and w and h then
-      local W, Ht = UIParent:GetWidth() or 1920, UIParent:GetHeight() or 1080
-      local tl, tt = (W - TOAST_W) / 2, Ht + TOAST_Y
-      if l < tl + TOAST_W and tl < l + w and t - h < tt and tt - TOAST_H < t then y = math.min(TOAST_Y, t - h - Ht - 6) end
+    if ok and l and t and w and h and h > 0 and l < tl + TOAST_W and tl < l + w then out[#out + 1] = { Ht - t, Ht - t + h } end
+  end
+  local wf = UIWidgetTopCenterContainerFrame
+  if type(wf) == "table" and type(wf.IsVisible) == "function" and C.Get(wf.IsVisible, wf) == true then
+    local t, h, k = C.Plain(C.Get(wf.GetTop, wf)), C.Plain(C.Get(wf.GetHeight, wf)), C.Plain(C.Get(wf.GetEffectiveScale, wf))
+    local u = UIParent:GetEffectiveScale() or 1
+    if type(t) == "number" and type(h) == "number" and h > 1 and type(k) == "number" and type(u) == "number" and u > 0 then
+      out[#out + 1] = { Ht - t * k / u, Ht - (t - h) * k / u }
     end
   end
+  return out
+end
+-- the toast's top, px down from the screen's top
+function H.ToastTop()
+  local list = inColumn()
+  local function over(y)
+    local n = 0
+    for _, o in ipairs(list) do n = n + math.max(0, math.min(y + TOAST_H, o[2]) - math.max(y, o[1])) end
+    return n
+  end
+  local want = -TOAST_Y
+  local cands = { want, 0 }
+  for _, o in ipairs(list) do cands[#cands + 1] = o[1] - TOAST_GAP - TOAST_H; cands[#cands + 1] = o[2] + TOAST_GAP end
+  local best, most
+  for _, y in ipairs(cands) do
+    if y >= 0 and y + TOAST_H <= ERRORS_TOP then
+      local n, d = over(y), math.abs(y - want)
+      if not best or n < most or (n == most and (d < math.abs(best - want) or (d == math.abs(best - want) and y < best))) then best, most = y, n end
+    end
+  end
+  return best or want
+end
+local function placeToast(f)
   f:ClearAllPoints()
-  f:SetPoint("TOP", UIParent, "TOP", 0, y)
+  f:SetPoint("TOP", UIParent, "TOP", 0, -H.ToastTop())
 end
 local function toastFrame()
   if H.toastFrame then return H.toastFrame end
@@ -1421,7 +1488,7 @@ local function bandButton(ui, x, w, label, on, fn, tip)
   b:SetWidth(w)
   b:SetLabel(label)
   b:SetOn(on and true or false)
-  b:SetScript("OnClick", function() if on then fn() end end)
+  b:SetScript("OnClick", C.Safe(function() if on then fn() end end, "halls: band"))
   if tip then
     b:SetScript("OnEnter", C.Safe(function(self) GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); tip(GameTooltip); GameTooltip:Show() end, "halls: tooltip"))
     b:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1571,7 +1638,7 @@ local function scrollButton(ui, x, y, w, label, fn)
   b:SetWidth(w)
   b:SetLabel(label)
   b:SetOn(true)
-  b:SetScript("OnClick", fn)
+  b:SetScript("OnClick", C.Safe(fn, "halls: button"))
   b:SetScript("OnEnter", nil); b:SetScript("OnLeave", nil)
   return b
 end
@@ -1881,7 +1948,7 @@ function Col:Pick(text, value, fn, tip)
   b:SetWidth(200)
   b:SetLabel(value)
   b:SetOn(true)
-  b:SetScript("OnClick", function(btn) fn(btn) end)
+  b:SetScript("OnClick", C.Safe(function(btn) fn(btn) end, "halls: button"))
   tipOn(b, tip)
   self.y = self.y + STEP
   return b
@@ -1932,7 +1999,7 @@ function Col:Buttons(list)
     b:SetWidth(120)
     b:SetLabel(d[1])
     b:SetOn(d[2] and true or false)
-    b:SetScript("OnClick", function() if d[2] then d[3]() end end)
+    b:SetScript("OnClick", C.Safe(function() if d[2] then d[3]() end end, "halls: button"))
     tipOn(b, d[4])
     bx = bx + 126
   end
@@ -1948,13 +2015,22 @@ local function kindMenu(owner, c)
   end)
 end
 local function classed(name, class) return "|cff" .. C.UI.Hex(C.UI.ClassColor(class)):sub(5) .. (name or "?") .. "|r" end
--- a member of the roster by what an officer typed: a name whole, else the one name it starts
+-- a member of the roster by what an officer typed: a name whole, else the one name it starts. Both folded to small
+-- letters, the Western capitals too (the client's string.lower folds ASCII alone: "oy" with o-slash found no Oystein in
+-- a Norwegian guild): UTF-8's C3 80 to C3 9E are A-grave to Thorn, each 32 below its small letter, but for C3 97, the
+-- multiplication sign
+local function fold(s)
+  return (s:lower():gsub("\195([\128-\158])", function(c)
+    local b = c:byte()
+    return b == 151 and ("\195" .. c) or ("\195" .. string.char(b + 32))
+  end))
+end
 function H.FindMember(text)
-  text = tostring(text or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+  text = fold(tostring(text or "")):gsub("^%s+", ""):gsub("%s+$", "")
   if text == "" then return nil end
   local found, n = nil, 0
   for _, row in ipairs(C.Roster:Rows()) do
-    local s = (row.short or ""):lower()
+    local s = fold(row.short or "")
     if row.guid and s == text then return row end
     if row.guid and s:sub(1, #text) == text then found, n = row, n + 1 end
   end

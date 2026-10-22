@@ -17,7 +17,7 @@
 --            entry out
 --   Falls    a higher value for "most", a lower one for "fastest". A fastest clear needs two voices: two members'
 --            values within five seconds (everyone in a run sets the same time); the record is the larger of the
---            fastest agreeing pair, so no one voice lowers it, its holder the member it is (ties to the smaller GUID).
+--            fastest agreeing pair, so no one voice lowers it, its holder the member it is (ties to the first heard).
 --            Live only: a delta (1D) 90 s into a login,
 --            or your own value changing; a full record (1F) and what changed while you were away update it quietly
 --   On       every record ships off. The officers' list, CuteDB.halls[club].recOn, travels as 1O|<at>|<code>.<code>...
@@ -237,7 +237,8 @@ local function holder(g)
   return { name = (m.name and C.Short(m.name)) or "?", class = m.class, level = m.level }
 end
 -- the entries, each stat's: what the policy closes since, or a holder marked untrusted since, is taken out first
--- (checked again only when the policy changed: P.ver)
+-- (checked again only when the policy changed: P.ver; one held past what the time allows, Rec.Ceiling, as saved by 0.9,
+-- goes then too)
 local purgedAt
 function Rec.Entries()
   local d = H().DB()
@@ -247,17 +248,35 @@ function Rec.Entries()
   if purgedAt ~= P.ver then
     purgedAt = P.ver
     for id, e in pairs(E) do
-      if type(e) ~= "table" or type(e.v) ~= "number" or P:Route(id) ~= "all" or P:Untrusted(e.g) then E[id] = nil end
+      if type(e) ~= "table" or type(e.v) ~= "number" or P:Route(id) ~= "all" or P:Untrusted(e.g) or e.v > Rec.Ceiling(id) then E[id] = nil end
     end
   end
   return E
 end
 local function count(E) local n = 0; for _ in pairs(E) do n = n + 1 end return n end
--- a value counts toward a record: the stat routed Everyone, a member who may hold one, within the stat's bounds, more
--- than nothing for a "most"
+-- (The launch audit) a "most" record rests on one member's Cute (11.1), and the stats' own bounds let a count be 2^31:
+-- an edited copy's 2^31 jumps held the Records chip on every member's screen for good, as no honest value could pass
+-- it. A value past what the time since Cute began counting allows holds none: Cute's own counts began with 0.1.0 on 18
+-- October 2026, each at most its rate a day since then, a day at least (a death, its release and the run back take 40 s
+-- at the least, a new instance 10 minutes, a jump a second, a fish a 4 s cast, a quest handed in 10 s, a ghost runs 9
+-- yards a second; 10000 gold a day, a run report each run); a week's count its rate for seven days; what the game
+-- counts (quests done, the different bosses killed) far past what the game holds. A copy within them still holds a
+-- record until the officers mark it untrusted (Rec.Entries drops it)
+local SINCE = 1792281600 -- 18 October 2026, 00:00 UTC: no Cute counted anything before
+local PER_DAY = { deaths = 2000, dungeons = 150, raids = 150, jumps = 86400, where = 5000, fish = 20000, ghost_yards = 1000000,
+  gold_earned = 100000000, runs = 150, honors = 150, roasts = 150 }
+local PER_WEEK = { deaths_week = 7 * 2000, quests_week = 7 * 10000, runs_week = 7 * 150, honors_week = 7 * 150, roasts_week = 7 * 150 }
+local AT_MOST = { quests_done = 50000, bosses = 5000 }
+function Rec.Ceiling(id)
+  local d = PER_DAY[id]
+  if d then return d * math.max(1, math.ceil((now() - SINCE) / 86400)) end
+  return PER_WEEK[id] or AT_MOST[id] or math.huge
+end
+-- a value counts toward a record: the stat routed Everyone, a member who may hold one, within the stat's bounds and
+-- what the time allows, more than nothing for a "most"
 local function counts(id, kind, g, v)
   if type(v) ~= "number" or v ~= v then return nil end
-  if kind == "max" and v <= 0 then return nil end
+  if kind == "max" and (v <= 0 or v > Rec.Ceiling(id)) then return nil end
   if C.Policy:Route(id) ~= "all" then return nil end
   if C.Stats.Implausible(id, v) then return nil end
   return holder(g)
@@ -293,7 +312,10 @@ end
 -- one group's where they came together
 Rec.came = {}
 local function came(id, g) local t = Rec.came[id]; if not t then t = {}; Rec.came[id] = t end t[g] = gtime() end
--- the voices for a clear: every member with a value for it that counts, smallest first, ties to the smaller GUID
+-- the voices for a clear: every member with a value for it that counts, smallest first. Equal times go to the one that
+-- came live first this session (Rec.came), before any that did not come live, those by the smaller GUID (the launch
+-- audit: ties went to the smaller GUID alone, so an edited copy repeating a group's exact time, its GUID sorting first,
+-- took the holder's name and the NEW RECORD)
 local function voices(id)
   local out = {}
   local R = C.Roster
@@ -304,7 +326,14 @@ local function voices(id)
       out[#out + 1] = { g = g, v = v, row = row }
     end
   end
-  table.sort(out, function(a, b) if a.v ~= b.v then return a.v < b.v end return C.Comm.Before(a.g, b.g) end)
+  local at = Rec.came[id] or {}
+  table.sort(out, function(a, b)
+    if a.v ~= b.v then return a.v < b.v end
+    local ta, tb = at[a.g], at[b.g]
+    if ta and tb then if ta ~= tb then return ta < tb end
+    elseif ta or tb then return ta ~= nil end
+    return C.Comm.Before(a.g, b.g)
+  end)
   return out
 end
 Rec.Voices = voices
@@ -317,7 +346,7 @@ function Rec.RangeTop(n)
 end
 -- a clear's record (11.3): the smallest time another member's backs from at or under it within five seconds, the
 -- larger of the agreeing pair, so no one voice can lower it (an edited copy's a few seconds under a real clear backs
--- the real one); its holder the member with that time, ties to the smaller GUID
+-- the real one); its holder the member with that time, ties to the one heard first (voices)
 function Rec:Clear(n, live)
   if type(n) ~= "number" then return end
   local id = "c" .. n
@@ -724,7 +753,7 @@ function Rec.Draw(ui)
     end
     if isOfficer and e then
       r.pv:SetLabel("Preview"); r.pv:SetOn(true)
-      r.pv:SetScript("OnClick", function() Rec.Preview(id) end)
+      r.pv:SetScript("OnClick", C.Safe(function() Rec.Preview(id) end, "records: preview"))
     end
     r.fn = nil
     r.tip = function(tip)

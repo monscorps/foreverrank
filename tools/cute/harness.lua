@@ -16920,6 +16920,334 @@ do local function cardsStage()
   end)
   said[#said + 1] = "the live Hall of Shame ranks this week's Deaths this week"
 
+  -- [stage: fix-cards] that stage's tests go right below this line
+  ----------------------------------------------------------------------------
+  -- The launch audit's cards findings (fix-cards, 2026-10-22), a case each. Every case runs, each in a guild of its
+  -- own, and the stage fails naming every case that failed
+  ----------------------------------------------------------------------------
+  do
+    local failed, passed = {}, {}
+    local function case(name, guild, body)
+      isolated(guild, function()
+        local ok, err = pcall(body)
+        if ok then passed[#passed + 1] = name else failed[#failed + 1] = name .. ": " .. tostring(err) end
+      end)
+    end
+
+    -- the officers' toast stands clear of the game's error and progress text (UIErrorsFrame, Blizzard_UIErrorsFrame:
+    -- TOP 0 -122, 512 x 60, its newest line on top, so 122 to 182 px down), which 0.9's place 100 below the top covered
+    -- for the toast's 10 s, and of what is under it (the engine's arrow at 190 under Cute): 20 to 68 px down, above the
+    -- clock strip's default 80. A strip dragged into that place: above it where it leaves room, else under it while that
+    -- ends above the error text, else the screen's top, over as little of it as may be; the game's top-centre widgets
+    -- (a contested zone's score, TOP 0 -15) kept clear where they show
+    case("the toast clear of the error text", { gmember("Tov", 1, "MAGE") }, function()
+      local c = cchar("Tov", 1)
+      login(c)
+      tickAll(30)
+      local Hc, UIP = H(c), c.env.UIParent
+      local W, Ht = UIP:GetWidth(), UIP:GetHeight()
+      local errors = { l = (W - 512) / 2, r = (W + 512) / 2, t = Ht - 122, b = Ht - 182 }
+      local function show() Hc.toastNow = nil; Hc:ShowToast(Hc.TestSet(false), true); GEN = GEN + 1; return rectOf(Hc.toastFrame) end
+      local function down(r) return string.format("%d to %d px down", Ht - r.t, Ht - r.b) end
+      local r = show()
+      assert(r and not overlap(r, errors, 0) and Ht - r.b <= 122, "the toast clears the error text, above it: " .. down(r))
+      assert(Ht - r.t == 20 and Ht - r.b == 68, "20 to 68 px down: " .. down(r))
+      check(Hc.toastFrame, "fix-cards the toast at the top")
+      local strip
+      c.C.API.QuestClock = function() return strip.l, strip.t, strip.w, strip.h end
+      local function at(top, h) strip = { l = W / 2 - 110, t = Ht - top, w = 220, h = h }; return { l = strip.l, r = strip.l + 220, t = Ht - top, b = Ht - top - h } end
+      local s = at(10, 24)
+      r = show()
+      assert(not overlap(r, s, 0) and not overlap(r, errors, 0) and Ht - r.b <= 122, "a strip at 10 px: the toast under it, above the error text: " .. down(r))
+      s = at(60, 24)
+      r = show()
+      assert(not overlap(r, s, 0) and Ht - r.b < 60, "a strip at 60 px: the toast above it: " .. down(r))
+      s = at(46, 48)
+      r = show()
+      assert(not overlap(r, errors, 0) and Ht - r.t == 0, "a strip at 200% where nothing fits: the screen's top, never the error text: " .. down(r))
+      c.C.API.QuestClock = nil
+      local wf = c.env.CreateFrame("Frame", nil, UIP)
+      wf:SetSize(300, 40)
+      wf:SetPoint("TOP", UIP, "TOP", 0, -15)
+      wf.__top = Ht - 15
+      c.env.UIWidgetTopCenterContainerFrame = wf
+      r = show()
+      assert(not overlap(r, { l = W / 2 - 150, r = W / 2 + 150, t = Ht - 15, b = Ht - 55 }, 0) and not overlap(r, errors, 0), "the top-centre widgets kept clear: " .. down(r))
+      wf:Hide()
+      r = show()
+      assert(Ht - r.t == 20, "the widgets gone, the toast at 20 again: " .. down(r))
+      c.env.UIWidgetTopCenterContainerFrame = nil
+      Hc.toastFrame:Hide()
+      if c.C.CardFrame.frame then c.C.CardFrame.frame:Hide() end
+    end)
+
+    -- the halls' weekly store (CuteDB.halls[club].weeks), which only the officers' hall composer reads (This week and
+    -- Last week): an officer's client alone keeps it, of what goes to Everyone and came on the guild channel under a
+    -- sender string the roster bears out; a member's client keeps none (0.9 kept every member's, closed ones too, for
+    -- good), and deletes what it kept when the officers close a stat; an officer's goes with a demotion and with the
+    -- guild; a GUID the roster no longer lists and a week no hall reads are pruned
+    local wora = gmember("Wora", 1)
+    case("the weekly store, the officers' alone", { wora, gmember("Wim", 3), gmember("Wex", 3, "ROGUE") }, function()
+      local o, m, x = cchar("Wora", 1), cchar("Wim", 3), cchar("Wex", 3, { class = "ROGUE" })
+      login(o); login(m); login(x)
+      tickAll(30)
+      local function weeks(c) return H(c).DB().weeks end
+      fire(x, "PLAYER_DEAD"); fire(x, "PLAYER_DEAD")
+      tickAll(5)
+      assert(weeks(o)[x.o.guid] and weeks(o)[x.o.guid].v.deaths_week == 2, "the officer keeps Wex's week, for the halls")
+      assert(next(weeks(m)) == nil, "a member's client keeps no one's week")
+      -- a sender string the roster cannot name, its message carrying a member's GUID: nothing kept under that GUID
+      H(o):Seen("Stranger-Elsewhere", { guid = m.o.guid, deaths_week = 99 })
+      assert(not (weeks(o)[m.o.guid] and weeks(o)[m.o.guid].v.deaths_week == 99), "a GUID the sender string does not bear out keeps nothing")
+      -- a weekly stat the officers keep to themselves, whispered to them: the roster has it, the weeks none of it
+      o.C.Policy:Set("quests_week", "self")
+      o.C.Comm:SendPolicy()
+      tickAll(5)
+      fire(x, "QUEST_TURNED_IN", 214, 0, 0)
+      tickAll(5)
+      local e = o.env.CuteDB.roster[x.sender]
+      assert(e and e.stats.quests_week == 1, "the officer's roster has Wex's quest this week")
+      assert((weeks(o)[x.o.guid].v.quests_week or 0) == 0, "the weeks keep nothing the officers keep to themselves: " .. tostring(weeks(o)[x.o.guid].v.quests_week))
+      -- the officers close Deaths this week: a member's client that kept weeks (as 0.9 did) deletes them
+      local wk = H(m).WeekNow()
+      weeks(m)[x.o.guid] = { n = wk, v = { deaths_week = 2 } }
+      o.C.Policy:Set("deaths_week", "self")
+      o.C.Comm:SendPolicy()
+      tickAll(5)
+      assert(m.C.Policy:Route("deaths_week") == "self", "Wim's client holds the closed policy")
+      assert(next(weeks(m)) == nil, "the member's weeks gone with the close")
+      o.C.Policy:Set("deaths_week", "all")
+      o.C.Comm:SendPolicy()
+      tickAll(5)
+      -- pruned: a GUID the roster no longer lists, and a week two back that no hall reads
+      local ow = weeks(o)
+      ow[guidOf("Gone")] = { n = wk, v = { deaths_week = 5 } }
+      ow[guidOf("Wim")] = { n = wk - 2, v = { deaths_week = 1 } }
+      H(o).PruneWeeks()
+      ow = weeks(o)
+      assert(ow[guidOf("Gone")] == nil and ow[guidOf("Wim")] == nil and ow[x.o.guid], "a member gone and a week two back pruned, Wex's kept")
+      -- the guild left (Roster.lua R:LeftGuild): an officer's weeks go with it
+      o.C.Roster:LeftGuild()
+      assert(next(weeks(o)) == nil, "the guild left: the weeks gone")
+      fire(x, "PLAYER_DEAD")
+      tickAll(5)
+      assert(weeks(o)[x.o.guid], "an officer again keeps Wex's week")
+      -- an officer no more (Policy.lua P:Purge on the demotion): the weeks go
+      wora.rank, wora.rankName = 3, "Raider"
+      o.C.Roster:Refresh()
+      tickAll(5)
+      assert(not o.C.Roster:MeOfficer() and next(weeks(o)) == nil, "demoted: the weeks gone")
+    end)
+
+    -- CuteRun heard on a frame of its own: every addon's message (DBM's, WeakAuras', Cute's own guild traffic) comes to
+    -- a frame that registers CHAT_MSG_ADDON, and the Runs module's frame ran each through C.Safe (a table and a closure a
+    -- call) only to drop it. The prefix is picked out first, as Comm.lua picks out Cute's: another prefix's message makes
+    -- no garbage, a CuteRun one reaches RunComm once
+    case("CuteRun on a frame of its own", { gmember("Rua", 3) }, function()
+      local c = cchar("Rua", 3)
+      login(c)
+      tickAll(5)
+      assert(c.C.Modules.byId.runs.active and c.C.Runs.events.CHAT_MSG_ADDON == nil, "Runs on, CHAT_MSG_ADDON none of the module's events")
+      local frames = {}
+      for _, f in ipairs(c.frames) do if f.__events.CHAT_MSG_ADDON and f.__scripts.OnEvent and f ~= c.C.Comm.frame then frames[#frames + 1] = f end end
+      local RC = c.C.RunComm
+      local real, got = RC.Receive, 0
+      RC.Receive = function() got = got + 1 end
+      for _, f in ipairs(frames) do f.__scripts.OnEvent(f, "CHAT_MSG_ADDON", "CuteRun", "2H|x", "PARTY", "Someone-Forever") end
+      local once = got
+      local J = rawget(_G, "jit")
+      if J then J.off() end
+      collectgarbage()
+      collectgarbage("stop")
+      local kb = collectgarbage("count")
+      for _ = 1, 3000 do for _, f in ipairs(frames) do f.__scripts.OnEvent(f, "CHAT_MSG_ADDON", "DBM5", "V|123", "RAID", "Someone-Forever") end end
+      local grew = collectgarbage("count") - kb
+      collectgarbage("restart")
+      if J then J.on() end
+      RC.Receive = real
+      assert(once == 1, "a CuteRun message reaches RunComm once: " .. once)
+      assert(got == 1 and grew < 32, string.format("3000 messages of another prefix: none reach RunComm (%d), %.1f KB of garbage", got - 1, grew))
+    end)
+
+    -- the officers' and leaders' buttons of 0.8 and 0.9 run their actions through C.Safe: an error in one is recorded
+    -- under its path for /cute errors, never handed to the game's handler (the card screen's Publish, Back, Send to
+    -- party; the Halls band's New card and New hall; Test announcement and Open Queue; the composer's Pick, Preview, Save
+    -- draft, Clear; Runs' End run and Show a test report; Records' Preview)
+    case("the cards' buttons record their errors", { gmember("Saf", 1, "MAGE"), gmember("Sib", 3) }, function()
+      local c, mate = cchar("Saf", 1), cchar("Sib", 3)
+      login(c); login(mate)
+      tickAll(200)
+      local function boom(where, b)
+        assert(b, where .. ": the button")
+        c.env.CUTE_DEV = false
+        local ok, err = pcall(press, b)
+        c.env.CUTE_DEV = true
+        local e = (c.env.CuteDB.errors or {})[1]
+        assert(ok and e and e.where == where and e.msg:find("boom", 1, true), where .. ": the click's error recorded, not raised: " .. tostring(err) .. " / " .. tostring(e and e.where))
+      end
+      -- the card screen's buttons
+      H(c).Test(false)
+      local CF = c.C.CardFrame
+      CF.buttons[1].fn = function() error("boom on the card screen") end
+      boom("card screen: button", CF.buttons[1])
+      CF.frame:Hide(); H(c).toastFrame:Hide()
+      -- the Halls band
+      H(c).OpenChip("queue")
+      local Hc = H(c)
+      local newHall = Hc.NewHall
+      Hc.NewHall = function() error("boom in the band") end
+      boom("halls: band", buttonOf(c, "New hall"))
+      Hc.NewHall = newHall
+      -- the composer: Pick and its buttons
+      press(buttonOf(c, "New card"))
+      local menu = c.env.MenuUtil.CreateContextMenu
+      c.env.MenuUtil.CreateContextMenu = function() error("boom in the label's menu") end
+      boom("halls: button", buttonOf(c, "SHOUT-OUT"))
+      c.env.MenuUtil.CreateContextMenu = menu
+      local save = Hc.SaveDraft
+      Hc.SaveDraft = function() error("boom in Save draft") end
+      boom("halls: button", buttonOf(c, "Save draft"))
+      Hc.SaveDraft = save
+      press(buttonOf(c, "Clear"))
+      -- News with nothing published: Test announcement
+      H(c).OpenChip("news")
+      local test = Hc.Test
+      Hc.Test = function() error("boom in the test announcement") end
+      boom("halls: button", buttonOf(c, "Test announcement"))
+      Hc.Test = test
+      -- Records' Preview
+      local Rc0 = c.C.Records
+      Rc0.Entries().deaths = { v = 3, g = mate.o.guid, n = "Sib", c = "MAGE", t = c.C.ServerNow() }
+      H(c).OpenChip("records")
+      local row = rowLabeled(c, "Deaths")
+      local preview = Rc0.Preview
+      Rc0.Preview = function() error("boom in Preview") end
+      boom("records: preview", row and row.pv)
+      Rc0.Preview = preview
+      -- Runs: Show a test report
+      c.C.UI:Open("runs")
+      local RU = c.C.RunsUI
+      local rt = RU.Test
+      RU.Test = function() error("boom in the test report") end
+      boom("runs: test", buttonOf(c, "Show a test report"))
+      RU.Test = rt
+    end)
+
+    -- New card's Member box finds a member whose name starts with a Norwegian capital, typed in lower case: the
+    -- client's string.lower folds ASCII alone, so "oy" with o-slash found no Oystein
+    case("the Member box folds the Norwegian capitals", { gmember("Lea", 1), gmember("\195\152ystein", 3), gmember("\195\133se", 3), gmember("\195\134sir", 3) }, function()
+      local c = cchar("Lea", 1)
+      login(c)
+      tickAll(30)
+      local Hc = H(c)
+      for _, typed in ipairs({ "\195\184ystein", "\195\184y", "\195\152Y", "\195\152ystein" }) do
+        local row = Hc.FindMember(typed)
+        assert(row and row.short == "\195\152ystein", "typed " .. typed .. ": " .. tostring(row and row.short))
+      end
+      assert((Hc.FindMember("\195\165se") or {}).short == "\195\133se" and (Hc.FindMember("\195\166") or {}).short == "\195\134sir", "a-ring and ae typed small")
+      assert(Hc.FindMember("\195\184x") == nil, "nobody by that start")
+    end)
+
+    -- a "most" record rests on one member's Cute: a value past what the time since Cute began counting allows (Cute's
+    -- counts began with 0.1.0 on 18 October 2026) holds none, so an edited copy's 2^31 jumps does not hold the Records
+    -- chip for good while an honest 500 is the guild's best
+    case("a most record within what time allows", { gmember("Rok", 1), gmember("Ryn", 3), gmember("Rax", 3) }, function()
+      local rok, ryn, rax = cchar("Rok", 1), cchar("Ryn", 3), cchar("Rax", 3)
+      login(rok); login(ryn); login(rax)
+      tickAll(100)
+      local b36 = rok.C.Comm.b36
+      rax.C.Comm.Queue({ msg = "1D|4|jumps=" .. b36(2147483000) })
+      tickAll(3)
+      ryn.C.Comm.Queue({ msg = "1D|4|jumps=" .. b36(500) })
+      tickAll(3)
+      local e = recOf(rok, "jumps")
+      assert(e and e.g == ryn.o.guid and e.v == 500, "Ryn's 500 jumps hold the record, not 2^31: " .. tostring(e and e.v))
+      -- one saved from before (0.9 kept it) goes too
+      Rc(rok).Entries().jumps = { v = 2147483000, g = rax.o.guid, n = "Rax", c = "MAGE", t = rok.C.ServerNow() }
+      rok.C.Policy.ver = rok.C.Policy.ver + 1
+      assert(recOf(rok, "jumps") == nil, "a saved one past the bound dropped")
+    end)
+
+    -- a fastest clear's holder among equal times is the voice that came live first, not the smaller GUID: an edited copy
+    -- repeating a group's exact time took its holder's name (and a NEW RECORD) where its GUID sorted first
+    case("a clear's tie to the voice that came first", { gmember("Tia", 1), gmember("Tub", 3, "ROGUE"), gmember("Tey", 3, "PRIEST") }, function()
+      local tia, tub, tey = cchar("Tia", 1), cchar("Tub", 3, { class = "ROGUE" }), cchar("Tey", 3, { class = "PRIEST" })
+      for _, c in ipairs({ tia, tub, tey }) do login(c) end
+      tickAll(100)
+      -- (the larger GUID's time comes first; the smaller's, the same time, after it)
+      local first, second = tub, tey
+      if tia.C.Comm.Before(tub.o.guid, tey.o.guid) then first, second = tey, tub end
+      assert(Rc(first).OwnClear(36, 1500), "the first clear")
+      tickAll(125)
+      assert(recOf(tia, "c36") == nil, "one voice is no record")
+      assert(Rc(second).OwnClear(36, 1500), "the same time again")
+      tickAll(125)
+      local e = recOf(tia, "c36")
+      assert(e and e.v == 1500 and e.g == first.o.guid, "the record is the voice that came first: " .. tostring(e and (e.g == second.o.guid and "the later one" or e.g)))
+    end)
+
+    -- the run's cards whispered to the officers (1W) are built from this client's own report, never from the scribe's
+    -- 2A: the scribe is the group's leader where it said hello, which may be another guild's leader or an edited copy,
+    -- and a card it made up about a guild mate went into the officers' Queue
+    case("1W from this client's own build", { gmember("Fia", 3, "MAGE"), gmember("Fox", 3, "ROGUE") }, function()
+      local fia, fox = cchar("Fia", 3), cchar("Fox", 3, { class = "ROGUE" })
+      login(fia); login(fox)
+      tickAll(30)
+      local Rn = fia.C.Runs
+      local me, mate = sfx(fia), sfx(fox)
+      local t0 = fia.env.GetServerTime() - 2400
+      local run = { id = fia.C.Comm.b36(t0) .. "-" .. me, kind = "d", inst = 36, place = "The Deadmines", start = t0, at = t0, seq = 0, members = {},
+        own = { ["in"] = 2, dp = 1, de = 0 }, bosses = {}, nb = 0, wipes = 0, dorder = 0, maps = {}, meter = { done = {}, tot = {} }, loot = {},
+        joined = 0, fought = true, together = 2, lastKill = 1500 }
+      run.members[me] = { g = fia.o.guid, n = "Fia", c = "MAGE", r = "Human", s = 2, first = 0, obs = {}, hello = "0.9.0" }
+      run.members[mate] = { g = fox.o.guid, n = "Fox", c = "ROGUE", r = "Human", s = 2, first = 0, obs = { de = 0 }, v = { t = 2400, de = 0 }, seq = 1, hello = "0.9.0" }
+      Rn.run = run
+      local own = Rn:Build(run)
+      assert(own, "this client's own report")
+      local shown = {}
+      for k, v in pairs(own) do shown[k] = v end
+      shown.cards, shown.from = { { mate, "FI", 5, "blooper" } }, "scribe"
+      local Hc = H(fia)
+      local real, got = Hc.RunEnded, nil
+      Hc.RunEnded = function(_, _, rep) got = rep end
+      Rn:Finish(own, shown)
+      Hc.RunEnded = real
+      if fia.C.CardFrame.frame then fia.C.CardFrame.frame:Hide() end
+      assert(got == own, "the 1W from this client's own report: " .. tostring(got and got.from))
+    end)
+
+    -- the Runs band during a run names who writes the report in words a player knows ("report by Brann"), and nothing
+    -- where that is you: "scribe" is the protocol's word
+    case("the Runs band without the word scribe", { gmember("Bri", 3) }, function()
+      local c = cchar("Bri", 3)
+      login(c)
+      local RU = c.C.RunsUI
+      local mine = RU.BandText({ place = "The Deadmines", t = 750, kind = "d", bosses = 3, scribe = "you" })
+      local theirs = RU.BandText({ place = "The Deadmines", t = 750, kind = "d", bosses = 3, scribe = "Brann" })
+      assert(not mine:find("scribe", 1, true) and not mine:find("report by", 1, true) and mine:find("3 bosses", 1, true), "your own run: " .. mine)
+      assert(theirs:find("report by Brann", 1, true) and not theirs:find("scribe", 1, true), "another's: " .. theirs)
+    end)
+
+    -- the card screen has no typed letter x to close it: Close and Esc (UISpecialFrames) close it, as the design has it
+    case("the card screen closed by Close and Esc", { gmember("Cyx", 3) }, function()
+      local c = cchar("Cyx", 3)
+      login(c)
+      tickAll(5)
+      H(c).Test(false)
+      local CF = c.C.CardFrame
+      local x
+      for _, f in ipairs(c.frames) do if f.__kind == "Button" and f:IsVisible() and f.label and f.label:GetText() == "x" then x = f end end
+      local esc = false
+      for _, n in ipairs(c.env.UISpecialFrames) do if n == "CuteCardFrame" then esc = true end end
+      assert(CF.frame:IsShown() and not x and esc, "no typed x; Esc closes it")
+      press(buttonOf(c, "Close"))
+      assert(not CF.frame:IsShown(), "Close closes it")
+      H(c).toastFrame:Hide()
+    end)
+    assert(#failed == 0, "fix-cards: " .. #failed .. " case(s) failed:\n  " .. table.concat(failed, "\n  "))
+    said[#said + 1] = "the launch audit's cards findings: " .. table.concat(passed, "; ")
+  end
+
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end
 
@@ -19333,7 +19661,7 @@ do
     check(Ht.toastFrame, "merge3 the toast under the clock at 200%")
     QBt:Settings().clock.show = false; QBt.Timer.Apply()
     toast()
-    assert(Ht.toastFrame.__points[1].y == -100, "the clock hidden: the toast at its own place")
+    assert(Ht.toastFrame.__points[1].y == -20, "the clock hidden: the toast at its own place")
     Mc.set(nil)
     leave(t)
     said[#said + 1] = "a card's toast clears the clock strip"
@@ -19498,9 +19826,8 @@ do
     login(mo, db)
     tickAll(60)
     local d = db.halls["7"]
-    local w = d.weeks[g]
-    assert(w.v.deaths_week == nil and w.p.v.deaths_week == nil and w.v.quests_week == 3 and w.p.v.quests_week == 1,
-      "a member's file keeps no weekly value of a stat the officers keep, this week's or last: " .. tostring(w.v.deaths_week) .. " / " .. tostring(w.p.v.deaths_week))
+    -- (merge4: fix-cards' H.PurgeWeeks then takes a member's weekly store whole, the closed stat's values with the rest)
+    assert(next(d.weeks) == nil, "a member's file keeps no weekly value, of a stat the officers keep or any: " .. json(d.weeks))
     local left = {}
     for _, r in ipairs(d.queue) do left[#left + 1] = r.id end
     assert(table.concat(left, ",") == "dr" and d.firsts == nil and d.achSeen == nil, "nor the officers' queue, ledger or earns: " .. table.concat(left, ","))
