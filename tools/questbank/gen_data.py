@@ -3283,6 +3283,10 @@ LOCKKEY = sorted(probe_pull.lock_keys(os.path.join(_WI, "Lock.csv")))
 assert 216523 in LOCKKEY and 277136 in LOCKKEY and 281350 in LOCKKEY and len(LOCKKEY) > 100, "Lock.csv's keys: %d" % len(LOCKKEY)
 lines.append("-- [item] = true: the items the client's Lock.csv names as a lock's key, whatever their class (Finds.lua)")
 lines.append("D.LOCKKEY = {" + ",".join("[%d]=true" % i for i in LOCKKEY) + "}")
+# D.SECRETKEY: the secret chains' keys past their first step, probe_pull.py's SECRET_KEYS (one list): a find opened
+# carrying one is the chain's next step, which a host's guild shows only once two guild mates found it (Finds.lua told)
+lines.append("-- [item] = true: the secret chains' keys past their first step, probe_pull.py's SECRET_KEYS (Finds.lua)")
+lines.append("D.SECRETKEY = {" + ",".join("[%d]=true" % i for i in sorted(probe_pull.SECRET_KEYS)) + "}")
 
 # ---------------------------------------------------------------------------
 # D.FIND: what the world holds beyond quests, per map: { kind, id, "x,y;x,y" (thousandths), files, extra, source }.

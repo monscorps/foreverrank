@@ -24455,6 +24455,40 @@ end
     assert(recorded[1] == 1, "the party's XP reading is heard")
     unspy()
   end }
+
+  -- M1 (trust, must). What a secret chain's key opens is the chain's next step (probe_pull.py SECRET_KEYS: the Keystone
+  -- chain's Fragments and Stone Key, the Dormant Runestone, the Tome of Dalaran's Black Tome): Data.lua names them
+  -- (D.SECRETKEY, gen_data.py), and a find you opened carrying one is told to the host as secret, so a host's guild shows
+  -- it only once two guild mates found it (Cute/Finds.lua)
+  FECASES[#FECASES + 1] = { "M1: a lock opened carrying a secret chain's key is told to the host as secret", function()
+    local OBJ = "GameObject-0-4455-0-12-%d-0000A1B2C3"
+    local c = newClient({ name = "Keyholder", level = 20, cap = 60, faction = "Alliance", className = "Mage", class = "MAGE", classID = 8,
+      race = "Human", log = {}, done = {}, world = { 0, -9450, 60 }, map = 1429, bagSlots = { { 281350, 1 } }, bind = "Goldshire", xp = 0 })
+    local env = c.env
+    env.C_Map.GetPlayerMapPosition = function() return { x = 0.6, y = 0.4, GetXY = function(self) return self.x, self.y end } end
+    env.C_Item.GetItemInfoInstant = function(id) local k = (c.klass or {})[id]; if not k then return nil end return id, "", "", "", 0, k[1], k[2] end
+    env.IsInInstance = function() return false, "none" end
+    env.C_RestrictedActions = { IsAddOnRestrictionActive = function() return false end }
+    login(c)
+    local QB, D = c.QB, c.QB.Data
+    for _, k in ipairs({ 281350, 284092, 284093, 281358, 281359, 276561 }) do
+      assert(type(D.SECRETKEY) == "table" and D.SECRETKEY[k] == true, "Data.lua names the secret chains' keys: " .. k)
+    end
+    local told = {}
+    QB.Finds.host = { Noted = function(...) told[#told + 1] = { ... } end, Rows = function() return {} end, Maps = function() return {} end, ver = 0 }
+    c.klass = { [281350] = { 15, 0 }, [216523] = { 13, 0 } }
+    local keep = D.OPEN
+    D.OPEN = { [3366] = 0 }
+    local f = QB.Finds.frame
+    c.soft = { guid = OBJ:format(9501) }
+    f.__scripts.OnEvent(f, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-1", 3366)
+    assert(#told == 1 and told[1][1] == "k" and told[1][2] == 9501 and told[1][8] == true, "opened carrying a Keystone Fragment: told as secret: " .. #told)
+    c.o.bagSlots = { { 216523, 1 } }
+    c.soft = { guid = OBJ:format(9502) }
+    f.__scripts.OnEvent(f, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-2", 3366)
+    assert(#told == 2 and told[2][2] == 9502 and told[2][8] ~= true, "opened with an ordinary key: not secret")
+    D.OPEN, c.soft, QB.Finds.host = keep, nil, nil
+  end }
   local failed = {}
   for _, case in ipairs(FECASES) do
     local ok, err = pcall(case[2])

@@ -237,22 +237,23 @@ function Finds.Known(m, kind, id, title, keys)
   return false
 end
 
--- A host's guild: Finds.host = { Noted = fn(kind, id, m, x, y, extra, data), Rows = fn(m), Maps = fn(), ver = n }
+-- A host's guild: Finds.host = { Noted = fn(kind, id, m, x, y, extra, data, secret), Rows = fn(m), Maps = fn(), ver = n }
 -- (Cute's Bridge.lua; QuestBank alone has none, and nothing below does anything):
 --   Noted  a find of yours as you note it: "b" a book read where it stands (extra its title), "k" an object opened with
 --          a key, "h" a chest looted, "r" a rare's nameplate shown (extra its level; every time one shows: the host
 --          keeps the pace of its pings), "x" a crossing (id 0, extra { m, x, y, secs } where you came out and how long
 --          it took); the spot in thousandths of map m; data true where QuestBank's data has it (the host counts it,
---          and shares only what the data lacks)
+--          and shares only what the data lacks); secret true where it is a secret chain's next step (opened carrying one
+--          of D.SECRETKEY's keys: the host's guild shows it only once two guild mates found it, as D.FIND never has it)
 --   Rows   the finds on map m the guild shared: { kind, id, x, y (thousandths), name (a book's title), level (a rare's),
 --          mates (how many guild mates saw it, you not counted), sure (two members agree, or the officers' word says
 --          so), ping (a rare seen now: the GetTime() it was seen) }, kept by the host
 --   Maps   the maps it has finds on
 --   ver    goes up whenever Rows may say something else
-local function tell(kind, id, m, x, y, extra, data)
+local function tell(kind, id, m, x, y, extra, data, secret)
   local h = Finds.host
   if not (h and type(h.Noted) == "function" and m and x and y) then return end
-  QB.Try("finds: told the host", h.Noted, kind, id, m, x, y, extra, data == true)
+  QB.Try("finds: told the host", h.Noted, kind, id, m, x, y, extra, data == true, secret == true)
 end
 Finds.Tell = tell
 local NONE = {}
@@ -273,12 +274,24 @@ function Finds.Ver()
   local h = Finds.host
   return (h and tonumber(h.ver)) or 0
 end
--- a note just made, told to the host's guild as the kind it is now, and whether QuestBank's data has it
+-- (the launch audit) whether a find is a secret chain's next step: opened carrying one of its keys (D.SECRETKEY, gen_data.py
+-- from probe_pull.py's SECRET_KEYS: the Keystone chain's Fragments and Stone Key, the Dormant Runestone, the Black Tome).
+-- Any of them among its key candidates counts: one carried while opening an ordinary chest leaves that chest waiting
+-- for a second guild mate too, never a step shown early
+local function secretOf(rec)
+  local sk = QB.Data.SECRETKEY
+  if type(sk) ~= "table" or type(rec) ~= "table" or type(rec.k) ~= "table" then return false end
+  for _, k in ipairs(rec.k) do if sk[k] then return true end end
+  return false
+end
+Finds.SecretOf = secretOf
+-- a note just made, told to the host's guild as the kind it is now, whether QuestBank's data has it, and whether it is
+-- a secret chain's next step
 local function told(key, rec, m, x, y)
   local kind = Finds.KindOf(key, rec)
   local id = tonumber(key:sub(2))
   if not (kind and id) or kind == "r" then return end
-  tell(kind, id, m, x, y, kind == "b" and rec.b or nil, Finds.Known(m, kind, id, rec.b, rec.k))
+  tell(kind, id, m, x, y, kind == "b" and rec.b or nil, Finds.Known(m, kind, id, rec.b, rec.k), secretOf(rec))
 end
 
 ----------------------------------------------------------------------------

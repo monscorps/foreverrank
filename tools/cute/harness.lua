@@ -19349,6 +19349,47 @@ do
     QB.Target.Route = function() return { legs = { { stop = stop, kind = kind, travel = 1, rows = {}, leave = 20.4 } }, xp = 0, level = 20, t = 1 } end
     return function() QB.Target.Route = was end
   end
+
+  -- M1 (trust, must). A secret chain's next step showed on every guild mate's map, dim, as soon as one guild mate opened
+  -- its lock (1X carried no mark; build() drew any find a guild mate saw). The engine tells a find opened carrying a
+  -- secret chain's key as secret (QuestBank's Finds.lua, D.SECRETKEY); Cute sends it marked ("s" before its kind: an older
+  -- Cute passes it by), still a voice, and draws a marked find only once two guild mates found it (or you did)
+  FECASES[#FECASES + 1] = { "M1: a secret find shows on a guild mate's map only once two guild mates found it", function()
+    inGuild({ member("Ann", 3), member("Ben", 3), member("Cy", 3) }, function()
+      local function char(name)
+        local c = newClient(charOf({ name, 3, "Raider", "WARRIOR", 20 }))
+        c.env.C_Map = c.env.C_Map or {}
+        local was = c.env.C_Map.GetMapInfo
+        c.env.C_Map.GetMapInfo = function(m) if type(m) ~= "number" or m >= 99000 then return nil end return was and was(m) or { mapID = m, name = "Map " .. m, mapType = 3 } end
+        return c
+      end
+      local ann, ben, cy = char("Ann"), char("Ben"), char("Cy")
+      for _, c in ipairs({ ann, ben, cy }) do login(c) end
+      tickAll(30)
+      local F, b36 = ben.C.Finds, ben.C.Comm.b36
+      local function rowOf(c, id) for _, r in ipairs(c.C.Finds.door.Rows(1429)) do if r.id == id then return r end end end
+      local kv = F.Pack({ k = "k", id = 9501, m = 1429, x = 600, y = 400, sec = true })
+      local back = F.Parse(kv)
+      assert(back and back.k == "k" and back.id == 9501 and back.sec == true, "a secret find packed and parsed back as one: " .. tostring(kv))
+      assert(kv:sub(1, 2) == "sk" and F.Pack({ k = "k", id = 9501, m = 1429, x = 600, y = 400 }):sub(1, 1) == "k", "marked before its kind; an ordinary one as before")
+      assert(F.Parse("s" .. F.Pack({ k = "r", id = 7, m = 1429, x = 1, y = 1, lv = 20 })) == nil, "a rare or a crossing is never secret")
+      F:Receive(kv, ann.sender, false)
+      assert(rowOf(ben, 9501) == nil, "one guild mate's secret find: nothing on Ben's map, not even dim")
+      F:Receive(F.Pack({ k = "k", id = 9502, m = 1429, x = 100, y = 100 }), ann.sender, false)
+      assert(rowOf(ben, 9502) and not rowOf(ben, 9502).sure, "an ordinary find: dim with one voice, as before")
+      F:Receive(F.Pack({ k = "k", id = 9501, m = 1429, x = 603, y = 401, sec = true }), cy.sender, false)
+      local r = rowOf(ben, 9501)
+      assert(r and r.sure and r.mates == 2, "two guild mates found it: drawn whole")
+      -- your own, told secret by the engine: a voice that goes marked
+      ann.C.Finds.door.Noted("k", 9601, 1429, 300, 300, nil, false, true)
+      tickAll(130)
+      local marked = false
+      for _, m in ipairs(ann.sent) do if m.msg:sub(1, 3) == "1X|" and m.msg:find("sk" .. b36(9601) .. "@", 1, true) then marked = true end end
+      assert(marked, "Ann's own secret lock goes out marked")
+      assert(rowOf(ben, 9601) == nil and rowOf(cy, 9601) == nil, "and shows on no guild mate's map with her voice alone")
+      for _, c in ipairs({ ann, ben, cy }) do leave(c) end
+    end)
+  end }
   local failed = {}
   for _, case in ipairs(FECASES) do
     local ok, err = pcall(case[2])
