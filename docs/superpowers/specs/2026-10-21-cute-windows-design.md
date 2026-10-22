@@ -1083,3 +1083,10 @@ on the map; E comes last because 0.7's drag already works and nothing in A to G 
 - The look: no drawn squares or chips, status as the right-hand word, game art for every control and mark, the step
   frame outlined, the route with a map, segments and a level-up rule, the Quests tab in two columns.
 - Order: A, B, C+D, F, G, E.
+- Decided on 2026-10-22 during the build (owner delegated): G ships finds as display and guild sharing. QB.Finds as a
+  routing overlay (the g/e/o/t/v entries and the re-plan-once test) moves to a post-launch round, because a one-off
+  teleport two members took could otherwise become a "Portal in X to Y" step for the whole guild. The first consumer
+  will be a fallback where Travel says "No known way there" (Zephras Isle), using your own and the guild's confirmed
+  crossings, worded as the way you or the guild came.
+- Also decided then: Cute's Settings window may scroll its section list at the 760 x 420 minimum (14 sections with
+  Runs); at the default size every section shows. The memory gate is the harness's 11264 KB budget.
