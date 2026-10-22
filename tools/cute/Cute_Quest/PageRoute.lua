@@ -20,6 +20,31 @@ local function plain(v) if issecretvalue and issecretvalue(v) then return nil en
 local WAY = { flight = { "flight", "flight" }, boat = { "boat", "boat" }, zeppelin = { "zeppelin", "zeppelin" }, tram = { "tram", "tram" },
   portal = { "portal", "portal" }, hearth = { "hearth", "hearthstone" } }
 
+-- (the launch audit) a portal leg's start, as the arrow's step says it (Travel.lua STEP.portal: "Portal in <here> to
+-- <there>"; 6.1.1, "portal to Darnassus" read as the mage spell Portal: Darnassus): of D.LINK's portals (kind "p", your
+-- side's), the end nearest the stop the leg takes you to is where you come out, and the other one's town is where the
+-- portal stands ("Rut'theran Village" for a stop in Darnassus). nil where none is known
+local function portalFrom(stop)
+  local M, D = E.Model, E.Data
+  local w = M and M.World and stop and stop.m and M.World(stop.m, stop.x, stop.y)
+  if not (w and D and type(D.LINK) == "table") then return nil end
+  local fac = E.faction or "A"
+  local best, bd
+  for _, l in ipairs(D.LINK) do
+    local a, b = l[4], l[5]
+    if l[2] == "p" and type(l[1]) == "string" and l[1]:find(fac, 1, true) and type(a) == "table" and type(b) == "table" then
+      for _, ends in ipairs({ { a, b }, { b, a } }) do
+        local near, far = ends[1], ends[2]
+        if near[1] == w.c and type(near[2]) == "number" and type(near[3]) == "number" then
+          local d = (near[2] - w.wx) ^ 2 + (near[3] - w.wy) ^ 2
+          if not bd or d < bd then best, bd = far[7], d end
+        end
+      end
+    end
+  end
+  return type(best) == "string" and best or nil
+end
+
 -- a stop in words: its NPC where it has one alone, and where it is as the map's pins name it (TV.StopPlace:
 -- "Smith Argus, Goldshire"; never Model.lua's "Elwynn Forest (42, 65)", kept for matching); the place alone otherwise
 local function stopName(stop)
@@ -264,7 +289,16 @@ function R.Draw(ui, scroll)
   local kit = ui:Kit("route", function(k)
     k.line = ui.Text(k, 12, K.INK, "LEFT")
     k.xp = L.MakeXP(k)
-    k.run = ui.Button(k, "Start run", 110, 20)
+    k.run = ui.Button(k, "Time hand-ins", 110, 20)
+    k.run:SetScript("OnEnter", Cute.Safe(function(self)
+      local on = E.Run and E.Run.Get()
+      GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+      GameTooltip:AddLine(on and "Stop timing" or "Time hand-ins", 1, 1, 1)
+      GameTooltip:AddLine(on and "Stops timing your hand-ins." or "Times your hand-ins from now: each banked quest is ticked off with the XP it paid, and the rest is planned again from where you stand.", 0.85, 0.85, 0.85, true)
+      GameTooltip:AddLine("Not a dungeon run: those are J's Runs.", 0.5, 0.5, 0.5, true)
+      GameTooltip:Show()
+    end, "route: the run's tooltip"))
+    k.run:SetScript("OnLeave", function() GameTooltip:Hide() end)
     k.rule = L.Flat(k, "ARTWORK", K.LINE, 1)
     k.rule:SetHeight(1)
   end)
@@ -279,8 +313,13 @@ function R.Draw(ui, scroll)
       E.Comma(r.xp or 0), DOT, math.floor((r.t or 0) + 0.5)) .. ((E.Model and E.Model.Busy()) and (DOT .. "planning") or "")
   end
   L.Put(kit.line, "TOPLEFT", 0, -6, bw - 130, words, K.INK, "LEFT", 12)
+  -- (the launch audit) the button times your hand-ins (the engine's hand-in run: each banked quest ticked off with the XP
+  -- it paid, the rest planned again from where you stand), and is named for that: under Cute a run is J's, a dungeon's,
+  -- and J's "End run" ends the group's. It shows while quests are banked (E:Banking: a level lock, or the rush after
+  -- one) or while it is on; questing with nothing banked it has nothing to time
   kit.run:ClearAllPoints(); kit.run:SetPoint("TOPRIGHT", 0, -2)
-  kit.run:SetLabel(run and "End run" or "Start run")
+  kit.run:SetShown(E.Run ~= nil and (run ~= nil or (E.Banking ~= nil and E:Banking() == true)))
+  kit.run:SetLabel(run and "Stop timing" or "Time hand-ins")
   kit.run:SetOn(E.Run ~= nil)
   kit.run:SetScript("OnClick", Cute.Safe(function() if E.Run.Get() then E.Run.Stop() else E:Recompute(true); E.Run.Start() end; redraw() end, "route: run"))
   if xp.from then
@@ -290,16 +329,22 @@ function R.Draw(ui, scroll)
   kit.rule:ClearAllPoints(); kit.rule:SetPoint("TOPLEFT", 0, -42); kit.rule:SetPoint("TOPRIGHT", 0, -42)
   kit:SetHeight(43)
   ui:SetBand(46)
-  -- the map on the left, "Open the map" under it
+  -- the map on the left, under it a bigger one: "Open in the map", Cute's map (M) on the route's first stop while the Map
+  -- module is on (the windows design; M is no panel, so it opens in a fight too: MapWin.lua MW.OpenOn); with Map off
+  -- (or QuestBank loaded beside Cute, whose own Map page is its map) "Open the map", the game's world map
   local box = Cute.LeftBox(ui, MAP_W)
   local pins = drawMap(box, legs)
-  box.open = box.open or ui.Button(box, "Open the map", 140, 22)
+  local inM = not QB.dormant and Cute.ModuleOn("map") and QB.MapWin ~= nil and QB.MapWin.OpenOn ~= nil
+  local label = inM and "Open in the map" or "Open the map"
+  box.open = box.open or ui.Button(box, label, 140, 22)
   box.open:ClearAllPoints(); box.open:SetPoint("TOPLEFT", 0, -(MAP_H + 8))
-  box.open:SetLabel("Open the map")
+  box.open:SetLabel(label)
   box.open:SetOn(true)
+  local first = legs[1] and legs[1].stop
   -- (the game's map is UIParent's MEDIUM but for its border, Blizzard_WorldMap.xml:67-85, under Cute's HIGH window: L
-  -- steps aside once the map is open)
+  -- steps aside once the map is open; M is one of Cute's windows, raised over L)
   box.open:SetScript("OnClick", Cute.Safe(function()
+    if inM then QB.MapWin.OpenOn(first and first.m) return end
     if E.UI and E.UI.OpenMap and E.UI.OpenMap() and ui.frame then ui.frame:Hide() end
   end, "route: the map"))
   -- the stops
@@ -332,7 +377,13 @@ function R.Draw(ui, scroll)
     if wk then
       local art = wk[1]
       if art == "flight" then art = (E.faction == "H") and "wyvern" or "gryphon" end
-      way = { { art = art, crop = true }, string.format("%s to %s, %d min", wk[2], place, math.max(1, mins)) }
+      local words = string.format("%s to %s, %d min", wk[2], place, math.max(1, mins))
+      if leg.kind == "portal" then
+        local from = portalFrom(s)
+        words = from and string.format("Portal in %s to %s, %d min", from, place, math.max(1, mins))
+          or string.format("Through the portal to %s, %d min", place, math.max(1, mins))
+      end
+      way = { { art = art, crop = true }, words }
     end
     local qs, gain = {}, 0
     for _, row in ipairs(leg.rows or {}) do

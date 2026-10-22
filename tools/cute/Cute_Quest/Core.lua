@@ -845,9 +845,27 @@ end
 
 QB.DOWNLOAD = "https://foreverrank.com/questbank/"
 
--- a party or guild member runs a newer QuestBank: say so once a session (Settings can turn it off)
+-- a party or guild member, or a voice on the realm's version channel, runs a newer QuestBank: say so once a session
+-- (Settings can turn it off), once two players say a version at least that new (the launch audit: one voice was enough,
+-- and anyone on the realm could say "1V|99.0" and have every QuestBank print a false update line naming them; Cute's
+-- C.SawVersion waits for two the same way). QB.newerOf[who]: the newer version each player said, VOICES_MAX kept
+local VOICES_MAX = 200
+QB.newerOf = {}
+local voicesN = 0
 function QB:SawVersion(v, who)
-  if not v or not v:match("^%d+%.%d+") or not QB.Newer(v, QB.version) then return end
+  if not v or not v:match("^%d+%.%d+") or type(who) ~= "string" then return end
+  if not QB.Newer(v, QB.version) then
+    if QB.newerOf[who] then QB.newerOf[who], voicesN = nil, voicesN - 1 end
+    return
+  end
+  if not QB.newerOf[who] then
+    if voicesN >= VOICES_MAX then QB.newerOf, voicesN = {}, 0 end
+    voicesN = voicesN + 1
+  end
+  QB.newerOf[who] = v
+  local n = 0
+  for _, other in pairs(QB.newerOf) do if not QB.Newer(v, other) then n = n + 1 end end
+  if n < 2 then return end
   if QB.newest and not QB.Newer(v, QB.newest.version) then return end
   QB.newest = { version = v, who = who }
   if self:Settings().updates and not QB.toldNewer then

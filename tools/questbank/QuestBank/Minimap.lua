@@ -1030,6 +1030,8 @@ function Mini.Invalidate()
   if Mini.ready then
     local owned = Mini.Owned()
     if owned ~= Mini.wasOwned then Mini.OwnerChanged(owned) end -- (a host's map module just came on, or went off)
+    -- (the far view's row ticked while the minimap is the game's: its wheel hooked now, Mini.FarOn)
+    if not Mini.hooked and Mini.FarOn() then Mini.Hooks() end
   end
   worldOf, cache.list, grp.list = {}, nil, nil
   if QB.Target then QB.Target.Invalidate() end
@@ -1205,6 +1207,7 @@ function Mini.OwnerChanged(owned)
   local fight = InCombatLockdown and InCombatLockdown()
   if owned then
     if not Mini.hooked then Mini.Hooks() end
+    if not Mini.trackReady then Mini.InitTracking() end
     if Mini.wasOwned == false then
       if fight then return end
       Mini.ApplyFree()
@@ -1223,6 +1226,11 @@ end
 -- tracking left as the game has it), and once it says no again every hook hands the game its own way (a right-click
 -- is the game's ping again, the wheel the game's zoom). The pins and the route drawn on it follow their own switches
 function Mini.Owned() return QB.MapOn == nil or QB.MapOn() == true end
+-- (the launch audit) the far view (MinimapView.lua: the wheel past the game's widest, a drag to look around, a click's ping
+-- on the ground drawn) is its own row's (mmExtended, Settings > Route's "Minimap far view": a player who keeps the game's
+-- map keeps it), whoever the minimap is; Ctrl-wheel, Alt-drag, the right-click menu, the size, the place and the
+-- tracking menu stay the owner's. Off and not owned, the game's own wheel
+function Mini.FarOn() QB.MiniView.Guard(); return QB.MiniView.On() end
 
 function Mini:Init()
   if self.ready then return end
@@ -1247,12 +1255,14 @@ function Mini:Init()
     pcall(f.RegisterEvent, f, e)
   end
   overlayFrame()
-  if Mini.Owned() then Mini.Hooks() end
+  if Mini.Owned() or Mini.FarOn() then Mini.Hooks() end
 end
 
 -- the mouse: Ctrl-wheel sizes, the wheel zooms; Alt-drag moves the minimap, a plain drag pans its view, a click pings
 -- and a right-click opens its menu (MinimapView.lua; with QuestTrail loaded, its own); the tracking menu's Target and
 -- Focus. Once, the first time the minimap is the engine's (Mini.Owned: at the login, or as a host's map module comes on)
+-- or its far view is on (Mini.FarOn): then the wheel without Ctrl and the plain drag are the far view's, the rest the
+-- game's until the minimap is the engine's (the tracking menu's entries wait for that: Mini.OwnerChanged)
 function Mini.Hooks()
   if Mini.hooked or not Minimap then return end
   Mini.hooked = true
@@ -1261,14 +1271,18 @@ function Mini.Hooks()
   local game = Minimap:GetScript("OnMouseWheel")
   Minimap:EnableMouseWheel(true)
   Minimap:SetScript("OnMouseWheel", QB.Safe(function(self, delta)
-    if Mini.Owned() then Mini.Wheel(delta) elseif game then game(self, delta) end
+    if Mini.Owned() then Mini.Wheel(delta)
+    elseif MV.On() and not (IsControlKeyDown and IsControlKeyDown()) then QB.MiniView.Wheel(delta); Mini.Update(0)
+    elseif game then game(self, delta) end
   end, "minimap wheel"))
   Minimap:HookScript("OnMouseDown", QB.Safe(function(_, button)
-    if not Mini.Owned() then return end
-    if IsAltKeyDown and IsAltKeyDown() then Mini.DragStart(button) else MV.MouseDown(button) end
+    local alt = IsAltKeyDown and IsAltKeyDown()
+    if Mini.Owned() then
+      if alt then Mini.DragStart(button) else MV.MouseDown(button) end
+    elseif not alt then MV.MouseDown(button) end -- (MV.MouseDown asks MV.On itself)
   end, "minimap mouse"))
   MV.Hook(Mini.DragStop)
-  Mini.InitTracking()
+  if Mini.Owned() then Mini.InitTracking() end
 end
 
 ----------------------------------------------------------------------------

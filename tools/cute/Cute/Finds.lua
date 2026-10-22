@@ -9,7 +9,10 @@
 --     h<object>@<map>:<x>,<y>                      a chest looted (never a herb or ore node: it would name a profession)
 --     r<creature>@<map>:<x>,<y>=<level>            a rare up now: a ping, shown ten minutes and never kept
 --     x<map>:<x>,<y>><map>:<x>,<y>=<seconds>       a crossing: where it starts, where you came out, how long it took
---   An older Cute passes 1X by; an entry of a kind this one does not know is passed by.
+--     s<b, k or h entry>                           a secret chain's next step (the engine tells which: opened carrying one
+--                                                  of its keys, QuestBank's D.SECRETKEY): drawn on a guild mate's map only
+--                                                  once two guild mates found it, never dim (the windows design, 11.3)
+--   An older Cute passes 1X by; an entry of a kind this one does not know is passed by (an older one's, a secret step).
 -- Two voices. A guild mate's find counts (sure: drawn whole on the map, counted, said in the officers' word) once two
 -- members agree: two GUIDs the roster lists, neither marked untrusted, spots within NEAR thousandths (its place their
 -- mean). One alone is display only, drawn dim; your own is yours at once (the engine's). A rare's ping is display only
@@ -276,7 +279,7 @@ end
 local function make(s, en, g)
   room(s, en, g)
   local idx = byGroup(s)
-  local e = { k = en.k, id = en.id, m = en.m, x = en.x, y = en.y, m2 = en.m2, x2 = en.x2, y2 = en.y2, s = en.s, v = {} }
+  local e = { k = en.k, id = en.id, m = en.m, x = en.x, y = en.y, m2 = en.m2, x2 = en.x2, y2 = en.y2, s = en.s, sec = en.sec, v = {} }
   s.list[#s.list + 1] = e
   local key = groupOf(e)
   idx[key] = idx[key] or {}
@@ -311,6 +314,8 @@ function F.Voice(g, en)
   end
   remean(e)
   e.t = titleOf(e)
+  -- (a secret step stays one: any voice that says so marks it)
+  if en.sec then e.sec = true end
   if en.s and e.k == "x" then e.s = math.floor(((e.s or en.s) + en.s) / 2 + 0.5) end
   s.n = s.n + 1
   e.at = s.n
@@ -346,8 +351,14 @@ end
 local function spotText(m, x, y) return b36(m) .. ":" .. b36(x) .. "," .. b36(y) end
 -- a title as it may travel and be shown (Stats.lua's label cleaning: no separators or control characters, 60 bytes)
 local function title(t) local s = C.Stats.CleanLabel(t or ""); return s ~= "" and s or nil end
+-- a kind a secret step may be: a book, a lock, a chest (never a rare's ping nor a crossing)
+local SECRET_KIND = { b = true, k = true, h = true }
 -- an entry as its wire text; nil for one that cannot go
 function F.Pack(en)
+  if en.sec and SECRET_KIND[en.k] then
+    local kv = F.Pack({ k = en.k, id = en.id, m = en.m, x = en.x, y = en.y, t = en.t })
+    return kv and ("s" .. kv) or nil
+  end
   if en.k == "x" then
     return "x" .. spotText(en.m, en.x, en.y) .. ">" .. spotText(en.m2, en.x2, en.y2) .. "=" .. b36(en.s or 1)
   end
@@ -361,6 +372,12 @@ end
 function F.Parse(text)
   if type(text) ~= "string" or #text > LIMIT then return nil end
   local k = text:sub(1, 1)
+  if k == "s" then
+    if not SECRET_KIND[text:sub(2, 2)] then return nil end
+    local en = F.Parse(text:sub(2))
+    if en then en.sec = true end
+    return en
+  end
   if k == "x" then
     local a, b, c, d, e, f, s = text:match("^x(%w+):(%w+),(%w+)>(%w+):(%w+),(%w+)=(%w+)$")
     if not a then return nil end
@@ -452,9 +469,10 @@ local function build()
   end
   for _, e in ipairs(s and s.list or {}) do
     if e.k ~= "x" then
-      local n, others = tally(e)
+      local n, others, mine = tally(e)
       local o = said(e)
-      if others > 0 or o then
+      -- (a secret step: once two guild mates found it, the officers' word says so, or it is yours too; never dim)
+      if (others > 0 or o) and not (e.sec and not (o or mine or others >= 2)) then
         add(e.m, { kind = e.k, id = e.id, x = e.x, y = e.y, name = titleOf(e), mates = others, sure = (o or n >= 2) or nil })
       end
     end
@@ -488,7 +506,7 @@ end
 local function cell(en) return math.floor(en.x / NEAR) .. "," .. math.floor(en.y / NEAR) end
 local function bump(id) if C.Sample and C.Sample.Bump then C.Sample:Bump(id) end end
 -- the entry the engine tells: kind, id, map, x, y in thousandths, extra (a book's title, a rare's level, a crossing's far
--- end { m, x, y, secs }), and whether QuestBank's data has it
+-- end { m, x, y, secs }), whether QuestBank's data has it, and whether it is a secret chain's next step
 local function entryOf(kind, id, m, x, y, extra)
   id, m, x, y = tonumber(id), tonumber(m), tonumber(x), tonumber(y)
   if not (m and x and y and id) or m < 1 or m > MAP_MAX or x < 0 or x > 1000 or y < 0 or y > 1000 then return nil end
@@ -506,12 +524,13 @@ local function entryOf(kind, id, m, x, y, extra)
   return en
 end
 F.EntryOf = entryOf
-function D.Noted(kind, id, m, x, y, extra, data)
-  C.Safe(function() F:Noted(kind, id, m, x, y, extra, data) end, "finds: noted")()
+function D.Noted(kind, id, m, x, y, extra, data, secret)
+  C.Safe(function() F:Noted(kind, id, m, x, y, extra, data, secret) end, "finds: noted")()
 end
-function F:Noted(kind, id, m, x, y, extra, data)
+function F:Noted(kind, id, m, x, y, extra, data, secret)
   local en = entryOf(kind, id, m, x, y, extra)
   if not en or not C.loaded then return end
+  if secret == true and SECRET_KIND[en.k] then en.sec = true end
   -- (Statistics: every one, the data's too)
   if STAT[en.k] then
     local key = en.k == "r" and ("r" .. en.id) or (en.k .. en.id .. "@" .. en.m .. ":" .. cell(en))

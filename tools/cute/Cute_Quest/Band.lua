@@ -206,7 +206,7 @@ Cute.QuestBand = {
   Members = function() return E.Guide.MemberSteps() end,
   Open = function() Cute.Open("quests") end,
   Read = function(s, ui) local q = questOf(s); if q and QB.Reader then QB.Reader.Read(ui, q) end end,
-  Arrow = function(s) local q = questOf(s); if q then E.UI.QuestClick(q, E:Status(q), "LeftButton") end end,
+  Arrow = function(s) local q = questOf(s); if q and QB.Reader then QB.Reader.Arrow(q) end end,
   Menu = function(s)
     local q = questOf(s)
     if not q then return end

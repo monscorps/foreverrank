@@ -36,15 +36,28 @@ end
 -- a tab change leaves the quest it was reading
 function R.Left(ui) if ui.reading and ui.reading.page ~= ui.page then ui.reading = nil end end
 
+-- (the launch audit) a quest on the arrow, one way everywhere (the reader's Show on arrow, Ctrl-click on a row, on the
+-- band's step and on the step frame's): one you hold and have not finished at its nearest open objective, as a click on
+-- the step frame's quest puts it (its SF.QuestSpot; the engine's own click put the hand-in NPC there, in town); any
+-- other through the engine's click (the hand-in, or the giver of a quest not taken). QuestBank's engine too, beside Cute
+function R.Arrow(q, st)
+  if not (E and q) then return end
+  local e = E.state and E.state.log and E.state.log[q.id]
+  local SF = E.StepFrame
+  if e and not e.complete and SF and SF.QuestSpot and SF.QuestSpot(q.id) then return end
+  E.UI.QuestClick(q, st or E:Status(q), "LeftButton")
+end
+
 -- a quest row's click, everywhere (the quest window's lists, the band's step)
 function QB.RowClick(ui, q, st, which)
   if not (E and q) then return end
   if which == "RightButton" then E.UI.QuestClick(q, st, "RightButton") return end
-  if (IsShiftKeyDown and IsShiftKeyDown()) or (IsControlKeyDown and IsControlKeyDown()) then
-    -- (the engine's own click: Shift links it or puts it on the pick-up list; with Ctrl, the arrow)
+  if IsShiftKeyDown and IsShiftKeyDown() then
+    -- (the engine's own click: Shift links it or puts it on the pick-up list)
     E.UI.QuestClick(q, st, "LeftButton")
     return
   end
+  if IsControlKeyDown and IsControlKeyDown() then R.Arrow(q, st) return end
   R.Read(ui, q)
 end
 
@@ -203,7 +216,7 @@ function R.Draw(ui, scroll)
   y = y + 10
   local st = E:Status(q)
   local acts = {}
-  acts[#acts + 1] = { "Show on arrow", function() E.UI.QuestClick(q, st, "LeftButton") end }
+  acts[#acts + 1] = { "Show on arrow", function() R.Arrow(q, st) end }
   if log then
     if shareable(q.id) then acts[#acts + 1] = { "Share", function() if callable("QuestLogPushQuest") then QuestLogPushQuest(log.index) end end } end
     acts[#acts + 1] = { "Abandon", function() E.UI.ConfirmAbandon(q) end }

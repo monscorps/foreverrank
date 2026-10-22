@@ -16,6 +16,12 @@ if QB.dormant then
     local A = type(C_AddOns) == "table" and C_AddOns or nil
     local ok, v = pcall(A and A.GetAddOnMetadata or error, "QuestBank", "Version")
     QB.missing = string.format("QuestBank %s or newer is needed; yours is %s.", NEED, (ok and type(v) == "string" and v ~= "") and v or "older")
+  else
+    -- (the launch audit) QuestBank's own party sync, beside Cute: never on RAID (as this copy's, E.noRaidSync below) and
+    -- never on GUILD, whatever its share.guild says: its 1S carried level, XP, class, a GUID tail and the plan around the
+    -- officers' Who sees what. Runtime flags on QuestBank's QB (QuestBankAPI, its Core.lua; Sync.lua reads them), none
+    -- of its saved settings written: guild sharing goes through Cute's Comm alone
+    QB.Engine.noRaidSync, QB.Engine.noGuildSync = true, true
   end
   return
 end
@@ -147,12 +153,16 @@ local function pageOf(tab)
   return page
 end
 -- (the step frame's click on a quest's step names the quest, UI.scrollToQuest, and opens tab 1: in Cute the quest window
--- reads that quest, as a click on a quest reads it everywhere; with Ctrl it goes on the arrow instead)
+-- reads that quest, as a click on a quest reads it everywhere; with Ctrl it goes on the arrow instead, as everywhere:
+-- Reader.lua R.Arrow)
 function UI:Open(tab)
   local qid = UI.scrollToQuest
   UI.scrollToQuest = nil
   local q = qid and tab == 1 and E.Quest.Get(qid)
-  if q and IsControlKeyDown and IsControlKeyDown() then UI.QuestClick(q, E:Status(q), "LeftButton") return end
+  if q and IsControlKeyDown and IsControlKeyDown() then
+    if QB.Reader then QB.Reader.Arrow(q, E:Status(q)) else UI.QuestClick(q, E:Status(q), "LeftButton") end
+    return
+  end
   Cute.Open(pageOf(tab), tab == 5 and "quests" or nil)
   local win = q and QB.Reader and Cute.Window and Cute.Window("quests")
   if win and win.frame and win.frame:IsShown() then QB.Reader.Read(win, q) end

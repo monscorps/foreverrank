@@ -4,9 +4,10 @@
 -- friend's plan, and follow each other's run. It also passes on the XP numbers each game reports.
 -- Small messages on the addon channel, a few a second at most; nothing goes out while sharing is off.
 --   1S|level|xp|fac|class|banked*100|plan*100|at60*100|runMin|runN|runXP|version|guid   status
---   1Q|part|parts|id.code[have/need],...                                    quests (b banked, a in the log with progress, p to fetch)
+--   1Q|part|parts|id.code[have/need],...                                    quests (b banked, a in the log with progress, p to fetch):
+--                                                                              to your group and a /qb sync friend, never the guild
 --   1L|id:xp:level,...                                                         XP the game reported
---   1R                                                                         please send yours
+--   1R                                                                         please send yours (on GUILD: your status alone)
 --   1G|text                                                                    the Guide's first step (6.0), for the others' step frames
 local _, QB = ...
 if QB.dormant then return end
@@ -17,6 +18,16 @@ QB.Sync = S
 local function memberChanged() S.stepVer = S.stepVer + 1 end
 local PREFIX = "QuestBank"
 local STALE = 30 * 60
+-- the group's channels: only a member of your group sends on them (a whisper, the guild and the realm's version channel
+-- reach you from anyone of your faction)
+local GROUP = { PARTY = true, RAID = true, INSTANCE_CHAT = true }
+S.GROUP = GROUP
+-- (the launch audit) GUILD hears your status alone: the quest list goes to your group (and to a friend by /qb sync). Every
+-- login made every QuestBank in the guild send its status and its whole list there (a 1R on GUILD cleared what each had
+-- sent), and each objective ticked sent the list again; only the group reads it (the Party page's dungeons, the
+-- group-quest factor). A guild mate's ask is answered with your status, once a guild mate in ASK_GAP seconds
+local ASK_GAP = 600
+S.guildAsked = {}
 
 local function now() return GetTime and GetTime() or 0 end
 
@@ -66,12 +77,18 @@ local function groupChannel()
   return (IsInRaid and IsInRaid()) and "RAID" or "PARTY"
 end
 
+-- whether you share with your guild: share.guild, unless a host that routes what its guild sees and runs beside
+-- QuestBank (Cute) set QB.noGuildSync on QuestBank's QB (QuestBankAPI): then nothing goes to GUILD nor is taken from it,
+-- whatever share.guild says (its saved value untouched), and the guild hears the host's own channel
+local function guildOn() return QB:Settings().share.guild and not QB.noGuildSync end
+S.GuildOn = guildOn
+
 local function channels()
   local share = QB:Settings().share
   local out = {}
   local g = share.party and groupChannel()
   if g then out[#out + 1] = g end
-  if share.guild and IsInGuild and IsInGuild() then out[#out + 1] = "GUILD" end
+  if guildOn() and IsInGuild and IsInGuild() then out[#out + 1] = "GUILD" end
   return out
 end
 
@@ -124,7 +141,7 @@ function S:Broadcast(force)
   local msgs, sig = questMsgs()
   for _, ch in ipairs(chans) do
     if force or status ~= self.lastStatus then queue(status, ch) end
-    if force or sig ~= self.lastQuests then for _, m in ipairs(msgs) do queue(m, ch) end end
+    if ch ~= "GUILD" and (force or sig ~= self.lastQuests) then for _, m in ipairs(msgs) do queue(m, ch) end end
   end
   self.lastStatus, self.lastQuests = status, sig
   if force then QB:Print("Shared your quests with " .. table.concat(chans, " and "):lower() .. ".") end
@@ -260,8 +277,9 @@ end
 
 function S:Receive(msg, channel, sender)
   if not sender or type(msg) ~= "string" or #msg > 255 then return end
-  -- (guild sharing off: nothing taken from the guild either, so a single guild mate's XP reading corrects nothing)
-  if channel == "GUILD" and not QB:Settings().share.guild then return end
+  -- (guild sharing off, or a host's noGuildSync: nothing taken from the guild either, so a single guild mate's XP
+  -- reading corrects nothing)
+  if channel == "GUILD" and not guildOn() then return end
   if isMe(sender) then return end
   local kind = msg:sub(1, 2)
   if kind == "1V" then
@@ -270,6 +288,13 @@ function S:Receive(msg, channel, sender)
     if v then self:HeardVersion(v, sender) end
     return
   end
+  -- (the launch audit) the realm's version channel carries 1V alone; a step line comes from your group alone, an XP
+  -- reading from your group or the guild you share with. Anyone of your faction can whisper you or speak there: a
+  -- stranger's 1G showed in your step frame, escape codes and all, and their 1L corrected your plan's XP. Your own
+  -- S:Step and QueueLive never whisper either; a whispered status and quest list still come (/qb sync)
+  if channel == "CHANNEL" then return end
+  if kind == "1G" and not GROUP[channel] then return end
+  if kind == "1L" and not (GROUP[channel] or channel == "GUILD") then return end
   if kind == "1S" and statusIsMine(msg) then
     -- our own echo, under a sender string we didn't recognise: it is us from now on
     S.mySender = sender
@@ -283,7 +308,11 @@ function S:Receive(msg, channel, sender)
     self.members[sender] = m
     memberChanged()
   end
-  if m then m.seen, m.via = now(), channel end
+  if m then
+    -- (a member's step is listed while their word comes by your group's channel, G.MemberSteps: told when that changes)
+    if (GROUP[m.via] or false) ~= (GROUP[channel] or false) then memberChanged() end
+    m.seen, m.via = now(), channel
+  end
   if kind == "1S" then
     local f = split(msg, "|")
     if m.class ~= f[5] or m.level == nil then memberChanged() end -- (the frame colours the name by class; a member is listed once its level is known)
@@ -305,6 +334,8 @@ function S:Receive(msg, channel, sender)
     if part == parts then m.quests, m.pending = m.pending, nil end
   elseif kind == "1G" then
     local text = msg:match("^1G|(.*)$")
+    -- (no escape codes: the sender's S:Step takes every | out, so a text that still has one is no QuestBank's)
+    text = text and text:gsub("|", "") or nil
     local step = (text and text ~= "") and text:sub(1, STEP_LEN) or nil
     if step ~= m.step then m.step = step; memberChanged() end
     if QB.StepFrame and QB.StepFrame.Refresh then QB.StepFrame.Refresh() end
@@ -322,6 +353,14 @@ function S:Receive(msg, channel, sender)
       if not QB.host and S.asked[baseName(target)] then
         queue(statusMsg(), "WHISPER", target)
         for _, q in ipairs((questMsgs())) do queue(q, "WHISPER", target) end
+      end
+    elseif channel == "GUILD" then
+      -- (a guild mate's ask: your status alone, once a guild mate in ASK_GAP; nothing sent before is forgotten)
+      local t = now()
+      local at = S.guildAsked[sender]
+      if not at or t - at >= ASK_GAP then
+        S.guildAsked[sender] = t
+        queue(statusMsg(), "GUILD")
       end
     else
       self.lastStatus, self.lastQuests = nil, nil
@@ -566,9 +605,9 @@ function S:Init()
   self.ready = true
   local f = CreateFrame("Frame")
   self.frame = f
-  f:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3, a4)
+  local handle = QB.Safe(function(event, msg, channel, sender)
     if event == "CHAT_MSG_ADDON" then
-      if a1 == PREFIX then S:Receive(a2, a3, a4) end
+      S:Receive(msg, channel, sender)
     elseif event == "GROUP_ROSTER_UPDATE" then
       local ch = groupChannel()
       if ch and ch ~= S.lastGroup and QB:Settings().share.party then
@@ -578,7 +617,18 @@ function S:Init()
       end
       S.lastGroup = ch
     end
-  end, "party sync: receiving"))
+  end, "party sync: receiving")
+  -- (the launch audit) every addon's CHAT_MSG_ADDON reaches this frame, 11 arguments with the frame and the event, more
+  -- than QB.Safe takes on its garbage-free way (a table and a closure each): another addon's is passed by here, with no
+  -- wrapper, and only QuestBank's own reaches the handler, with the three it reads
+  f:SetScript("OnEvent", function(_, event, prefix, msg, channel, sender)
+    if event == "CHAT_MSG_ADDON" then
+      if (issecretvalue and issecretvalue(prefix)) or prefix ~= PREFIX then return end
+      handle(event, msg, channel, sender)
+    else
+      handle(event)
+    end
+  end)
   f:RegisterEvent("CHAT_MSG_ADDON")
   f:RegisterEvent("GROUP_ROSTER_UPDATE")
   -- say hello once the plan is ready, and keep a run visible to the others

@@ -40,6 +40,11 @@ A.MODES = MODES
 -- info line and the row of steps left
 local WIDTH, TEXT_W, STEP_W = 232, 200, 176
 local PUCK_Y = -28                -- the puck's centre, below the frame's top
+-- (the launch audit) a host's default place (QB.cornerPlace, A.Place) stands under the game's zone banner: ZoneTextFrame
+-- (Blizzard_FrameXML/Mainline/ZoneText.xml) is TOP 0 -128, 128 x 128, its 32 px name centred in it (176 to 208 px down),
+-- the PvP line's 22 px under it and the subzone's 26 px under that (ZoneText.lua SetZoneText): 256 px down at most, for
+-- 3.5 s at each zone and subzone change. At TOP 0 -190 the puck and the step's name covered the middle of all three
+local CORNER_Y = 262
 local ARROW, ACT, TRAIL = 48, 36, 14
 local PING_S, POP_S, PING_EVERY = 0.6, 0.25, 2
 local SNAP_S, TURN = 0.25, 14     -- a frame this long snaps the arrow; else it eases this fast
@@ -626,10 +631,10 @@ function A.Place()
     return
   end
   -- (the windows round) a host's default place (QB.cornerPlace: Cute, whose step frame stands where the game's tracker
-  -- does): the top's middle, under the game's error text as QuestBank's own step frame is (SF.TOP_Y: UIErrorsFrame,
-  -- TOP 0 -122, 512 x 60, ends 182 px down; the windows round's TOP 0 -96 stood on it), unless the step frame stands
-  -- there now; then under it, as by default
-  local cornerY = (SF and SF.TOP_Y) or 190
+  -- does): the top's middle, under the game's error text (UIErrorsFrame, TOP 0 -122, 512 x 60, ends 182 px down; the
+  -- windows round's TOP 0 -96 stood on it) and, since the launch audit, under the zone banner (CORNER_Y), unless the
+  -- step frame stands there now; then under it, as by default
+  local cornerY = CORNER_Y
   if QB.cornerPlace and not onFrame(0, cornerY, bx, top, bottom, half, k) then
     if f.qbX == 0 and f.qbY == cornerY and not f.qbPos then return end
     f.qbPos, f.qbX, f.qbY = nil, 0, cornerY
@@ -1346,7 +1351,7 @@ local function arrowTop()
   if f and f.qbPos and type(pos) == "table" then return W / 2 + (tonumber(pos[2]) or 0), H + (tonumber(pos[3]) or 0) end
   if f and f.qbX then return W / 2 + f.qbX, H - (f.qbY or 0) end
   if type(pos) == "table" and pos[1] == "TOP" then return W / 2 + (tonumber(pos[2]) or 0), H + (tonumber(pos[3]) or 0) end
-  return W / 2, H - ((QB.StepFrame and QB.StepFrame.TOP_Y) or 190)
+  return W / 2, H - (QB.cornerPlace and CORNER_Y or ((QB.StepFrame and QB.StepFrame.TOP_Y) or 190))
 end
 local function setScale(k)
   k = math.max(0.5, math.min(2, tonumber(k) or 1))

@@ -5005,15 +5005,16 @@ do
     assert(rone.env.CuteQuestDB.settings.arrow == false and rone.env.QuestBankArrow and not rone.env.QuestBankArrow:IsShown(), "the arrow's row: off")
     click(boxOf(rone, "Direction arrow"))
     assert(rone.env.CuteQuestDB.settings.arrow == true and rone.env.QuestBankArrow:IsShown(), "and on again")
-    assert(not texts(rone):find("Lock the step frame", 1, true) and not texts(rone):find("Share your quests with your party", 1, true), "Quests: no lock row, the party's share in Data you share")
+    assert(not texts(rone):find("Lock the step frame", 1, true) and not texts(rone):find("Share your level, XP and quests with your group", 1, true), "Quests: no lock row, the party's share in Data you share")
     rone.C.UI:Open("settings", "share")
-    assert(texts(rone):find("Share your quests with your party", 1, true) and texts(rone):find("foreverrank.com", 1, true), "Data you share: the party's share, the notes for the site:\n" .. texts(rone))
+    assert(texts(rone):find("Share your level, XP and quests with your group", 1, true) and texts(rone):find("foreverrank.com", 1, true), "Data you share: the party's share, the notes for the site:\n" .. texts(rone))
     -- the Route tab: the band's summary and run button, the legs numbered; its section with the minimap's rows
     rone.C.UI:Open("route")
     assert(L.page == "route", "the Route tab")
     local tr = texts(rone)
-    -- (the windows round: where the route takes you, the stops as a timeline; W14)
-    assert((tr:find("Level %d+%.%d to ") or tr:find("Nothing on the route yet", 1, true)) and (tr:find("Start run", 1, true) or tr:find("End run", 1, true)), "the route's band: the summary and the run button:\n" .. tr)
+    -- (the windows round: where the route takes you, the stops as a timeline; W14. The run's button shows only while
+    -- quests are banked since the launch audit: the fix-engine stage's S5)
+    assert((tr:find("Level %d+%.%d to ") or tr:find("Nothing on the route yet", 1, true)) and not tr:find("Start run", 1, true), "the route's band: the summary, no Start run:\n" .. tr)
     check(L.frame, "the quest window, Route")
     rone.C.UI:Open("settings", "route")
     local tro = texts(rone)
@@ -5328,9 +5329,11 @@ do
     assert(seenGuild, "with the switch on a share goes to GUILD: the look sees it")
     s.share.guild = false
     for k = #c.outbox, 1, -1 do c.outbox[k] = nil end
-    -- the minimap with the Map module off: the game's own
+    -- the minimap with the Map module off: the game's own (its far view, Settings > Route's row, off here: since the
+    -- launch audit the far view follows that row alone, the fix-engine stage's S2)
     local Mini, mini = QB.Mini, c.env.Minimap
-    assert(not Mini.Owned() and not Mini.hooked, "Map off: the minimap is not the engine's, nothing hooked")
+    s.mmExtended = false
+    assert(not Mini.Owned(), "Map off: the minimap is not the engine's")
     local clicks, wheels, menus = c.gameClicks or 0, c.gameWheel or 0, #c.contextMenus
     mini.__scripts.OnMouseUp(mini, "RightButton"); tick(c, 1)
     mini.__scripts.OnMouseWheel(mini, 1)
@@ -5373,6 +5376,7 @@ do
     assert(c.tracking[2].active == true and math.abs((cont:GetScale() or 1) - 1.5) < 0.01, "Map on again: Target and the engine's size back")
     c.C.Modules.Set("Cute_Quest:map", false); tick(c, 1); frameTick()
     assert(c.tracking[2].active == false and math.abs((cont:GetScale() or 1) - s0) < 0.01, "and off: the game's again")
+    s.mmExtended = true
     -- a step without a quest (travel, train, grind, corpse) clicked: the quest window's Route tab (the base, always
     -- there), never the guild's Race
     QB.UI:Open(3)
@@ -15057,11 +15061,12 @@ do
     local c = questClient()
     c.C.UI:Open("settings", "share")
     local shown = texts(c)
-    assert(shown:find("The QuestBank Uploader sends what you found in the world to foreverrank.com", 1, true), "Data you share names the uploader:\n" .. shown)
     local page = assert(io.open(HERE .. "/../../addons/cute/index.html")):read("*a")
     local zip = io.open(HERE .. "/../../addons/cute/Cute-Uploader.zip", "rb")
     local offered = page:find('href="Cute-Uploader.zip"', 1, true) ~= nil and zip ~= nil
     if zip then zip:close() end
+    -- (no uploader named at all until the page offers Cute's: the launch audit, the fix-engine stage's S13)
+    assert(offered or not shown:find("Uploader", 1, true), "Data you share names an uploader Cute's page does not offer:\n" .. shown)
     local readme = assert(io.open(HERE .. "/README.md")):read("*a")
     assert(offered or not shown:find("Cute's page", 1, true), "Data you share says the uploader comes on Cute's page, which does not offer it")
     assert(offered or not readme:find("Cute's second download", 1, true), "the README calls the uploader Cute's second download, which Cute's page does not offer")
@@ -20455,6 +20460,334 @@ do
     leave(c)
     print("fix-cute-ui U13: Settings > Halls and Runs headed by their names; the step frame's menu says Say XP after each hand-in")
   end)
+end
+
+-- [stage: fix-engine] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The launch audit's engine findings, Cute's side (Cute and QuestBank launch, 4 November). Each case in FECASES failed
+-- on 0.9.0's files; every case runs, and the block fails at its end naming each one that did not hold
+----------------------------------------------------------------------------
+do
+  local FECASES = {}
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 20, online = true } end
+  local function quest(name, extra)
+    local o = { modules = { "Cute_Quest" }, addonState = {}, quest = true }
+    for k, v in pairs(extra or {}) do o[k] = v end
+    return newClient(charOf({ name, 1, "Officer", "WARRIOR", 20 }, o))
+  end
+  -- (a case that fails inside isolated() still gives the harness its guild and clients back)
+  local function inGuild(guild, fn)
+    local ok, err = true, nil
+    isolated(guild, function() ok, err = pcall(fn) end)
+    if not ok then error(err, 0) end
+  end
+  local function button(c, label) for _, b in ipairs(c.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == label then return b end end end
+  local function row(c, label) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == label end) end
+  -- a route of one stop, kind its way there (Target.Route as the Route tab reads it)
+  local function oneStop(QB, stop, kind)
+    local was = QB.Target.Route
+    QB.Target.Route = function() return { legs = { { stop = stop, kind = kind, travel = 1, rows = {}, leave = 20.4 } }, xp = 0, level = 20, t = 1 } end
+    return function() QB.Target.Route = was end
+  end
+
+  -- M1 (trust, must). A secret chain's next step showed on every guild mate's map, dim, as soon as one guild mate opened
+  -- its lock (1X carried no mark; build() drew any find a guild mate saw). The engine tells a find opened carrying a
+  -- secret chain's key as secret (QuestBank's Finds.lua, D.SECRETKEY); Cute sends it marked ("s" before its kind: an older
+  -- Cute passes it by), still a voice, and draws a marked find only once two guild mates found it (or you did)
+  FECASES[#FECASES + 1] = { "M1: a secret find shows on a guild mate's map only once two guild mates found it", function()
+    inGuild({ member("Ann", 3), member("Ben", 3), member("Cy", 3) }, function()
+      local function char(name)
+        local c = newClient(charOf({ name, 3, "Raider", "WARRIOR", 20 }))
+        c.env.C_Map = c.env.C_Map or {}
+        local was = c.env.C_Map.GetMapInfo
+        c.env.C_Map.GetMapInfo = function(m) if type(m) ~= "number" or m >= 99000 then return nil end return was and was(m) or { mapID = m, name = "Map " .. m, mapType = 3 } end
+        return c
+      end
+      local ann, ben, cy = char("Ann"), char("Ben"), char("Cy")
+      for _, c in ipairs({ ann, ben, cy }) do login(c) end
+      tickAll(30)
+      local F, b36 = ben.C.Finds, ben.C.Comm.b36
+      local function rowOf(c, id) for _, r in ipairs(c.C.Finds.door.Rows(1429)) do if r.id == id then return r end end end
+      local kv = F.Pack({ k = "k", id = 9501, m = 1429, x = 600, y = 400, sec = true })
+      local back = F.Parse(kv)
+      assert(back and back.k == "k" and back.id == 9501 and back.sec == true, "a secret find packed and parsed back as one: " .. tostring(kv))
+      assert(kv:sub(1, 2) == "sk" and F.Pack({ k = "k", id = 9501, m = 1429, x = 600, y = 400 }):sub(1, 1) == "k", "marked before its kind; an ordinary one as before")
+      assert(F.Parse("s" .. F.Pack({ k = "r", id = 7, m = 1429, x = 1, y = 1, lv = 20 })) == nil, "a rare or a crossing is never secret")
+      F:Receive(kv, ann.sender, false)
+      assert(rowOf(ben, 9501) == nil, "one guild mate's secret find: nothing on Ben's map, not even dim")
+      F:Receive(F.Pack({ k = "k", id = 9502, m = 1429, x = 100, y = 100 }), ann.sender, false)
+      assert(rowOf(ben, 9502) and not rowOf(ben, 9502).sure, "an ordinary find: dim with one voice, as before")
+      F:Receive(F.Pack({ k = "k", id = 9501, m = 1429, x = 603, y = 401, sec = true }), cy.sender, false)
+      local r = rowOf(ben, 9501)
+      assert(r and r.sure and r.mates == 2, "two guild mates found it: drawn whole")
+      -- your own, told secret by the engine: a voice that goes marked
+      ann.C.Finds.door.Noted("k", 9601, 1429, 300, 300, nil, false, true)
+      tickAll(130)
+      local marked = false
+      for _, m in ipairs(ann.sent) do if m.msg:sub(1, 3) == "1X|" and m.msg:find("sk" .. b36(9601) .. "@", 1, true) then marked = true end end
+      assert(marked, "Ann's own secret lock goes out marked")
+      assert(rowOf(ben, 9601) == nil and rowOf(cy, 9601) == nil, "and shows on no guild mate's map with her voice alone")
+      for _, c in ipairs({ ann, ben, cy }) do leave(c) end
+    end)
+  end }
+
+  -- M3 (owner, must). L > Route worded the Rut'theran portal as the mage spell: "portal to Darnassus, 1 min" under the icon
+  -- of Portal: Darnassus (135741), the 6.1.1 complaint the engine's Travel.lua fixed. A portal leg says where the portal
+  -- stands, "Portal in Rut'theran Village to <place>", under the world portal's art (portalpurple, 134492)
+  FECASES[#FECASES + 1] = { "M3: L > Route words the Rut'theran portal as the walk-in portal it is", function()
+    inGuild({ member("Rone", 1) }, function()
+      local c = quest("Rone")
+      login(c); tickAll(6)
+      local QB = c.addons[2].private
+      local art = c.env.Cute.Look.ART.portal
+      assert(art[1] == "portalpurple" and art[2] == 134492, "the portal's art: the world portal's, never the mage spell's: " .. tostring(art[1]) .. " " .. tostring(art[2]))
+      local undo = oneStop(QB, { m = 1457, x = 40, y = 50, name = "Darnassus" }, "portal")
+      c.C.UI:Open("route")
+      local tx = texts(c)
+      undo()
+      assert(tx:find("Portal in Rut'theran Village to ", 1, true) and tx:find(", 1 min", 1, true) and not tx:find("portal to ", 1, true), "the way line:\n" .. tx)
+      leave(c)
+    end)
+  end }
+
+  -- S1 (firsthour, owner, look). Route's map button opened the game's world map with Cute's Map on, and in a fight said
+  -- "In a fight only the game's own map key opens the map." The design: "Open in the map" (opens M), on the route's
+  -- first stop; M opens in a fight. With Map off it stays the game's map ("Open the map": the windows round's W19)
+  FECASES[#FECASES + 1] = { "S1: Route's Open in the map opens Cute's map on the route, in a fight too", function()
+    inGuild({ member("Rone", 1) }, function()
+      local c = quest("Rone")
+      login(c); tickAll(6)
+      local QB = c.addons[2].private
+      c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+      local undo = oneStop(QB, { m = 1429, x = 42, y = 65, name = "Goldshire" }, "foot")
+      c.C.UI:Open("route")
+      local open = button(c, "Open in the map")
+      assert(open, "Route's button with Map on:\n" .. texts(c))
+      local went
+      local go = QB.MapPage.Go
+      QB.MapPage.Go = function(m, why) went = { m, why }; return true end
+      c.combat = true
+      local n0 = #c.chat
+      press(open)
+      c.combat = false
+      QB.MapPage.Go = go
+      undo()
+      local M = c.C.UI.Window("map")
+      assert(rawget(M, "frame") and M.frame:IsShown() and not (c.map and c.map.shown), "M opened, not the game's map")
+      assert(went and went[1] == 1429 and went[2] == "user", "M on the route's first stop: " .. tostring(went and went[1]))
+      assert(not table.concat(c.chat, "\n", n0 + 1):find("In a fight", 1, true), "nothing said in a fight")
+      leave(c)
+    end)
+  end }
+
+  -- S5 (firsthour, owner). The Route band's "Start run" always showed, with no tooltip: under Cute a run is J's Runs (a
+  -- dungeon's report), and J's "End run" ends the group's. This one times your hand-ins (QuestBank's hand-in run, which a
+  -- level lock's banked quests are for): named for that, a tooltip, shown only while quests are banked or it is on
+  FECASES[#FECASES + 1] = { "S5: Route's run button times hand-ins, says so, and shows only while quests are banked", function()
+    inGuild({ member("Rone", 1) }, function()
+      local c = quest("Rone")
+      login(c); tickAll(6)
+      local QB = c.addons[2].private
+      c.C.UI:Open("route")
+      local kit = qwin(c).kits.route
+      assert(not QB:Banking() and not kit.run:IsShown() and not button(c, "Start run"), "nothing banked: no run button:\n" .. texts(c))
+      local banking = QB.Banking
+      QB.Banking = function() return true end
+      c.C.UI:Open("route")
+      assert(kit.run:IsShown() and kit.run.label:GetText() == "Time hand-ins", "banked: Time hand-ins: " .. tostring(kit.run.label:GetText()))
+      local tip = tipOf(kit.run)
+      assert(tip:find("ticked off", 1, true) and tip:find("dungeon", 1, true), "its tooltip says what it times and what it is not:\n" .. tip)
+      press(kit.run); tick(c, 1)
+      assert(QB.Run.Get() and kit.run.label:GetText() == "Stop timing", "on: Stop timing")
+      QB.Banking = banking
+      c.C.UI:Open("route")
+      assert(kit.run:IsShown(), "shown while it is on")
+      press(kit.run)
+      assert(not QB.Run.Get(), "Stop timing stops it")
+      leave(c)
+    end)
+  end }
+
+  -- S2 (firsthour). Settings > Route's "Minimap far view" (on by default) did nothing with Cute's Map off: the wheel was
+  -- hooked only while the minimap was the engine's. The far view (the wheel past the game's widest, a drag to look
+  -- around) follows its row alone; Ctrl-wheel, Alt-drag, the right-click menu, the size and the place stay the Map
+  -- module's. Both off, the game's own wheel
+  FECASES[#FECASES + 1] = { "S2: the minimap's far view follows its row, Map on or off", function()
+    inGuild({ member("Rone", 1) }, function()
+      local c = quest("Rone")
+      login(c); tickAll(6)
+      local QB = c.addons[2].private
+      local Mini, MV, mini, s = QB.Mini, QB.MiniView, c.env.Minimap, QB:Settings()
+      assert(not Mini.Owned() and s.mmExtended ~= false, "Map off, the far view on")
+      local far = 0
+      local wheel = MV.Wheel
+      MV.Wheel = function(d) far = far + 1; return wheel(d) end
+      local wheels, clicks, menus = c.gameWheel or 0, c.gameClicks or 0, #c.contextMenus
+      assert(mini.__scripts.OnMouseWheel, "the wheel hooked")
+      mini.__scripts.OnMouseWheel(mini, -1)
+      assert(far == 1 and (c.gameWheel or 0) == wheels, "Map off: the wheel is the far view's")
+      local scale = c.env.MinimapCluster.MinimapContainer:GetScale() or 1
+      c.ctrl = true
+      mini.__scripts.OnMouseWheel(mini, 1)
+      c.ctrl = false
+      assert(far == 1 and (c.gameWheel or 0) == wheels + 1 and math.abs((c.env.MinimapCluster.MinimapContainer:GetScale() or 1) - scale) < 0.001, "Ctrl-wheel: the game's, no size of ours")
+      mini.__scripts.OnMouseUp(mini, "RightButton"); tick(c, 1)
+      assert((c.gameClicks or 0) == clicks + 1 and #c.contextMenus == menus, "a right-click: the game's")
+      s.mmExtended = false
+      mini.__scripts.OnMouseWheel(mini, -1)
+      assert(far == 1 and (c.gameWheel or 0) == wheels + 2, "the far view off: the game's wheel")
+      s.mmExtended = true
+      MV.Wheel = wheel
+      leave(c)
+    end)
+  end }
+
+  -- S8 (scale). The Map window's per-frame OnUpdate went through Cute.Safe: a table and a closure every frame while M
+  -- was open (QuestBank 5.4.2 took that pattern out of the engine's own OnUpdates). A plain pcall now, nothing a frame
+  FECASES[#FECASES + 1] = { "S8: the Map window's frame tick makes no garbage", function()
+    inGuild({ member("Rone", 1) }, function()
+      local c = quest("Rone")
+      login(c); tickAll(6)
+      local QB = c.addons[2].private
+      c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+      c.C.UI:Open("map")
+      local b = c.C.UI.Window("map").mapBox
+      assert(b and b.__scripts.OnUpdate, "the map's box ticks")
+      local ticks = 0
+      local was = QB.MapPage.Tick
+      QB.MapPage.Tick = function() ticks = ticks + 1 end
+      local on = b.__scripts.OnUpdate
+      if jit then jit.off(); jit.flush() end
+      collectgarbage("collect"); collectgarbage("stop")
+      local before = collectgarbage("count")
+      for _ = 1, 500 do on(b, 0.016) end
+      local kb = collectgarbage("count") - before
+      collectgarbage("restart")
+      if jit then jit.on() end
+      QB.MapPage.Tick = was
+      assert(ticks == 500 and kb < 2, string.format("500 frames: %d ticks, %.1f KB", ticks, kb))
+      leave(c)
+    end)
+  end }
+
+  -- S9 (robust). The addon QuestBank beside Cute shared on GUILD and, in a raid, on RAID, whatever the officers' Who sees
+  -- what said. The dormant Bridge sets QuestBank's runtime flags (QuestBankAPI is QuestBank's QB; no saved setting written):
+  -- noRaidSync and noGuildSync, so guild sharing goes through Cute's Comm alone
+  FECASES[#FECASES + 1] = { "S9: QuestBank loaded beside Cute: its sync told off RAID and GUILD, nothing of its settings written", function()
+    inGuild({ member("Rone", 1) }, function()
+      local q = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+      local isLoaded = q.env.C_AddOns.IsAddOnLoaded
+      q.env.C_AddOns.IsAddOnLoaded = function(x) if x == "QuestBank" then return true, true end return isLoaded(x) end
+      local settings = { guide = { on = true, frame = true }, arrow = true, glow = { on = true, style = "sparkle" }, remind = { on = true }, share = { party = true, guild = true }, djShow = { boss = true, rare = true, trash = false, other = true } }
+      q.env.QuestBankAPI = {
+        version = "6.4.0", logReady = true, state = { level = 5, log = {} }, routeNow = { legs = {}, xp = 0, level = 5, t = 0 },
+        Settings = function() return settings end, MarkDirty = function() end, Comma = tostring, Short = tostring,
+        Model = { Busy = function() return false end }, Data = { CAT = {} }, Quest = { Get = function() return nil end },
+        Guide = { Steps = function() return {} end, Text = function(st) return st.text end, TimeToLevel = function() return nil end, MemberSteps = function() return {} end, Reminder = function() return nil end },
+        StepFrame = { Menu = function() end, Apply = function() end, RemindChanged = function() end }, Arrow = { Set = function() end },
+        UI = { PlaceGroups = function() return {}, {}, nil, nil, nil end, Candidates = function() return {} end, QuestClick = function() end, QuestTooltip = function() end },
+        Target = { Route = function() return { legs = {}, xp = 0, level = 5, t = 0 } end }, Run = { Get = function() return nil end },
+        DMap = { Attach = function() end, Refresh = function() end }, Gear = { Attach = function() end, Refresh = function() end, RefreshSoon = function() end },
+        Remind = { Pull = function() return {}, false end },
+      }
+      local API = q.env.QuestBankAPI
+      login(q); tickAll(5)
+      q.C.Modules.Set("Cute_Quest", true); tick(q, 6)
+      assert(q.addons[2].private.dormant == true, "QuestBank loaded: the copy sleeps")
+      assert(API.noRaidSync == true and API.noGuildSync == true, "QuestBank's sync told off RAID and GUILD")
+      assert(settings.share.guild == true and settings.share.party == true, "its saved settings as they were")
+      leave(q)
+    end)
+  end }
+
+  -- S10 (trust). Data you share's "Share your quests with your party" named only the quests, with no tooltip; each 1S
+  -- carries your level, XP, class and the plan's levels to PARTY or INSTANCE_CHAT, whatever Who sees what says
+  FECASES[#FECASES + 1] = { "S10: the group share's row names what it sends and says where it goes", function()
+    inGuild({ member("Rone", 1) }, function()
+      local c = quest("Rone")
+      login(c); tickAll(6)
+      c.C.UI:Open("settings", "share")
+      assert(not row(c, "Share your quests with your party"), "the old words gone")
+      local r = row(c, "Share your level, XP and quests with your group")
+      assert(r, "the row:\n" .. texts(c))
+      local tip = tipOf(r)
+      assert(tip:find("party or instance group", 1, true) and tip:find("Who sees what", 1, true), "its tooltip:\n" .. tip)
+      click(r)
+      assert(c.env.CuteQuestDB.settings.share.party == false, "unticked: off")
+      click(r)
+      assert(c.env.CuteQuestDB.settings.share.party == true, "ticked: on")
+      leave(c)
+    end)
+  end }
+
+  -- S12 (owner). For a quest you hold and have not finished, "show it on the arrow" (the reader's button, Ctrl-click on a
+  -- row, on the band's step, on the step frame's) pointed at the hand-in NPC in town; a plain click on the step frame's
+  -- quest goes to its nearest open objective. One way now: the step frame's (SF.QuestSpot); the engine's click otherwise
+  FECASES[#FECASES + 1] = { "S12: show on the arrow, a held unfinished quest: its nearest open objective, everywhere", function()
+    inGuild({ member("Rone", 1) }, function()
+      local c = quest("Rone", { log = { [7] = 1 } })
+      login(c); tickAll(6)
+      local QB = c.addons[2].private
+      local q = QB.Quest.Get(7)
+      assert(QB.state.log[7] and not QB.state.log[7].complete, "Kobold Camp Cleanup held, not finished")
+      local spots, clicks = {}, {}
+      local spot, qclick = QB.StepFrame.QuestSpot, QB.UI.QuestClick
+      QB.StepFrame.QuestSpot = function(id) spots[#spots + 1] = id; return true end
+      QB.UI.QuestClick = function(x, st, which) clicks[#clicks + 1] = x.id end
+      local L = qwin(c)
+      c.C.UI:Open("quests")
+      QB.Reader.Read(L, q)
+      press(button(c, "Show on arrow"))
+      c.ctrl = true
+      QB.RowClick(L, q, QB:Status(q), "LeftButton")
+      c.env.Cute.QuestBand.Arrow({ qid = 7 })
+      QB.UI.scrollToQuest = 7
+      QB.UI:Open(1)
+      c.ctrl = false
+      assert(#spots == 4 and #clicks == 0, "the reader, a row, the band, the step frame: its objective each time: " .. #spots .. " spots, " .. #clicks .. " clicks")
+      local other = QB.Quest.Get(33)
+      QB.Reader.Read(L, other)
+      press(button(c, "Show on arrow"))
+      assert(#clicks == 1 and clicks[1] == 33 and #spots == 4, "a quest not held: the engine's click (its giver)")
+      QB.StepFrame.QuestSpot, QB.UI.QuestClick = spot, qclick
+      leave(c)
+    end)
+  end }
+
+  -- S13 (look). Data you share named "The QuestBank Uploader", which Cute's page does not offer; its only copy offers to
+  -- install QuestBank, which puts Cute's quest copy to sleep. No word of it until Cute's page offers Cute-Uploader.zip
+  FECASES[#FECASES + 1] = { "S13: Data you share names no uploader Cute's page does not offer", function()
+    inGuild({ member("Rone", 1) }, function()
+      local c = quest("Rone")
+      login(c); tickAll(6)
+      c.C.UI:Open("settings", "share")
+      assert(not texts(c):find("Uploader", 1, true), "no uploader named:\n" .. texts(c))
+      leave(c)
+    end)
+  end }
+
+  -- S4 (firsthour), Cute_Quest's own words: the Finds list's note said what guides gave "QuestBank"; the site, which
+  -- gathers them, is foreverrank.com
+  FECASES[#FECASES + 1] = { "S4: the Finds list's note names foreverrank.com", function()
+    inGuild({ member("Rone", 1) }, function()
+      local c = quest("Rone")
+      login(c); tickAll(6)
+      local QB = c.addons[2].private
+      c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+      QB.MapWin.OpenFinds()
+      local tx = texts(c)
+      assert(tx:find("gave foreverrank.com", 1, true) and not tx:find("gave QuestBank", 1, true), "the note:\n" .. tx)
+      leave(c)
+    end)
+  end }
+
+  local failed = {}
+  for _, case in ipairs(FECASES) do
+    local ok, err = pcall(case[2])
+    if ok then print("fix-engine: " .. case[1] .. ": ok") else failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
+    collectgarbage("collect")
+  end
+  assert(#failed == 0, "fix-engine: " .. #failed .. " of " .. #FECASES .. " failed:\n  " .. table.concat(failed, "\n  "))
 end
 
 -- this pass's problems and layouts join the run's; the last pass prints them all

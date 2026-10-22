@@ -32,7 +32,9 @@ L.ART = {
   b = { "Crosshair_Buy_32", 131014 }, e = { "QuestObjective", 131017 }, f = { "Crosshair_Fishing_32", 303902 },
   s = { "Crosshair_LootAll_32", 131023 }, d = { "Dungeon", 136347 },
   flight = { "FlightPath", 132239 }, gryphon = { nil, 132239 }, wyvern = { nil, 132268 }, hearth = { nil, 134414 },
-  boat = { nil, 1686581 }, zeppelin = { nil, 1519491 }, tram = { nil, 132996 }, portal = { nil, 135741 },
+  -- (the portal: a world portal's atlas and the engine's D.TEX.portal, 134492, as Travel.lua's step draws it; never
+  -- 135741, the icon of the mage spell Portal: Darnassus)
+  boat = { nil, 1686581 }, zeppelin = { nil, 1519491 }, tram = { nil, 132996 }, portal = { "portalpurple", 134492 },
   foot = { nil, 132307 }, mount = { nil, 132261 }, skull = { nil, 137025 },
   dungeon = { "Dungeon", 136347 }, raid = { "Raid", 136347 }, party = { nil, 134149 },
   leader = { nil, 132062 }, assist = { nil, 132061 }, lock = { nil, 130944 }, alert = { nil, 357854 },

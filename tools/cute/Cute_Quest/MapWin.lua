@@ -34,6 +34,7 @@ end
 
 -- QuestBank loaded beside Cute (this copy sleeps): its own Map page shows its map
 local function engineMap() return (not QB.dormant) and E and E.MapPage or nil end
+local tickFailed = false -- (the map's frame tick failed once this session: said once, MW's box below)
 
 ----------------------------------------------------------------------------
 -- the four of the game's own providers the world map has and QuestBank's page did not (Blizzard_WorldMap.lua:213,
@@ -709,7 +710,7 @@ local function findsList(ui, scroll)
   k.count:Show()
   local w = scroll:Width()
   k.note:SetWidth(w - 8)
-  k.note:SetText("Yours, the guild's once two agree, and what players' games and guides gave QuestBank. Never a book's text or where a key leads.")
+  k.note:SetText("Yours, the guild's once two agree, and what players' games and guides gave foreverrank.com. Never a book's text or where a key leads.")
   k.note:Show()
   local nh = math.ceil(k.note:GetStringHeight() or 28)
   k:SetHeight(30 + nh + 6)
@@ -752,8 +753,18 @@ local function boxOf(ui)
   b.said.text = ui.Text(b.said, 12, ui.COLORS.INK, "LEFT")
   b.said.text:SetPoint("LEFT", 6, 0)
   b.said:Hide()
-  -- (while it shows: the canvas's route strokes, the arrow's step, a lit row's fade: MapPage.lua MP.Tick)
-  b:SetScript("OnUpdate", Cute.Safe(function(_, dt) local MP = engineMap(); if MP and MP.canvas then MP.Tick(dt or 0) end end, "map window: tick"))
+  -- (while it shows: the canvas's route strokes, the arrow's step, a lit row's fade: MapPage.lua MP.Tick). Every frame, so
+  -- through pcall, which makes nothing (the launch audit: Cute.Safe made a table and a closure a frame, 15 to 35 KB a
+  -- second of garbage while M was open); an error goes to Cute's list once
+  b:SetScript("OnUpdate", function(_, dt)
+    local MP = engineMap()
+    if not (MP and MP.canvas) then return end
+    local ok, err = pcall(MP.Tick, dt or 0)
+    if not ok and not tickFailed then
+      tickFailed = true
+      Cute.Safe(function() error(err, 0) end, "map window: tick")()
+    end
+  end)
   ui.mapBox = b
   return b
 end
@@ -994,13 +1005,20 @@ do
   end
 end
 
+-- M on map m (the menu's zones below, the Route tab's "Open in the map"): opened, in front of the window it was opened
+-- from (an open M is drawn again, not raised, by Cute.Open), on m where it has art (MP.Go says so where it has none);
+-- with no m, where it was
+function MW.OpenOn(m)
+  Cute.Open("map")
+  local w = Cute.Window and Cute.Window("map")
+  local f = w and w.frame
+  if f and f:IsShown() and f.Raise then f:Raise() end
+  local MP = engineMap()
+  if MP and m then MP.Go(m, "user") end
+end
 -- (sub-project F) the menu's Map entry (Cute/Windows.lua W.Menu): your zone, the last three zones M showed but yours, its
 -- Finds list, the game's own map (gameMap, as the header's button)
-local function openOn(m)
-  Cute.Open("map")
-  local MP = engineMap()
-  if MP then MP.Go(m, "user") end
-end
+local openOn = MW.OpenOn
 Cute.MapMenu = function()
   local mine = playerMap()
   local zones = {}

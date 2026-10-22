@@ -7486,10 +7486,13 @@ do
   owner.party, owner.pushable = nil, nil
   UI:Refresh()
 end
--- a friend runs a newer QuestBank: one notice, and the link
+-- a friend runs a newer QuestBank: one notice, and the link. (Since the launch audit one player's word is news only
+-- once a second says a version at least that new, the fix-engine stage's S11: a guild mate said it first here)
 do
   local fQB = friend.QB
   local real = fQB.version
+  owner.QB:SawVersion("9.9.9", "Cora Steelhand")
+  assert(owner.QB.newest == nil, "one player's word alone: not news yet")
   fQB.version = "9.9.9"
   fQB.Sync.lastStatus = nil
   fQB.Sync:Broadcast(true)
@@ -21759,8 +21762,9 @@ end
 -- D5. The default places under a host that asks for them (Cute's QB.cornerPlace), for the pieces never moved: the step
 -- frame stands where the game's quest tracker stands, its top right corner on the tracker's (read at the tracker's own
 -- size, the scale step of D3 left out), 8 px left of the tracker while it is kept; the arrow at the top's middle, TOP
--- 0 -190, under the game's error text (UIErrorsFrame, TOP 0 -122, 512 x 60: merge2 moved it from TOP 0 -96, where
--- "Not enough rage" stood on it); the camp bar and its banner where the engine puts them. At 1920 x 1080 and 1366 x 768
+-- 0 -262, under the game's error text (UIErrorsFrame, TOP 0 -122, 512 x 60: merge2 moved it from TOP 0 -96, where
+-- "Not enough rage" stood on it) and the zone banner (the launch audit: the fix-engine stage's S3); the camp bar and its
+-- banner where the engine puts them. At 1920 x 1080 and 1366 x 768
 -- none overlaps another, the error text among them.
 -- A dragged step frame stays where it was put; QuestBank alone keeps its own places (the engine's cases)
 do
@@ -21795,7 +21799,7 @@ do
     local sf = boxOf(env.QuestBankStep)
     assert(math.abs(sf.r - tr.r) < 0.5 and math.abs(sf.t - tr.t) < 0.5, string.format("%dx%d: the step frame on the tracker's corner %d, %d: %s", W, H, tr.r, tr.t, say(sf)))
     local ar = boxOf(env.QuestBankArrow)
-    assert(math.abs((ar.l + ar.r) / 2 - W / 2) < 0.5 and math.abs(ar.t - (H - 190)) < 0.5, string.format("%dx%d: the arrow at TOP 0 -190: %s", W, H, say(ar)))
+    assert(math.abs((ar.l + ar.r) / 2 - W / 2) < 0.5 and math.abs(ar.t - (H - 262)) < 0.5, string.format("%dx%d: the arrow at TOP 0 -262: %s", W, H, say(ar)))
     -- (the game's error text, Blizzard_UIErrorsFrame: TOP 0 -122, 512 x 60)
     local pieces = { { "step frame", sf }, { "arrow", ar }, { "error text", { l = W / 2 - 256, r = W / 2 + 256, t = H - 122, b = H - 182 } } }
     -- (the camp bar where the engine puts it, CENTER 0 -190: its top as Camp.BarTop says, a row of icons under it)
@@ -21819,7 +21823,7 @@ do
     local p = env.QuestBankStep.__points[1]
     assert(p.point == "CENTER" and p.x == 100 and p.y == 50, "a dragged place kept")
   end
-  print("windows D5: Cute's default places: the step frame on the hidden tracker's corner (8 px left of it while kept), the arrow at TOP 0 -190 under the game's error text, the camp bar the engine's; apart at 1920 x 1080 and 1366 x 768")
+  print("windows D5: Cute's default places: the step frame on the hidden tracker's corner (8 px left of it while kept), the arrow at TOP 0 -262 under the game's error text and zone banner, the camp bar the engine's; apart at 1920 x 1080 and 1366 x 768")
 end
 
 -- D6. The journal's list tiles under a host's skin that asks (Cute's QB.Skin.tiles): the level range on a 70% black plate
@@ -22063,16 +22067,16 @@ do
     assert(bx and apart(a, bx, top, bottom, half), string.format("%dx%d: the arrow off the step frame at the tracker's corner", W, H))
     -- the step frame dragged into the top's middle, over the arrow's place: the arrow under it
     local g = QB:Settings().guide
-    g.x, g.y = 0, H / 2 - 230; SF.Apply(); QB.Arrow.Place()
+    g.x, g.y = 0, H / 2 - 290; SF.Apply(); QB.Arrow.Place()
     a = arrow()
     bx, top, bottom, half = SF.Box()
-    assert(bx and top < 190 + TALL and bottom > 190, string.format("%dx%d: the frame dragged onto the arrow's place: %d..%d", W, H, top, bottom))
+    assert(bx and top < 262 + TALL and bottom > 262, string.format("%dx%d: the frame dragged onto the arrow's place: %d..%d", W, H, top, bottom))
     assert(apart(a, bx, top, bottom, half) and a.top >= bottom and a.top >= ERR.bottom,
       string.format("%dx%d: the arrow under the dragged frame (its bottom %d): top %d", W, H, bottom, a.top))
     g.x, g.y = nil, nil; SF.Apply(); QB.Arrow.Place()
-    assert(arrow().top == 190, "the frame back on the tracker's corner: the arrow back at TOP 0 -190")
+    assert(arrow().top == 262, "the frame back on the tracker's corner: the arrow back at TOP 0 -262 (under the zone banner since the launch audit)")
   end
-  print("merge2 M1: under Cute's QB.cornerPlace the arrow stands in the top's middle under the game's error text (TOP 0 -190), off the step frame; a frame dragged there has it under it; 1920 x 1080 and 1366 x 768")
+  print("merge2 M1: under Cute's QB.cornerPlace the arrow stands in the top's middle under the game's error text (TOP 0 -262), off the step frame; a frame dragged there has it under it; 1920 x 1080 and 1366 x 768")
 end
 do
   local c = lookChar("Notewhere")
@@ -24401,6 +24405,247 @@ do
   assert(#(env.QuestBankDB.errors or {}) == 0, "no error recorded")
   print("merge3: " .. table.concat(said, "; "))
 end
+
+-- [stage: fix-engine] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The launch audit's engine findings (Cute and QuestBank launch, 4 November). Each case in FECASES failed on 6.4.0's
+-- files; every case runs, and the block fails at its end naming each one that did not hold
+----------------------------------------------------------------------------
+;(function()
+  local FECASES = {}
+  -- a character in a party and a guild, in Elwynn Forest at level 18
+  local function syncChar(name, o)
+    o = o or {}
+    local c = newClient({ name = name, level = 18, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1, race = "Human",
+      log = o.log or {}, done = {}, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Goldshire", guild = true, group = true })
+    login(c)
+    return c
+  end
+  local function hearer(c) local f = c.QB.Sync.frame; return function(msg, channel, who) f.__scripts.OnEvent(f, "CHAT_MSG_ADDON", "QuestBank", msg, channel, who) end end
+  local function spy(c)
+    local QB = c.QB
+    local n, record = { 0 }, QB.Live.Record
+    QB.Live.Record = function(...) n[1] = n[1] + 1; return record(...) end
+    return n, function() QB.Live.Record = record end
+  end
+
+  -- M2 (trust, must). Anyone of your faction could whisper 1S, 1G and 1L under the "QuestBank" prefix, or send them on the
+  -- realm's version channel: while you were in a group their text showed in your step frame for half an hour, escape
+  -- codes and all, and their XP numbers corrected your plan's. A step line comes from your group alone now, an XP
+  -- reading from your group or (while you share with it) your guild; a whispered status and quest list still come
+  -- (/qb sync); the version channel carries 1V alone; a group's step loses any |
+  FECASES[#FECASES + 1] = { "M2: a whisper or the version channel never puts a stranger's step on your frame nor corrects your XP", function()
+    local c = syncChar("Whispered")
+    local QB, S, G = c.QB, c.QB.Sync, c.QB.Guide
+    local hear = hearer(c)
+    local recorded, unspy = spy(c)
+    local stranger, spammer, mate = "Grimm Shade-Forever Normal", "Vex Shade-Forever Normal", "Mate Steelhand-Forever Normal"
+    hear("1S|60|0|A|WARRIOR|0|0|0|-1|0|0|6.4.0|xxxxxxxxxx", "WHISPER", stranger)
+    hear("1G||TInterface\\Icons\\INV_Misc_Coin_01:64|t Free gold: whisper me", "WHISPER", stranger)
+    hear("1L|118:450:18", "WHISPER", stranger)
+    local steps = G.MemberSteps()
+    assert(#steps == 0, "a stranger's whispered step: never on your frame: " .. tostring(steps[1] and steps[1].text))
+    assert(recorded[1] == 0, "a whispered XP reading corrects nothing")
+    assert(S.members[stranger] and S.members[stranger].level == 60, "a whispered status still comes (/qb sync)")
+    hear("1S|60|0|A|WARRIOR|0|0|0|-1|0|0|6.4.0|yyyyyyyyyy", "CHANNEL", spammer)
+    hear("1G|Spam", "CHANNEL", spammer)
+    hear("1L|118:450:18", "CHANNEL", spammer)
+    assert(S.members[spammer] == nil and recorded[1] == 0 and #G.MemberSteps() == 0, "the version channel: 1V alone")
+    hear("1S|18|100|A|MAGE|0|0|0|-1|0|0|6.4.0|zzzzzzzzzz", "PARTY", mate)
+    hear("1G|Kill |cffff0000Kobold|r Vermin 3/8", "PARTY", mate)
+    steps = G.MemberSteps()
+    assert(#steps == 1 and steps[1].text:find("Kobold", 1, true) and not steps[1].text:find("|", 1, true), "the party's step shown, its | out: " .. tostring(steps[1] and steps[1].text))
+    hear("1L|118:450:18", "PARTY", mate)
+    assert(recorded[1] == 1, "the party's XP reading is heard")
+    unspy()
+  end }
+
+  -- M1 (trust, must). What a secret chain's key opens is the chain's next step (probe_pull.py SECRET_KEYS: the Keystone
+  -- chain's Fragments and Stone Key, the Dormant Runestone, the Tome of Dalaran's Black Tome): Data.lua names them
+  -- (D.SECRETKEY, gen_data.py), and a find you opened carrying one is told to the host as secret, so a host's guild shows
+  -- it only once two guild mates found it (Cute/Finds.lua)
+  FECASES[#FECASES + 1] = { "M1: a lock opened carrying a secret chain's key is told to the host as secret", function()
+    local OBJ = "GameObject-0-4455-0-12-%d-0000A1B2C3"
+    local c = newClient({ name = "Keyholder", level = 20, cap = 60, faction = "Alliance", className = "Mage", class = "MAGE", classID = 8,
+      race = "Human", log = {}, done = {}, world = { 0, -9450, 60 }, map = 1429, bagSlots = { { 281350, 1 } }, bind = "Goldshire", xp = 0 })
+    local env = c.env
+    env.C_Map.GetPlayerMapPosition = function() return { x = 0.6, y = 0.4, GetXY = function(self) return self.x, self.y end } end
+    env.C_Item.GetItemInfoInstant = function(id) local k = (c.klass or {})[id]; if not k then return nil end return id, "", "", "", 0, k[1], k[2] end
+    env.IsInInstance = function() return false, "none" end
+    env.C_RestrictedActions = { IsAddOnRestrictionActive = function() return false end }
+    login(c)
+    local QB, D = c.QB, c.QB.Data
+    for _, k in ipairs({ 281350, 284092, 284093, 281358, 281359, 276561 }) do
+      assert(type(D.SECRETKEY) == "table" and D.SECRETKEY[k] == true, "Data.lua names the secret chains' keys: " .. k)
+    end
+    local told = {}
+    QB.Finds.host = { Noted = function(...) told[#told + 1] = { ... } end, Rows = function() return {} end, Maps = function() return {} end, ver = 0 }
+    c.klass = { [281350] = { 15, 0 }, [216523] = { 13, 0 } }
+    local keep = D.OPEN
+    D.OPEN = { [3366] = 0 }
+    local f = QB.Finds.frame
+    c.soft = { guid = OBJ:format(9501) }
+    f.__scripts.OnEvent(f, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-1", 3366)
+    assert(#told == 1 and told[1][1] == "k" and told[1][2] == 9501 and told[1][8] == true, "opened carrying a Keystone Fragment: told as secret: " .. #told)
+    c.o.bagSlots = { { 216523, 1 } }
+    c.soft = { guid = OBJ:format(9502) }
+    f.__scripts.OnEvent(f, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-2", 3366)
+    assert(#told == 2 and told[2][2] == 9502 and told[2][8] ~= true, "opened with an ordinary key: not secret")
+    D.OPEN, c.soft, QB.Finds.host = keep, nil, nil
+  end }
+
+  -- S3 (firsthour). Under a host's corner place (Cute) the arrow stood at TOP 0 -190, on the game's zone banner: at every
+  -- zone or subzone change its puck and the step's name covered the zone's name, the PvP line and the subzone's for the
+  -- banner's 3.5 s. ZoneText.xml: ZoneTextFrame TOP 0 -128, 128 x 128, its 32 px name centred (176 to 208 down), the PvP
+  -- line's 22 px under it, the subzone's 26 px under that: 256 px down at most. The arrow starts under it
+  FECASES[#FECASES + 1] = { "S3: under a host's corner place the arrow stands under the game's zone and subzone banner", function()
+    for _, ui in ipairs({ { 1920, 1080 }, { 1366, 768 } }) do
+      local c = lookChar("Banner" .. ui[1], { ui = ui, host = { cornerPlace = true } })
+      local env, QB = c.env, c.QB
+      QB:Settings().guide.hideTracker = true; QB.StepFrame.Apply()
+      for _, k in ipairs({ 1, 1.5 }) do
+        QB:Settings().arrowScale = k ~= 1 and k or nil
+        QB.Arrow:Set(true); QB.Arrow.Place()
+        local f = env.QuestBankArrow
+        local p = f.__points[1]
+        local top = -p.y * (f:GetScale() or 1)
+        assert(p.point == "TOP" and p.x == 0 and top >= 256 + 4, string.format("%dx%d at %d%%: the arrow's top %d px down, under the banner's 256", ui[1], ui[2], k * 100, top))
+      end
+      QB:Settings().arrowScale = nil
+    end
+  end }
+
+  -- S4 (firsthour). The engine's chat lines and tooltips said QuestBank under Cute (whose Bridge sets QB.NAME): "Right-
+  -- click it in QuestBank ... to Route it again" after Skip this quest, "QuestBank doesn't know quest N", "The game told
+  -- QuestBank its rewards", and the quest tooltip's lines. They name the host, and Skip names the menu's own words
+  FECASES[#FECASES + 1] = { "S4: the engine's chat lines and tooltips name its host", function()
+    local c = lookChar("Hosted", { host = { NAME = "Cute" } })
+    local QB, UI = c.QB, c.QB.UI
+    local q = QB.Quest.Get(7)
+    local n0 = #c.chat
+    UI.SkipQuest(q)
+    QB:SetSkipped(7, false)
+    QB.Link.Click("addon:QuestBank:quest:99999999")
+    UI.QuestClick({ id = 99999998, name = "A Quest Seen", surveyOnly = true, lvl = 5 }, nil, "LeftButton")
+    -- (the lines themselves: QuestBank's own chat prefix is its Print's, which a host's Bridge replaces with its own)
+    local said = table.concat(c.chat, "\n", n0 + 1):gsub("|c%x+QuestBank|r ", "")
+    assert(said:find("Right-click it again and choose Route it again", 1, true) and said:find("Cute doesn't know quest 99999999", 1, true)
+      and said:find("The game told Cute its rewards", 1, true) and not said:find("QuestBank", 1, true), "chat names Cute:\n" .. said)
+    local rewards = QB.Quest.Rewards
+    QB.Quest.Rewards = function() return nil, "unknown" end
+    local was = { q.surveyOnly, q.sodLeftover, q.liveFull }
+    q.surveyOnly, q.sodLeftover, q.liveFull = true, true, nil
+    UI.longTips = true
+    lines = {}
+    UI.QuestTooltip(c.env.GameTooltip, q, QB:Status(q))
+    UI.longTips = nil
+    q.surveyOnly, q.sodLeftover, q.liveFull = was[1], was[2], was[3]
+    QB.Quest.Rewards = rewards
+    local text = table.concat(lines, "\n")
+    assert(text:find("Cute", 1, true) and not text:find("QuestBank", 1, true), "the quest's tooltip names Cute:\n" .. text)
+  end }
+
+  -- S6 (scale). QuestBank alone shares on GUILD by default: every login made every QuestBank in the guild send its status
+  -- and its whole quest list there (a 1R on GUILD cleared what each had sent), and each objective ticked sent the list
+  -- again. The quest list goes to the group alone now; the guild hears your status, and a guild mate's ask is answered
+  -- with it alone, once a guild mate in ten minutes
+  FECASES[#FECASES + 1] = { "S6: on GUILD the status alone, never the quest list; a guild mate's ask answered with it once in ten minutes", function()
+    local c = syncChar("Guildmate", { log = { { 7, 0 }, { 33, 1 } } })
+    local QB, S = c.QB, c.QB.Sync
+    local hear = hearer(c)
+    QB:Settings().share.guild = true
+    tick(c, 30)
+    local function sent(fn)
+      c.outbox = {}
+      fn()
+      tick(c, 40)
+      local out = {}
+      for _, m in ipairs(c.outbox) do if m[3] == "GUILD" or m[3] == "PARTY" then out[#out + 1] = m end end
+      return out
+    end
+    local function count(list, kind, ch) local n = 0; for _, m in ipairs(list) do if m[2]:sub(1, 2) == kind and m[3] == ch then n = n + 1 end end; return n end
+    local out = sent(function() S:Broadcast(true) end)
+    assert(count(out, "1S", "GUILD") == 1 and count(out, "1Q", "GUILD") == 0 and count(out, "1Q", "PARTY") >= 1,
+      string.format("a share: the status on GUILD, the quests to the party alone: %d %d %d", count(out, "1S", "GUILD"), count(out, "1Q", "GUILD"), count(out, "1Q", "PARTY")))
+    out = sent(function() hear("1R", "GUILD", "Asker One-Forever Normal") end)
+    assert(count(out, "1S", "GUILD") == 1 and #out == 1, "a guild mate's ask: the status on GUILD, nothing more: " .. #out)
+    out = sent(function() hear("1R", "GUILD", "Asker One-Forever Normal") end)
+    assert(#out == 0, "the same ask again within ten minutes: nothing: " .. #out)
+    tick(c, 601)
+    out = sent(function() hear("1R", "GUILD", "Asker One-Forever Normal") end)
+    assert(count(out, "1S", "GUILD") == 1 and count(out, "1Q", "GUILD") == 0, "ten minutes on: the status again")
+    out = sent(function() hear("1R", "PARTY", "Mate Steelhand-Forever Normal") end)
+    assert(count(out, "1Q", "PARTY") >= 1 and count(out, "1Q", "GUILD") == 0, "the party's ask: the quests to the party, none to the guild")
+  end }
+
+  -- S7 (scale). The party sync's frame took QB.Safe's allocating way for every addon message of every prefix (a
+  -- CHAT_MSG_ADDON is 11 arguments, more than QB.Safe's 6). Another addon's message is passed by at no cost now
+  FECASES[#FECASES + 1] = { "S7: another addon's message costs the party sync no garbage", function()
+    local c = syncChar("Quietframe")
+    local f = c.QB.Sync.frame
+    local on = f.__scripts.OnEvent
+    if jit then jit.off(); jit.flush() end
+    collectgarbage("collect"); collectgarbage("stop")
+    local before = collectgarbage("count")
+    for _ = 1, 500 do on(f, "CHAT_MSG_ADDON", "DBM-Core", "V|1|2", "PARTY", "Mate Steelhand-Forever Normal", "Mate Steelhand", 0, 0, "", 0) end
+    local kb = collectgarbage("count") - before
+    collectgarbage("restart")
+    if jit then jit.on() end
+    assert(kb < 2, string.format("500 messages of another addon: %.1f KB", kb))
+    local hear = hearer(c)
+    hear("1S|18|100|A|MAGE|0|0|0|-1|0|0|6.4.0|zzzzzzzzzz", "PARTY", "Mate Steelhand-Forever Normal")
+    assert(c.QB.Sync.members["Mate Steelhand-Forever Normal"], "QuestBank's own still heard")
+  end }
+
+  -- S9 (robust). The addon QuestBank beside Cute shared level, XP, class, a GUID tail and the quest plan on GUILD, and in a
+  -- raid on RAID, whatever the officers' Who sees what said. A host's runtime flags (Cute's dormant Bridge sets them on
+  -- QuestBankAPI; no saved setting written): noRaidSync keeps it off RAID, noGuildSync off GUILD both ways
+  FECASES[#FECASES + 1] = { "S9: a host's noGuildSync keeps QuestBank's guild sharing quiet both ways, whatever share.guild says", function()
+    local c = syncChar("Beside")
+    local QB, S = c.QB, c.QB.Sync
+    local hear = hearer(c)
+    QB:Settings().share.guild = true
+    QB.noGuildSync = true
+    tick(c, 30)
+    c.outbox = {}
+    S.lastStatus, S.lastQuests = nil, nil
+    S:Broadcast(false)
+    hear("1R", "GUILD", "Asker One-Forever Normal")
+    tick(c, 30)
+    local guild, party = 0, 0
+    for _, m in ipairs(c.outbox) do if m[3] == "GUILD" then guild = guild + 1 elseif m[3] == "PARTY" then party = party + 1 end end
+    assert(guild == 0 and party > 0, "nothing on GUILD, the party as before: " .. guild .. ", " .. party)
+    local recorded, unspy = spy(c)
+    hear("1L|118:450:18", "GUILD", "Mate Steelhand-Forever Normal")
+    hear("1S|18|100|A|MAGE|0|0|0|-1|0|0|6.4.0|zzzzzzzzzz", "GUILD", "Guildie Steelhand-Forever Normal")
+    assert(recorded[1] == 0 and S.members["Guildie Steelhand-Forever Normal"] == nil, "nothing taken from GUILD")
+    unspy()
+    QB.noGuildSync = nil
+  end }
+
+  -- S11 (trust). QuestBank alone printed "QuestBank X is out (Name runs it)" after one 1V from anyone on the realm's
+  -- version channel. Two players now, each saying a version at least that new (Cute's C.SawVersion)
+  FECASES[#FECASES + 1] = { "S11: a newer QuestBank is said once two players say a version at least that new", function()
+    local c = syncChar("Versions")
+    local QB, S = c.QB, c.QB.Sync
+    local n0 = #c.chat
+    S:Receive("1V|99.0", "CHANNEL", "Troll Grimm-Forever Normal")
+    S:Receive("1V|99.0", "CHANNEL", "Troll Grimm-Forever Normal")
+    assert(QB.newest == nil and not table.concat(c.chat, "\n", n0 + 1):find("is out", 1, true), "one voice, twice: nothing said")
+    S:Receive("1S|18|100|A|MAGE|0|0|0|-1|0|0|7.0.0|zzzzzzzzzz", "PARTY", "Mate Steelhand-Forever Normal")
+    local said = table.concat(c.chat, "\n", n0 + 1)
+    assert(QB.newest and QB.newest.version == "7.0.0" and select(2, said:gsub("is out", "")) == 1 and said:find("QuestBank 7.0.0 is out", 1, true),
+      "a second voice at least as new: said once, the version both say: " .. said)
+  end }
+
+  local failed = {}
+  for _, case in ipairs(FECASES) do
+    local ok, err = pcall(case[2])
+    if ok then print("fix-engine: " .. case[1] .. ": ok") else failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
+    collectgarbage("collect")
+  end
+  assert(#failed == 0, "fix-engine: " .. #failed .. " of " .. #FECASES .. " failed:\n  " .. table.concat(failed, "\n  "))
+end)()
 
 local seen = {}
 local unique = {}
