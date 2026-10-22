@@ -289,7 +289,16 @@ function R.Draw(ui, scroll)
   local kit = ui:Kit("route", function(k)
     k.line = ui.Text(k, 12, K.INK, "LEFT")
     k.xp = L.MakeXP(k)
-    k.run = ui.Button(k, "Start run", 110, 20)
+    k.run = ui.Button(k, "Time hand-ins", 110, 20)
+    k.run:SetScript("OnEnter", Cute.Safe(function(self)
+      local on = E.Run and E.Run.Get()
+      GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+      GameTooltip:AddLine(on and "Stop timing" or "Time hand-ins", 1, 1, 1)
+      GameTooltip:AddLine(on and "Stops timing your hand-ins." or "Times your hand-ins from now: each banked quest is ticked off with the XP it paid, and the rest is planned again from where you stand.", 0.85, 0.85, 0.85, true)
+      GameTooltip:AddLine("Not a dungeon run: those are J's Runs.", 0.5, 0.5, 0.5, true)
+      GameTooltip:Show()
+    end, "route: the run's tooltip"))
+    k.run:SetScript("OnLeave", function() GameTooltip:Hide() end)
     k.rule = L.Flat(k, "ARTWORK", K.LINE, 1)
     k.rule:SetHeight(1)
   end)
@@ -304,8 +313,13 @@ function R.Draw(ui, scroll)
       E.Comma(r.xp or 0), DOT, math.floor((r.t or 0) + 0.5)) .. ((E.Model and E.Model.Busy()) and (DOT .. "planning") or "")
   end
   L.Put(kit.line, "TOPLEFT", 0, -6, bw - 130, words, K.INK, "LEFT", 12)
+  -- (the launch audit) the button times your hand-ins (the engine's hand-in run: each banked quest ticked off with the XP
+  -- it paid, the rest planned again from where you stand), and is named for that: under Cute a run is J's, a dungeon's,
+  -- and J's "End run" ends the group's. It shows while quests are banked (E:Banking: a level lock, or the rush after
+  -- one) or while it is on; questing with nothing banked it has nothing to time
   kit.run:ClearAllPoints(); kit.run:SetPoint("TOPRIGHT", 0, -2)
-  kit.run:SetLabel(run and "End run" or "Start run")
+  kit.run:SetShown(E.Run ~= nil and (run ~= nil or (E.Banking ~= nil and E:Banking() == true)))
+  kit.run:SetLabel(run and "Stop timing" or "Time hand-ins")
   kit.run:SetOn(E.Run ~= nil)
   kit.run:SetScript("OnClick", Cute.Safe(function() if E.Run.Get() then E.Run.Stop() else E:Recompute(true); E.Run.Start() end; redraw() end, "route: run"))
   if xp.from then

@@ -4997,8 +4997,9 @@ do
     rone.C.UI:Open("route")
     assert(L.page == "route", "the Route tab")
     local tr = texts(rone)
-    -- (the windows round: where the route takes you, the stops as a timeline; W14)
-    assert((tr:find("Level %d+%.%d to ") or tr:find("Nothing on the route yet", 1, true)) and (tr:find("Start run", 1, true) or tr:find("End run", 1, true)), "the route's band: the summary and the run button:\n" .. tr)
+    -- (the windows round: where the route takes you, the stops as a timeline; W14. The run's button shows only while
+    -- quests are banked since the launch audit: the fix-engine stage's S5)
+    assert((tr:find("Level %d+%.%d to ") or tr:find("Nothing on the route yet", 1, true)) and not tr:find("Start run", 1, true), "the route's band: the summary, no Start run:\n" .. tr)
     check(L.frame, "the quest window, Route")
     rone.C.UI:Open("settings", "route")
     local tro = texts(rone)
@@ -19436,6 +19437,34 @@ do
       assert(rawget(M, "frame") and M.frame:IsShown() and not (c.map and c.map.shown), "M opened, not the game's map")
       assert(went and went[1] == 1429 and went[2] == "user", "M on the route's first stop: " .. tostring(went and went[1]))
       assert(not table.concat(c.chat, "\n", n0 + 1):find("In a fight", 1, true), "nothing said in a fight")
+      leave(c)
+    end)
+  end }
+
+  -- S5 (firsthour, owner). The Route band's "Start run" always showed, with no tooltip: under Cute a run is J's Runs (a
+  -- dungeon's report), and J's "End run" ends the group's. This one times your hand-ins (QuestBank's hand-in run, which a
+  -- level lock's banked quests are for): named for that, a tooltip, shown only while quests are banked or it is on
+  FECASES[#FECASES + 1] = { "S5: Route's run button times hand-ins, says so, and shows only while quests are banked", function()
+    inGuild({ member("Rone", 1) }, function()
+      local c = quest("Rone")
+      login(c); tickAll(6)
+      local QB = c.addons[2].private
+      c.C.UI:Open("route")
+      local kit = qwin(c).kits.route
+      assert(not QB:Banking() and not kit.run:IsShown() and not button(c, "Start run"), "nothing banked: no run button:\n" .. texts(c))
+      local banking = QB.Banking
+      QB.Banking = function() return true end
+      c.C.UI:Open("route")
+      assert(kit.run:IsShown() and kit.run.label:GetText() == "Time hand-ins", "banked: Time hand-ins: " .. tostring(kit.run.label:GetText()))
+      local tip = tipOf(kit.run)
+      assert(tip:find("ticked off", 1, true) and tip:find("dungeon", 1, true), "its tooltip says what it times and what it is not:\n" .. tip)
+      press(kit.run); tick(c, 1)
+      assert(QB.Run.Get() and kit.run.label:GetText() == "Stop timing", "on: Stop timing")
+      QB.Banking = banking
+      c.C.UI:Open("route")
+      assert(kit.run:IsShown(), "shown while it is on")
+      press(kit.run)
+      assert(not QB.Run.Get(), "Stop timing stops it")
       leave(c)
     end)
   end }
