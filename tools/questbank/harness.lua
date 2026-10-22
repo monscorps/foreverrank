@@ -25190,6 +25190,65 @@ end)()
   assert(#failed == 0, "fix3-engine: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
 end)()
 
+-- [stage: merge6] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The integration findings on launch/merge6, QuestBank's side, a case each; each failed on merge6's files before its
+-- fix. Every case runs, and the block fails at its end naming each one that did not hold
+----------------------------------------------------------------------------
+;(function()
+  local CASES = {}
+  -- a character in a party and a guild (o.group, o.guild false: out of either; o.raid: the group a raid)
+  local function char(name, o)
+    o = o or {}
+    local c = newClient({ name = name, level = o.level or 18, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1, race = "Human",
+      log = o.log or { { 7, 0 } }, done = {}, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Goldshire", guild = o.guild ~= false, group = o.group ~= false })
+    c.raid = o.raid
+    login(c)
+    tick(c, 5)
+    return c
+  end
+  local function said(c, from) return (table.concat(c.chat, "\n", from + 1):gsub("|c%x+QuestBank|r ", "")) end
+  local function sentOn(c, ch, target)
+    local n = 0
+    for _, m in ipairs(c.outbox) do if m[1] == "QuestBank" and m[3] == ch and (target == nil or m[4] == target) then n = n + 1 end end
+    return n
+  end
+  local function tipOf(btn)
+    lines = {}
+    btn.__scripts.OnEnter(btn)
+    local tip = table.concat(lines, "\n")
+    if btn.__scripts.OnLeave then btn.__scripts.OnLeave(btn) end
+    return tip
+  end
+  local function read(path) local f = assert(io.open(HERE .. "/../../" .. path)); local s = f:read("*a"); f:close(); return s end
+  local function plainOf(s)
+    return (s:gsub("<[^>]+>", " "):gsub("&#39;", "'"):gsub("&quot;", '"'):gsub("&lt;", "<"):gsub("&gt;", ">"):gsub("&amp;", "&"):gsub("%s+", " "))
+  end
+
+  -- M1 (privacy, should). pages3's privacy line said QuestBank talks only to the group's QuestBank and Cute users and
+  -- the guild's QuestBank users, plus the version check: /qb sync Name whispers your status and your whole quest list
+  -- to anyone you name, in your group and guild or not, and answers their whispered ask with the same
+  CASES[#CASES + 1] = { "M1: the page's privacy line names the friend you /qb sync, whom QuestBank whispers", function()
+    local c = char("Whisperer", { group = false, guild = false })
+    c.outbox = {}
+    c.env.SlashCmdList.QUESTBANK("sync Bob")
+    tick(c, 30)
+    assert(sentOn(c, "WHISPER", "Bob") >= 3, "/qb sync Bob whispers Bob, in no group nor guild of yours: " .. sentOn(c, "WHISPER", "Bob"))
+    local line = plainOf(assert(read("questbank/index.html"):match('<p class="qb%-privacy">(.-)</p>'), "QuestBank's page has its privacy line"))
+    assert(line:find("your group's QuestBank and Cute users and your guild's QuestBank users", 1, true), "pages3's words kept (its P1):\n" .. line)
+    assert(line:find("/qb sync", 1, true), "the line names the friend you /qb sync:\n" .. line)
+    assert(line:find("version check", 1, true), "and the realm's version check:\n" .. line)
+  end }
+
+  local failed = {}
+  for _, case in ipairs(CASES) do
+    local ok, err = pcall(case[2])
+    if ok then print("merge6: " .. case[1] .. ": ok") else failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
+    collectgarbage("collect")
+  end
+  assert(#failed == 0, "merge6: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
+end)()
+
 local seen = {}
 local unique = {}
 for _, p in ipairs(problems) do if not seen[p] then seen[p] = true; unique[#unique + 1] = p end end
