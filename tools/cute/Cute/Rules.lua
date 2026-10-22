@@ -305,7 +305,7 @@ function R:CheckSeed()
   step()
 end
 -- Rule 0 done: the verdict kept for /cute diag, the model built, your Missing enchants asked again (the seed may count
--- now, or no longer), the Guide drawn
+-- now, or no longer), the guild window and the quest window's pick drawn again (Guide.lua G.Redraw)
 function R:Checked()
   local chk = self.check
   chk.state = "done"
@@ -318,6 +318,7 @@ function R:Checked()
   self:Rebuild()
   if C.Sample and C.Sample.started then C.Sample:Schedule("unenchanted"); C.Sample:Schedule("ready") end
   if C.UI and C.UI.Refresh then C.UI:Refresh() end
+  if C.Guide and C.Guide.Redraw then C.Guide.Redraw() end
 end
 -- none (no seed shipped), checking (Rule 0 still running), fresh, stale; with stale, why in words
 function R.SeedState()
@@ -1472,7 +1473,7 @@ end
 R.Rebuild = C.Perf.Timed("rebuild", R.Rebuild)
 
 -- the guild's play changed something the rules weigh: built again three seconds on (a burst of records builds once);
--- the Guide draws again only when it is the page open
+-- the dungeon pick draws again where it shows, the quest window's Quests or Dungeons tab (Guide.lua G.Redraw)
 -- (each build a few seconds after the change, as many as a storm of records brings at once; and after a build, the
 -- next not before REBUILD_EVERY seconds on, so a login wave or a guild levelling builds twice a minute at most where
 -- 0.7.0 built every three seconds. urgent: what this character did or an officer chose, built a few seconds on
@@ -1492,7 +1493,7 @@ function R:Dirty(urgent)
     if R.dueGen ~= gen then return end
     R.due = false
     R:Rebuild()
-    if C.UI and C.UI.page == "guide" and C.UI.Refresh then C.UI:Refresh() end
+    if C.Guide and C.Guide.Redraw then C.Guide.Redraw() end
   end, "rules: rebuild"))
 end
 -- a member's values arrived (Roster.lua): their XP sample learned at once, by the GUID the record speaks for (g: none

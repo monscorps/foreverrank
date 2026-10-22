@@ -14829,6 +14829,72 @@ do
   end)
 end
 
+-- The integration findings on the merged tree, each a case of its own (a failing one does not hide the next: all run,
+-- then every failure is named).
+-- M5: the dungeon pick lives in the Quests window now (PageQuests, PageJournal), and what it weighs draws it again
+-- there on its own, as it drew the retired Guide page: Rule 0's verdict (Rules.lua R:Checked), the model built again
+-- (R:Dirty), a mate online or off in the roster, and a new member's values (Roster.lua R:Apply). Hidden, it waits
+-- (it draws as it opens).
+do
+  local CASES = {}
+  local function member(name, rank, o)
+    local m = { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 30, online = true }
+    for k, v in pairs(o or {}) do m[k] = v end
+    return m
+  end
+  -- (isolated, its guild and clients put back whether the case passed or not)
+  local function iso(guild, fn) local ok, err; isolated(guild, function() ok, err = pcall(fn) end); if not ok then error(err, 0) end end
+  local function errorAt(c, where) for _, e in ipairs(c.env.CuteDB.errors or {}) do if e.where == where then return e end end end
+  local function labelled(c, text) for _, f in ipairs(c.frames) do if f.__kind == "Button" and f.label and f.label.__text == text and f:IsVisible() then return f end end end
+
+  CASES[#CASES + 1] = { "M5 the Quests window's pick draws again on its own", function() iso({ member("Rone", 1), member("Mia", 3, { online = false }), member("Ned", 3, { online = false }) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 30 }))
+    c.env.CuteDB = {}
+    fire(c, "ADDON_LOADED", "Cute")
+    c.C.Setup.told = true
+    fire(c, "PLAYER_ENTERING_WORLD", true, false)
+    local R = c.C.Rules
+    openGuide(c)
+    local win = qwin(c)
+    assert(win.frame:IsShown() and win.page == "quests", "the Quests window on its Quests tab")
+    if SEEDED then
+      assert(R.SeedState() == "checking" and texts(c):find("Checking what we knew against this client", 1, true), "Rule 0 still checking, the pick saying so:\n" .. texts(c))
+      tick(c, 3)
+      assert(R.SeedState() ~= "checking", "Rule 0 done")
+      assert(not texts(c):find("Checking what we knew", 1, true), "Rule 0 done: the Quests window drew the pick again on its own:\n" .. texts(c))
+    else
+      tick(c, 3)
+    end
+    local draws = 0
+    local draw = win.Draw
+    win.Draw = function(...) draws = draws + 1; return draw(...) end
+    R:Dirty(true); tick(c, 6)
+    assert(draws >= 1, "the model built again: the pick drawn again")
+    draws = 0
+    GUILD[2].online = true
+    fire(c, "GUILD_ROSTER_UPDATE"); tick(c, 2)
+    assert(draws >= 1, "a mate online: the pick drawn again")
+    draws = 0
+    c.C.Roster:Apply("Ned-Forever", { guid = guidOf("Ned"), level = 30 }); tick(c, 2)
+    assert(draws >= 1, "a new member's values: the pick drawn again")
+    -- hidden: nothing drawn until it opens
+    win.frame:Hide()
+    draws = 0
+    R:Dirty(true); GUILD[2].online = false; fire(c, "GUILD_ROSTER_UPDATE"); tick(c, 6)
+    assert(draws == 0, "hidden: nothing drawn: " .. draws)
+    win.Draw = nil
+    leave(c)
+  end) end }
+
+  local failed = {}
+  for _, case in ipairs(CASES) do
+    local ok, err = pcall(case[2])
+    if ok then print("merge2: " .. case[1] .. ": ok") else failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
+    collectgarbage("collect")
+  end
+  assert(#failed == 0, "merge2 cases failed:\n" .. table.concat(failed, "\n"))
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

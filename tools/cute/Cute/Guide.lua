@@ -205,6 +205,16 @@ function G.Invite(mate)
   if C.UI and C.UI.RefreshAll then C.UI.RefreshAll() end
   return true
 end
+-- the pick drawn again where it shows: the quest window on its Quests or Dungeons tab (PageQuests.lua and
+-- PageJournal.lua draw it through Cute.Guide.DrawPick), once a second at most and not while it is hidden (UI:Refresh:
+-- it draws as it opens). What the pick weighs calls it: Rule 0's verdict and the model built again (Rules.lua), a mate
+-- online or off, a level, a new member's values (Roster.lua). The guild window's own refresh never reached it
+local PICK_PAGES = { quests = true, journal = true }
+function G.Redraw()
+  local U = C.UI
+  local win = U and U.windows and U.windows.quests
+  if win and PICK_PAGES[win.page] and win.Refresh then win:Refresh() end
+end
 local function invitedRecently(mate)
   local t = G.invited[mate.guid or mate.invite or ""]
   return t ~= nil and C.Now() - t < INVITED

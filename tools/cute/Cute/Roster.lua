@@ -309,6 +309,8 @@ function R:Refresh(event)
   if changed then
     self.updatedAt = now()
     if C.UI and C.UI.Refresh then C.UI:Refresh() end
+    -- (a mate online or off, a level: the quest window's dungeon pick, Guide.lua)
+    if C.Guide and C.Guide.Redraw then C.Guide.Redraw() end
   end
 end
 
@@ -1160,11 +1162,14 @@ function R:Apply(name, kv, whispered)
   if C.Rules then C.Rules:Observe(e.stats, kv, g, prev) end
   -- a member's Cute newer than yours (Core.lua), from a voice the officers have not marked untrusted
   if kv.addon_ver ~= nil and g and not P:Untrusted(g) then C.SawVersion(kv.addon_ver, g) end
+  local cameOn = e.online ~= true
   e.seen, e.online = t, true
   self.updatedAt = t
   if created or folded or e.stats.guid ~= guidWas or e.stats.addon_ver ~= verWas or e.ch ~= chWas then self:Identity() else self:Changed() end
-  -- the window draws again only for a new member or a value it shows (UI.lua)
+  -- the window draws again only for a new member or a value it shows (UI.lua); the quest window's dungeon pick for a
+  -- new member, one whose addon spoke again, or a level (the mates it names, Guide.lua)
   if C.UI and C.UI.Arrived then C.UI:Arrived(kv, created) end
+  if (created or cameOn or prev.level ~= nil) and C.Guide and C.Guide.Redraw then C.Guide.Redraw() end
 end
 
 -- your own class file name, for the colour when the roster has not listed you yet
