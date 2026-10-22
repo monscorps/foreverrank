@@ -17,6 +17,10 @@ QB.Sync = S
 local function memberChanged() S.stepVer = S.stepVer + 1 end
 local PREFIX = "QuestBank"
 local STALE = 30 * 60
+-- the group's channels: only a member of your group sends on them (a whisper, the guild and the realm's version channel
+-- reach you from anyone of your faction)
+local GROUP = { PARTY = true, RAID = true, INSTANCE_CHAT = true }
+S.GROUP = GROUP
 
 local function now() return GetTime and GetTime() or 0 end
 
@@ -270,6 +274,13 @@ function S:Receive(msg, channel, sender)
     if v then self:HeardVersion(v, sender) end
     return
   end
+  -- (the launch audit) the realm's version channel carries 1V alone; a step line comes from your group alone, an XP
+  -- reading from your group or the guild you share with. Anyone of your faction can whisper you or speak there: a
+  -- stranger's 1G showed in your step frame, escape codes and all, and their 1L corrected your plan's XP. Your own
+  -- S:Step and QueueLive never whisper either; a whispered status and quest list still come (/qb sync)
+  if channel == "CHANNEL" then return end
+  if kind == "1G" and not GROUP[channel] then return end
+  if kind == "1L" and not (GROUP[channel] or channel == "GUILD") then return end
   if kind == "1S" and statusIsMine(msg) then
     -- our own echo, under a sender string we didn't recognise: it is us from now on
     S.mySender = sender
@@ -283,7 +294,11 @@ function S:Receive(msg, channel, sender)
     self.members[sender] = m
     memberChanged()
   end
-  if m then m.seen, m.via = now(), channel end
+  if m then
+    -- (a member's step is listed while their word comes by your group's channel, G.MemberSteps: told when that changes)
+    if (GROUP[m.via] or false) ~= (GROUP[channel] or false) then memberChanged() end
+    m.seen, m.via = now(), channel
+  end
   if kind == "1S" then
     local f = split(msg, "|")
     if m.class ~= f[5] or m.level == nil then memberChanged() end -- (the frame colours the name by class; a member is listed once its level is known)
@@ -305,6 +320,8 @@ function S:Receive(msg, channel, sender)
     if part == parts then m.quests, m.pending = m.pending, nil end
   elseif kind == "1G" then
     local text = msg:match("^1G|(.*)$")
+    -- (no escape codes: the sender's S:Step takes every | out, so a text that still has one is no QuestBank's)
+    text = text and text:gsub("|", "") or nil
     local step = (text and text ~= "") and text:sub(1, STEP_LEN) or nil
     if step ~= m.step then m.step = step; memberChanged() end
     if QB.StepFrame and QB.StepFrame.Refresh then QB.StepFrame.Refresh() end

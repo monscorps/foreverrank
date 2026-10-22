@@ -1231,8 +1231,11 @@ function G.MemberSteps()
   for k = #memberSteps, 1, -1 do memberSteps[k] = nil end
   if not grouped then return memberSteps end
   local n = 0
+  -- (the launch audit) only members whose word comes by your group's channel (Sync's S.GROUP): a whisper's sender, whom
+  -- anyone of your faction can be, is never listed
+  local group = S.GROUP or {}
   for _, m in ipairs(S:Members()) do
-    if type(m.step) == "string" and m.step ~= "" then
+    if type(m.step) == "string" and m.step ~= "" and group[m.via] then
       n = n + 1
       local row = memberPool[n]
       if not row then row = {}; memberPool[n] = row end

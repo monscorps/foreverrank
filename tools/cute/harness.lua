@@ -19322,6 +19322,42 @@ do
   end)
 end
 
+-- [stage: fix-engine] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The launch audit's engine findings, Cute's side (Cute and QuestBank launch, 4 November). Each case in FECASES failed
+-- on 0.9.0's files; every case runs, and the block fails at its end naming each one that did not hold
+----------------------------------------------------------------------------
+do
+  local FECASES = {}
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 20, online = true } end
+  local function quest(name, extra)
+    local o = { modules = { "Cute_Quest" }, addonState = {}, quest = true }
+    for k, v in pairs(extra or {}) do o[k] = v end
+    return newClient(charOf({ name, 1, "Officer", "WARRIOR", 20 }, o))
+  end
+  -- (a case that fails inside isolated() still gives the harness its guild and clients back)
+  local function inGuild(guild, fn)
+    local ok, err = true, nil
+    isolated(guild, function() ok, err = pcall(fn) end)
+    if not ok then error(err, 0) end
+  end
+  local function button(c, label) for _, b in ipairs(c.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == label then return b end end end
+  local function row(c, label) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == label end) end
+  -- a route of one stop, kind its way there (Target.Route as the Route tab reads it)
+  local function oneStop(QB, stop, kind)
+    local was = QB.Target.Route
+    QB.Target.Route = function() return { legs = { { stop = stop, kind = kind, travel = 1, rows = {}, leave = 20.4 } }, xp = 0, level = 20, t = 1 } end
+    return function() QB.Target.Route = was end
+  end
+  local failed = {}
+  for _, case in ipairs(FECASES) do
+    local ok, err = pcall(case[2])
+    if ok then print("fix-engine: " .. case[1] .. ": ok") else failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
+    collectgarbage("collect")
+  end
+  assert(#failed == 0, "fix-engine: " .. #failed .. " of " .. #FECASES .. " failed:\n  " .. table.concat(failed, "\n  "))
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

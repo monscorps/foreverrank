@@ -24402,6 +24402,68 @@ do
   print("merge3: " .. table.concat(said, "; "))
 end
 
+-- [stage: fix-engine] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The launch audit's engine findings (Cute and QuestBank launch, 4 November). Each case in FECASES failed on 6.4.0's
+-- files; every case runs, and the block fails at its end naming each one that did not hold
+----------------------------------------------------------------------------
+;(function()
+  local FECASES = {}
+  -- a character in a party and a guild, in Elwynn Forest at level 18
+  local function syncChar(name, o)
+    o = o or {}
+    local c = newClient({ name = name, level = 18, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1, race = "Human",
+      log = o.log or {}, done = {}, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Goldshire", guild = true, group = true })
+    login(c)
+    return c
+  end
+  local function hearer(c) local f = c.QB.Sync.frame; return function(msg, channel, who) f.__scripts.OnEvent(f, "CHAT_MSG_ADDON", "QuestBank", msg, channel, who) end end
+  local function spy(c)
+    local QB = c.QB
+    local n, record = { 0 }, QB.Live.Record
+    QB.Live.Record = function(...) n[1] = n[1] + 1; return record(...) end
+    return n, function() QB.Live.Record = record end
+  end
+
+  -- M2 (trust, must). Anyone of your faction could whisper 1S, 1G and 1L under the "QuestBank" prefix, or send them on the
+  -- realm's version channel: while you were in a group their text showed in your step frame for half an hour, escape
+  -- codes and all, and their XP numbers corrected your plan's. A step line comes from your group alone now, an XP
+  -- reading from your group or (while you share with it) your guild; a whispered status and quest list still come
+  -- (/qb sync); the version channel carries 1V alone; a group's step loses any |
+  FECASES[#FECASES + 1] = { "M2: a whisper or the version channel never puts a stranger's step on your frame nor corrects your XP", function()
+    local c = syncChar("Whispered")
+    local QB, S, G = c.QB, c.QB.Sync, c.QB.Guide
+    local hear = hearer(c)
+    local recorded, unspy = spy(c)
+    local stranger, spammer, mate = "Grimm Shade-Forever Normal", "Vex Shade-Forever Normal", "Mate Steelhand-Forever Normal"
+    hear("1S|60|0|A|WARRIOR|0|0|0|-1|0|0|6.4.0|xxxxxxxxxx", "WHISPER", stranger)
+    hear("1G||TInterface\\Icons\\INV_Misc_Coin_01:64|t Free gold: whisper me", "WHISPER", stranger)
+    hear("1L|118:450:18", "WHISPER", stranger)
+    local steps = G.MemberSteps()
+    assert(#steps == 0, "a stranger's whispered step: never on your frame: " .. tostring(steps[1] and steps[1].text))
+    assert(recorded[1] == 0, "a whispered XP reading corrects nothing")
+    assert(S.members[stranger] and S.members[stranger].level == 60, "a whispered status still comes (/qb sync)")
+    hear("1S|60|0|A|WARRIOR|0|0|0|-1|0|0|6.4.0|yyyyyyyyyy", "CHANNEL", spammer)
+    hear("1G|Spam", "CHANNEL", spammer)
+    hear("1L|118:450:18", "CHANNEL", spammer)
+    assert(S.members[spammer] == nil and recorded[1] == 0 and #G.MemberSteps() == 0, "the version channel: 1V alone")
+    hear("1S|18|100|A|MAGE|0|0|0|-1|0|0|6.4.0|zzzzzzzzzz", "PARTY", mate)
+    hear("1G|Kill |cffff0000Kobold|r Vermin 3/8", "PARTY", mate)
+    steps = G.MemberSteps()
+    assert(#steps == 1 and steps[1].text:find("Kobold", 1, true) and not steps[1].text:find("|", 1, true), "the party's step shown, its | out: " .. tostring(steps[1] and steps[1].text))
+    hear("1L|118:450:18", "PARTY", mate)
+    assert(recorded[1] == 1, "the party's XP reading is heard")
+    unspy()
+  end }
+  local failed = {}
+  for _, case in ipairs(FECASES) do
+    local ok, err = pcall(case[2])
+    if ok then print("fix-engine: " .. case[1] .. ": ok") else failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
+    collectgarbage("collect")
+  end
+  assert(#failed == 0, "fix-engine: " .. #failed .. " of " .. #FECASES .. " failed:\n  " .. table.concat(failed, "\n  "))
+end)()
+
 local seen = {}
 local unique = {}
 for _, p in ipairs(problems) do if not seen[p] then seen[p] = true; unique[#unique + 1] = p end end
