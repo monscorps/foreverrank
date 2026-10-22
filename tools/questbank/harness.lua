@@ -24891,6 +24891,29 @@ end)()
     assert(tip:find("Share now: your quests with your group, your level with your guild", 1, true), "the button's tooltip:\n" .. tip)
   end }
 
+  -- H1 (scale, should). 6.4.1's hello asked the guild with 1R, which every QuestBank 6.4.0 or older there answers with its
+  -- status and its whole quest list on GUILD. The guild's ask is 1H now, which 6.4.0 never answers, and which this one
+  -- answers with the status alone, once an asker in ten minutes
+  CASES[#CASES + 1] = { "H1: the hello asks the guild with 1H, the group with 1R; a 1H is answered with the status alone", function()
+    local c = char("Hello")
+    local QB, S = c.QB, c.QB.Sync
+    QB:Settings().share.guild = true
+    tick(c, 30)
+    assert(sent(c, "1H", "GUILD") == 1 and sent(c, "1R", "GUILD") == 0, "the guild asked with 1H: " .. sent(c, "1H", "GUILD") .. ", 1R " .. sent(c, "1R", "GUILD"))
+    assert(sent(c, "1R", "PARTY") >= 1, "the party asked with 1R")
+    local hear = hearer(c)
+    local asker = "Asker One-Forever Normal"
+    c.outbox = {}
+    hear("1H", "GUILD", asker)
+    tick(c, 40)
+    assert(sent(c, "1S", "GUILD") == 1 and #c.outbox == 1, "a guild mate's 1H: the status on GUILD alone: " .. #c.outbox)
+    assert(S.members[asker] == nil, "the asker is no member")
+    c.outbox = {}
+    hear("1H", "GUILD", asker)
+    tick(c, 40)
+    assert(#c.outbox == 0, "the same ask again within ten minutes: nothing")
+  end }
+
   local failed = {}
   for _, case in ipairs(CASES) do
     local ok, err = pcall(case[2])

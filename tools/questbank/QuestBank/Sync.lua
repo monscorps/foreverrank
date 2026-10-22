@@ -8,6 +8,7 @@
 --                                                                              to your group and a /qb sync friend, never the guild
 --   1L|id:xp:level,...                                                         XP the game reported, to your group alone
 --   1R                                                                         please send yours (on GUILD: your status alone)
+--   1H                                                                         the guild's ask: your status alone
 --   1G|text                                                                    the Guide's first step (6.0), for the others' step frames
 local _, QB = ...
 if QB.dormant then return end
@@ -26,7 +27,9 @@ local GROUP_WORD = { PARTY = "party", RAID = "raid", INSTANCE_CHAT = "instance g
 -- (the launch audit) GUILD hears your status alone: the quest list goes to your group (and to a friend by /qb sync). Every
 -- login made every QuestBank in the guild send its status and its whole list there (a 1R on GUILD cleared what each had
 -- sent), and each objective ticked sent the list again; only the group reads it (the Party page's dungeons, the
--- group-quest factor). A guild mate's ask is answered with your status, once a guild mate in ASK_GAP seconds
+-- group-quest factor). A guild mate's ask is answered with your status, once a guild mate in ASK_GAP seconds. (The final
+-- audit) the hello asks the guild with 1H, which a QuestBank before this one never answers: their answer to a guild 1R
+-- is their status and their whole list on GUILD
 local ASK_GAP = 600
 S.guildAsked = {}
 
@@ -286,6 +289,16 @@ local function statusIsMine(msg)
   return tail ~= nil and tail ~= "" and #guid >= 10 and tail == guid:sub(-10)
 end
 
+-- a guild mate's ask: your status alone, once a guild mate in ASK_GAP; nothing sent before is forgotten
+local function answerGuild(sender)
+  local t = now()
+  local at = S.guildAsked[sender]
+  if not at or t - at >= ASK_GAP then
+    S.guildAsked[sender] = t
+    queue(statusMsg(), "GUILD")
+  end
+end
+
 function S:Receive(msg, channel, sender)
   if not sender or type(msg) ~= "string" or #msg > 255 then return end
   -- (guild sharing off, or a host's noGuildSync: nothing taken from the guild either, so a single guild mate's XP
@@ -314,7 +327,7 @@ function S:Receive(msg, channel, sender)
     return
   end
   local m = self.members[sender]
-  if not m and kind ~= "1R" then
+  if not m and kind ~= "1R" and kind ~= "1H" then
     m = { key = sender, name = sender:match("^([^%-]+)") or sender }
     self.members[sender] = m
     memberChanged()
@@ -353,6 +366,10 @@ function S:Receive(msg, channel, sender)
       QB.Live.Record(tonumber(id), tonumber(xp), tonumber(lvl), "party")
     end
     if QB.liveVer ~= before then QB:MarkDirty() end
+  elseif kind == "1H" then
+    -- (the final audit) the guild's ask, a hello's: answered as a guild 1R
+    if channel == "GUILD" then answerGuild(sender) end
+    return
   elseif kind == "1R" then
     local target = channel == "WHISPER" and sender or nil
     if target then
@@ -362,13 +379,7 @@ function S:Receive(msg, channel, sender)
         for _, q in ipairs((questMsgs())) do queue(q, "WHISPER", target) end
       end
     elseif channel == "GUILD" then
-      -- (a guild mate's ask: your status alone, once a guild mate in ASK_GAP; nothing sent before is forgotten)
-      local t = now()
-      local at = S.guildAsked[sender]
-      if not at or t - at >= ASK_GAP then
-        S.guildAsked[sender] = t
-        queue(statusMsg(), "GUILD")
-      end
+      answerGuild(sender)
     else
       self.lastStatus, self.lastQuests = nil, nil
       self:Changed()
@@ -644,10 +655,10 @@ function S:Init()
   end)
   f:RegisterEvent("CHAT_MSG_ADDON")
   f:RegisterEvent("GROUP_ROSTER_UPDATE")
-  -- say hello once the plan is ready, and keep a run visible to the others
+  -- say hello once the plan is ready (the guild asked with 1H), and keep a run visible to the others
   C_Timer.After(12, QB.Safe(function()
     local chans = channels()
-    for _, ch in ipairs(chans) do queue("1R", ch) end
+    for _, ch in ipairs(chans) do queue(ch == "GUILD" and "1H" or "1R", ch) end
     S:Changed()
   end, "party sync: hello"))
   local beat
