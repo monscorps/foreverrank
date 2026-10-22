@@ -24574,6 +24574,25 @@ end
     out = sent(function() hear("1R", "PARTY", "Mate Steelhand-Forever Normal") end)
     assert(count(out, "1Q", "PARTY") >= 1 and count(out, "1Q", "GUILD") == 0, "the party's ask: the quests to the party, none to the guild")
   end }
+
+  -- S7 (scale). The party sync's frame took QB.Safe's allocating way for every addon message of every prefix (a
+  -- CHAT_MSG_ADDON is 11 arguments, more than QB.Safe's 6). Another addon's message is passed by at no cost now
+  FECASES[#FECASES + 1] = { "S7: another addon's message costs the party sync no garbage", function()
+    local c = syncChar("Quietframe")
+    local f = c.QB.Sync.frame
+    local on = f.__scripts.OnEvent
+    if jit then jit.off(); jit.flush() end
+    collectgarbage("collect"); collectgarbage("stop")
+    local before = collectgarbage("count")
+    for _ = 1, 500 do on(f, "CHAT_MSG_ADDON", "DBM-Core", "V|1|2", "PARTY", "Mate Steelhand-Forever Normal", "Mate Steelhand", 0, 0, "", 0) end
+    local kb = collectgarbage("count") - before
+    collectgarbage("restart")
+    if jit then jit.on() end
+    assert(kb < 2, string.format("500 messages of another addon: %.1f KB", kb))
+    local hear = hearer(c)
+    hear("1S|18|100|A|MAGE|0|0|0|-1|0|0|6.4.0|zzzzzzzzzz", "PARTY", "Mate Steelhand-Forever Normal")
+    assert(c.QB.Sync.members["Mate Steelhand-Forever Normal"], "QuestBank's own still heard")
+  end }
   local failed = {}
   for _, case in ipairs(FECASES) do
     local ok, err = pcall(case[2])

@@ -598,9 +598,9 @@ function S:Init()
   self.ready = true
   local f = CreateFrame("Frame")
   self.frame = f
-  f:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3, a4)
+  local handle = QB.Safe(function(event, msg, channel, sender)
     if event == "CHAT_MSG_ADDON" then
-      if a1 == PREFIX then S:Receive(a2, a3, a4) end
+      S:Receive(msg, channel, sender)
     elseif event == "GROUP_ROSTER_UPDATE" then
       local ch = groupChannel()
       if ch and ch ~= S.lastGroup and QB:Settings().share.party then
@@ -610,7 +610,18 @@ function S:Init()
       end
       S.lastGroup = ch
     end
-  end, "party sync: receiving"))
+  end, "party sync: receiving")
+  -- (the launch audit) every addon's CHAT_MSG_ADDON reaches this frame, 11 arguments with the frame and the event, more
+  -- than QB.Safe takes on its garbage-free way (a table and a closure each): another addon's is passed by here, with no
+  -- wrapper, and only QuestBank's own reaches the handler, with the three it reads
+  f:SetScript("OnEvent", function(_, event, prefix, msg, channel, sender)
+    if event == "CHAT_MSG_ADDON" then
+      if (issecretvalue and issecretvalue(prefix)) or prefix ~= PREFIX then return end
+      handle(event, msg, channel, sender)
+    else
+      handle(event)
+    end
+  end)
   f:RegisterEvent("CHAT_MSG_ADDON")
   f:RegisterEvent("GROUP_ROSTER_UPDATE")
   -- say hello once the plan is ready, and keep a run visible to the others
