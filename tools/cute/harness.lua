@@ -22022,6 +22022,75 @@ do
   print("merge5: " .. table.concat(said, "; "))
 end
 
+-- [stage: merge6] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The integration findings on launch/merge6, Cute's side, a case each; every case runs, and the block fails at its end
+-- naming each one that did not hold:
+-- M5. A save that only opens a stat (no stricter, so members raise no doubt, only Policy.lua's P.unread) while a
+--     member's Guild Info read is unusable past ten minutes (a secret, as inside an encounter): what her mates send as
+--     they read the line and open it is kept aside the whole wait, her read takes it, nothing asked. fix3 counted only
+--     P.doubt and no line read as a wait, so their ten minutes ran out before her read and the values were lost
+----------------------------------------------------------------------------
+do
+  local CASES, failed, said = {}, {}, {}
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "MAGE", level = 30, online = true } end
+  local function char(name, rank, extra) return newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", "MAGE", 30 }, extra)) end
+  local function inGuild(guild, fn)
+    local ok, err = true, nil
+    isolated(guild, function() ok, err = pcall(fn) end)
+    if not ok then error(err, 0) end
+  end
+  local function pol(mine, vis)
+    local copy = {}
+    for k, v in pairs(vis or {}) do copy[k] = v end
+    return { policy = { vis = copy, by = "Ofa-Forever", mine = mine or nil, rank = 1, at = EPOCH, threshold = 1 } }
+  end
+  -- Ofa an officer, Mia and Zed members; the hearths the officers' alone, the zones everyone's (as fix3-cute-core's)
+  local function hearths()
+    INFO[7] = infoLine(pol(nil, { hearth = "self" }).policy)
+    local ofa, mia, zed = char("Ofa", 1), char("Mia", 3), char("Zed", 3, { hearth = "Stormwind" })
+    local mdb = pol(nil, { hearth = "self" })
+    login(ofa, pol(true, { hearth = "self" })); login(mia, mdb); login(zed, pol(nil, { hearth = "self" }))
+    tickAll(200)
+    assert(mdb.roster[zed.sender].stats.hearth == nil and mdb.roster[zed.sender].stats.zone ~= nil, "Mia holds Zed's zone, not his hearth")
+    return ofa, mia, zed, mdb
+  end
+
+  CASES[#CASES + 1] = { "M5 a save that only opens a stat, read past ten minutes later: what came meanwhile is kept, her read takes it, nothing asked", function()
+    inGuild({ member("Ofa", 1), member("Mia", 3), member("Zed", 3) }, function()
+      local ofa, mia, zed, mdb = hearths()
+      -- Guild Info a secret on Mia's client, as inside an encounter
+      mia.infoSecret = true
+      local m0, z0 = msgs(mia, "1R"), msgs(zed, "1R")
+      assert(ofa.C.Policy:Set("hearth", "all") and saveLine(ofa))
+      tickAll(2)
+      local P, R = mia.C.Policy, mia.C.Roster
+      assert(P.doubt == nil and P.unread ~= nil and zed.C.Policy:Route("hearth") == "all" and P:Route("hearth") ~= "all",
+        "no doubt (the save closes nothing), the officer's newer policy unread; Zed has read it, Mia not")
+      tickAll(700)
+      assert(R.aside[zed.sender] and R.aside[zed.sender].v.hearth and R.aside[ofa.sender] and R.aside[ofa.sender].v.hearth,
+        "what came before her read is all still aside after ten minutes")
+      mia.infoSecret = false
+      fire(mia, "GUILD_ROSTER_UPDATE")
+      tickAll(30)
+      assert(P.unread == nil and P:Route("hearth") == "all", "she read the line")
+      assert(msgs(mia, "1R") == m0 and msgs(zed, "1R") == z0, "nobody asked the guild: " .. (msgs(mia, "1R") - m0) .. " and " .. (msgs(zed, "1R") - z0) .. " asks")
+      assert(mdb.roster[zed.sender].stats.hearth == "Stormwind" and mdb.roster[ofa.sender].stats.hearth == "Goldshire",
+        "Mia holds Zed's hearth and Ofa's: " .. tostring(mdb.roster[zed.sender].stats.hearth) .. ", " .. tostring(mdb.roster[ofa.sender].stats.hearth))
+      assert(mdb.roster[zed.sender].stats.zone ~= nil, "his zone, never closed, as it was")
+      for _, c in ipairs({ ofa, mia, zed }) do leave(c) end
+    end)
+    said[#said + 1] = "a save that only opens a stat, read past ten minutes later: what came meanwhile is kept and taken, nothing asked"
+  end }
+
+  for _, case in ipairs(CASES) do
+    local ok, err = pcall(case[2])
+    if not ok then failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
+  end
+  assert(#failed == 0, "merge6: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
+  print("merge6: " .. table.concat(said, "; "))
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

@@ -1017,14 +1017,17 @@ end
 -- an instance or a faction the officers keep, which a mate's client sends as its read opens it) are kept the same way,
 -- a part each (R.aside[key].l, counted with the values: R:PartAside), and heard again as a reroute here opens them,
 -- after the values, so the kills taken there have their boss's name. No time counts while this client waits for a read
--- that may open them (an officer's stricter policy heard, Policy.lua P.doubt, or no line read yet this session: inside
--- an instance, a whole run): their ten minutes start again at the first sweep after the wait. What is kept aside is no
+-- that may open them (an officer's stricter policy heard, Policy.lua P.doubt; (merge6) an officer's newer policy heard
+-- and not read yet, stricter or not, P.unread: the most common save, one that only opens a stat or a category, raises
+-- no doubt, and its values, labels and claims came as the mates read it while this client's read could not be had; or
+-- no line read yet this session: inside an instance, a whole run): their ten minutes start again at the first sweep
+-- after the wait. P.unread ends at the read that confirms the line (Policy.lua P:ReadLine). What is kept aside is no
 -- reason to ask the guild: only a value really lost while this client does not hold the line's policy (refused, its
 -- sender's share full, or gone) is asked for again as the wait ends (R.lostUnsettled, Policy.lua P:Settle). 0.9.2 asked
 -- for every value that came during the wait, and every client online answered with its whole record and pass
 R.aside = {}
 local ASIDE_FOR, ASIDE_WAIT = 600, 60
-local function waiting() local P = C.Policy; return P.doubt == true or P.line == nil end
+local function waiting() local P = C.Policy; return P.doubt == true or P.unread ~= nil or P.line == nil end
 local function unsettledNow() return not R:OfficerStill() and not C.Policy:Settled() end
 local function sweepAside()
   local t, held = now(), waiting()
