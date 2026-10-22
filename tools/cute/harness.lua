@@ -20999,6 +20999,77 @@ do
   end)
 end
 
+-- [stage: merge4] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The merge's integration findings (launch/merge4), a case each; every case runs, and the block fails at its end naming
+-- each one that did not hold:
+-- H1. A member promoted while offline logs in to an officer's halls: the members idle since are in This week (its
+--     client kept no weeks while it was a member, and an ask with a since brings only what changed); an officer who
+--     leaves the guild, its weeks gone, keeps no hold, so a rejoin asks every record whole
+----------------------------------------------------------------------------
+do
+  local CASES, failed, said = {}, {}, {}
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "MAGE", level = 30, online = true } end
+  local function char(name, extra) return newClient(charOf({ name, 3, "Raider", "MAGE", 30 }, extra)) end
+  local function inGuild(guild, fn)
+    local ok, err = true, nil
+    isolated(guild, function() ok, err = pcall(fn) end)
+    if not ok then error(err, 0) end
+  end
+  local function read(path) local f = assert(io.open(HERE .. "/../../" .. path)); local x = f:read("*a"); f:close(); return x end
+  local function plainOf(x) return (x:gsub("<[^>]+>", " "):gsub("&#39;", "'"):gsub("&quot;", '"'):gsub("&lt;", "<"):gsub("&gt;", ">"):gsub("&amp;", "&"):gsub("%s+", " ")) end
+  local function run(cmd) local p = io.popen(cmd .. " 2>&1"); local out = p and p:read("*a") or ""; if p then p:close() end return out end
+
+  CASES[#CASES + 1] = { "H1 a member promoted while offline has the idle members' weeks; an officer who left keeps no hold", function()
+    local brann = member("Brann", 3)
+    inGuild({ member("Wora", 1), brann, member("Wex", 3) }, function()
+      local o, b, x = char("Wora"), char("Brann"), char("Wex")
+      local bdb = {}
+      login(o); login(b, bdb); login(x)
+      tickAll(200)
+      -- Wex dies while Brann is online, a member: Brann's client keeps no weeks
+      fire(x, "PLAYER_DEAD")
+      tickAll(5)
+      local wex = x.o.guid
+      assert(o.C.Halls.ThisWeek(wex, "deaths_week") == 1 and next(b.C.Halls.DB().weeks) == nil, "the officer keeps Wex's week, the member none")
+      -- (Brann stays a while: what went in the last minute before a logout is sent again, Comm.lua HOLD_MARGIN)
+      tickAll(300)
+      fire(b, "PLAYER_LOGOUT"); leave(b)
+      assert(type(bdb.chars) == "table" and type(b.C.Char().hold) == "table", "Brann's logout keeps a hold")
+      -- promoted while offline; Wex idle since
+      brann.rank, brann.rankName = 1, "Officer"
+      tickAll(60)
+      local b2 = char("Brann")
+      login(b2, bdb)
+      tickAll(200)
+      assert(b2.C.Roster:MeOfficer(), "Brann is an officer at this login")
+      assert(b2.C.Halls.ThisWeek(wex, "deaths_week") == 1, "This week's halls have idle Wex's deaths: " .. tostring(b2.C.Halls.ThisWeek(wex, "deaths_week")))
+      for _, c in ipairs({ o, b2, x }) do leave(c) end
+      -- an officer who leaves the guild: its weeks go, and so does its hold, at once and at the logout
+      local o2 = char("Wora")
+      local odb = o.env.CuteDB
+      fire(o, "PLAYER_LOGOUT")
+      assert(type(o.C.Char().hold) == "table", "Wora's logout keeps a hold")
+      login(o2, odb); login(x, x.env.CuteDB)
+      tickAll(200)
+      assert(next(o2.C.Halls.DB().weeks) ~= nil, "the officer holds weeks again")
+      o2.C.Roster:LeftGuild()
+      assert(next(o2.C.Halls.DB().weeks) == nil and o2.C.Char().hold == nil, "the guild left: weeks and hold gone")
+      fire(o2, "PLAYER_LOGOUT")
+      assert(o2.C.Char().hold == nil, "and no hold written at the logout, so a rejoin asks every record whole")
+      leave(o2); leave(x)
+    end)
+    said[#said + 1] = "a member promoted while offline has idle members' weeks; an officer who left keeps no hold"
+  end }
+
+  for _, case in ipairs(CASES) do
+    local ok, err = pcall(case[2])
+    if not ok then failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
+  end
+  assert(#failed == 0, "merge4: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
+  print("merge4: " .. table.concat(said, "; "))
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

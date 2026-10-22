@@ -477,6 +477,22 @@ function M:Unheld()
   self.unheld = true
   if CuteDB then C.Char().hold = nil end
 end
+-- (merge4) every record asked whole, this login alone: what this client holds lacks what no since brings back (an
+-- officer at this login who was none at its last kept no halls' weeks then, Roster.lua R:PurgeCheck). The hold goes, so
+-- a hello still to come asks whole; an ask waiting with a since loses it (and one owed is owed whole); one that left
+-- with a since is followed by a plain ask. This login's own hold is kept at its logout as ever
+function M:AskWhole()
+  if CuteDB then C.Char().hold = nil end
+  local waiting = false
+  for _, m in ipairs(self.out) do
+    if m.ask then
+      waiting = true
+      if m.since then m.msg, m.since, m.hello = m.msg:sub(1, #m.msg - #m.since), nil, nil end
+    end
+  end
+  if self.askOwed == "hello" then self.askOwed = true end
+  if not waiting and not self.askOwed and self.sinceLeft then self.sinceLeft = nil; self:Ask() end
+end
 -- what this client takes on the wire, as a text: every stat its registry defines (but the dynamic ones, kept whether
 -- defined or not, and those learned in play), counted and summed by hash. A module switched on or a newer Cute changes
 -- it: values of those stats went while this client dropped them, and a since would never bring them
@@ -712,7 +728,7 @@ M.drops, M.paused = 0, nil
 -- (the ask that left, or that will not: the hello's is sent again where it never left, M:AskAgain)
 local function asked(e, r)
   if not e.ask then return end
-  if r == "sent" then M.askOwed = nil; M.askLeft = C.Now(); if M.AskLeft then M:AskLeft() end
+  if r == "sent" then M.askOwed = nil; M.askLeft, M.sinceLeft = C.Now(), e.since; if M.AskLeft then M:AskLeft() end
   elseif r ~= "gone" then M.askOwed = e.hello and "hello" or true; M:AskAgain() end
 end
 -- (this login's record gone whole on GUILD for the first time: an ask whose since is later holds it, M:Answer)
@@ -1281,8 +1297,10 @@ function M:Ask(hello)
   local guid = C.MyGUID()
   -- (one ask waiting at a time: a second would only be answered as the first)
   for _, m in ipairs(self.out) do if m.ask then return end end
+  -- (since kept with the message, so M:AskWhole can take it off while it waits)
+  local since = (hello and self.SinceHex) and self:SinceHex() or ""
   queue({ msg = "1R|" .. (guid and (guid:gsub("[|;=]", "")) or "") .. "|" .. string.format("%.0f", C.Policy:Stamp()) .. "|"
-    .. string.format("%.0f", C.Rules.WordStamp()) .. "|" .. C.Policy:Fp() .. ((hello and self.SinceHex) and self:SinceHex() or ""), first = true, ask = true, hello = hello })
+    .. string.format("%.0f", C.Rules.WordStamp()) .. "|" .. C.Policy:Fp() .. since, first = true, ask = true, hello = hello, since = since ~= "" and since or nil })
 end
 -- an ask that never left (the client refused it, or an error on the way): asked again half a minute on, and when the
 -- lockdown ends (M:Restriction)
