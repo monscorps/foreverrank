@@ -7486,10 +7486,13 @@ do
   owner.party, owner.pushable = nil, nil
   UI:Refresh()
 end
--- a friend runs a newer QuestBank: one notice, and the link
+-- a friend runs a newer QuestBank: one notice, and the link. (Since the launch audit one player's word is news only
+-- once a second says a version at least that new, the fix-engine stage's S11: a guild mate said it first here)
 do
   local fQB = friend.QB
   local real = fQB.version
+  owner.QB:SawVersion("9.9.9", "Cora Steelhand")
+  assert(owner.QB.newest == nil, "one player's word alone: not news yet")
   fQB.version = "9.9.9"
   fQB.Sync.lastStatus = nil
   fQB.Sync:Broadcast(true)
@@ -24619,6 +24622,22 @@ end
     unspy()
     QB.noGuildSync = nil
   end }
+
+  -- S11 (trust). QuestBank alone printed "QuestBank X is out (Name runs it)" after one 1V from anyone on the realm's
+  -- version channel. Two players now, each saying a version at least that new (Cute's C.SawVersion)
+  FECASES[#FECASES + 1] = { "S11: a newer QuestBank is said once two players say a version at least that new", function()
+    local c = syncChar("Versions")
+    local QB, S = c.QB, c.QB.Sync
+    local n0 = #c.chat
+    S:Receive("1V|99.0", "CHANNEL", "Troll Grimm-Forever Normal")
+    S:Receive("1V|99.0", "CHANNEL", "Troll Grimm-Forever Normal")
+    assert(QB.newest == nil and not table.concat(c.chat, "\n", n0 + 1):find("is out", 1, true), "one voice, twice: nothing said")
+    S:Receive("1S|18|100|A|MAGE|0|0|0|-1|0|0|7.0.0|zzzzzzzzzz", "PARTY", "Mate Steelhand-Forever Normal")
+    local said = table.concat(c.chat, "\n", n0 + 1)
+    assert(QB.newest and QB.newest.version == "7.0.0" and select(2, said:gsub("is out", "")) == 1 and said:find("QuestBank 7.0.0 is out", 1, true),
+      "a second voice at least as new: said once, the version both say: " .. said)
+  end }
+
   local failed = {}
   for _, case in ipairs(FECASES) do
     local ok, err = pcall(case[2])
