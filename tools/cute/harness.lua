@@ -15770,6 +15770,37 @@ do
     leave(c)
     said[#said + 1] = "M's legend: In your log's switch and head an objective's cursor; with our icons on the game's map off, M's pins and switches kept"
   end)
+  -- K2: the reader's buttons in M's narrow list, a quest you can share in a group: Show on arrow, Share and Abandon all
+  -- inside the list, the third on a line of its own where the list is too narrow for three
+  isolated({ member("Rone", 1) }, function()
+    local c, QB = mapClient("Rone", 1)
+    c.env.IsInGroup = function() return true end
+    c.env.C_QuestLog.IsPushableQuest = function() return true end
+    c.C.UI:Open("map")
+    local ui = c.C.UI.Window("map")
+    for _, size in ipairs({ { 860, 500 }, { 1120, 640 } }) do
+      ui.frame:SetSize(size[1], size[2])
+      QB.MapPage.Go(1429, "user")
+      ui:Draw()
+      QB.Reader.Read(ui, QB.Quest.Get(7))
+      local w = ui.scroll:Width()
+      local got = {}
+      for _, b in ipairs(ui.buttons.items) do
+        if b:IsShown() then
+          local _, _, _, x, y = b:GetPoint()
+          got[b.label:GetText()] = { x = x, y = y, w = b:GetWidth() }
+        end
+      end
+      assert(got["Show on arrow"] and got.Share and got.Abandon, "the reader's three buttons")
+      for label, g in pairs(got) do
+        assert(g.x >= 0 and g.x + g.w <= w - 6, label .. " inside the list at " .. size[1] .. ": " .. g.x .. " + " .. g.w .. " of " .. w)
+      end
+      check(ui.frame, "map window at " .. size[1] .. "x" .. size[2] .. ", a quest to share in the reader")
+      QB.Reader.Back(ui)
+    end
+    leave(c)
+    said[#said + 1] = "the reader's Show on arrow, Share and Abandon inside M's list at both sizes"
+  end)
   print("map K: " .. table.concat(said, "; "))
 end
 

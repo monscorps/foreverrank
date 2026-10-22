@@ -212,6 +212,9 @@ function R.Draw(ui, scroll)
   end
   local x = 6
   for _, a in ipairs(acts) do
+    -- (as many in a line as the list has room for: one that would pass its edge starts the next line, as the Map window's
+    -- narrow list needs for a third)
+    if x > 6 and x + 110 > w - 6 then x, y = 6, y + 28 end
     local b = ui.buttons:Get()
     b:ClearAllPoints()
     b:SetPoint("TOPLEFT", x, -y)
