@@ -918,10 +918,14 @@ local function readAll()
   ctx.level = QB.state and QB.state.level or 1
   ctx.pull = R.PullOn()
   local any = dirty.all
+  -- (the hud review) Reminders on screen off: nothing read but the step frame's line, which stays its rows' in QuestBank
+  -- alone, and nothing at all under a host whose switch is the only master (QB.remindAll, Cute's module)
+  local off = set.on == false
   for _, p in ipairs(R.list) do
     local want = any
     if not want then for _, g in ipairs(p.groups or {}) do if dirty[g] then want = true break end end end
     if p.timed and needClock then want = true end
+    if off and (QB.remindAll or p.piece ~= "step") then p.n = 0; want = false end
     if want then
       p.n = 0
       if not offRow(p) then
@@ -1085,6 +1089,7 @@ end
 
 -- the clock: one look a second while a word changes as time or you go, a party row can show, or the fade runs
 local function wantClock()
+  if set.on == false then return stepRec ~= nil and stepRec.timed == true end -- (off: the step frame's line alone)
   local t = false
   for _, l in pairs(shown) do for _, rec in ipairs(l) do if rec.timed then t = true end end end
   if stepRec and stepRec.timed then t = true end
@@ -1795,7 +1800,7 @@ end
 ----------------------------------------------------------------------------
 R.EVENTS = {
   buffs = { "SPELLS_CHANGED", "WEAPON_ENCHANT_CHANGED" },
-  party = { "GROUP_ROSTER_UPDATE", "UNIT_CONNECTION", "UNIT_IN_RANGE_UPDATE" },
+  party = { "GROUP_ROSTER_UPDATE" }, -- (UNIT_CONNECTION, UNIT_IN_RANGE_UPDATE: the party's own frame, R:Init)
   camp = { "PLAYER_STARTED_MOVING", "PLAYER_STOPPED_MOVING", "PLAYER_UPDATE_RESTING", "PLAYER_MOUNT_DISPLAY_CHANGED",
            "PLAYER_SOFT_INTERACT_CHANGED", "BAG_UPDATE_DELAYED" },
   upkeep = { "UPDATE_INVENTORY_ALERTS", "BAG_UPDATE_DELAYED", "BAG_UPDATE_COOLDOWN", "MERCHANT_SHOW", "MERCHANT_CLOSED",
@@ -1804,7 +1809,7 @@ R.EVENTS = {
             "LEARNED_SPELL_IN_SKILL_LINE", "TRAINER_SHOW", "TRAINER_CLOSED", "ZONE_CHANGED", "ZONE_CHANGED_INDOORS",
             "ZONE_CHANGED_NEW_AREA", "TAXI_NODE_STATUS_CHANGED", "UI_INFO_MESSAGE", "PLAYER_STOPPED_MOVING" },
   away = { "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST", "PLAYER_CONTROL_LOST", "PLAYER_CONTROL_GAINED",
-           "UNIT_ENTERED_VEHICLE", "UNIT_EXITED_VEHICLE", "CINEMATIC_START", "CINEMATIC_STOP" },
+           "CINEMATIC_START", "CINEMATIC_STOP" }, -- (the vehicle's two: yours alone, R:Init)
   pull = { "READY_CHECK", "READY_CHECK_FINISHED" },
   all = { "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED", "ADDON_RESTRICTION_STATE_CHANGED" },
 }
@@ -1816,7 +1821,8 @@ local function index()
   end
 end
 -- (the unit events are on frames of their own, for you alone: never every unit's on the main frame)
-local OWN_UNIT = { UNIT_AURA = true, UNIT_SPELLCAST_SUCCEEDED = true, UNIT_INVENTORY_CHANGED = true }
+local OWN_UNIT = { UNIT_AURA = true, UNIT_SPELLCAST_SUCCEEDED = true, UNIT_INVENTORY_CHANGED = true, UNIT_CONNECTION = true,
+  UNIT_IN_RANGE_UPDATE = true, UNIT_ENTERED_VEHICLE = true, UNIT_EXITED_VEHICLE = true }
 function R.Hear(event, fn)
   hearers[event] = hearers[event] or {}
   table.insert(hearers[event], fn)
@@ -1893,20 +1899,27 @@ function R:Init()
   for e in pairs(groupsOf) do pcall(f.RegisterEvent, f, e) end
   for e in pairs(hearers) do if not groupsOf[e] and not OWN_UNIT[e] then pcall(f.RegisterEvent, f, e) end end
   -- your auras and your party's, each its own frame and bit, the payload never read (secret while auras are
-  -- restricted, UnitAuraDocumentation.lua:643-645); your own casts alone (RegisterUnitEvent)
-  local function unitFrame(bit, ...)
+  -- restricted, UnitAuraDocumentation.lua:643-645); your own casts alone (RegisterUnitEvent). (The hud review) the
+  -- party's range and connection with its auras, for party1 to party4 alone, and none of the three in a raid, where
+  -- the party row never shows (UNIT_IN_RANGE_UPDATE's payload is secret, UnitDocumentation.lua:4331: never read); the
+  -- vehicle's two for you alone (VehicleDocumentation.lua:38)
+  local function unitFrame(bit, events, ...)
     local u = CreateFrame("Frame")
     u:SetScript("OnEvent", QB.Safe(function(_, event, ...)
+      if bit == "party" and yes(IsInRaid) then return end
       for _, fn in ipairs(hearers[event] or {}) do fn(event, ...) end
       dirty[bit] = true
       if bit == "buffs" then dirty.camp = true; dirty.pull = true end
       R.Dirty(bit)
-    end, "reminders: auras"))
-    if u.RegisterUnitEvent then pcall(u.RegisterUnitEvent, u, "UNIT_AURA", ...) else pcall(u.RegisterEvent, u, "UNIT_AURA") end
+    end, "reminders: " .. bit))
+    for _, e in ipairs(events) do
+      if u.RegisterUnitEvent then pcall(u.RegisterUnitEvent, u, e, ...) else pcall(u.RegisterEvent, u, e) end
+    end
     return u
   end
-  self.auraFrame = unitFrame("buffs", "player")
-  self.partyFrame = unitFrame("party", "party1", "party2", "party3", "party4")
+  self.auraFrame = unitFrame("buffs", { "UNIT_AURA" }, "player")
+  self.partyFrame = unitFrame("party", { "UNIT_AURA", "UNIT_CONNECTION", "UNIT_IN_RANGE_UPDATE" }, "party1", "party2", "party3", "party4")
+  self.awayFrame = unitFrame("away", { "UNIT_ENTERED_VEHICLE", "UNIT_EXITED_VEHICLE" }, "player")
   local cast = CreateFrame("Frame")
   self.castFrame = cast
   cast:SetScript("OnEvent", QB.Safe(function(_, event, ...)

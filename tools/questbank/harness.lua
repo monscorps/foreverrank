@@ -22095,7 +22095,8 @@ end
 ----------------------------------------------------------------------------
 do
   local HUD = {}
-  -- a character out in the world who knows `known`; o: level, faction, world, map, bags, party, saved, resting
+  -- a character out in the world who knows `known`; o: level, faction, world, map, bags, party, saved, resting, before
+  -- (a function of the client, run before its login)
   local function hud(name, class, className, classID, known, o)
     o = o or {}
     local c = newClient({ name = name, level = o.level or 20, cap = 60, faction = o.faction or "Alliance", className = className, class = class,
@@ -22167,6 +22168,7 @@ do
     env.GetInventoryItemTexture = function() return nil end
     env.CanMerchantRepair = function() return c.repairs or false end
     env.MainMenuBarBackpackButton = env.CreateFrame("Button", "MainMenuBarBackpackButton", env.UIParent)
+    if o.before then o.before(c) end
     login(c)
     -- (trained at its level, as the levels a class learns at count it on a client without the spellbook's calls: the
     -- step frame's line is the case's own, Train's would come first; the Train case reads the spellbook)
@@ -23265,6 +23267,63 @@ do
     local per = acc * 1024 / 10
     assert(per < 2048, string.format("a full refresh: %.0f bytes of its own (at most 2 KB)", per))
     print(string.format("hud: a full refresh with four reminders up: %.0f bytes of its own", per))
+  end }
+
+  -- 19b. what a session costs: a cook out of kits walking out of town never looks up the nearest seller; with Reminders
+  -- off nothing is read but the step frame's line (QuestBank's row) or nothing at all (a host's module, QB.remindAll),
+  -- and no clock runs, in a party too; the party's range and connection events are the party's units' alone, the
+  -- vehicle's yours, and in a raid they refresh nothing
+  CASES[#CASES + 1] = { "costs: no seller looked up on the move, nothing read with Reminders off, a raid's range changes nothing", function()
+    local function spy(c)
+      local make = c.env.CreateFrame
+      c.env.CreateFrame = function(...)
+        local f = make(...)
+        rawset(f, "RegisterEvent", function(self, e) self.__reg = self.__reg or {}; self.__reg[e] = "all" end)
+        rawset(f, "RegisterUnitEvent", function(self, e, ...) self.__reg = self.__reg or {}; self.__reg[e] = table.concat({ ... }, ",") end)
+        return f
+      end
+    end
+    local c = hud("Costly", "WARRIOR", "Warrior", 1, { [1229737] = true, [2550] = true }, { level = 12, before = spy, party = { { "Brom", "WARRIOR", 12, buffs = {} } } })
+    local env, R = c.env, c.QB.Remind
+    local function reg(f, e) return f and f.__reg and f.__reg[e] end
+    for _, e in ipairs({ "UNIT_IN_RANGE_UPDATE", "UNIT_CONNECTION" }) do
+      assert(not reg(R.frame, e) and reg(R.partyFrame, e) == "party1,party2,party3,party4", e .. ": the party's units alone: " .. tostring(reg(R.partyFrame, e)))
+    end
+    for _, e in ipairs({ "UNIT_ENTERED_VEHICLE", "UNIT_EXITED_VEHICLE" }) do
+      assert(not reg(R.frame, e) and reg(R.awayFrame, e) == "player", e .. ": yours alone: " .. tostring(reg(R.awayFrame, e)))
+    end
+    tick(c, 2)
+    -- a raid: a member's range or connection changing refreshes nothing
+    c.raid = true; ev(c, "GROUP_ROSTER_UPDATE"); tick(c, 2)
+    local r0 = R.refreshes
+    local pf = R.partyFrame
+    for _ = 1, 20 do pf.__scripts.OnEvent(pf, "UNIT_IN_RANGE_UPDATE", "party1", true); pf.__scripts.OnEvent(pf, "UNIT_CONNECTION", "party1", true) end
+    tick(c, 0)
+    assert(R.refreshes == r0, "a raid's range and connection changes: no refresh: " .. (R.refreshes - r0))
+    c.raid = false; ev(c, "GROUP_ROSTER_UPDATE"); tick(c, 2)
+    -- a cook who has used a kit, out of kits and wood, walking out of town: no seller looked up
+    c.profs = { { "Cooking", 15 } }
+    c.QB.Camp.CharDB().kitUsed = true
+    local looks, near = 0, c.QB.Camp.NearestSeller
+    c.QB.Camp.NearestSeller = function(...) looks = looks + 1; return near(...) end
+    for _ = 1, 10 do R.Refresh() end
+    assert(looks == 0, "on the move out of town: no seller looked up: " .. looks)
+    c.QB.Camp.NearestSeller = near
+    -- Reminders off: QuestBank's row, the step frame's line alone read; a host's module, nothing; no clock in the party
+    local reads, all = 0, 0
+    for _, pv in ipairs(R.list) do
+      local f0 = pv.safeRead
+      pv.safeRead = function(...) all = all + 1; if pv.piece ~= "step" then reads = reads + 1 end; return f0(...) end
+    end
+    R.Settings().on = false
+    R.Refresh(); tick(c, 2)
+    assert(reads == 0 and not (R.clock and R.clock.__scripts.OnUpdate), "Reminders off in a party: nothing read but the line's, no clock: " .. reads)
+    c.QB.remindAll, all = true, 0
+    R.Refresh(); tick(c, 2)
+    assert(all == 0, "a host's module off: nothing read at all: " .. all)
+    c.QB.remindAll = nil
+    R.Settings().on = true
+    c.o.group = false
   end }
 
   -- (each case on its own: a failing one is named and the rest still run; the block fails at its end)

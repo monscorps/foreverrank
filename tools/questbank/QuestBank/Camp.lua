@@ -344,14 +344,14 @@ Camp.Seed = seed
 -- and boats where the arrow's router knows the way, else on foot as the crow flies), or nil. A seller of every item
 -- in all (a list, optional) comes before one of some of them. Sellers your games have seen; with seeded also the seed's
 -- (D.CAMP_SELL), each counting its minutes half again and one more (Classic data: it may have moved), so a seller seen
--- in play wins at about the same distance; a seed seller a game has seen is the one seen
+-- in play wins at about the same distance; a seed seller a game has seen is the one seen. (The hud review) the
+-- minutes by Remind's own reach from you, made once a refresh (R.Minutes), never a search of its own each time
 function Camp.NearestSeller(want, all, seeded)
   local db = sellDB(false)
   if not (db or seeded) then return nil end
   local me = QB.API.WorldPosition()
   if not me then return nil end
-  local TV, R = QB.Travel, nil
-  local walk = QB.Model.DETOUR / QB.Model.RUN / 60
+  local minutes = QB.Remind.Minutes
   local best, bm, bScore, bMiss
   local function look(e)
     if type(e) ~= "table" or e.c ~= me.c or type(e.wx) ~= "number" or type(e.wy) ~= "number" then return end
@@ -363,12 +363,8 @@ function Camp.NearestSeller(want, all, seeded)
       for _, x in ipairs(e.i or {}) do if x == id then has = true end end
       if not has then miss = miss + 1 end
     end
-    local m
-    if TV and TV.Reach and TV.Via then
-      if R == nil then local okR, r = pcall(TV.Reach, me, TV.Opts("pin")); R = okR and r or false end
-      if R then local okV, v = pcall(TV.Via, R, e); if okV then m = v end end
-    end
-    if not m or m == math.huge then m = math.sqrt((e.wx - me.wx) ^ 2 + (e.wy - me.wy) ^ 2) * walk end
+    local m = minutes(me, e)
+    if not m then return end
     local score = e.seed and (m * 1.5 + 1) or m
     if not best or miss < bMiss or (miss == bMiss and score < bScore) then best, bm, bScore, bMiss = e, m, score, miss end
   end
@@ -1012,7 +1008,8 @@ R.Add({ key = "fire", neverName = "Campfire", piece = "reminders", order = 30, r
       rec.tex, rec.lit, rec.word = itemTex(e, 134400), true, "Make"
       R.Click(rec, "spell", cookSpell())
       rec.name, rec.why, rec.clickWord = "Basic Campfire Kit", "You carry Simple Wood and Flint and Tinder: make one in your Cooking window.", "open Cooking"
-    elseif cook and charDB().kitUsed and not kit and not (wood and flint) then
+    elseif cook and charDB().kitUsed and not kit and not (wood and flint) and (moment or ctx.town) then
+      -- (the seller looked up only at Fire's moment or in town: never on the move, where nothing would show)
       local need = (not wood and not flint) and BOTH or (wood and FLINT_ONLY or WOOD_ONLY)
       local e, m = Camp.NearestSeller(KIT_GOODS, need, true)
       if e and m <= 10 and (moment or (ctx.town and m <= 2)) then
