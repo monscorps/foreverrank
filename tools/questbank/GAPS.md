@@ -29,6 +29,7 @@ Forever redrew Mulgore, Eastern Plaguelands, Redridge and Stormwind: 247 Wowhead
 Classic frame and were moved to Forever's; 81 were already in Forever's.
 Instant follow-ups planned on the day: 308. Race-limited quests: 418. Quests in mutually exclusive groups: 497.
 Turn-in NPCs found by the name in the quest's objective, where Wowhead links none: 50.
+Finds (D.FIND): 32 books at 32 places from the guides, 1 locked object from the guides.
 World map icons: objective spots for 1457 quests (1145 from CMaNGOS spawns, 306 from its quest outlines only, 1 from Wowhead Forever's quest pages, 5 from players' games alone; 4 more have players' spots beside those); 53 quests that start from an item show where it drops. 176 quests need a profession or a reputation the addon can't check.
 
 Seen in Forever by players (191 uploads merged by probe_pull.py, 2026-10-14T03:07:22Z): 329 quests, 16 of them Classic seeds now confirmed.

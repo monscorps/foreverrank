@@ -6223,6 +6223,46 @@ D.TRAINER = {
 {13417,"Sagorne Creststrider",7,1,1938,-4223,1454,38.7,35.9}
 }
 
+-- [spell] = the lock type it opens: the client's opening spells (an open-lock effect of no skill's lock type,
+-- SpellEffect.csv); 0 opens with a key, the lock's item (Finds.lua)
+D.OPEN = {[3365]=5,[3366]=0,[5107]=0,[6247]=10,[6249]=0,[6477]=12,[6478]=13,[6527]=0,[6529]=0,[6658]=0,[6802]=0,[8517]=0,[10738]=0,[11437]=0,[11535]=0,[11792]=0,[13478]=0,[13564]=0,[13565]=0,[14125]=0,[15276]=0,[17432]=0,[18952]=0,[21248]=0,[21288]=0,[21651]=17,[22810]=13,[26587]=0,[26588]=0,[26868]=17,[423088]=0,[423632]=0,[461679]=0,[463320]=0,[1221363]=5,[1236393]=209,[1269930]=5,[1277271]=0,[1308379]=209,[1309310]=209,[1309978]=209,[1310156]=209,[1310491]=209}
+-- [item] = true: the items the client's Lock.csv names as a lock's key, whatever their class (Finds.lua)
+D.LOCKKEY = {[872]=true,[2589]=true,[2629]=true,[3467]=true,[3499]=true,[3710]=true,[3745]=true,[3930]=true,[4027]=true,[4529]=true,[4639]=true,[4640]=true,[4750]=true,[4882]=true,[4986]=true,[5020]=true,[5021]=true,[5059]=true,[5068]=true,[5165]=true,[5185]=true,[5338]=true,[5384]=true,[5396]=true,[5397]=true,[5475]=true,[5521]=true,[5687]=true,[5851]=true,[5868]=true,[5916]=true,[5937]=true,[6074]=true,[6207]=true,[6208]=true,[6209]=true,[6210]=true,[6783]=true,[6893]=true,[7146]=true,[7208]=true,[7733]=true,[8444]=true,[9240]=true,[9249]=true,[9299]=true,[9472]=true,[10445]=true,[10460]=true,[10515]=true,[10757]=true,[11000]=true,[11078]=true,[11079]=true,[11115]=true,[11140]=true,[11197]=true,[11602]=true,[11833]=true,[11885]=true,[12144]=true,[12186]=true,[12286]=true,[12301]=true,[12344]=true,[12382]=true,[12785]=true,[12814]=true,[12891]=true,[12906]=true,[12942]=true,[12973]=true,[13302]=true,[13303]=true,[13304]=true,[13305]=true,[13306]=true,[13307]=true,[13523]=true,[13704]=true,[13873]=true,[14523]=true,[14547]=true,[15042]=true,[15766]=true,[16208]=true,[16308]=true,[16333]=true,[16603]=true,[17242]=true,[17262]=true,[17333]=true,[17696]=true,[18249]=true,[18266]=true,[18268]=true,[18629]=true,[19931]=true,[21172]=true,[21174]=true,[21761]=true,[21762]=true,[22486]=true,[22754]=true,[23055]=true,[206966]=true,[206975]=true,[208005]=true,[208007]=true,[208682]=true,[208739]=true,[208743]=true,[208749]=true,[208768]=true,[209030]=true,[209045]=true,[209059]=true,[209608]=true,[210209]=true,[210323]=true,[210568]=true,[210963]=true,[210968]=true,[211273]=true,[211471]=true,[211482]=true,[214435]=true,[216523]=true,[217718]=true,[221324]=true,[221497]=true,[227451]=true,[227928]=true,[227930]=true,[227932]=true,[228912]=true,[229362]=true,[231789]=true,[235518]=true,[235785]=true,[237011]=true,[237196]=true,[237230]=true,[237773]=true,[238345]=true,[238501]=true,[238802]=true,[239097]=true,[245675]=true,[246683]=true,[259357]=true,[263992]=true,[265821]=true,[266148]=true,[266161]=true,[267089]=true,[268505]=true,[268520]=true,[268582]=true,[268647]=true,[269997]=true,[271721]=true,[276561]=true,[277136]=true,[277507]=true,[281350]=true,[281358]=true,[281359]=true,[284092]=true}
+-- [uiMap] = {{kind, id, "x,y;x,y" (thousandths), files, extra, source}, ...}: what the world holds beyond quests (b a
+-- book and its title, k an object and the key Lock.csv names, h an object looted and its items' kind, r a rare and
+-- its level); source p what two players' files agree on, g a guide's place (Finds.lua; QuestBank_Finds adds f)
+D.FIND = {
+[1413]={{"b",0,"627,363",0,"Baxtan: On Destructive Magics","g"},{"b",0,"563,88",0,"Arcanic Systems Manual","g"},{"b",0,"528,547",0,"Secrets of the Dreamers","g"}},
+[1416]={{"b",0,"485,576",0,"Defensive Magics 101","g"}},
+[1417]={{"b",0,"730,650",0,"A Web of Lies: Debunking Myths and Legends","g"}},
+[1418]={{"b",0,"570,390",0,"Mummies: A Guide to the Unsavory Undead","g"}},
+[1419]={{"b",0,"553,322",0,"Conjurer's Codex","g"}},
+[1420]={{"b",0,"595,523",0,"The Apothecary's Metaphysical Primer","g"}},
+[1421]={{"b",0,"434,412",0,"Ataeric: On Arcane Curiosities","g"},{"b",0,"635,631",0,"The Dalaran Digest, Vol. 23","g"}},
+[1422]={{"b",0,"380,540",0,"Undead Potatoes","g"}},
+[1425]={{"b",0,"360,727",0,"Venomous Journeys","g"}},
+[1427]={{"b",0,"370,490",0,"A Mind of Metal","g"}},
+[1429]={{"b",0,"654,701",0,"Archmage Theocritus' Research Journal","g"}},
+[1431]={{"b",0,"67,285",0,"Crimes Against Anatomy","g"}},
+[1432]={{"b",0,"745,196",0,"Runes of the Sorcerer-Kings","g"}},
+[1434]={{"b",0,"415,508",0,"Basilisks: Should Petrification be Feared?","g"}},
+[1435]={{"b",0,"610,220",0,"A Luddite's Guide to Caring for Your Demonic Pet","g"},{"k",0,"610,220",0,216523,"g"}},
+[1436]={{"b",0,"454,704",0,"Bewitchments and Glamours","g"}},
+[1437]={{"b",0,"336,479",0,"Goaz Scrolls","g"}},
+[1439]={{"b",0,"596,222",0,"Nar'thalas Almanac, Vol. 74","g"}},
+[1441]={{"b",0,"340,400",0,"Geomancy: The Stone-Cold Truth","g"}},
+[1442]={{"b",0,"744,857",0,"Fury of the Land","g"}},
+[1443]={{"b",0,"550,280",0,"Demons and You","g"}},
+[1444]={{"b",0,"506,157",0,"The Liminal and the Arcane","g"}},
+[1445]={{"b",0,"570,210",0,"RwlRwlRwlRwl!","g"}},
+[1446]={{"b",0,"727,478",0,"Legends of the Tidesages","g"}},
+[1447]={{"b",0,"200,610",0,"Everyday Etiquette","g"}},
+[1448]={{"b",0,"652,32",0,"Northern Kalimdor - A Comprehensive Guide","g"}},
+[1452]={{"b",0,"610,380",0,"Ka-Boom!","g"}},
+[1454]={{"b",0,"385,782",0,"The Lessons of Ta'zo","g"}},
+[1455]={{"b",0,"761,102",0,"Archmage Antonidas: The Unabridged Autobiography","g"}}
+}
+
 -- [class token] = the levels the class learns a new spell at (codex/spellbook.json, the Forever client's tables)
 D.SPELL_LV = {
 DRUID = {1,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,36,40,42,44,50},

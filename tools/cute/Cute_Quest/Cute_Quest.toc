@@ -19,6 +19,7 @@ Discover.lua
 Survey.lua
 Game.lua
 Loot.lua
+Finds.lua
 Observe.lua
 Timer.lua
 Link.lua

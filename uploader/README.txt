@@ -1,24 +1,29 @@
 QuestBank Uploader (Windows, optional)
 ======================================
 
-Sends your QuestBank.lua to foreverrank.com after the game writes it
-(at logout and on /reload), so what you discover in game reaches
-everyone's QuestBank in the next data release. No account, no key,
-nothing to type. Uploads are stored privately and never published as
-they are (the file holds your characters' names); only what QuestBank
-noted about quests, NPCs, items, spells and XP goes into the releases.
+Sends what QuestBank (or Cute) noted in the world to foreverrank.com
+after the game writes it (at logout and on /reload), so what you
+discover in game reaches everyone's QuestBank. No account, no key,
+nothing to type. Only the parts of QuestBank.lua and Cute_Quest.lua
+that hold no name leave your PC; Cute.lua is never read. Once a day
+it brings back what players' games found and agree on, in the
+QuestBank_Finds addon.
 
 Setup, once: double-click Install.bat in this folder. It also puts the
 QuestBank addon from this download into your game's Interface\AddOns.
 A copy you already have is updated (the old one is kept as
-Interface\QuestBank.bak); where there is none, it asks once.
+Interface\QuestBank.bak); where there is none, it asks once. The copy
+that comes with Cute never puts QuestBank in: copy its Cute and
+Cute_Quest folders into Interface\AddOns yourself, as with Cute alone.
+QuestBank_Finds goes in beside QuestBank or Cute, also when you add
+them after Install.
 
 Then the QuestBank Uploader icon sits in the system tray by the clock.
 It sends every 30 minutes and starts again with Windows. Right-click it:
 
   Send now            send right away
   Status              your game folders with the QuestBank in each,
-                      every QuestBank.lua it watches (size, when the
+                      every saved file it watches (size, when the
                       game wrote it, which QuestBank wrote it, sent or
                       not) and the last lines of its log
   Choose WoW folder   when WoW lives somewhere other than the usual

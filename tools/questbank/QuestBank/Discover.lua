@@ -271,10 +271,8 @@ local function spot()
   if not ok or secret(m) or type(m) ~= "number" or m <= 0 then return nil end
   local ok2, pos = pcall(C_Map.GetPlayerMapPosition, m, "player")
   if not ok2 or pos == nil or secret(pos) or type(pos) ~= "table" then return nil end
-  local ok3, x, y = pcall(function()
-    if pos.GetXY then return pos:GetXY() end
-    return pos.x, pos.y
-  end)
+  local ok3, x, y = true, pos.x, pos.y
+  if pos.GetXY then ok3, x, y = pcall(pos.GetXY, pos) end -- (no closure: the finds read this every second, walking)
   if not ok3 or secret(x) or secret(y) or type(x) ~= "number" or type(y) ~= "number" then return nil end
   if (x == 0 and y == 0) or x < 0 or x > 1 or y < 0 or y > 1 then return nil end
   return m, floor(x * 1000 + 0.5), floor(y * 1000 + 0.5)
@@ -407,7 +405,7 @@ function Disc.Accepted(id) born[id] = now() end
 
 -- look at the log: an objective that has more than last time (or is finished now) was ticked where you stand; the
 -- quests that moved in this look share its time (Timer.Tick: ticked[1..nTicked], one list kept for it)
-local ticked = {}
+local ticked, done = {}, {}
 local function look()
   if not forever() then return end
   local L = C_QuestLog
@@ -417,7 +415,7 @@ local function look()
   local t = now()
   local settled = t >= settleUntil and seen ~= nil
   local fresh, since, here = {}, {}, nil
-  local nTicked = 0
+  local nTicked, nDone = 0, 0
   for li = 1, n do
     local okI, info = pcall(L.GetInfo, li)
     local id = okI and type(info) == "table" and not secret(info) and plainNum(info.questID) or nil
@@ -461,13 +459,19 @@ local function look()
           end
         end
         -- complete since the last look, where its progress was seen made: the work is whole (Timer.lua)
-        if whole and old and was and not wasWhole and QB.Timer and QB.Timer.Done then QB.Timer.Done(id) end
+        if whole and old and was and not wasWhole and QB.Timer and QB.Timer.Done then
+          QB.Timer.Done(id)
+          nDone = nDone + 1
+          done[nDone] = id
+        end
         fresh[id] = cur
       end
     end
   end
   seen, born = fresh, since
   if nTicked > 0 and QB.Timer and QB.Timer.Tick then QB.Timer.Tick(ticked, nTicked) end
+  -- (and the file's name-free copy of each completion, for the uploads: Finds.lua, once this look's work is counted)
+  if QB.Finds then for i = 1, nDone do QB.Finds.QuestDone(done[i]) end end
 end
 Disc.Look = look
 
@@ -512,4 +516,6 @@ function Disc:Init()
   -- which client: Forever is 16xxx; notes from Classic Era must not mark Classic quests as seen in Forever
   d.iface = (GetBuildInfo and QB.Plain(select(4, GetBuildInfo()))) or d.iface
   d.ver = QB.version
+  -- the finds (Finds.lua), which keep their notes in this table: objects, rares, crossings, the file's token
+  if QB.Finds then QB.Finds:Init() end
 end

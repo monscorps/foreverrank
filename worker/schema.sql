@@ -165,3 +165,7 @@ CREATE INDEX IF NOT EXISTS idx_probe_received ON probe_uploads(received DESC);
 -- referring host. No IP, user agent, cookie or anything per reader. The Worker also creates these on first use.
 CREATE TABLE IF NOT EXISTS page_views (day TEXT NOT NULL, path TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, path));
 CREATE TABLE IF NOT EXISTS page_refs (day TEXT NOT NULL, host TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, host));
+
+-- The finds players' files agree on (tools/probe_pull.py --publish-finds, admin only), served at /api/finds.json for
+-- the QuestBank Uploader's daily fetch. One row: the published set as JSON. The Worker also creates it on first use.
+CREATE TABLE IF NOT EXISTS finds_data (id INTEGER PRIMARY KEY CHECK (id = 1), body TEXT NOT NULL, updated INTEGER NOT NULL);
