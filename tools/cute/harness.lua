@@ -19382,6 +19382,43 @@ do
   end)
 end
 
+-- U2. The rows that change the game unasked say how, one DIM line under each: Map ("Cute's map on M; the minimap's
+--     wheel and right-click become Cute's", M the key its box shows), Reminders ("buffs, food, repair and training, out
+--     of a fight") and Interact light ("turns on the game's Interact key and its icons; Settings puts them back")
+function UIX.text(c, s)
+  for _, o in everything() do
+    if o.__kind == "FontString" and o.__shown and o.__text == s and visible(o) and o.__parent and o.__parent.__client == c then return o end
+  end
+end
+do
+  local uiMember, uiRow = UIX.member, UIX.row
+  isolated({ uiMember("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, card = true }))
+    login(c); tick(c, 3)
+    assert(c.env.CuteSetupFrame and c.env.CuteSetupFrame:IsShown(), "the card")
+    local function under(label, words)
+      local r, t = uiRow(c, label), UIX.text(c, words)
+      assert(r and t, "the " .. label .. " row says what it does under it, \"" .. words .. "\":\n" .. texts(c))
+      GEN = GEN + 1
+      local rr, tr = rectOf(r), rectOf(t)
+      assert(tr.t <= rr.b + 3 and tr.t >= rr.b - 6 and tr.l >= rr.l + 18, string.format("right under its row, by its label: row %d..%d, line top %d left %d", rr.t, rr.b, tr.t, tr.l))
+    end
+    under("Map", "Cute's map on M; the minimap's wheel and right-click become Cute's")
+    under("Reminders", "buffs, food, repair and training, out of a fight")
+    under("Interact light", "turns on the game's Interact key and its icons; Settings puts them back")
+    check(c.env.CuteSetupFrame, "fix-cute-ui U2 the setup card's notes")
+    -- the Map line names the key its box shows: N picked by hand
+    local box
+    for _, b in ipairs(c.frames) do if rawget(b, "Bind") and b:IsVisible() and b.id == "map" then box = b end end
+    press(box)
+    box.__scripts.OnKeyDown(box, "N")
+    under("Map", "Cute's map on N; the minimap's wheel and right-click become Cute's")
+    check(c.env.CuteSetupFrame, "fix-cute-ui U2 the setup card's notes, N for the map")
+    leave(c)
+    print("fix-cute-ui U2: the Map, Reminders and Interact light rows each say under them what they change, the Map line with its key")
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

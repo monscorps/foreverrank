@@ -7,6 +7,9 @@
 -- the default: everything on but the two automatic choices. Start writes the choices, marks every row shown answered
 -- (CuteDB.chars[me].setup[row]), keeps the keys (Keys.lua) and reloads; after the reload the quest window opens once (the
 -- map's, for a card that came back with its Map row alone).
+-- The rows that change the game unasked say how in one dim line under them (Map: the minimap's mouse is the engine's
+-- while it is on, Minimap.lua Mini.Owned; Reminders: what the bar and banner remind of; Interact light: the game's
+-- soft-target settings, Glow.lua, put back when it is switched off).
 -- Not now changes nothing and the card never comes back by itself (the menu keeps "Set up Cute..." until Start). A row a
 -- later round adds comes back alone, once. Nothing on it is cut: labels and the note wrap.
 -- Shown 3 s after the first loading screen that is out of combat and outside an instance.
@@ -62,11 +65,16 @@ local function rows()
     -- (sub-project F) the Map window with its key: row mapwin, whose tick starts from the earlier mapicons answer (the
     -- game's map with Cute's icons, which took no key); a character who answered that sees this row alone, once. Not
     -- asked while QuestBank is loaded (no window to open: asked once it is not)
-    if not dormant() then add({ id = "mapwin", group = "Windows", label = "Map", kind = "check", module = "Cute_Quest:map", key = "map" }) end
+    if not dormant() then
+      add({ id = "mapwin", group = "Windows", label = "Map", kind = "check", module = "Cute_Quest:map", key = "map", note = function()
+        local k = S.KeyText("map")
+        return (k ~= "-" and ("Cute's map on " .. k) or "Cute's map window") .. "; the minimap's wheel and right-click become Cute's"
+      end })
+    end
     if q then
       add({ id = "step", group = "On screen", label = "Step frame and arrow", kind = "check" })
-      add({ id = "camp", group = "On screen", label = "Reminders", kind = "check" })
-      add({ id = "light", group = "On screen", label = "Interact light", kind = "check" })
+      add({ id = "camp", group = "On screen", label = "Reminders", kind = "check", note = "buffs, food, repair and training, out of a fight" })
+      add({ id = "light", group = "On screen", label = "Interact light", kind = "check", note = "turns on the game's Interact key and its icons; Settings puts them back" })
       add({ id = "accept", group = "Quests", label = "Accept for me", kind = "choice" })
       add({ id = "handin", group = "Quests", label = "Hand finished quests in for me", kind = "check" })
     elseif C.Modules.byId.quests then
@@ -255,11 +263,15 @@ function S.Draw()
         if r.key == "guild" and not C.Keys.InGuild() then box:Bind(r.key, "-") end
       end
       y = y + math.max(ROWH, h + 7)
-      -- a hand-picked key that does something else in the game: one dim line under its row
+      -- what the row changes in the game, then a hand-picked key that does something else there: a dim line each
+      local note = r.note
+      if type(note) == "function" then note = note() end
       local under = r.key and S.KeyWords(r.key)
-      if under then
-        local nh = say(f, x + 20, y - 2, inner - 20 - (r.indent or 0), under, DIM, 11)
-        y = y + nh + 2
+      for _, s in ipairs({ note or false, under or false }) do
+        if s then
+          local nh = say(f, x + 20, y - 2, inner - 20 - (r.indent or 0), s, DIM, 11)
+          y = y + nh + 2
+        end
       end
     end
   end
