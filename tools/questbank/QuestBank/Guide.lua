@@ -654,21 +654,83 @@ local function seeded(key)
   return false
 end
 
--- the trainer's window: the NPC is written down as a trainer of your class (a class trainer's window opens for its
--- class alone; a profession's is told apart by IsTradeskillTrainer), and with nothing left to learn, this level is
--- trained. Nothing said in chat
-local function onTrainer()
-  G.atClassTrainer = false
+-- (the hud review) the names of your class's line of the spellbook, known and to learn (the book's own, else
+-- C_Spell.GetSpellName of its spell), a set reused; empty where the book gives none
+local nameBuf = {}
+local function classNames()
+  for k in pairs(nameBuf) do nameBuf[k] = nil end
+  local first, n = classLine()
+  if not first then return nameBuf end
+  local SB, getName = C_SpellBook, C_Spell and C_Spell.GetSpellName
+  local bank = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player or 0
+  for slot = first + 1, first + n do
+    local ok, it = pcall(SB.GetSpellBookItemInfo, slot, bank)
+    if ok and type(it) == "table" then
+      local nm, sp = plain(it.name), plain(it.spellID)
+      if type(nm) ~= "string" and type(sp) == "number" and type(getName) == "function" then
+        local okN, v = pcall(getName, sp)
+        nm = okN and plain(v) or nil
+      end
+      if type(nm) == "string" and nm ~= "" then nameBuf[nm] = true end
+    end
+  end
+  return nameBuf
+end
+-- (the hud review) whether the trainer's window open now is your class trainer's: not a profession's
+-- (IsTradeskillTrainer), nor a pet trainer's or any kind but the general one (C_Trainer.GetTrainerType,
+-- TrainerDocumentation.lua:20; Enum.TrainerType General 0, Pet 3, TrainerConstantsDocumentation.lua; the game's own
+-- window tells a pet trainer apart so, Blizzard_TrainerUI_Camelot.lua:4); and of your class: the seed's trainer of it,
+-- else a window whose list names a spell of your class's line (a weapon master's names weapons; one written down by
+-- an earlier window that names none is let go), else one written down at an earlier window when this one lists
+-- nothing. A book that names no spell can't tell: the general kind is enough, as before. Until 6.2 every window but a
+-- profession's counted, and a hunter at a pet trainer had every spell to train marked not sold and left there
+local function classTrainer(key, n)
   if type(IsTradeskillTrainer) == "function" then
     local ok, trade = pcall(IsTradeskillTrainer)
-    if ok and plain(trade) == true then return end
+    if ok and plain(trade) == true then return false end
   end
-  G.atClassTrainer = true
+  local CT = C_Trainer
+  if CT and type(CT.GetTrainerType) == "function" then
+    local ok, kind = pcall(CT.GetTrainerType)
+    kind = ok and plain(kind) or nil
+    local general = Enum and Enum.TrainerType and Enum.TrainerType.General or 0
+    if type(kind) == "number" and kind ~= general then return false end
+  end
   local id = classID()
+  local npc = tonumber(key and key:match("^c(%d+)$"))
+  if npc and id then
+    for _, t in ipairs(QB.Data.TRAINER or {}) do if t[1] == npc then return t[3] == id end end
+  end
+  local disc = QB.Discover and QB.Discover.DB and QB.Discover.DB()
+  local known = key and disc and type(disc.trainer) == "table" and disc.trainer[key]
+  local names = classNames()
+  if next(names) ~= nil and type(n) == "number" and n > 0 and type(GetTrainerServiceInfo) == "function" then
+    for i = 1, math.min(n, 300) do
+      local ok, sname = pcall(GetTrainerServiceInfo, i)
+      sname = ok and plain(sname) or nil
+      if type(sname) == "string" and names[sname] then return true end
+    end
+    if type(known) == "table" and known.cl then disc.trainer[key] = nil end
+    return false
+  end
+  if type(known) == "table" and known.cl then return known.cl == id end
+  return next(names) == nil
+end
+
+-- the trainer's window: the NPC is written down as a trainer of your class (classTrainer above), and with nothing left
+-- to learn, this level is trained. Nothing said in chat
+local function onTrainer()
+  G.atClassTrainer = false
   local okG, guid, okN, name = false, nil, false, nil
   if type(UnitGUID) == "function" then okG, guid = pcall(UnitGUID, "npc") end
   if type(UnitName) == "function" then okN, name = pcall(UnitName, "npc") end
   local key = okG and QB.Discover and QB.Discover.Key and QB.Discover.Key(guid)
+  local okS, n = false, 0
+  if type(GetNumTrainerServices) == "function" then okS, n = pcall(GetNumTrainerServices) end
+  n = okS and plain(n) or 0
+  if not classTrainer(key or nil, n) then return end
+  G.atClassTrainer = true
+  local id = classID()
   name = okN and plain(name) or nil
   if key and type(name) == "string" and id and not seeded(key) and QB.Discover.DB then
     local m = plain(QB.API.MapID())
@@ -683,9 +745,6 @@ local function onTrainer()
       t.n, t.cl, t.m, t.x, t.y = name, id, m, x * 100, y * 100
     end
   end
-  local okS, n = false, 0
-  if type(GetNumTrainerServices) == "function" then okS, n = pcall(GetNumTrainerServices) end
-  n = okS and plain(n) or 0
   local avail = 0
   if type(n) == "number" and type(GetTrainerServiceInfo) == "function" then
     for i = 1, n do

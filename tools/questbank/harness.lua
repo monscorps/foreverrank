@@ -22813,10 +22813,11 @@ do
     local nb = { { spellID = 6603, itemType = 1 }, { spellID = 20598, itemType = 1 }, { spellID = 78, itemType = 1 }, { spellID = 1234567, itemType = 2 } }
     local x = hud("Oddone", "WARRIOR", "Warrior", 1, {}, { level = 12, book = nb })
     x.env.C_SpellBook.GetSpellBookItemLevelLearned = function(slot) return slot == 4 and 10 or 0 end
-    x.env.C_Spell.GetSpellName = function(id) return id == 1234567 and "Forever's Own" or nil end
+    -- (the class trainer's window lists a spell of the class: Heroic Strike, learned)
+    x.env.C_Spell.GetSpellName = function(id) return ({ [1234567] = "Forever's Own", [78] = "Heroic Strike" })[id] end
     x.env.IsTradeskillTrainer = function() return false end
     x.env.GetNumTrainerServices = function() return 1 end
-    x.env.GetTrainerServiceInfo = function() return "Rend", "used", 0, 4 end
+    x.env.GetTrainerServiceInfo = function() return "Heroic Strike", "used", 0, 1 end
     x.QB.Guide.TrainDirty()
     assert(x.QB.Guide.Trainable() == 1, "before the trainer: counted")
     x.npcName, x.npcGUID = "Lyria Du Lac", "Creature-0-4455-0-12-913-0000A1B2C3"
@@ -22832,6 +22833,44 @@ do
     book[6].itemType = 1; G.TrainDirty()
     assert(Glow.Useful("Test Warrior", c.soft.guid) == nil, "nothing to train: no light")
     Glow.Subtitle, c.soft = sub, nil
+  end }
+
+  -- 13b. a hunter at a pet trainer and at a weapon master: neither window is the class trainer's, so nothing is marked as
+  -- not sold nor left at the trainer, and neither is noted as the class's trainer; at the hunter trainer, both as before
+  CASES[#CASES + 1] = { "Train: a pet trainer's or a weapon master's window is never the class trainer's", function()
+    local book = { { spellID = 6603, itemType = 1 }, { spellID = 20598, itemType = 1 }, { spellID = 2973, itemType = 1 }, { spellID = 1978, itemType = 2 },
+                   { spellID = 3044, itemType = 2 }, { spellID = 1130, itemType = 2 } }
+    local c = hud("Petkeeper", "HUNTER", "Hunter", 3, {}, { level = 12, book = book })
+    local env, G = c.env, c.QB.Guide
+    local lvl = { [4] = 4, [5] = 6, [6] = 6 }
+    env.C_SpellBook.GetSpellBookItemLevelLearned = function(slot) return lvl[slot] or 0 end
+    local NAMES = { [2973] = "Raptor Strike", [1978] = "Serpent Sting", [3044] = "Arcane Shot", [1130] = "Hunter's Mark" }
+    env.C_Spell.GetSpellName = function(id) return NAMES[id] end
+    -- (TrainerConstantsDocumentation.lua's Enum.TrainerType; C_Trainer.GetTrainerType, TrainerDocumentation.lua:20)
+    env.Enum.TrainerType = { General = 0, TalentsObsolete = 1, Tradeskills = 2, Pet = 3 }
+    env.C_Trainer = { GetTrainerType = function() return c.trainerType end }
+    env.IsTradeskillTrainer = function() return false end
+    local services = {}
+    env.GetNumTrainerServices = function() return #services end
+    env.GetTrainerServiceInfo = function(i) local sv = services[i]; if sv then return sv[1], sv[2], 0, sv[3] end end
+    G.TrainDirty()
+    assert(G.Trainable() == 3, "three to train: " .. tostring(G.Trainable()))
+    local function visit(kind, guid, name, list)
+      c.trainerType, services = kind, list
+      c.npcName, c.npcGUID = name, guid
+      c.ev(c.QB.eventFrame, "TRAINER_SHOW")
+      ev(c, "TRAINER_CLOSED"); tick(c, 1)
+    end
+    local function marked() local db = G.DB(); return (db.notSold and next(db.notSold)) or (db.skip and next(db.skip)) end
+    visit(3, "Creature-0-4455-0-12-3688-0000A1B2C3", "Reban Freerunner", { { "Growl", "available", 10 }, { "Bite", "available", 1 } })
+    local disc = c.QB.Discover.DB()
+    assert(G.Trainable() == 3 and not marked(), "a pet trainer: nothing marked, three still to train")
+    assert(not (disc.trainer and disc.trainer.c3688), "a pet trainer is never noted as the hunter's")
+    visit(0, "Creature-0-4455-0-12-11867-0000A1B2C3", "Woo Ping", { { "Staves", "available", 1 }, { "Two-Handed Swords", "available", 1 } })
+    assert(G.Trainable() == 3 and not marked() and not (disc.trainer and disc.trainer.c11867), "a weapon master: neither")
+    -- the hunter's own trainer: noted, and what stays to learn is left at it
+    visit(0, "Creature-0-4455-0-12-987654-0000A1B2C3", "Hunter Trainer", { { "Serpent Sting", "available", 4 }, { "Arcane Shot", "available", 6 }, { "Hunter's Mark", "available", 6 } })
+    assert(disc.trainer and disc.trainer.c987654 and disc.trainer.c987654.cl == 3 and G.Trainable() == 0, "the class trainer's window: noted, and left at it")
   end }
 
   -- 14. Flight path: in Lakeshire and at Sentinel Hill (no rest area) beside a flight master you lack, the line;
