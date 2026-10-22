@@ -12873,6 +12873,36 @@ do
   end)
 end
 
+-- W24 (the review of sub-project C): the menu names a window with the key Cute holds for it, and no other: a character
+-- in no guild has no Guild key (the game's J opens the game's guild window: Keys.lua takes it once in a guild), so the
+-- entry is "Guild"; in a guild, "Guild (J)"; and "Quests (L)" while L is Cute's
+do
+  isolated({ { name = "Rone-Forever", guid = guidOf("Rone"), rank = 1, rankName = "Officer", class = "WARRIOR", level = 5, online = true } }, function()
+    local function entry(list, text) for _, e in ipairs(list) do if e.text == text then return e end end end
+    local function names(list) local out = {}; for _, e in ipairs(list) do out[#out + 1] = tostring(e.text) end; return table.concat(out, ", ") end
+    local function menuOf(c)
+      local n0 = #c.contextMenus
+      c.C.UI.mini.__scripts.OnClick(c.C.UI.mini, "RightButton")
+      assert(#c.contextMenus == n0 + 1, "a menu opened")
+      return c.contextMenus[#c.contextMenus]
+    end
+    local eve = newClient(charOf({ "Eve", 3, "Raider", "ROGUE", 5 }, { inGuild = false, modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(eve); tickAll(6)
+    eve.C.Keys.Set("guild", "follow"); eve.C.Keys.Set("quests", "follow")
+    assert(eve.C.Keys.held.J == nil and eve.C.Keys.held.L == "quests", "no guild: J is not taken, L is")
+    local m = menuOf(eve)
+    assert(entry(m, "Guild") and not entry(m, "Guild (J)") and entry(m, "Quests (L)"), "no guild: Guild with no key, Quests (L): " .. names(m))
+    leave(eve)
+    local rone = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(rone); tickAll(6)
+    rone.C.Keys.Set("guild", "follow"); rone.C.Keys.Set("quests", false)
+    m = menuOf(rone)
+    assert(entry(m, "Guild (J)") and entry(m, "Quests") and not entry(m, "Quests (L)"), "in a guild: Guild (J); L cleared: Quests: " .. names(m))
+    leave(rone)
+    print("windows W24: the menu names each window with the key Cute holds for it: no Guild key outside a guild, none for a cleared one")
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

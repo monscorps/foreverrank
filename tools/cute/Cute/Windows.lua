@@ -267,10 +267,15 @@ end
 ----------------------------------------------------------------------------
 -- the menu: right-click on the minimap button, or the game's addon compartment
 ----------------------------------------------------------------------------
--- a window's name with the key this character has for it: "Guild (J)"
+-- a window's name with the key Cute holds for it now: "Guild (J)". A key the setting names but Cute does not hold (the
+-- Guild key outside a guild, Keys.lua K.Apply; a fight's wait) opens the game's window, so the name has none
 local function withKey(text, id)
-  local k = C.Keys and C.Keys.KeysFor(id)[1]
-  return k and (text .. " (" .. k .. ")") or text
+  local K = C.Keys
+  if not K then return text end
+  for _, k in ipairs(K.KeysFor(id)) do
+    if K.held[k] == id then return text .. " (" .. k .. ")" end
+  end
+  return text
 end
 W.WithKey = withKey
 -- (MenuUtil.CreateContextMenu, as camelot's own code builds its menus, FriendsFrame.lua:2191; a parent with a submenu
