@@ -41,6 +41,9 @@ E.thinMap = true
 -- the engine's words name the host: "Choose a reward: X is Cute's pick", "Nothing to do: /cute quests", the minimap
 -- menu's "Cute settings"; and they leave out the /qb commands a Cute player is never told of (host: Settings alone)
 E.NAME, E.CMD, E.host = "Cute", "/cute quests", true
+-- (the hud round) the Reminders module is Reminders' only master switch: off, the step frame's line goes with the two
+-- pieces (QuestBank alone keeps the line to its rows when "Reminders on screen" is off: Remind.lua)
+E.remindAll = true
 -- the minimap is the engine's only while Cute's Map module is on (Minimap.lua, Mini.Owned): its wheel, Ctrl-wheel,
 -- Alt-drag, right-click menu, size and place, and the tracking menu's Target; off, the game's own
 function E.MapOn() return Cute.ModuleOn("map") end
@@ -152,6 +155,8 @@ end
 local TITLE = { quests = "Quests", route = "Route", settings = "Settings", journal = "Dungeons", gear = "Gear" }
 function UI.PageName(tab) return TITLE[pageOf(tab)] or "Quests" end
 function UI:ShowTab(tab) self:Open(tab) end
+-- (the hud round) Settings from a reminder's menu: Cute's Reminders section
+function UI.OpenReminders() Cute.Open("settings", "camp") end
 function UI:TogglePage(tab) self:Open(tab) end
 function UI:Toggle() Cute.Open("quests") end
 function UI:Refresh() Cute.Refresh() end
@@ -217,6 +222,22 @@ QB.MAP_FLAGS = { "mapIcons", "pins" }
 local MINI_FLAGS = { "minimapPins", "minimapLines", "minimapGivers", "mmExtended" }
 local function firstRun()
   local s = E:Settings()
+  -- (the hud round) the engine's reminders' settings as they are now (Remind.Settings: 6.1.1's switches become Nevers,
+  -- campBar remind.on), before any module's switch reads them; and a kept cuteOff.camp of 0.7 (the Camp module's
+  -- switch then followed campBar, the two buffs rows and the light) rewritten: the module follows remind.on alone, and
+  -- the rows it kept go back to them as kept
+  local fresh = not s.cuteDefaults
+  if E.Remind and E.Remind.Settings then E.Remind.Settings() end
+  local kept = type(s.cuteOff) == "table" and s.cuteOff.camp or nil
+  if type(kept) == "table" and kept["remind.on"] == nil and (kept.campBar ~= nil or kept["remind.buffs"] ~= nil or kept["glow.on"] ~= nil) then
+    if kept["remind.buffs"] ~= nil then s.remind.buffs = kept["remind.buffs"] end
+    if kept["remind.party"] ~= nil then s.remind.party = kept["remind.party"] end
+    if kept["glow.on"] ~= nil and type(s.glow) == "table" then s.glow.on = kept["glow.on"] end
+    s.cuteOff.camp = { ["remind.on"] = kept.campBar ~= false }
+  end
+  -- (a fresh install: the interact light off until the first-run card's row says, since the engine's default is on and
+  -- the light changes the game's soft-target settings, Glow.lua)
+  if fresh and type(s.glow) == "table" then s.glow.on = false end
   s.cuteGuildOff = true
   if type(s.share) == "table" then s.share.guild = false end
   if not s.cuteDefaults then
@@ -244,8 +265,8 @@ local function firstRun()
 end
 
 -- the setup card's door (Cute/Setup.lua): the engine's settings this copy keeps (never QuestBank's), whether this account
--- saved any before this load, and the card's Start written into them. Camp on: the switch's keeping cleared, so the
--- flags the card set stay as set when the module comes on at the reload (Bridge's QB.Follow)
+-- saved any before this load, and the card's Start written into them. Reminders on: the switch's keeping cleared, so
+-- remind.on stays as the card set it when the module comes on at the reload (Bridge's QB.Follow); the light its own
 local savedBefore = false -- (read at ADDON_LOADED, before the engine fills its defaults in)
 Cute.QuestSetup = {
   Settings = function() return E:Settings() end,
@@ -255,9 +276,14 @@ Cute.QuestSetup = {
     if p.step ~= nil then s.guide.frame = p.step and true or false; s.arrow = p.step and true or false end
     if p.campOn then
       if type(s.cuteOff) == "table" then s.cuteOff.camp = nil end
-      if p.camp ~= nil then s.campBar = p.camp and true or false; s.remind.buffs = p.camp and true or false end
-      if p.light ~= nil then s.glow.on = p.light and true or false end
+      if p.camp ~= nil then
+        local r = E.Remind and E.Remind.Settings() or s.remind
+        r.on = p.camp and true or false
+        s.campBar = r.on
+      end
     end
+    -- (the interact light is its own row, whatever the Reminders row says)
+    if p.light ~= nil then s.glow.on = p.light and true or false end
     if p.accept then s.autoAccept = p.accept end
     if p.handin ~= nil then s.autoTurnIn = p.handin and true or false end
   end,
