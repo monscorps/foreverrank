@@ -24685,6 +24685,8 @@ end
 --     launch audit's filter read the last channel heard); out of a group, every step heard goes
 -- Q2. Under a host (Cute_Quest), /qb discoveries and /qb probe name the host's saved file and its page's uploader, never
 --     QuestBank.lua nor QuestBank Uploader (whose Install puts QuestBank in, which puts the host's copy to sleep)
+-- Q3. Settings' guild box says what goes to the guild (your level and progress: the quest list goes to the group
+--     alone), and its tooltip says so
 ----------------------------------------------------------------------------
 ;(function()
   local CASES = {}
@@ -24747,6 +24749,22 @@ end
     local alone = table.concat(q.chat, "\n", n + 1)
     assert(alone:find("QuestBank.lua", 1, true) and alone:find("The Windows uploader is QuestBank Uploader: foreverrank.com/questbank/", 1, true)
       and alone:find(q.QB.Game.RETIRED, 1, true), "QuestBank alone: its own file and uploader: " .. alone)
+  end }
+
+  CASES[#CASES + 1] = { "Q3: Settings' guild box says the guild gets your level and progress, the quests going to the group", function()
+    local c = lookChar("Boxes")
+    local UI = c.QB.UI
+    UI:Open(5); UI:Refresh()
+    local box = UI.views[5].shareGuild
+    local label = box.label:GetText()
+    assert(label == "Share my level and progress with my guild", "the guild box's words: " .. tostring(label))
+    assert(box.__scripts.OnEnter, "the guild box has a tooltip")
+    lines = {}
+    box.__scripts.OnEnter(box)
+    local tip = table.concat(lines, "\n")
+    if box.__scripts.OnLeave then box.__scripts.OnLeave(box) end
+    assert(tip:find("level", 1, true) and tip:find("group only", 1, true), "its tooltip says what goes and that the quests go to the group only:\n" .. tip)
+    UI.frame:Hide()
   end }
 
   local failed = {}
