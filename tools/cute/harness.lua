@@ -19145,6 +19145,8 @@ end
 -- P7. The setup card's light row starts from the light, never from the Camp module's choice: on, ticked (a 0.8
 --     character who unticked Camp keeps the light through Start); off only until the card says (a fresh install's Not
 --     now, then the menu's card), ticked; turned off in Settings > Reminders, unticked
+-- P8. Under Cute's lock the minimap's place is Edit Mode's: a place kept from an Alt-drag of 0.8 let go at the first
+--     apply, never put back; a Ctrl-wheel keeps the size alone
 ----------------------------------------------------------------------------
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
@@ -19269,6 +19271,26 @@ do
     check(n.env.CuteSetupFrame, "merge3 the setup card, the light off")
     leave(n)
     said[#said + 1] = "the card's light row starts from the light, never from the Camp module"
+    -- P8
+    local p = client(false)
+    login(p); tickAll(6)
+    local QBp = p.addons[2].private
+    local Mini, MC = QBp.Mini, p.env.MinimapCluster
+    local free = Mini.FreeDB()
+    free.x, free.y = 300, 300
+    MC:ClearAllPoints(); MC:SetPoint("TOPRIGHT", p.env.UIParent, "TOPRIGHT", -40, -40)
+    Mini.ApplyFree()
+    local mp = MC.__points[1]
+    assert(p.C.Layout.Locked("minimap") and mp.point == "TOPRIGHT" and mp.x == -40 and free.x == nil and free.y == nil,
+      "Cute's lock: the minimap where Edit Mode put it, the place kept from 0.8 let go: " .. tostring(mp.point))
+    Mini.SetScale(1.2)
+    mp = MC.__points[1]
+    assert(mp.point == "TOPRIGHT" and mp.x == -40 and free.x == nil and math.abs((free.scale or 0) - 1.2) < 0.01, "a Ctrl-wheel: the size kept, never a place")
+    Mini.ApplyFree()
+    assert(MC.__points[1].point == "TOPRIGHT", "applied again: still Edit Mode's")
+    Mini.ResetFree()
+    leave(p)
+    said[#said + 1] = "under Cute's lock the minimap's place is Edit Mode's"
     print("merge3 review: " .. table.concat(said, "; "))
   end)
 end

@@ -24279,6 +24279,9 @@ end
 --     clock.y in UIParent's units) and places it at once; scale keeps the centre; get and set against UIParent's centre;
 --     its drag waits for a host's lock, and a drop keeps its centre in UIParent's units
 -- N4. API.UnspentTalents (Cute's talents_free and Reminders' Talents) takes HasUnspentTalentPoints' no as the answer
+-- N5. (the merge3 review) A host's lock holds the minimap's place for the game's Edit Mode: a place the engine kept (an
+--     Alt-drag of Cute 0.8, a Ctrl-wheel) is let go at the first apply under it, never put back after an Edit Mode
+--     change or a loading screen; a Ctrl-wheel under it keeps the size alone. QuestBank alone puts its place back
 ----------------------------------------------------------------------------
 do
   local said = {}
@@ -24372,6 +24375,29 @@ do
   assert(A.UnspentTalents() == true, "no talent frame's question: the old count")
   env.GetNumUnspentTalents = nil
   said[#said + 1] = "the talent frame's no is the answer"
+  -- N5: a place kept before the lock (Cute 0.8's Alt-drag), the cluster where Edit Mode puts it
+  local free, UIP, ev = Mini.FreeDB(), env.UIParent, Mini.eventFrame
+  QB.LayoutLocked = function(key) return key == "minimap" end
+  free.x, free.y = 300, 300
+  MC:ClearAllPoints(); MC:SetPoint("TOPRIGHT", UIP, "TOPRIGHT", -40, -40)
+  ev.__scripts.OnEvent(ev, "EDIT_MODE_LAYOUTS_UPDATED")
+  tick(c, 1)
+  local mp = MC.__points[1]
+  assert(mp.point == "TOPRIGHT" and mp.x == -40 and mp.y == -40 and free.x == nil and free.y == nil,
+    "a host's lock: the minimap where Edit Mode put it, the kept place let go: " .. tostring(mp.point) .. " " .. tostring(free.x))
+  Mini.SetScale(1.2)
+  mp = MC.__points[1]
+  assert(mp.point == "TOPRIGHT" and mp.x == -40 and free.x == nil and free.y == nil and math.abs(free.scale - 1.2) < 0.001,
+    "a Ctrl-wheel under the lock: the size kept, never a place: " .. tostring(mp.point))
+  ev.__scripts.OnEvent(ev, "PLAYER_ENTERING_WORLD")
+  tick(c, 1)
+  assert(MC.__points[1].point == "TOPRIGHT" and math.abs(MC.MinimapContainer:GetScale() - 1.2) < 0.001, "a loading screen: Edit Mode's place, the kept size")
+  QB.LayoutLocked = nil
+  free.x, free.y = 300, 300
+  Mini.ApplyFree()
+  assert(MC.__points[1].point == "TOPLEFT" and free.x, "QuestBank alone: its kept place put back as before")
+  Mini.ResetFree()
+  said[#said + 1] = "under a host's lock the minimap's place is Edit Mode's, its size the engine's"
   assert(#(env.QuestBankDB.errors or {}) == 0, "no error recorded")
   print("merge3: " .. table.concat(said, "; "))
 end

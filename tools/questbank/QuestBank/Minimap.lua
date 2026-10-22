@@ -1050,6 +1050,14 @@ local function freeDB()
   return s.miniFree
 end
 Mini.FreeDB = freeDB
+-- (the merge3 review) a host's one lock holds the minimap (QB.LayoutLocked("minimap"): Cute's, for the game's Edit Mode
+-- to place it): the engine keeps its size and never its place, so an Edit Mode move is never undone; QuestBank alone
+-- has no lock and keeps both
+local function hostPlaces()
+  local h = QB.LayoutLocked
+  return type(h) == "function" and h("minimap") == true
+end
+Mini.HostPlaces = hostPlaces
 
 -- a frame's centre in UIParent units
 local function centreOf(fr)
@@ -1082,7 +1090,8 @@ function Mini.MaxScale()
   return math.max(SCALE_MIN, math.min(SCALE_MAX, (UIParent:GetHeight() or 1080) * 0.92 / h))
 end
 
--- size the minimap around its centre; kept for next time
+-- size the minimap around its centre; kept for next time (under a host's lock its size alone, the cluster left where
+-- Edit Mode put it)
 function Mini.SetScale(scale)
   local c = container()
   if not c then return nil end
@@ -1090,10 +1099,12 @@ function Mini.SetScale(scale)
   scale = math.max(SCALE_MIN, math.min(Mini.MaxScale(), scale))
   local db = freeDB()
   if not db.orig then db.orig = c:GetScale() or 1 end
+  local held = hostPlaces()
   local x, y = centreOf(c)
   c:SetScale(scale)
-  if x then Mini.PlaceAt(x, y) end
-  db.scale = scale; db.x, db.y = centreOf(c)
+  if x and not held then Mini.PlaceAt(x, y) end
+  db.scale = scale
+  if held then db.x, db.y = nil, nil else db.x, db.y = centreOf(c) end
   Mini.Place()
   return scale
 end
@@ -1123,8 +1134,7 @@ function Mini.DragStart(button)
   if button ~= "LeftButton" or not (IsAltKeyDown and IsAltKeyDown()) or (InCombatLockdown and InCombatLockdown()) then return end
   -- (the layout round) a host's one lock (QB.LayoutLocked: Cute's, which keeps the minimap locked for the game's Edit
   -- Mode to place); QuestBank alone has none, and Alt-drags it as it always did
-  local h = QB.LayoutLocked
-  if type(h) == "function" and h("minimap") == true then return end
+  if hostPlaces() then return end
   if not MinimapCluster then return end
   MinimapCluster:SetMovable(true)
   MinimapCluster:StartMoving()
@@ -1143,12 +1153,14 @@ function Mini.DragStop()
   end
 end
 
--- the kept size and place, again after a loading screen (Edit Mode puts its own back first)
+-- the kept size and place, again after a loading screen (Edit Mode puts its own back first). Under a host's lock the
+-- size alone: a place kept before it (an Alt-drag of Cute 0.8, a Ctrl-wheel's centre) is let go, Edit Mode's stands
 function Mini.ApplyFree()
   local c, db = container(), freeDB()
   if not c or (InCombatLockdown and InCombatLockdown()) then return end
   if db.scale then c:SetScale(math.max(SCALE_MIN, math.min(Mini.MaxScale(), db.scale))) end
-  if db.x and db.y then Mini.PlaceAt(db.x, db.y) end
+  if hostPlaces() then db.x, db.y = nil, nil
+  elseif db.x and db.y then Mini.PlaceAt(db.x, db.y) end
 end
 
 -- other addons' minimap buttons, back on the rim: LibDBIcon's from their own saved angle, any other button left far
