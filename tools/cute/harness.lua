@@ -19741,6 +19741,44 @@ do
   end)
 end
 
+-- U12. Settings' long lists take two columns once the window is 1040 px wide or more (the windows design's 7): Columns'
+--     lists (Race, Prog, Hall of Shame cards, Officers) and an officer's Who sees what, each list whole in one column,
+--     the shorter column taking the next; Everyone and Only you over each column's boxes. Under 1040, one column
+do
+  isolated({ UIX.member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }))
+    login(c); tickAll(60)
+    local win = c.C.UI.Window("settings")
+    local function xs(list)
+      local seen, n = {}, 0
+      for _, x in ipairs(list) do if not seen[x] then seen[x] = true; n = n + 1 end end
+      return n
+    end
+    local function rowXs() local out = {}; for _, r in ipairs(UIX.rows(c)) do out[#out + 1] = r.x end return out end
+    local function boxXs()
+      local out = {}
+      GEN = GEN + 1
+      for _, fr in ipairs(c.frames) do if fr.__kind == "CheckButton" and fr:IsVisible() and fr.statId and fr.vis == "all" then out[#out + 1] = rectOf(fr).l end end
+      return out
+    end
+    local function heads(word) local n = 0; for l in texts(c):gmatch("[^\n]+") do if l == word then n = n + 1 end end return n end
+    for _, size in ipairs({ { 1100, 640 }, { 1040, 560 }, { 800, 560 } }) do
+      c.C.UI:Open("settings", "columns")
+      win.frame:SetSize(size[1], size[2]); sdraw(c)
+      local two = size[1] >= 1040
+      assert(xs(rowXs()) == (two and 2 or 1), string.format("Columns at %d px: %d column(s) of rows", size[1], xs(rowXs())))
+      check(win.frame, string.format("fix-cute-ui U12 Settings > Columns at %dx%d", size[1], size[2]))
+      c.C.UI:Open("settings", "vis")
+      sdraw(c)
+      assert(xs(boxXs()) == (two and 2 or 1) and heads("Everyone") == (two and 2 or 1) and heads("Only you") == (two and 2 or 1),
+        string.format("Who sees what at %d px: %d column(s) of boxes, %d Everyone heads", size[1], xs(boxXs()), heads("Everyone")))
+      check(win.frame, string.format("fix-cute-ui U12 Settings > Who sees what at %dx%d", size[1], size[2]))
+    end
+    leave(c)
+    print("fix-cute-ui U12: Columns and Who sees what in two columns from 1040 px, one under it")
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

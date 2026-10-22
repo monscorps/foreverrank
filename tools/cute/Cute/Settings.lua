@@ -25,6 +25,9 @@ local MUTE = { 0.52, 0.52, 0.52 }
 local NAV_W = 168   -- the list of sections
 local NAV_GAP = 12  -- between it and the column
 local COL_MAX = 560 -- the column: wider, a label and its boxes read as two things far apart
+-- (the windows design's 7) the long lists, Columns and an officer's Who sees what, take two columns once the window is
+-- this wide, COL_GAP apart
+local TWO_AT, COL_GAP = 1040, 24
 -- the column's spacing, the same in every section. Nothing in Settings is cut: a label or a note wraps and its row grows
 -- to the lines it needs (from 22 px), a choice measures its options and wraps them under its label, and the list of
 -- sections never shrinks its rows (it scrolls)
@@ -115,6 +118,20 @@ local function column(x, w, band, ui)
   local p = band and { labels = ui.bandLabels, values = ui.bandLabels, buttons = ui.bandButtons }
     or { labels = widgets.labels, values = widgets.values, buttons = widgets.buttons }
   return setmetatable({ x = x, w = w, y = 4, fresh = true, p = p, ui = ui }, Col)
+end
+-- two columns side by side, w wide each, drawn as one: a head starts a list, which goes whole to the shorter column, its
+-- rows after it in that column; every other call draws in the column the last head chose. full is both columns' width
+-- (the band's), Bottom the lower one's end
+local function twoColumns(x, w, ui)
+  local a, b = column(x, w, false, ui), column(x + w + COL_GAP, w, false, ui)
+  local two = { a = a, b = b, cur = a, full = 2 * w + COL_GAP }
+  function two:Bottom() return math.max(a.y, b.y) end
+  return setmetatable(two, { __index = function(t, k)
+    if k == "Head" then return function(self, s) self.cur = (b.y < a.y) and b or a; return Col.Head(self.cur, s) end end
+    local f = Col[k]
+    if type(f) == "function" then return function(self, ...) return f(self.cur, ...) end end
+    return t.cur[k]
+  end })
 end
 -- a FontString at a size of its own (a pooled one may come from a smaller use)
 local function sized(fs, n)
@@ -568,7 +585,7 @@ local function drawVisibility(col, officer, ui)
     col:Note(C.Policy:Describe())
     return
   end
-  local band = column(col.x, col.w, true, ui)
+  local band = column(col.x, col.full or col.w, true, ui)
   band:Head("Who sees what")
   band:Note(C.Policy:Describe())
   local unsaved = officer and C.Policy:Unsaved()
@@ -600,6 +617,8 @@ local function drawVisibility(col, officer, ui)
     C.Comm:PolicySoon()
     redraw()
   end } })
+  -- (in two columns, the two headings over each column's boxes)
+  if col.a then local l = column(col.a.x, col.a.w, true, ui); l.y, l.fresh = band.y, false; l:PairHeads() end
   band:PairHeads()
   ui:SetBand(band.y)
   for _, cat in ipairs(C.Stats.CATS) do
@@ -822,14 +841,19 @@ function C.Settings_Draw(ui)
   end
   nav.list:SetContentHeight(y + 4)
   nav.rows = y
-  -- the chosen section, in one column
-  local w = math.min(COL_MAX, sf:Width() - 12)
-  local col = column(6, w, false, ui)
+  -- the chosen section, in one column; Columns and an officer's Who sees what in two once the window is wide enough
+  local room = sf:Width() - 12
+  local col
+  if (sel.id == "columns" or (sel.id == "vis" and officer)) and (ui.frame:GetWidth() or 0) >= TWO_AT then
+    col = twoColumns(6, math.min(COL_MAX, math.floor((room - COL_GAP) / 2)), ui)
+  else
+    col = column(6, math.min(COL_MAX, room), false, ui)
+  end
   C.Safe(function()
     if sel.module then sel.module.settings(ui, col)
     elseif sel.extra then sel.extra.draw(ui, col)
     else sel.draw(col, officer, ui) end
   end, "settings: " .. sel.id)()
   hideRest()
-  sf:SetContentHeight(col.y + 8)
+  sf:SetContentHeight((rawget(col, "Bottom") and col:Bottom() or col.y) + 8)
 end
