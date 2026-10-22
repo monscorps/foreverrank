@@ -24677,6 +24677,62 @@ do
   end
 end
 
+-- [stage: merge4] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The merge's integration findings (launch/merge4), a case each; every case runs, and the block fails at its end
+-- naming each one that did not hold:
+-- Q1. A party member who is also a guild mate keeps their step on your frame after their status comes on GUILD (the
+--     launch audit's filter read the last channel heard); out of a group, every step heard goes
+----------------------------------------------------------------------------
+;(function()
+  local CASES = {}
+  local function groupChar(name)
+    local c = newClient({ name = name, level = 18, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1, race = "Human",
+      log = {}, done = {}, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Goldshire", guild = true, group = true })
+    login(c)
+    return c
+  end
+  local function hearer(c) local f = c.QB.Sync.frame; return function(msg, channel, who) f.__scripts.OnEvent(f, "CHAT_MSG_ADDON", "QuestBank", msg, channel, who) end end
+
+  CASES[#CASES + 1] = { "Q1: a guild mate in your party keeps their step after their status on GUILD; out of a group the steps go", function()
+    local c = groupChar("Partied")
+    local QB, S, G = c.QB, c.QB.Sync, c.QB.Guide
+    QB:Settings().share.guild = true
+    local hear = hearer(c)
+    local mate = "Brann Steelhand-Forever Normal"
+    hear("1S|18|100|A|PALADIN|0|0|0|-1|0|0|6.4.0|zzzzzzzzzz", "PARTY", mate)
+    hear("1G|Kill Kobold Vermin 3/8", "PARTY", mate)
+    local steps = G.MemberSteps()
+    assert(#steps == 1 and steps[1].text == "Kill Kobold Vermin 3/8", "Brann's step shown: " .. tostring(steps[1] and steps[1].text))
+    -- (S:Broadcast three seconds on: the status per channel, the group's first, then the guild's)
+    local v0 = S.stepVer
+    hear("1S|18|160|A|PALADIN|0|0|0|-1|0|0|6.4.0|zzzzzzzzzz", "PARTY", mate)
+    hear("1S|18|160|A|PALADIN|0|0|0|-1|0|0|6.4.0|zzzzzzzzzz", "GUILD", mate)
+    steps = G.MemberSteps()
+    assert(#steps == 1 and steps[1].text == "Kill Kobold Vermin 3/8", "his status on GUILD after the party's: his step still shown: " .. #steps)
+    assert(S.stepVer == v0, "the same member's status, by either channel: the list is not made again: " .. (S.stepVer - v0))
+    -- (QueueLive's 1L after a hand-in, to GUILD last)
+    hear("1L|118:450:18", "GUILD", mate)
+    assert(#G.MemberSteps() == 1, "his XP reading on GUILD: his step still shown")
+    -- out of the group: his step goes, and does not come back in the next group
+    c.o.group = false
+    S.frame.__scripts.OnEvent(S.frame, "GROUP_ROSTER_UPDATE")
+    assert(S.members[mate] and S.members[mate].step == nil and #G.MemberSteps() == 0, "out of the group: no step held")
+    c.o.group = true
+    S.frame.__scripts.OnEvent(S.frame, "GROUP_ROSTER_UPDATE")
+    hear("1S|18|200|A|PALADIN|0|0|0|-1|0|0|6.4.0|zzzzzzzzzz", "GUILD", mate)
+    assert(#G.MemberSteps() == 0, "in another group, a former group mate's old step never shows")
+  end }
+
+  local failed = {}
+  for _, case in ipairs(CASES) do
+    local ok, err = pcall(case[2])
+    if ok then print("merge4: " .. case[1] .. ": ok") else failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
+    collectgarbage("collect")
+  end
+  assert(#failed == 0, "merge4: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
+end)()
+
 local seen = {}
 local unique = {}
 for _, p in ipairs(problems) do if not seen[p] then seen[p] = true; unique[#unique + 1] = p end end

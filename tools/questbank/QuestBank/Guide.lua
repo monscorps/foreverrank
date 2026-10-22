@@ -1231,11 +1231,11 @@ function G.MemberSteps()
   for k = #memberSteps, 1, -1 do memberSteps[k] = nil end
   if not grouped then return memberSteps end
   local n = 0
-  -- (the launch audit) only members whose word comes by your group's channel (Sync's S.GROUP): a whisper's sender, whom
-  -- anyone of your faction can be, is never listed
-  local group = S.GROUP or {}
+  -- (merge4) every member with a step: Sync takes a 1G from your group's channel alone (a whisper's sender, whom anyone
+  -- of your faction can be, never has one), and drops every step once you are out of a group. The launch audit's test
+  -- of the last channel heard hid a party member who shares your guild: their status there came after their step
   for _, m in ipairs(S:Members()) do
-    if type(m.step) == "string" and m.step ~= "" and group[m.via] then
+    if type(m.step) == "string" and m.step ~= "" then
       n = n + 1
       local row = memberPool[n]
       if not row then row = {}; memberPool[n] = row end

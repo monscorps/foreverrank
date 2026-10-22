@@ -308,11 +308,7 @@ function S:Receive(msg, channel, sender)
     self.members[sender] = m
     memberChanged()
   end
-  if m then
-    -- (a member's step is listed while their word comes by your group's channel, G.MemberSteps: told when that changes)
-    if (GROUP[m.via] or false) ~= (GROUP[channel] or false) then memberChanged() end
-    m.seen, m.via = now(), channel
-  end
+  if m then m.seen, m.via = now(), channel end
   if kind == "1S" then
     local f = split(msg, "|")
     if m.class ~= f[5] or m.level == nil then memberChanged() end -- (the frame colours the name by class; a member is listed once its level is known)
@@ -374,6 +370,10 @@ end
 ----------------------------------------------------------------------------
 -- for the Party page
 ----------------------------------------------------------------------------
+-- every member's step forgotten (out of a group: G.MemberSteps lists every step held)
+function S:DropSteps()
+  for _, m in pairs(self.members) do if m.step ~= nil then m.step = nil; memberChanged() end end
+end
 function S:Members()
   local out = {}
   local t = now()
@@ -609,6 +609,8 @@ function S:Init()
     if event == "CHAT_MSG_ADDON" then
       S:Receive(msg, channel, sender)
     elseif event == "GROUP_ROSTER_UPDATE" then
+      -- (merge4) out of a group: every step heard goes, so a former group mate's never shows in your next group
+      if not (IsInGroup and QB.Plain(IsInGroup()) == true) then S:DropSteps() end
       local ch = groupChannel()
       if ch and ch ~= S.lastGroup and QB:Settings().share.party then
         S.lastStatus, S.lastQuests = nil, nil
