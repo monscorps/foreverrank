@@ -493,6 +493,14 @@ function M:AskWhole()
   if self.askOwed == "hello" then self.askOwed = true end
   if not waiting and not self.askOwed and self.sinceLeft then self.sinceLeft = nil; self:Ask() end
 end
+-- (fix2) a stat this file deleted of others' records opened again (Policy.lua P:Rerouted): every record asked whole,
+-- by one login. Where this login's ask has not left (a member offline at the opening reads the line before its hello),
+-- that ask goes whole and its logout keeps a hold as ever (M:AskWhole); where it has, the next login asks whole
+-- (M:Unheld). 0.9.1 took the hold from both, and the login after the whole one asked whole again
+function M:Reopened()
+  local w = self.wire
+  if w and tonumber(w.asked) then self:Unheld() else self:AskWhole() end
+end
 -- what this client takes on the wire, as a text: every stat its registry defines (but the dynamic ones, kept whether
 -- defined or not, and those learned in play), counted and summed by hash. A module switched on or a newer Cute changes
 -- it: values of those stats went while this client dropped them, and a since would never bring them

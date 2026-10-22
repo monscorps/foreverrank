@@ -21200,6 +21200,83 @@ sys.argv = ["build.py", "--no-zip"]; del build.problems[:]; build.check_zips([ol
   print("merge4: " .. table.concat(said, "; "))
 end
 
+-- [stage: fix2-cute-core] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- fix2-cute-core: the second launch audit's findings on Cute's core, a case each; every case runs, and the block fails
+-- at its end naming each one that did not hold:
+-- R1. A stat the officers open again asks every record whole only on a client that deleted its values while it was
+--     closed (not an officer's, which deletes nothing, nor one that never held any: a stat closed by default opened
+--     for the first time), and for one login: a member offline at the opening asks whole at its next login, whose
+--     logout keeps a hold again
+----------------------------------------------------------------------------
+do
+  local CASES, failed, said = {}, {}, {}
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "MAGE", level = 30, online = true } end
+  local function char(name, rank, extra) return newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", "MAGE", 30 }, extra)) end
+  local function inGuild(guild, fn)
+    local ok, err = true, nil
+    isolated(guild, function() ok, err = pcall(fn) end)
+    if not ok then error(err, 0) end
+  end
+  local function pol(mine, vis)
+    local copy = {}
+    for k, v in pairs(vis or {}) do copy[k] = v end
+    return { policy = { vis = copy, by = "Ofa-Forever", mine = mine or nil, rank = 1, at = EPOCH, threshold = 1 } }
+  end
+  local function askOf(c, from) for i = from or 1, #c.sent do local m = c.sent[i].msg; if m:sub(1, 3) == "1R|" then return m end end end
+  local function hexOf(ask) return ask and ask:match("|(%x*)$") or "" end
+  local function size(t) local n = 0; for _ in pairs(t or {}) do n = n + 1 end return n end
+
+  CASES[#CASES + 1] = { "R1 a stat opened again asks whole only where its values were deleted, and for one login", function()
+    inGuild({ member("Ofa", 1), member("Cobb", 3), member("Cyra", 3) }, function()
+      INFO[7] = infoLine(pol().policy)
+      local ofa, a, b = char("Ofa", 1), char("Cobb", 3), char("Cyra", 3)
+      local odb, adb = pol(true), pol()
+      login(ofa, odb); login(a, adb); login(b, pol())
+      tickAll(200)
+      assert(adb.roster[b.sender] and adb.roster[b.sender].stats.zone == "Duskwood", "Cobb has Cyra's zone")
+      -- Whispers an hour, the officers' by default, opened for the first time: nobody held any of it
+      assert(ofa.C.Policy:Set("whispers", "all") and saveLine(ofa))
+      tickAll(60)
+      assert(a.C.Policy:Route("whispers") == "all" and not a.C.Comm.unheld and not ofa.C.Comm.unheld, "a stat closed by default opened for the first time drops no hold")
+      -- Zone closed: Cobb deletes Cyra's zone, Ofa, an officer, deletes nothing
+      assert(ofa.C.Policy:Set("zone", "self") and saveLine(ofa))
+      tickAll(60)
+      assert(adb.roster[b.sender].stats.zone == nil and odb.roster[b.sender].stats.zone == "Duskwood", "Cobb deleted her zone, Ofa kept it")
+      fire(a, "PLAYER_LOGOUT"); leave(a)
+      assert(type(adb.chars[a.name].hold) == "table", "Cobb's logout keeps a hold")
+      -- Zone opened again while Cobb is away: Cyra, online, deleted Ofa's zone (her next login asks whole), Ofa nothing
+      assert(ofa.C.Policy:Set("zone", "all") and saveLine(ofa))
+      tickAll(60)
+      assert(b.C.Comm.unheld and not ofa.C.Comm.unheld, "Cyra, who deleted values, keeps no hold; Ofa, who deleted none, keeps hers")
+      -- Cobb's login reads the line before its hello: that ask goes whole, and its logout keeps a hold
+      local a2 = char("Cobb", 3)
+      login(a2, adb)
+      tickAll(200)
+      assert(#hexOf(askOf(a2)) == 16, "his login after the opening asks whole: " .. tostring(askOf(a2)))
+      assert(adb.roster[b.sender].stats.zone == "Duskwood", "and he has her zone again")
+      fire(a2, "PLAYER_LOGOUT"); leave(a2)
+      assert(type(adb.chars[a.name].hold) == "table", "that login's logout keeps a hold: one login asks whole")
+      local a3 = char("Cobb", 3)
+      login(a3, adb)
+      tickAll(30)
+      assert(#hexOf(askOf(a3)) == 32, "the next login asks with a since: " .. tostring(askOf(a3)))
+      leave(a3)
+      fire(ofa, "PLAYER_LOGOUT")
+      assert(type(odb.chars[ofa.name].hold) == "table", "Ofa deleted nothing: her logout keeps a hold")
+      leave(ofa); leave(b)
+    end)
+    said[#said + 1] = "a stat opened again asks whole only where its values were deleted, and for one login"
+  end }
+
+  for _, case in ipairs(CASES) do
+    local ok, err = pcall(case[2])
+    if not ok then failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
+  end
+  assert(#failed == 0, "fix2-cute-core: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
+  print("fix2-cute-core: " .. table.concat(said, "; "))
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end
