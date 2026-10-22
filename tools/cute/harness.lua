@@ -15363,6 +15363,8 @@ do
     end
     assert(F.Pack(cases[1]) == "b" .. b36(9101) .. "@" .. b36(1429) .. ":" .. b36(401) .. "," .. b36(402) .. "=Raven Hill Tome" and F.Pack(cases[2]) == "k" .. b36(424080) .. "@" .. b36(1429) .. ":" .. b36(610) .. "," .. b36(220)
       and F.Pack(cases[5]) == "x" .. b36(1429) .. ":" .. b36(310) .. "," .. b36(690) .. ">" .. b36(1453) .. ":" .. b36(500) .. "," .. b36(500) .. "=" .. b36(12), "the wire's form: " .. F.Pack(cases[1]))
+    local skull = F.Parse(F.Pack({ k = "r", id = 7002, m = 1429, x = 5, y = 5 }))
+    assert(skull and skull.k == "r" and skull.lv == nil, "a rare whose plate gave no level (a skull's) still goes, its level unknown")
     local long = F.Pack({ k = "b", id = 1, m = 1429, x = 1, y = 1, t = ("Tome;of=Ages|" ):rep(10) })
     local t = long:match("=(.*)$")
     assert(#t <= 60 and not t:find("[;=|]"), "a title cleaned, 60 bytes at most: " .. t)
@@ -15378,7 +15380,7 @@ do
     assert(select(2, e2.msg:gsub(";", ";")) + 1 == 10, "ten short entries a message at most")
     -- refused
     for _, bad in ipairs({ "b" .. b36(1) .. "@" .. b36(99500) .. ":1,1=T", "h" .. b36(1) .. "@" .. b36(1429) .. ":" .. b36(1001) .. ",1", "h0@" .. b36(1429) .. ":1,1",
-      "r" .. b36(5) .. "@" .. b36(1429) .. ":1,1=0", "x" .. b36(1429) .. ":1,1>" .. b36(1453) .. ":1,1=0", "b" .. b36(1) .. "@" .. b36(1429) .. ":1,1=", "zz@1:1,1", "h" .. b36(1) .. "@" .. b36(1429) .. ":1.5,1" }) do
+      "r" .. b36(5) .. "@" .. b36(1429) .. ":1,1=" .. b36(100), "x" .. b36(1429) .. ":1,1>" .. b36(1453) .. ":1,1=0", "b" .. b36(1) .. "@" .. b36(1429) .. ":1,1=", "zz@1:1,1", "h" .. b36(1) .. "@" .. b36(1429) .. ":1.5,1" }) do
       assert(F.Parse(bad) == nil, "refused: " .. bad)
     end
     leave(c)

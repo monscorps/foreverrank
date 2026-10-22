@@ -295,7 +295,12 @@ function F.Parse(text)
   if not m then return nil end
   local en = { k = k, id = id, m = m, x = x, y = y }
   if k == "b" then en.t = title(extra); if not en.t then return nil end end
-  if k == "r" then en.lv = unb36(extra or ""); if not en.lv or en.lv < 1 or en.lv > 99 then return nil end end
+  -- (a rare's level, 0 where its plate gave none: a skull's "??")
+  if k == "r" then
+    local lv = unb36(extra or "")
+    if not lv or lv < 0 or lv > 99 then return nil end
+    en.lv = lv > 0 and lv or nil
+  end
   return en
 end
 
