@@ -25070,6 +25070,43 @@ end)()
     UI.frame:Hide()
   end }
 
+  -- L2 (trust, should). A reading was told to the group only when it differed from the saved file's, and QueueLive dropped
+  -- every reading made out of a group: one made solo, in an earlier session or for the group before never reached the
+  -- group you are in now, until your next level. Each goes once a group, held in memory; joining a group and a member's
+  -- ask (a group 1R) send your log's readings again
+  CASES[#CASES + 1] = { "L2: a reading made out of a group goes to the group you join, once; a member's ask has it again", function()
+    local c = char("Solo", { level = 5, log = { { 7, 0 } }, group = false })
+    local QB = c.QB
+    local q = QB.Quest.Get(7)
+    local listed = q and QB.Model.Listed(q) or 0
+    assert(q and listed > 0 and QB.Model.Pct(q.lvl, 5) >= 100, "Kobold Camp Cleanup pays in full at level 5: " .. tostring(listed))
+    tick(c, 30)
+    c.outbox = {}
+    c.logXP = { [7] = listed }
+    QB:MarkDirty(); tick(c, 30)
+    assert(c.env.QuestBankDB.live and c.env.QuestBankDB.live[7] and c.env.QuestBankDB.live[7].src == "log", "the solo reading kept")
+    assert(sent(c, "1L", "PARTY") + sent(c, "1L", "GUILD") == 0, "out of a group: nothing sent")
+    -- a mate joins
+    c.o.group = true; roster(c)
+    QB:MarkDirty(); tick(c, 30)
+    assert(sent(c, "1L", "PARTY") == 1, "joined: the solo reading goes to the party once: " .. sent(c, "1L", "PARTY"))
+    assert(sent(c, "1L", "GUILD") == 0, "never to the guild")
+    c.outbox = {}
+    QB:MarkDirty(); tick(c, 30)
+    assert(sent(c, "1L", "PARTY") == 0, "a re-plan after: nothing again: " .. sent(c, "1L", "PARTY"))
+    -- a member who joins or reloads asks: the readings again
+    local hear = hearer(c)
+    hear("1R", "PARTY", "Mate Steelhand-Forever Normal"); hear("1R", "PARTY", "Other Steelhand-Forever Normal")
+    tick(c, 30)
+    assert(sent(c, "1L", "PARTY") == 1, "a member's ask: the reading again, once for two asks: " .. sent(c, "1L", "PARTY"))
+    -- out of the group and into the next: sent there too
+    c.o.group = false; roster(c)
+    c.o.group = true; roster(c)
+    c.outbox = {}
+    tick(c, 30)
+    assert(sent(c, "1L", "PARTY") == 1, "the next group hears it as well: " .. sent(c, "1L", "PARTY"))
+  end }
+
   local failed = {}
   for _, case in ipairs(CASES) do
     local ok, err = pcall(case[2])

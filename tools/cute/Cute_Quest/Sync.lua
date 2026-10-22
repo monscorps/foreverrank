@@ -12,7 +12,7 @@
 --   1G|text                                                                    the Guide's first step (6.0), for the others' step frames
 local _, QB = ...
 if QB.dormant then return end
-local S = { members = {}, out = {}, live = {}, stepVer = 0 }
+local S = { members = {}, out = {}, live = {}, liveSent = {}, stepVer = 0 }
 QB.Sync = S
 -- stepVer: up whenever a member comes, goes, or sends a step or status (1G, 1S), so the Guide's member-step list
 -- (G.MemberSteps) and the step frame can tell nothing changed without a table or a string a tick
@@ -219,10 +219,17 @@ function S:Changed()
 end
 
 -- (the final audit) an XP reading goes to your group alone, while you share with it: on GUILD every quest of your log went
--- to the guild, whose readings this one no longer takes either (S:Receive)
+-- to the guild, whose readings this one no longer takes either (S:Receive). (merge5) Each once a group: S.liveSent holds
+-- what this group was told (id -> "xp:level"), in memory, emptied when your group channel changes and when a member asks
+-- (S:ResendLive); a reading made while out of a group is not marked, so the next group hears it
 function S:QueueLive(id, xp, level)
   if not (QB:Settings().share.party and groupChannel()) then return end
-  self.live[#self.live + 1] = id .. ":" .. xp .. ":" .. level
+  local key = xp .. ":" .. level
+  if self.liveSent[id] == key then return end
+  self.liveSent[id] = key
+  local entry = id .. ":" .. key
+  for _, e in ipairs(self.live) do if e == entry then return end end
+  self.live[#self.live + 1] = entry
   if self.liveWaiting then return end
   self.liveWaiting = true
   C_Timer.After(5, QB.Safe(function()
@@ -234,6 +241,18 @@ function S:QueueLive(id, xp, level)
       if ch then queue("1L|" .. table.concat(batch, ","), ch) end
     end
   end, "party sync: XP"))
+end
+
+-- (merge5) your log's readings again, from the saved file (your own game's, never a member's): for a group you just
+-- joined and for a member who asks (a group 1R, sent by one who joins or reloads)
+function S:ResendLive()
+  self.liveSent = {}
+  local live = QuestBankDB and QuestBankDB.live
+  if type(live) ~= "table" then return end
+  for _, e in ipairs(QB.state and QB.state.logOrder or {}) do
+    local v = live[e.id]
+    if type(v) == "table" and v.src ~= "party" and type(v.full) == "number" and type(v.lvl) == "number" then self:QueueLive(e.id, v.full, v.lvl) end
+  end
 end
 
 ----------------------------------------------------------------------------
@@ -395,6 +414,7 @@ function S:Receive(msg, channel, sender)
       answerGuild(sender)
     else
       self.lastStatus, self.lastQuests = nil, nil
+      self:ResendLive()
       self:Changed()
     end
     return
@@ -678,9 +698,12 @@ function S:Init()
       -- audit) and their quest lists. Still in one: what the members who left had
       if not (IsInGroup and QB.Plain(IsInGroup()) == true) then S:DropSteps() else S:DropGone() end
       local ch = groupChannel()
+      -- (merge5) another group, or none: what the last one was told of your XP readings is no news to this one
+      if ch ~= S.lastGroup then S.liveSent = {} end
       if ch and ch ~= S.lastGroup and QB:Settings().share.party then
         S.lastStatus, S.lastQuests = nil, nil
         queue("1R", ch)
+        S:ResendLive()
         S:Changed()
       end
       S.lastGroup = ch
