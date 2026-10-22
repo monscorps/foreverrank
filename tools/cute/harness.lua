@@ -19326,8 +19326,8 @@ end
 ----------------------------------------------------------------------------
 -- The pages round: addons/cute/index.html and questbank/index.html say what this build does, read against the client.
 -- W1. The window's pictures are this build's: one each for J, L and M, whose alt text names the window's tabs as the
---     client draws them, in order (J an officer's, L with its Dungeons and Gear tabs on, M the map); nothing of 0.7's
---     single window is left (its Guide and Settings tabs, its band's "Tick Quests" line)
+--     client draws them, in order (J an officer's, L with its Dungeons and Gear tabs on, M with the Map on); nothing of
+--     0.7's single window is left (its Guide and Settings tabs, its band's "Tick Quests" line)
 -- W2. Install: Cute_Quest is the base and loads at every login, so no step says it loads only while a module is on; no
 --     clause that says what you switch on or off names a base tab (Quests, Route), on the page or in Changes.lua's
 --     lines from 0.8.0 on; every key the setup card binds is named
@@ -19376,7 +19376,7 @@ do
     CASES[#CASES + 1] = { "W1 J, L and M pictured as the client draws them", function()
       assert(not page:find('data-tab="guide"', 1, true) and not page:find('id="cu-tab-settings"', 1, true) and not page:find("Tick Quests in Settings", 1, true),
         "the page still draws 0.7's single window (a Guide tab, a Settings tab, the band's Tick Quests line)")
-      Mods.Set("Cute_Quest:journal", true); Mods.Set("Cute_Quest:gear", true)
+      Mods.Set("Cute_Quest:journal", true); Mods.Set("Cute_Quest:gear", true); Mods.Set("Cute_Quest:map", true)
       local function titles(window) local out = {}; for _, def in ipairs(Mods.Pages(true, window)) do out[#out + 1] = def.title end return out end
       local wins = { { "j", titles("guild") }, { "l", titles("quests") }, { "m", titles("map") } }
       for _, w in ipairs(wins) do
