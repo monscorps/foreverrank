@@ -899,8 +899,10 @@ function R:Finish(rep, shown)
     bump(rep)
     bests(run, own)
     self:Show(shown or rep)
-    -- (the run's cards to the officers, from the guild member who sends them: Halls.lua, 1W)
-    if C.Halls and C.Halls.RunEnded then C.Safe(function() C.Halls:RunEnded(run, shown or rep) end, "halls: run cards")() end
+    -- (the run's cards to the officers, from the guild member who sends them: Halls.lua, 1W. This client's own build,
+    -- never the scribe's 2A it showed: the scribe is the group's leader where it said hello, another guild's or an
+    -- edited copy, and a card it made up about a guild mate went into the officers' Queue)
+    if C.Halls and C.Halls.RunEnded then C.Safe(function() C.Halls:RunEnded(run, rep) end, "halls: run cards")() end
   end
 end
 -- out of any guild no policy can settle (Policy:Left keeps no line): no run starts there (R:Start), and one begun in a

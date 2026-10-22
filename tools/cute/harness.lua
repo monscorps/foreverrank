@@ -17168,6 +17168,36 @@ do local function cardsStage()
       local e = recOf(tia, "c36")
       assert(e and e.v == 1500 and e.g == first.o.guid, "the record is the voice that came first: " .. tostring(e and (e.g == second.o.guid and "the later one" or e.g)))
     end)
+
+    -- the run's cards whispered to the officers (1W) are built from this client's own report, never from the scribe's
+    -- 2A: the scribe is the group's leader where it said hello, which may be another guild's leader or an edited copy,
+    -- and a card it made up about a guild mate went into the officers' Queue
+    case("1W from this client's own build", { gmember("Fia", 3, "MAGE"), gmember("Fox", 3, "ROGUE") }, function()
+      local fia, fox = cchar("Fia", 3), cchar("Fox", 3, { class = "ROGUE" })
+      login(fia); login(fox)
+      tickAll(30)
+      local Rn = fia.C.Runs
+      local me, mate = sfx(fia), sfx(fox)
+      local t0 = fia.env.GetServerTime() - 2400
+      local run = { id = fia.C.Comm.b36(t0) .. "-" .. me, kind = "d", inst = 36, place = "The Deadmines", start = t0, at = t0, seq = 0, members = {},
+        own = { ["in"] = 2, dp = 1, de = 0 }, bosses = {}, nb = 0, wipes = 0, dorder = 0, maps = {}, meter = { done = {}, tot = {} }, loot = {},
+        joined = 0, fought = true, together = 2, lastKill = 1500 }
+      run.members[me] = { g = fia.o.guid, n = "Fia", c = "MAGE", r = "Human", s = 2, first = 0, obs = {}, hello = "0.9.0" }
+      run.members[mate] = { g = fox.o.guid, n = "Fox", c = "ROGUE", r = "Human", s = 2, first = 0, obs = { de = 0 }, v = { t = 2400, de = 0 }, seq = 1, hello = "0.9.0" }
+      Rn.run = run
+      local own = Rn:Build(run)
+      assert(own, "this client's own report")
+      local shown = {}
+      for k, v in pairs(own) do shown[k] = v end
+      shown.cards, shown.from = { { mate, "FI", 5, "blooper" } }, "scribe"
+      local Hc = H(fia)
+      local real, got = Hc.RunEnded, nil
+      Hc.RunEnded = function(_, _, rep) got = rep end
+      Rn:Finish(own, shown)
+      Hc.RunEnded = real
+      if fia.C.CardFrame.frame then fia.C.CardFrame.frame:Hide() end
+      assert(got == own, "the 1W from this client's own report: " .. tostring(got and got.from))
+    end)
     assert(#failed == 0, "fix-cards: " .. #failed .. " case(s) failed:\n  " .. table.concat(failed, "\n  "))
     said[#said + 1] = "the launch audit's cards findings: " .. table.concat(passed, "; ")
   end
