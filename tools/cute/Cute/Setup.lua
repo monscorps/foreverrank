@@ -81,6 +81,15 @@ local function rows()
       -- (the quest window registered and no engine of its own: QuestBank serves it, Bridge.lua's dormant copy)
       add({ id = "dormant", group = "On screen", kind = "line", label = "QuestBank is loaded: its step frame, arrow and Reminders are its own." })
     end
+  else
+    -- no quest window: Cute_Quest missing (only the Cute folder copied, a common slip) or refused by the client, said
+    -- in one line, so the card's J alone is no puzzle
+    local M = C.Modules
+    if not M.Found("Cute_Quest") then
+      add({ id = "questaddon", group = "Windows", kind = "line", label = "Cute_Quest is not in Interface\\AddOns: your quest window comes with it, from the same download." })
+    elseif M.failed.Cute_Quest then
+      add({ id = "questaddon", group = "Windows", kind = "line", label = "Cute_Quest did not load (" .. tostring(M.failed.Cute_Quest) .. "): your quest window comes with it." })
+    end
   end
   local done, shown = answered(), {}
   local ids = {}

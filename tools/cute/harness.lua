@@ -19453,6 +19453,23 @@ do
   end)
 end
 
+-- U4. Without Cute_Quest (only the Cute folder copied) the card asks of the guild window alone and says so: "J opens
+--     Cute's guild window", and a DIM line that the quest window comes with Cute_Quest, from the same download
+do
+  local uiMember = UIX.member
+  isolated({ uiMember("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { card = true }))
+    login(c); tick(c, 3)
+    local t = texts(c)
+    assert(c.env.CuteSetupFrame and c.env.CuteSetupFrame:IsShown() and not c.C.Modules.byId.quests, "no Cute_Quest: the card all the same")
+    assert(t:find("J opens Cute's guild window;", 1, true) and not t:find("J and L", 1, true), "the guild window alone:\n" .. t)
+    assert(t:find("Cute_Quest is not in Interface\\AddOns: your quest window comes with it, from the same download.", 1, true), "and where the quest window is:\n" .. t)
+    check(c.env.CuteSetupFrame, "fix-cute-ui U4 the card without Cute_Quest")
+    leave(c)
+    print("fix-cute-ui U4: without Cute_Quest the card names J and the guild window alone, and says the quest window comes with Cute_Quest")
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end
