@@ -19337,6 +19337,8 @@ end
 --     Queue's run cards, earns and firsts, a card locked to them, the firsts ledger and the earns remembered
 -- C5. A book's title is one two of its voices gave alike: an edited copy's first title, joined by an honest member who
 --     read the book, is never drawn or said in the officers' word
+-- C6. What comes before the roster first reads is taken fifty a frame once it does, and what comes meanwhile goes behind
+--     it, so an older record never lands after a newer delta
 ----------------------------------------------------------------------------
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "MAGE", level = 30, online = true } end
@@ -19507,6 +19509,43 @@ do
     leave(cy)
   end)
   said[#said + 1] = "a book's title is one two voices gave alike: an edited copy's first title is never drawn or said"
+  -- C6
+  do
+    local guild = { member("Ofa", 0) }
+    for i = 1, 20 do guild[#guild + 1] = member("Rr" .. i, 3) end
+    isolated(guild, function()
+      local ofa = char("Ofa", 0)
+      local real, slow = ofa.env.C_Club.GetClubMembers, true
+      ofa.env.C_Club.GetClubMembers = function(...) if slow then return {} end return real(...) end
+      login(ofa)
+      tickAll(10)
+      -- 120 records and deltas before the roster reads (C_Club slow after a restart)
+      local b36 = ofa.C.Comm.b36
+      for k = 1, 6 do
+        for i = 1, 20 do
+          local msg = k == 1 and ("1F|1|1|4|guid=" .. guidOf("Rr" .. i) .. ";deaths=" .. b36(1)) or ("1D|4|deaths=" .. b36(k))
+          ofa.C.Comm:Receive(msg, "GUILD", "Rr" .. i .. "-Forever")
+        end
+      end
+      assert(#ofa.C.Comm.early == 120, "kept until the roster reads: " .. #ofa.C.Comm.early)
+      local R = ofa.C.Roster
+      local applied, realApply = 0, R.Apply
+      R.Apply = function(...) applied = applied + 1; return realApply(...) end
+      slow = false
+      fire(ofa, "GUILD_ROSTER_UPDATE")
+      assert(applied > 0 and applied <= 50, "the roster read: the first fifty taken in that frame, not all: " .. applied)
+      -- a delta heard while the rest waits its frame goes behind them, so Rr1's newer count is the one kept
+      ofa.C.Comm:Receive("1D|4|deaths=" .. b36(7), "GUILD", "Rr1-Forever")
+      tick(ofa, 1)
+      local db = ofa.env.CuteDB.roster
+      assert(applied == 121 and db["Rr1-Forever"].stats.deaths == 7 and db["Rr20-Forever"].stats.deaths == 6 and not db["Rr1-Forever"].suspect,
+        "all taken over the next frames, in order: " .. applied .. ", deaths " .. tostring(db["Rr1-Forever"].stats.deaths))
+      assert(#ofa.C.Comm.early == 0 and not ofa.C.Comm.replaying, "and the buffer empty")
+      R.Apply = realApply
+      leave(ofa)
+    end)
+  end
+  said[#said + 1] = "what came before the roster read is taken fifty a frame, what comes meanwhile behind it"
   print("fix-cute-core review: " .. table.concat(said, "; "))
 end
 

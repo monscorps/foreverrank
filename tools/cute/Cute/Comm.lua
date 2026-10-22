@@ -1892,10 +1892,33 @@ M.early, M.waiting = {}, {}
 -- (a guild of hundreds answers a login with hundreds of records: 2000 hold them while C_Club is slow after a restart;
 -- one dropped is a loss this login's hold does not move past, M:Logout)
 local EARLY_CAP, EARLY_EACH = 2000, 32 -- (of one sender: a copy's burst pushes no officer's or member's whispers out)
+-- taken EARLY_SLICE a frame once the roster reads, in the order they came (a full buffer taken at once stalled the game
+-- for half a second); what comes meanwhile of the kinds kept goes behind them (M:Receive), so an older record never
+-- lands after a newer delta of the same sender. earlyOf: how many each sender has waiting (0.9.0 counted them by
+-- walking the buffer at every message), earlyHead: the next to take
+local EARLY_SLICE = 50
+M.earlyOf = {}
+local function takeEarly(m) M:Receive(m[1], m[2], m[3], true) end
 function M:ReplayEarly()
-  local list = self.early
-  self.early = {}
-  for _, m in ipairs(list) do self:Receive(m[1], m[2], m[3]) end
+  if self.replaying then return end
+  self.replaying, self.earlyHead = true, 1
+  local take = C.Safe(takeEarly, "comm: receiving")
+  local step
+  step = C.Safe(function()
+    local list = M.early
+    for i = M.earlyHead, math.min(#list, M.earlyHead + EARLY_SLICE - 1) do
+      local m = list[i]
+      list[i], M.earlyHead = false, i + 1
+      local n = M.earlyOf[m[3]]
+      M.earlyOf[m[3]] = (n and n > 1) and n - 1 or nil
+      take(m)
+    end
+  end, "comm: replay", function()
+    -- (the next frame's booked whatever happened in this one)
+    if M.earlyHead <= #M.early then C_Timer.After(0, step)
+    else M.early, M.earlyOf, M.earlyHead, M.replaying = {}, {}, nil, false end
+  end)
+  step()
 end
 -- the asks answered lately, by asker (one ask a sender in ASK_AGAIN seconds starts an answer), and when the statistics
 -- pass last answered each member's (once in GAME_AGAIN seconds a member; an officer's always): a copy that asks every
@@ -1903,7 +1926,7 @@ end
 local ASK_AGAIN, GAME_AGAIN, POLICY_AGAIN, UNTRUSTED_AGAIN = 180, 1800, 30, 300
 M.answered, M.answeredSince, M.gameAnswered, M.policyAsked = {}, {}, {}, {}
 
-function M:Receive(text, channel, sender)
+function M:Receive(text, channel, sender, replayed)
   text, channel, sender = C.Plain(text), C.Plain(channel), C.Plain(sender)
   if type(text) ~= "string" or type(sender) ~= "string" then return end
   local whispered = channel == "WHISPER"
@@ -1911,10 +1934,12 @@ function M:Receive(text, channel, sender)
   local R = C.Roster
   local kind = text:sub(1, 2)
   if whispered and not WHISPERED[kind] then return end
-  if not R.trusted and (whispered or kind == "1F" or kind == "1D") then
-    local n = 0
-    for _, m in ipairs(self.early) do if m[3] == sender then n = n + 1 end end
-    if #self.early < EARLY_CAP and n < EARLY_EACH then self.early[#self.early + 1] = { text, channel, sender } else self.lost = true end
+  if (not R.trusted or (self.replaying and not replayed)) and (whispered or kind == "1F" or kind == "1D") then
+    local n = self.earlyOf[sender] or 0
+    if #self.early - ((self.earlyHead or 1) - 1) < EARLY_CAP and n < EARLY_EACH then
+      self.early[#self.early + 1] = { text, channel, sender }
+      self.earlyOf[sender] = n + 1
+    else self.lost = true end
     return
   end
   -- the GUID a full record or an ask carries decides whether the message is yours, handed back by the game; a delta
