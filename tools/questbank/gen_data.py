@@ -3401,6 +3401,10 @@ def find_selftest():
     probe_pull.merge_find(acc, {"o800001": {"p": [[1428, 500, 500, 1]], "h": {"13.0": 1}, "k": [281350]}}, "tA", 5)
     probe_pull.merge_find(acc, {"o800001": {"p": [[1428, 503, 501, 1]], "h": {"13.0": 1}, "k": [281350]}}, "tB", 6)
     assert not [r for r in find_rows(acc).get(1428, []) if r[1] == 800001], "the Keystone Fragment's satchel: never shipped"
+    # (fix-data) nor when only one file noted the secret key and the other only looted it: no row of it in D.FIND
+    probe_pull.merge_find(acc, {"o800003": {"p": [[1428, 300, 300, 1]], "h": {"13.0": 1}, "k": [281358]}}, "tA", 7)
+    probe_pull.merge_find(acc, {"o800003": {"p": [[1428, 303, 301, 1]], "h": {"13.0": 1}}}, "tB", 8)
+    assert not [r for r in find_rows(acc).get(1428, []) if r[1] == 800003], "one file's secret key: never shipped"
     assert not [r for rs in find_rows(acc, {281350: [4572]}).values() for r in rs if r[0] == "k" and r[4] in FIND_SECRET_KEYS]
     assert FIND_SECRET_KEYS == probe_pull.SECRET_KEYS, "one list of the secret chains' keys"
     assert lua_text("Bjørn \"x\" \\") == '"Bj\\195\\184rn \\"x\\" \\\\"'

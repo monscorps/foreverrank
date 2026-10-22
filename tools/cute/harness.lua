@@ -20755,13 +20755,24 @@ do
   end }
 
   -- S13 (look). Data you share named "The QuestBank Uploader", which Cute's page does not offer; its only copy offers to
-  -- install QuestBank, which puts Cute's quest copy to sleep. No word of it until Cute's page offers Cute-Uploader.zip
-  FECASES[#FECASES + 1] = { "S13: Data you share names no uploader Cute's page does not offer", function()
+  -- install QuestBank, which puts Cute's quest copy to sleep. No word of it until Cute's page offers Cute-Uploader.zip,
+  -- then one note that Cute's page has it (merge4: fix-data's page offers it), and never QuestBank's by name
+  FECASES[#FECASES + 1] = { "S13: Data you share names no uploader but the one Cute's page offers", function()
     inGuild({ member("Rone", 1) }, function()
       local c = quest("Rone")
       login(c); tickAll(6)
       c.C.UI:Open("settings", "share")
-      assert(not texts(c):find("Uploader", 1, true), "no uploader named:\n" .. texts(c))
+      local shown = texts(c)
+      local page = assert(io.open(HERE .. "/../../addons/cute/index.html")):read("*a")
+      local zip = io.open(HERE .. "/../../addons/cute/Cute-Uploader.zip", "rb")
+      local offered = page:find('href="Cute-Uploader.zip"', 1, true) ~= nil and zip ~= nil
+      if zip then zip:close() end
+      assert(not shown:find("QuestBank Uploader", 1, true), "never QuestBank's uploader:\n" .. shown)
+      if offered then
+        assert(shown:find("Cute's page at foreverrank.com has the uploader", 1, true), "Cute's page named for the uploader it offers:\n" .. shown)
+      else
+        assert(not shown:lower():find("uploader", 1, true), "no uploader named:\n" .. shown)
+      end
       leave(c)
     end)
   end }
@@ -20788,6 +20799,36 @@ do
     collectgarbage("collect")
   end
   assert(#failed == 0, "fix-engine: " .. #failed .. " of " .. #FECASES .. " failed:\n  " .. table.concat(failed, "\n  "))
+end
+
+-- [stage: fix-data] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- D1. Settings > Data you share says where a Cute player gets the uploader: Cute's page, which offers Cute-Uploader.zip
+--     (build_uploader.py --cute: the uploader that never puts QuestBank in) beside Cute.zip, the zip beside the page; the
+--     page never sends a Cute player to QuestBank's uploader, whose Install offers QuestBank (Cute_Quest asleep)
+----------------------------------------------------------------------------
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  local ok, err
+  isolated({ member("Rone", 1) }, function() ok, err = pcall(function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    c.C.UI:Open("settings", "share")
+    local shown = texts(c)
+    -- (merge4: one short note, the uploader as Cute's page offers it, never QuestBank's by name: fix-engine's S13)
+    assert(shown:find("Cute's page at foreverrank.com has the uploader: it sends the site what you found in the world", 1, true), "Data you share says Cute's page has the uploader:\n" .. shown)
+    assert(not shown:find("QuestBank Uploader", 1, true), "and never sends a Cute player to QuestBank's:\n" .. shown)
+    local page = assert(io.open(HERE .. "/../../addons/cute/index.html")):read("*a")
+    assert(page:find('href="Cute-Uploader.zip"', 1, true), "Cute's page offers Cute-Uploader.zip")
+    assert(page:find('href="Cute.zip"', 1, true), "Cute's page still offers Cute.zip")
+    assert(not page:find("QuestBank-Uploader.zip", 1, true), "Cute's page never offers QuestBank's uploader")
+    local zip = io.open(HERE .. "/../../addons/cute/Cute-Uploader.zip", "rb")
+    assert(zip, "Cute-Uploader.zip is beside Cute's page")
+    zip:close()
+    leave(c)
+  end) end)
+  assert(ok, "fix-data D1: " .. tostring(err))
+  print("fix-data: Data you share names Cute's page, which offers Cute-Uploader.zip")
 end
 
 -- this pass's problems and layouts join the run's; the last pass prints them all

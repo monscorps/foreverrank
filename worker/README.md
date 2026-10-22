@@ -19,7 +19,9 @@ main on push, and this Worker goes live only by the owner's deploy, so the relea
 
 1. Deploy the Worker (the deploy, below) and check `/api/finds.json` answers.
 2. Rebuild the uploaders from `uploader/` as it is now: `python3 tools/build_uploader.py` (QuestBank-Uploader.zip,
-   which reads `Cute_Quest.lua` too) and `python3 tools/build_uploader.py --cute` (Cute-Uploader.zip, for Cute's page).
+   which reads `Cute_Quest.lua` too) and `python3 tools/build_uploader.py --cute` (Cute-Uploader.zip, Cute's second
+   download; `python3 tools/cute/build.py` packs it with Cute.zip, and with `--online` stops while the live Worker has
+   no finds round).
 3. `python3 -I tools/questbank/build_page.py --online`: it stops while the zip does not read `Cute_Quest.lua` or the
    live Worker has no finds round.
 4. Only then push main.
@@ -27,7 +29,9 @@ main on push, and this Worker goes live only by the owner's deploy, so the relea
 The deploy:
 
 1. `cd worker && npx wrangler deploy` (the code: the `cutequest-savedvars` kind, Cute.lua refused, every QuestBank.lua and
-   Cute_Quest.lua cut to the allow-list before it is stored, `GET /api/finds.json`, `POST /api/finds`).
+   Cute_Quest.lua cut to the allow-list before it is stored, `GET /api/finds.json`, `POST /api/finds`, and the pull's
+   `ip_hash`: `probe_pull.py` counts two files sent from one address as one witness of a find, and an upload pulled
+   from a Worker that does not say where it came from counts as one with every other such upload).
 2. The `finds_data` table is created on the first publish; to make it by hand:
    `npx wrangler d1 execute levelpace-forever --remote --command "CREATE TABLE IF NOT EXISTS finds_data (id INTEGER PRIMARY KEY CHECK (id = 1), body TEXT NOT NULL, updated INTEGER NOT NULL)"`.
 3. `python3 tools/probe_pull.py` as usual (it pulls, merges and writes `research/questbank/finds.json`), then

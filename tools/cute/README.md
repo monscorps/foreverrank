@@ -5,8 +5,8 @@ hundred facts about its own character, plus what it meets in play (the bosses it
 factions, what it enchants) and the game's own statistics where the client reports them, shares them with the
 guild over the game's addon channel, and shows the whole guild in one window. Officers decide per stat whether members
 see each other's, and what they keep to themselves goes to them alone, never on the guild channel (Privacy and trust).
-Cute has no server: what the guild shares goes over the guild channel alone. The QuestBank Uploader (packed beside Cute
-as `Cute-Uploader.zip` by `tools/build_uploader.py --cute`, at release, for Cute's page to offer) sends foreverrank.com
+Cute has no server: what the guild shares goes over the guild channel alone. The QuestBank Uploader (Cute's second download,
+`Cute-Uploader.zip`, which `build.py` packs with `tools/build_uploader.py --cute` whenever it zips Cute) sends foreverrank.com
 only what the quest engine noted in the world, from `Cute_Quest.lua` and cut to one allow-list (`worker/src/allow.js`);
 it refuses `Cute.lua`, so never a name nor anything about the guild leaves the game.
 
@@ -1532,11 +1532,13 @@ page's changelog (Versions; the build stops when the toc's version has no line t
 into `Cute_Quest` (`build_quest`: every file `QuestBank.toc` lists but `UI.lua`, byte for byte, and its art; it stops on
 a file it does not know, a copy that differs from its source, a Lua file without its dormant guard, or a stray file in
 the folder, and writes `Cute_Quest.toc` with Cute's version and QuestBank's; the folder's own nine files are the only
-ones edited by hand), zips both folders (`zip -rq ... Cute Cute_Quest -x "*.DS_Store"`; `--no-zip` keeps the zip you
-have), regenerates `addons/cute/stats.js`
-from the registry, the window's defaults and the rules' thresholds with their bounds (`page_stats.lua`), stamps the version from `Cute.toc`, the zip's size in
+ones edited by hand), zips both folders (`zip -rq ... Cute Cute_Quest -x "*.DS_Store"`) and packs the second download,
+`Cute-Uploader.zip` (`tools/build_uploader.py --cute`: the same folders, the uploader with `Cute.txt` beside it, which
+never puts QuestBank in, and `QuestBank_Finds`; `--no-zip` keeps the zips you have), regenerates `addons/cute/stats.js`
+from the registry, the window's defaults and the rules' thresholds with their bounds (`page_stats.lua`), stamps the version from `Cute.toc`, the zips' sizes in
 KB and the stat counts into `addons/cute/index.html` between `<!--@name-->` markers, then checks the page: every link
-and image exists, every class is `cu-` and none collides with `forever.css`, no hand-typed version or placeholder is
+and image exists, the uploader is promised in Settings and here only while the page offers `Cute-Uploader.zip`, which is
+the Cute bundle of Cute.zip's version (never QuestBank's uploader; `--online`: the live Worker takes `Cute_Quest.lua`), every class is `cu-` and none collides with `forever.css`, no hand-typed version or placeholder is
 left, the changelog's newest entry is the toc's version, the greys pass 4.5:1, a check box's edge 3:1 on the page's
 panels and in the window (UI.lua's EDGE), and the Download button is dark text on
 a light button through the whole cascade. It ends `problems: 0` and `OK`, or lists the problems and exits 1.

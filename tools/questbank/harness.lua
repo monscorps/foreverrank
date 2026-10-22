@@ -24647,6 +24647,36 @@ end
   assert(#failed == 0, "fix-engine: " .. #failed .. " of " .. #FECASES .. " failed:\n  " .. table.concat(failed, "\n  "))
 end)()
 
+-- [stage: fix-data] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- What the finds this engine notes become on the site, checked where it is merged (tools/probe_pull.py --selftest,
+-- made-up files; worker/test.mjs, the Worker with a stand-in database):
+-- D1. An object one file opened with a secret chain's key among its candidates ships no row, though the other file
+--     that agrees on its place only looted it (its opening not caught) or the key-carrying file stood elsewhere
+-- D2. Two files sent from one address are one witness, however many tokens they carry: a made-up title from two of one
+--     player's files never ships; a file from another address makes two. The Worker's pull says where each upload came
+--     from (the address's hash, which probe_pull digests again and never keeps)
+----------------------------------------------------------------------------
+do
+  local function run(cmd)
+    local p = io.popen(cmd .. " 2>&1")
+    local out = p and p:read("*a") or ""
+    if p then p:close() end
+    return out
+  end
+  local out = run("python3 -I '" .. HERE .. "/../probe_pull.py' --selftest")
+  assert(out:find("selftest OK: the allow-list, Cute's files and the world notes", 1, true), "probe_pull.py --selftest:\n" .. out)
+  assert(out:find("selftest OK: a secret key in one file hides the object; one address is one witness", 1, true), "probe_pull.py --selftest, D1 and D2:\n" .. out)
+  print("fix-data: " .. out:match("selftest OK: a secret key[^\n]*"))
+  if run("command -v node"):find("node", 1, true) then
+    out = run("node '" .. HERE .. "/../../worker/test.mjs'")
+    assert(out:find("ok    the pull says where each upload came from", 1, true) and not out:find("FAIL", 1, true), "worker/test.mjs:\n" .. out)
+    print("fix-data: worker/test.mjs " .. (out:match("(%d+ of %d+ checks passed)") or "?"))
+  else
+    print("fix-data: worker/test.mjs skipped (no node here)")
+  end
+end
+
 local seen = {}
 local unique = {}
 for _, p in ipairs(problems) do if not seen[p] then seen[p] = true; unique[#unique + 1] = p end end

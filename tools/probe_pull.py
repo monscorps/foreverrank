@@ -26,9 +26,10 @@ are left out.
   python3 tools/probe_pull.py --selftest            # the parser and the merge against tools/fixtures/probe/
   python3 tools/probe_pull.py --publish-finds       # send research/questbank/finds.json to the Worker (owner-run)
 
-Every run also writes research/questbank/finds.json: what two players' files agree on (finds_rows), the set the Worker
-serves at /api/finds.json once published, and gen_data.py's D.FIND beside the guides' seed. QuestBank.lua and
-Cute_Quest.lua (Cute's copy of the engine, counted as source "cute") are read through the allow-list (strip): the
+Every run also writes research/questbank/finds.json: what two players' files agree on (finds_rows), two files sent from
+one address counting as one (the pull says where each upload came from; research/probe/where.json keeps it for
+--rebuild), the set the Worker serves at /api/finds.json once published, and gen_data.py's D.FIND beside the guides'
+seed. QuestBank.lua and Cute_Quest.lua (Cute's copy of the engine, counted as source "cute") are read through the allow-list (strip): the
 parts that hold no name. Cute.lua is never read.
 
 The admin key is read from worker/.probe-admin-key (gitignored) or the PROBE_ADMIN_KEY
@@ -922,6 +923,47 @@ def voice(disc):
 
 
 VOICES = 64  # voices kept per find, crossing, seller or trainer: past that the one heard longest ago goes
+SOURCES = 16  # addresses kept per voice: past that the one heard from longest ago goes
+
+
+# ------------------------------------------------------------------------------- one address, one witness
+# A token is the file's, and one player can make two (two saved files, or one edited). The Worker keeps each upload's
+# address as a hash (the rate limit's ip_hash) and its pull says it; what is kept here is a digest of that hash, never
+# the hash or the address. disc.json "where" = { voice: { source: stamp } }: the addresses each voice's uploads came
+# from. A find counts its witnesses, not its voices (witnesses): two files sent from one address are one
+def source_of(ip_hash):
+    """An upload's source from the pull's ip_hash (16 hex characters): "w" and a digest of it; "?" when the Worker did not
+    say (a pull before it told, or a row without one): every such upload is one source together."""
+    if isinstance(ip_hash, str) and re.fullmatch(r"[0-9a-f]{16}", ip_hash):
+        return "w" + hashlib.sha256(("where:" + ip_hash).encode()).hexdigest()[:11]
+    return "?"
+
+
+def _heard_from(acc, who, where, stamp):
+    """Voice who's upload came from source where (source_of's), at most SOURCES a voice."""
+    srcs = acc.setdefault("where", {}).setdefault(who, {})
+    srcs[where] = stamp
+    if len(srcs) > SOURCES:
+        for old in sorted(srcs, key=lambda x: (srcs[x], x))[:len(srcs) - SOURCES]:
+            del srcs[old]
+
+
+def witnesses(where, voices):
+    """How many independent witnesses voices are: each matched to a source of its own (a bipartite matching), so two
+    files from one address count once however many tokens they carry, and a player who moved still counts once. A voice
+    no source was noted for (a file merged here with --merge, or by the selftests) is its own source."""
+    srcs = {v: sorted(where.get(v) or {v: 0}) for v in voices}
+    holder = {}
+
+    def take(v, tried):
+        for x in srcs[v]:
+            if x not in tried:
+                tried.add(x)
+                if x not in holder or take(holder[x], tried):
+                    holder[x] = v
+                    return True
+        return False
+    return sum(1 for v in sorted(voices) if take(v, set()))
 
 
 def _voted(table, key, who, rec, stamp):
@@ -1035,16 +1077,22 @@ def finds_rows(acc, keys=None):
     mean, at most four places a map); a book's title or a level when two of those files say it. A key Lock.csv names
     when it was among the candidates of every one of those files that opened it by key (two at least: the key that
     opened it was in each one's bags) and, of those, is carried at the fewest finds (_key_spread); a tie names none, and
-    the object stands as looted. An object a secret chain's key may have opened (SECRET_KEYS) ships no row at all.
-    Sorted."""
+    the object stands as looted. An object a secret chain's key may have opened (SECRET_KEYS among any one file's
+    candidates, wherever it stood) ships no row at all. Files count as witnesses (witnesses): two sent from one address
+    are one, for a place, a title or a level and a key alike. Sorted."""
     keys = lock_keys() if keys is None else keys
     finds = acc.get("find") or {}
+    where = acc.get("where") or {}
     spread = _key_spread(finds)
     rows = []
     for key, votes in sorted(finds.items()):
         kind0, fid = key[0], int(key[1:])
         if kind0 == "i":
             continue  # an item read has no place
+        # (a secret chain's next step: one file that opened it with such a key is enough, wherever it stood; the files
+        # that agree on a place may only have looted it, their opening not caught)
+        if SECRET_KEYS & {x for rec in votes.values() for x in rec.get("k") or []}:
+            continue
         by_map = {}
         for who, rec in votes.items():
             for m, x, y, _n in [tuple(p[:4]) for p in rec.get("p") or []]:
@@ -1061,32 +1109,32 @@ def finds_rows(acc, keys=None):
                         break
                 else:
                     places.append({"x": x, "y": y, "pts": [(x, y, who)]})
-            agreed = [pl for pl in places if len({p[2] for p in pl["pts"]}) >= 2]
+            for pl in places:
+                pl["w"] = witnesses(where, {p[2] for p in pl["pts"]})
+            agreed = [pl for pl in places if pl["w"] >= 2]
             if not agreed:
                 continue
-            agreed.sort(key=lambda pl: (-len({p[2] for p in pl["pts"]}), pl["x"], pl["y"]))
+            agreed.sort(key=lambda pl: (-pl["w"], pl["x"], pl["y"]))
             agreed = agreed[:4]
             who_here = {p[2] for pl in agreed for p in pl["pts"]}
             spots = ";".join("%d,%d" % (int(pl["x"] + 0.5), int(pl["y"] + 0.5)) for pl in agreed)
-            files = max(len({p[2] for p in pl["pts"]}) for pl in agreed)
+            files = max(pl["w"] for pl in agreed)
 
             def said(field, ok=lambda v: True):
-                c = collections.Counter()
+                by = collections.defaultdict(set)
                 for who in who_here:
                     v = votes[who].get(field)
                     for x in (v if isinstance(v, list) else [v]):
                         if x is not None and ok(x):
-                            c[x] += 1
-                best = sorted(c.items(), key=lambda kv: (-kv[1], str(kv[0])))
+                            by[x].add(who)
+                best = sorted(((x, witnesses(where, ws)) for x, ws in by.items()), key=lambda kv: (-kv[1], str(kv[0])))
                 return best[0][0] if best and best[0][1] >= 2 else None
             if kind0 == "c":
                 lv = said("r")
                 rows.append([m, "r", fid, spots, files, lv or 0])
                 continue
-            held = [set(votes[who]["k"]) for who in sorted(who_here) if votes[who].get("k")]
-            both = set.intersection(*held) if len(held) >= 2 else set()
-            if SECRET_KEYS & both:
-                continue  # (a secret chain's next step)
+            keyed = sorted(who for who in who_here if votes[who].get("k"))
+            both = set.intersection(*[set(votes[who]["k"]) for who in keyed]) if witnesses(where, set(keyed)) >= 2 else set()
             title = said("b")
             if title:
                 rows.append([m, "b", fid, spots, files, title])
@@ -1195,9 +1243,11 @@ def merge_world(acc, d, who, stamp):
     return n
 
 
-def merge_upload(acc, text, source="local"):
-    """Decode one upload and merge it. Returns (kind, had_notes). The same notes arriving again (an unchanged file re-sent,
-    or ForeverProbe's copy of QuestBank's notes next to QuestBank's own file) are merged once. A QuestBank.lua has three
+def merge_upload(acc, text, source="local", where=None):
+    """Decode one upload and merge it. Returns (kind, had_notes). where is the upload's source (source_of: where the
+    Worker says it came from, "?" when it did not say), None for a file merged here, its voice its own witness. The
+    same notes arriving again (an unchanged file re-sent, or ForeverProbe's copy of QuestBank's notes next to
+    QuestBank's own file) are merged once. A QuestBank.lua has three
     parts with a digest each, its notes (disc, turnins, live), where its objectives ticked (disc.os) and QuestBankDB.game,
     so a file where only a tooltip or a spot changed still brings that, and one where only the notes changed doesn't
     count its items or vote for its spots again. Notes from a client other than Forever are left out, spots too."""
@@ -1250,6 +1300,8 @@ def merge_upload(acc, text, source="local"):
                 meta["with_world"] = meta.get("with_world", 0) + 1
                 n = merge_find(acc, disc.get("find"), who, meta["with_world"]) + merge_world(acc, disc, who, meta["with_world"])
                 n += merge_dur(acc, disc.get("qtime"), who)
+                if where:
+                    _heard_from(acc, who, where, meta["with_world"])
                 spotted = n > 0 or spotted
                 fresh = True
         # what the game told the quest survey (Survey.lua), a part of its own the same way
@@ -1340,10 +1392,24 @@ def admin_key():
     return key
 
 
+WHERE_FILE = "where.json"  # in raw_dir: { "<upload id>": source (source_of) } for the uploads the Worker said came from
+
+
+def read_where(raw_dir):
+    """raw_dir's where.json: each pulled upload's source, so --rebuild counts witnesses as the pull did."""
+    path = os.path.join(raw_dir, WHERE_FILE)
+    try:
+        got = json.load(open(path))
+    except (OSError, ValueError):
+        return {}
+    return {k: v for k, v in got.items() if isinstance(k, str) and isinstance(v, str)} if isinstance(got, dict) else {}
+
+
 def pull(acc, endpoint, key, raw_dir, limit=20):
     after = acc["meta"].get("last_id", 0)
     new = 0
     os.makedirs(raw_dir, exist_ok=True)
+    wheres = read_where(raw_dir)
     while True:
         # a named user agent: Cloudflare answers the bare Python one with 403 before the Worker runs
         req = urllib.request.Request("%s/api/probe/pull?after=%d&limit=%d" % (endpoint.rstrip("/"), after, limit),
@@ -1363,8 +1429,12 @@ def pull(acc, endpoint, key, raw_dir, limit=20):
             text = gzip.decompress(base64.b64decode(row["body_gzip_base64"])).decode("utf-8", "replace")
             ext = "txt" if row["kind"] == "export" else "lua"
             open(os.path.join(raw_dir, "%05d-%s.%s" % (row["id"], row["kind"], ext)), "w", encoding="utf-8").write(text)
+            where = source_of(row.get("ip_hash"))
+            if where != "?":
+                wheres[str(row["id"])] = where
+                json.dump(wheres, open(os.path.join(raw_dir, WHERE_FILE), "w"), sort_keys=True)
             try:
-                kind, notes = merge_upload(acc, text, row.get("source") or "unknown")
+                kind, notes = merge_upload(acc, text, row.get("source") or "unknown", where=where)
             except (ValueError, LuaError, KeyError) as e:
                 print("  upload #%d (%s) could not be read: %s" % (row["id"], row["kind"], e))
                 kind, notes = row["kind"], False
@@ -1831,6 +1901,19 @@ def selftest_finds():
                           "o800002": {"p": [[1428, 700 + dx, 700, 1]], "b": "A Burnt Page", "k": [281358, 216523]}}, who, 1)
     assert [r for r in finds_rows(kacc, lk) if r[2] in (800001, 800002)] == [], "a secret chain's step: never shipped"
     assert SECRET_KEYS >= {281350, 284092, 284093, 281358, 281359, 276561}
+    # (fix-data) one file opened it with a secret key among its candidates, the other only looted it (its opening came
+    # outside OPEN_S, so it noted no keys): still a secret chain's step. So is one whose key-carrying file stood elsewhere
+    kacc = empty()
+    merge_find(kacc, {"o800003": {"p": [[1428, 300, 300, 1]], "h": {"13.0": 1}, "k": [281358, 5396]},
+                      "o800004": {"p": [[1429, 100, 100, 1]], "h": {"15.0": 1}, "k": [281350]}}, "tP", 1)
+    merge_find(kacc, {"o800003": {"p": [[1428, 303, 301, 1]], "h": {"13.0": 1}},
+                      "o800004": {"p": [[1428, 600, 600, 1]], "h": {"15.0": 1}}}, "tQ", 2)
+    merge_find(kacc, {"o800004": {"p": [[1428, 602, 601, 1]], "h": {"15.0": 1}}}, "tR", 3)
+    assert [r for r in finds_rows(kacc, lk) if r[2] in (800003, 800004)] == [], \
+        "a secret key in one file's candidates hides the object: %r" % finds_rows(kacc, lk)
+    merge_find(kacc, {"o800005": {"p": [[1428, 300, 300, 1]], "h": {"13.0": 1}, "k": [5396]}}, "tP", 4)
+    merge_find(kacc, {"o800005": {"p": [[1428, 303, 301, 1]], "h": {"13.0": 1}}}, "tQ", 5)
+    assert [r[1] for r in finds_rows(kacc, lk) if r[2] == 800005] == ["h"], "an ordinary key, one file: looted, as before"
     assert "aaaaaaaaaaaaaaaa" not in json.dumps(acc), "the token itself is never kept"
 
     # the world: flights, crossings and boat legs, sellers, trainers, trails; one voice a file
@@ -1869,6 +1952,69 @@ def selftest_finds():
     assert flat(lists(r"const ALLOW = \[([^\]]*)\]", page)) == list(ALLOW), "the page's allow-list"
     assert flat(lists(r"const ERROR_KEYS = \[([^\]]*)\]", page)) == list(ERROR_KEYS), "the page's error fields"
     print("selftest OK: the allow-list, Cute's files and the world notes")
+
+    # (fix-data) two files sent from one address are one witness, however many tokens they carry: a made-up title from
+    # two of one player's files ships nothing; a third file from elsewhere makes two. An upload whose address the Worker
+    # did not tell ("?") is one witness with every other such upload; a file merged here (no address) its own
+    book = lambda x: {"o900001": {"p": [[1429, x, 500, 1]], "b": "Made Up"}}  # noqa: E731
+    ip1, ip2 = "0123456789abcdef", "fedcba9876543210"
+    assert source_of(ip1) != source_of(ip2) and source_of(ip1).startswith("w") and source_of(None) == "?" and source_of("junk") == "?"
+    wacc = empty()
+    merge_upload(wacc, file("1111111111111111", book(500)), "uploader", where=source_of(ip1))
+    merge_upload(wacc, file("2222222222222222", book(503)), "uploader", where=source_of(ip1))
+    assert len(wacc["find"]["o900001"]) == 2 and finds_rows(wacc, keys) == [], "two tokens from one address: one witness: %r" % finds_rows(wacc, keys)
+    merge_upload(wacc, file("3333333333333333", book(506)), "uploader", where=source_of(ip2))
+    rows = finds_rows(wacc, keys)
+    assert rows == [[1429, "b", 900001, "503,500", 2, "Made Up"]], "a file from another address: two witnesses: %r" % rows
+    assert ip1 not in json.dumps(wacc) and ip2 not in json.dumps(wacc), "the address's hash itself is never kept"
+    # one address's two files about another place: nothing placed there
+    merge_upload(wacc, file("1111111111111111", {"o900002": {"p": [[1429, 100, 100, 1]], "b": "Said Twice"}}), "uploader", where=source_of(ip1))
+    merge_upload(wacc, file("2222222222222222", {"o900002": {"p": [[1429, 102, 101, 1]], "b": "Said Twice"}}), "uploader", where=source_of(ip1))
+    assert not [r for r in finds_rows(wacc, keys) if r[2] == 900002], "one address's two files place nothing"
+    # a player who moved: one token sent from two addresses, the other from one of them: two witnesses all the same
+    macc = empty()
+    merge_upload(macc, file("1111111111111111", book(500)), "uploader", where=source_of(ip1))
+    merge_upload(macc, file("1111111111111111", book(501)), "uploader", where=source_of(ip2))
+    merge_upload(macc, file("2222222222222222", book(503)), "uploader", where=source_of(ip1))
+    assert [r[4] for r in finds_rows(macc, keys)] == [2], finds_rows(macc, keys)
+    uacc = empty()
+    merge_upload(uacc, file("4444444444444444", book(500)), "uploader", where=source_of(None))
+    merge_upload(uacc, file("5555555555555555", book(503)), "uploader", where=source_of(None))
+    assert finds_rows(uacc, keys) == [], "two uploads of unknown address: one witness"
+    merge_upload(uacc, file("6666666666666666", book(506)), "local")
+    assert [r[4] for r in finds_rows(uacc, keys)] == [2], "a file merged here is its own witness"
+    assert witnesses({}, {"tA", "tB"}) == 2 and witnesses({"tA": {"w1": 1}, "tB": {"w1": 2}}, {"tA", "tB"}) == 1
+    assert witnesses({"tA": {"w1": 1, "w2": 1}, "tB": {"w1": 2}, "tC": {"w1": 1}}, {"tA", "tB", "tC"}) == 2
+    # the pull: each row's ip_hash becomes its upload's source and lands in where.json for --rebuild (a stand-in for
+    # the Worker; nothing leaves this machine)
+    import io, tempfile
+
+    def row(i, tok, x, ip):
+        body = base64.b64encode(gzip.compress(file(tok, book(x)).encode())).decode()
+        return {"id": i, "kind": "questbank-savedvars", "source": "uploader", "ip_hash": ip, "body_gzip_base64": body}
+    pages = [{"rows": [row(1, "7777777777777777", 500, ip1), row(2, "8888888888888888", 503, ip1)]},
+             {"rows": [row(3, "9999999999999999", 506, None)]}, {"rows": []}]
+    real = urllib.request.urlopen
+    urllib.request.urlopen = lambda req, timeout=None: io.BytesIO(json.dumps(pages.pop(0)).encode())
+    try:
+        with tempfile.TemporaryDirectory() as raw:
+            pacc = empty()
+            with open(os.devnull, "w") as quiet:
+                keep, sys.stdout = sys.stdout, quiet
+                try:
+                    assert pull(pacc, "https://worker.invalid", "k", raw, limit=2) == 3
+                finally:
+                    sys.stdout = keep
+            assert read_where(raw) == {"1": source_of(ip1), "2": source_of(ip1)}, read_where(raw)
+            assert ip1 not in open(os.path.join(raw, WHERE_FILE)).read()
+            assert [r[4] for r in finds_rows(pacc, keys)] == [2], "rows 1 and 2 from one address are one witness, row 3 (unknown) another"
+            pacc2 = empty()
+            for i, f in enumerate(sorted(x for x in os.listdir(raw) if re.match(r"^\d+-", x))):
+                merge_upload(pacc2, open(os.path.join(raw, f)).read(), "rebuild", where=read_where(raw).get(str(i + 1), "?"))
+            assert pacc2["where"] == pacc["where"], "a rebuild counts as the pull did"
+    finally:
+        urllib.request.urlopen = real
+    print("selftest OK: a secret key in one file hides the object; one address is one witness")
 
 
 def write_finds(acc, path):
@@ -1928,13 +2074,15 @@ def main():
             raw = [os.path.getmtime(os.path.join(a.raw_dir, f)) for f in os.listdir(a.raw_dir) if re.match(r"^\d+-", f)]
             pulled = acc["meta"].get("pulled") or (stamp(max(raw)) if raw else None)
         acc = empty()
+        wheres = read_where(a.raw_dir)
         for f in sorted(os.listdir(a.raw_dir)):
             m = re.match(r"^(\d+)-", f)
             if not m:
                 continue
             acc["meta"]["last_id"] = max(acc["meta"]["last_id"], int(m.group(1)))
             try:
-                kind, notes = merge_upload(acc, open(os.path.join(a.raw_dir, f), encoding="utf-8").read(), "rebuild")
+                kind, notes = merge_upload(acc, open(os.path.join(a.raw_dir, f), encoding="utf-8").read(), "rebuild",
+                                           where=wheres.get(str(int(m.group(1))), "?"))
             except (ValueError, KeyError) as e:
                 print("  %s could not be read, skipped: %s" % (f, e))
         print("rebuilt from %d decoded upload(s) up to #%d" % (acc["meta"]["uploads"], acc["meta"]["last_id"]))
