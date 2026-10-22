@@ -18110,7 +18110,7 @@ do
     -- Settings > Data you share: the line and the row
     c.C.UI:Open("settings", "share")
     local st = texts(c)
-    assert(st:find("QuestBank does not have yet", 1, true) and st:find("1 confirmed by the guild", 1, true) and st:find("Share finds with the guild", 1, true)
+    assert(st:find(" new find", 1, true) and st:find("1 confirmed by the guild", 1, true) and st:find("Share finds with the guild", 1, true)
       and st:find("A guild mate's find counts once two of you agree", 1, true), "Data you share: the line and the row:\n" .. st)
     local sw = c.C.UI.Window("settings")
     for _, size in ipairs({ { 800, 560 }, { 760, 420 } }) do
@@ -18453,12 +18453,12 @@ do
     disc.findN = (tonumber(disc.findN) or 0) + 1
     c.C.UI:Open("settings", "share")
     local st = texts(c)
-    assert(st:find("1 find QuestBank does not have yet", 1, true) and st:find("Show finds", 1, true), "the Map module on: the line and Show finds:\n" .. st)
+    assert(st:find("1 new find", 1, true) and st:find("Show finds", 1, true), "the Map module on: the line and Show finds:\n" .. st)
     c.C.UI.Window("settings").frame:Hide()
     c.C.Modules.Set("Cute_Quest:map", false); tick(c, 1)
     c.C.UI:Open("settings", "share")
     st = texts(c)
-    assert(st:find("1 find QuestBank does not have yet", 1, true) and not st:find("Show finds", 1, true), "the Map module off: the line, no Show finds:\n" .. st)
+    assert(st:find("1 new find", 1, true) and not st:find("Show finds", 1, true), "the Map module off: the line, no Show finds:\n" .. st)
     check(c.C.UI.Window("settings").frame, "map K8 Data you share with the Map module off")
     leave(c)
     said[#said + 1] = "Data you share's finds line with Show finds only while the Map window is on"
@@ -21213,6 +21213,8 @@ end
 --     line is not there (each line above says its source)
 -- V2. The setup card's Map line, unticked, sends the far view to where its switch is: Settings, Route ("Minimap far
 --     view"), not the Route tab
+-- V3. Settings > Data you share counts the finds in the footers' words ("1 new find, a dot, 0 confirmed by the
+--     guild"), and Show finds says the Map window's words: never QuestBank, an addon a Cute player does not have
 ----------------------------------------------------------------------------
 do
   local CASES, failed, said = {}, {}, {}
@@ -21277,6 +21279,29 @@ do
       leave(c)
     end)
     said[#said + 1] = "the card sends the far view to Settings, Route"
+  end }
+
+  CASES[#CASES + 1] = { "V3 Data you share counts the finds in the footers' words, never QuestBank", function()
+    inGuild({ UIX.member("Rone", 1) }, function()
+      local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, log = { [7] = 2 } }))
+      login(c); tickAll(6)
+      c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+      local QB = c.addons[2].private
+      local disc = QB.Discover.DB()
+      disc.find = { o9001 = { p = { { 1429, 400, 400, 1 } }, b = "A Diary of Your Own", n = 1 } }
+      disc.findN = (tonumber(disc.findN) or 0) + 1
+      c.C.UI:Open("settings", "share")
+      local new, sure2 = c.C.Finds.Tally()
+      local words = c.C.API.Finds.FooterText(new, sure2)
+      local st = texts(c)
+      assert(new == 1 and words:find("^1 new find") and st:find(words, 1, true), "the footers' words, \"" .. words .. "\":\n" .. st)
+      assert(not st:find("QuestBank does not have", 1, true), "no QuestBank in the count:\n" .. st)
+      local tip = tipOf(UIX.button(c, "Show finds"))
+      assert(tip:find("what players' games and guides gave foreverrank.com", 1, true) and not tip:find("QuestBank", 1, true), "Show finds in the Map window's words:\n" .. tip)
+      check(c.C.UI.Window("settings").frame, "fix2-cute-ui V3 Data you share, the finds line")
+      leave(c)
+    end)
+    said[#said + 1] = "Data you share counts new finds as the footers do"
   end }
 
   for _, case in ipairs(CASES) do
