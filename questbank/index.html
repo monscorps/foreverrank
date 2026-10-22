@@ -166,13 +166,6 @@
 .qb-install-cta { margin-top: 1rem; }
 .qb-small { margin: .9rem 0 0; font-size: .9rem; color: var(--qb-dim); }
 
-/* what you get */
-.qb-tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .7rem; }
-.qb-tiles li { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: .8rem; align-items: start; background: var(--qb-panel); border: 1px solid var(--qb-line); border-radius: var(--r-panel); padding: .9rem 1rem; }
-.qb-tiles img { width: 40px; height: 40px; border-radius: 4px; border: 1px solid rgba(229,204,128,.45); }
-.qb-tiles b { display: block; font: 600 .98rem/1.3 var(--heading); color: #f6f1e4; }
-.qb-tiles span { display: block; margin-top: .2rem; font-size: .9rem; line-height: 1.45; color: var(--qb-dim); }
-
 /* gallery: a snap strip on a phone, a grid on a desktop; a slot is hidden until its picture loads */
 .qb-shots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; }
 .qb-shot { margin: 0; display: flex; flex-direction: column; gap: .45rem; }
@@ -239,10 +232,15 @@
 
 @media (max-width: 1340px) { .qb-swipe { display: block; } }
 @media (max-width: 720px) {
-  .qb-step { left: 12px; top: 12px; width: 220px; }  /* a phone sees the window's left edge first: the step frame goes over it, not off screen */
+  /* a phone: the arrow and the step frame first, whole and at their real size, the window under them to swipe through */
+  .qb-scene { width: 1034px; height: auto; display: flex; flex-direction: column; align-items: flex-start; gap: .9rem; }
+  .qb-arrow, .qb-step, .qb-win { position: relative; left: auto; top: auto; }
+  .qb-arrow { order: 1; flex: none; }
+  .qb-step { order: 2; width: min(260px, calc(100vw - 2rem)); }
+  .qb-win { order: 3; flex: none; }
 }
 @media (max-width: 860px) {
-  .qb-steps, .qb-tiles, .qb-shots { grid-template-columns: 1fr; }
+  .qb-steps, .qb-shots { grid-template-columns: 1fr; }
   .qb-counters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .qb-shots { display: flex; gap: .8rem; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding: 0 1rem; padding-bottom: .5rem; margin: 0 -1rem; padding-left: 1rem; padding-right: 1rem; overscroll-behavior-x: contain; }
   .qb-shot { flex: 0 0 86vw; max-width: 24rem; scroll-snap-align: start; }
@@ -319,20 +317,6 @@
   </div>
 </section>
 
-<section class="qb-sec" id="what">
-  <div class="qb-wrap">
-    <h2>What you get</h2>
-    <ul class="qb-tiles">
-      <li><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_map_01.jpg" alt=""><div><b>Your next step</b><span>Now ranks the places worth your time.</span></div></li>
-      <li><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_map02.jpg" alt=""><div><b>The arrow</b><span>Flight, boat, tram, hearthstone, then the walk.</span></div></li>
-      <li><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_map09.jpg" alt=""><div><b>Map and minimap</b><span>The game's own pins; the minimap zooms far out.</span></div></li>
-      <li><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_book_09.jpg" alt=""><div><b>Forever's XP</b><span>Every quest priced as Forever pays it.</span></div></li>
-      <li><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_groupneedmore.jpg" alt=""><div><b>Your party</b><span>Who needs which quest; dungeons to run together.</span></div></li>
-      <li><img src="https://wow.zamimg.com/images/wow/icons/large/inv_chest_plate04.jpg" alt=""><div><b>Gear to go get</b><span>The best upgrade for each slot, and where.</span></div></li>
-    </ul>
-  </div>
-</section>
-
 <section class="qb-sec" id="gallery">
   <div class="qb-wrap">
     <h2>In game</h2>
@@ -401,7 +385,7 @@
   <div class="qb-wrap">
     <h2>Changelog</h2>
     <ul class="qb-log">
-      <li><b>6.4.0</b><span>Reminders: one quiet strip for buffs, food, repair and more, a click doing it where the game allows, never in a fight or in chat; your party's missing buffs on the Buffs banner; spells to train and flight paths to learn as a line under the step.</span></li>
+      <li><b>6.4.0</b><span>Reminders, one quiet strip for buffs, food, repair and more; your party's missing buffs; spells to train and flight paths to learn under the step.</span></li>
     </ul>
     <details class="qb-fold">
       <summary>Earlier versions</summary>
@@ -477,7 +461,7 @@
       {"mark": "wait", "held": true, "bag": true, "icon": "achievement_zone_wetlands_01", "name": "Tramping Paws", "lvl": "L21", "chain": true, "note": "In your log: 3/10 · 2 in the same spot", "kind": "log", "xp": "1,250"}]}
   ],
   "arrow": {"fly": "Fly to Lakeshire", "then": ", then Go to", "name": "Lakeshire", "dist": "150 yards · 3 min", "foot": "ability_rogue_sprint"},
-  "step": {"now": "Kill Defias Trapper 4/15", "next": ["Hand in The People's Militia", "Accept The Defias Brotherhood from Gryan Stoutmantle"],
+  "step": {"now": "Kill Defias Trapper 4/15", "next": ["Hand in The People's Militia", "Accept The Defias Brotherhood"],
            "time": "about 14 min to level 21", "item": null, "members": []}
 }
 </script>

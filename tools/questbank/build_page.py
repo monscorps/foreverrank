@@ -693,7 +693,7 @@ def check_length(html):
     words = len(re.findall(r"\d[\d,.]*|[A-Za-z][A-Za-z'’]*", text))  # a number is one word
     # a phone at 375 px: about 7 words a line at 15 px, 23 px a line, plus the blocks that take space on their own
     lines = words / 7.0
-    fixed = 56 + 300 + 660 + 90 + 60 + 6 * 44 + 3 * 60 + 300 + 6 * 56 + 24 * 6  # nav, hero art, the stage, the step frame, the swipe note, tiles, buttons, chart, gallery slots, folds
+    fixed = 56 + 300 + 900 + 60 + 3 * 60 + 300 + 6 * 56 + 24 * 6  # nav, hero art, the stage (the arrow, the step frame and the window stacked), the swipe note, buttons, chart, gallery slots, folds
     px = lines * 23 + fixed
     screens = px / 812.0
     note = "visible words %d (target %d), about %.1f phone screens at 375 px (target %d); folded text not counted" % (words, WORD_TARGET, screens, SCREEN_TARGET)
