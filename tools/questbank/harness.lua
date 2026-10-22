@@ -22748,6 +22748,31 @@ do
     assert(QB:Settings().mapIcons == true and QB:Settings().mapGive == true and QB:Settings().mapTurn == false, "QuestBank alone: a switch flipped with the master off turns that one on alone, as before")
     said[#said + 1] = "QuestBank alone: its page by the master switch, a switch flipped turning that one on alone"
   end
+  -- R2: a merged pin lit for each quest it stands for
+  do
+    local objectives = { [7] = { { text = "Kobold Vermin slain: 3/10", finished = false, numFulfilled = 3, numRequired = 10 } },
+      [18] = { { text = "Red Burlap Bandana: 2/12", finished = false, numFulfilled = 2, numRequired = 12 } } }
+    local c = hostChar("Mergelit", { mapWindow = true, kindMarks = true }, { level = 3, log = { { 7, 0 }, { 18, 0 } }, objectives = objectives })
+    local QB = c.QB
+    local MP, QM, MD = QB.MapPage, QB.QuestMap, QB.Data
+    MD.SN = { [1] = "Kobold Vermin", [2] = "Red Burlap Bandana" }
+    MD.SPOT = { [7] = "k,1,1429,700,200,25,c,1", [18] = "c,5,1429,706,200,40,w,2" }
+    MD.SREQ = { [7] = "1:10", [18] = "5:12" }
+    MP.Go(1429, "user")
+    redraw(c)
+    local head
+    for _, f in ipairs(QM.pageProvider.active) do if f.data.kind == "obj" and f.data.merged then head = f end end
+    assert(head and head.data.count == 2, "two quests' marks 6 px apart: one pin for both")
+    local other = head.data.id == 7 and 18 or 7
+    MP.Hover(other)
+    assert(MP.Lit(head.data), "the other quest's row hovered: the merged pin lit")
+    MP.Hover(nil)
+    MP.Focus(other)
+    assert(MP.Lit(head.data), "the other quest read: the merged pin lit")
+    MP.Focus(other)
+    assert(not MP.Lit(head.data), "and let go")
+    said[#said + 1] = "a merged pin lit for each quest it stands for, hovered or read"
+  end
   print("map R: " .. table.concat(said, "; "))
 end
 

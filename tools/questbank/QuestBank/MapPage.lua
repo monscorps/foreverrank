@@ -747,9 +747,11 @@ function MP.FindCount(m)
   return n
 end
 
--- does a pin's data hold quest id: a ! or ? (its quests, and a ?'s pick-ups), a mark (its quest), a route pin (its ids)
+-- does a pin's data hold quest id: a ! or ? (its quests, and a ?'s pick-ups), a mark (its quest), a route pin (its ids),
+-- and a pin merged with others (QM.Merge's d.merged, the finds' too) each of theirs
 local function holds(d, id)
   if not (d and id) then return false end
+  for _, o in ipairs(d.merged or {}) do if holds(o, id) then return true end end
   -- (a find: by its key, "find:..."; never a quest's id)
   if d.fkey then return d.fkey == id end
   if d.id == id or (d.ids and d.ids[id]) then return true end
