@@ -10070,7 +10070,8 @@ do
   said[#said + 1] = "a stale officer's routing raises no doubt"
 
   -- (e) the line keeps Hearthstone to the officers; Mia's roster ask went a second before Ofa opens it and saves, so
-  -- her read waits and she drops Zed's hearth, sent once: as her read brings the new line she asks, once, and holds it
+  -- her read waits and Zed's hearth, sent once, is kept from her record: as her read brings the new line she holds it,
+  -- kept aside meanwhile, and asks nothing (fix2-cute-core: 0.9.1 asked, every member online at once)
   isolated({ member("Ofa", 1), member("Mia", 3), member("Zed", 3) }, function()
     INFO[7] = infoLine(pol(nil, { hearth = "self" }).policy)
     local ofa, mia, zed = char("Ofa", 1), char("Mia", 3), char("Zed", 3, { hearth = "Stormwind" })
@@ -10085,11 +10086,11 @@ do
     assert(not mia.C.Policy.doubt and mia.C.Policy:Route("hearth") == "self" and rec(mia.env.CuteDB, "Zed").stats.hearth == nil, "Mia routes by the line from before, and dropped what came")
     tickAll(120)
     assert(mia.C.Policy:Settled() and mia.C.Policy:Route("hearth") == "all", "Mia read the line")
-    assert(msgs(mia, "1R") == asks + 1, "she asked once as the doubt ended: " .. (msgs(mia, "1R") - asks))
+    assert(msgs(mia, "1R") == asks, "she asked nothing: " .. (msgs(mia, "1R") - asks))
     assert(rec(mia.env.CuteDB, "Zed").stats.hearth == "Stormwind", "and holds Zed's hearth")
     for _, c in ipairs({ ofa, mia, zed }) do leave(c) end
   end)
-  said[#said + 1] = "a value dropped before the line read asked for again"
+  said[#said + 1] = "a value that came before the line read taken as it opens"
 
   -- (f) the line keeps Empty slots to the officers; Mia's held policy opened it. She logs in where Guild Info is a
   -- secret, her Ready counting the empty slots meanwhile, then reads the line: the record released counts by it
@@ -18107,7 +18108,7 @@ do
     -- Settings > Data you share: the line and the row
     c.C.UI:Open("settings", "share")
     local st = texts(c)
-    assert(st:find("QuestBank does not have yet", 1, true) and st:find("1 confirmed by the guild", 1, true) and st:find("Share finds with the guild", 1, true)
+    assert(st:find(" new find", 1, true) and st:find("1 confirmed by the guild", 1, true) and st:find("Share finds with the guild", 1, true)
       and st:find("A guild mate's find counts once two of you agree", 1, true), "Data you share: the line and the row:\n" .. st)
     local sw = c.C.UI.Window("settings")
     for _, size in ipairs({ { 800, 560 }, { 760, 420 } }) do
@@ -18450,12 +18451,12 @@ do
     disc.findN = (tonumber(disc.findN) or 0) + 1
     c.C.UI:Open("settings", "share")
     local st = texts(c)
-    assert(st:find("1 find QuestBank does not have yet", 1, true) and st:find("Show finds", 1, true), "the Map module on: the line and Show finds:\n" .. st)
+    assert(st:find("1 new find" .. c.C.UI.Look.DOT, 1, true) and st:find("Show finds", 1, true), "the Map module on: the line and Show finds:\n" .. st)
     c.C.UI.Window("settings").frame:Hide()
     c.C.Modules.Set("Cute_Quest:map", false); tick(c, 1)
     c.C.UI:Open("settings", "share")
     st = texts(c)
-    assert(st:find("1 find QuestBank does not have yet", 1, true) and not st:find("Show finds", 1, true), "the Map module off: the line, no Show finds:\n" .. st)
+    assert(st:find("1 new find" .. c.C.UI.Look.DOT, 1, true) and not st:find("Show finds", 1, true), "the Map module off: the line, no Show finds:\n" .. st)
     check(c.C.UI.Window("settings").frame, "map K8 Data you share with the Map module off")
     leave(c)
     said[#said + 1] = "Data you share's finds line with Show finds only while the Map window is on"
@@ -21198,6 +21199,247 @@ sys.argv = ["build.py", "--no-zip"]; del build.problems[:]; build.check_zips([ol
   end
   assert(#failed == 0, "merge4: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
   print("merge4: " .. table.concat(said, "; "))
+end
+
+-- [stage: fix2-cute-core] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- fix2-cute-core: the second launch audit's findings on Cute's core, a case each; every case runs, and the block fails
+-- at its end naming each one that did not hold:
+-- R1. A stat the officers open again asks every record whole only on a client that deleted its values while it was
+--     closed (not an officer's, which deletes nothing, nor one that never held any: a stat closed by default opened
+--     for the first time), and for one login: a member offline at the opening asks whole at its next login, whose
+--     logout keeps a hold again
+-- R2. A stat opened: no member asks the guild for what it dropped while it routed by the line from before (the
+--     officer's value sent at the click, a mate's sent as it read the line first). Kept aside in memory, those are
+--     taken once its own read opens the stat; one of a stat that stays closed goes after a while, never kept
+-- L1. A level-up in the guild is patched in place from its club event (the level cap raised): no full read, no identity
+--     built, no record walked; a full read that finds levels alone moved builds none either
+-- W1. The wire keeps one sent time a label and one a boss's own claim (its first kill in a group), not every text a kill
+--     or a growing loot list ever sent; a wire of the old kind is kept by id
+-- Q1. A 1Q from a member the officers marked untrusted starts nothing; one asker's 1Q is answered twice a session at
+--     most, and forces the whole statistics pass once in half an hour
+-- N1. Settings > Data you share counts finds in the footers' words and its Show finds tooltip ends as M's note does:
+--     no "QuestBank" under Cute
+----------------------------------------------------------------------------
+do
+  local CASES, failed, said = {}, {}, {}
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "MAGE", level = 30, online = true } end
+  local function char(name, rank, extra) return newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", "MAGE", 30 }, extra)) end
+  local function inGuild(guild, fn)
+    local ok, err = true, nil
+    isolated(guild, function() ok, err = pcall(fn) end)
+    if not ok then error(err, 0) end
+  end
+  local function pol(mine, vis)
+    local copy = {}
+    for k, v in pairs(vis or {}) do copy[k] = v end
+    return { policy = { vis = copy, by = "Ofa-Forever", mine = mine or nil, rank = 1, at = EPOCH, threshold = 1 } }
+  end
+  local function askOf(c, from) for i = from or 1, #c.sent do local m = c.sent[i].msg; if m:sub(1, 3) == "1R|" then return m end end end
+  local function hexOf(ask) return ask and ask:match("|(%x*)$") or "" end
+  local function size(t) local n = 0; for _ in pairs(t or {}) do n = n + 1 end return n end
+
+  CASES[#CASES + 1] = { "R1 a stat opened again asks whole only where its values were deleted, and for one login", function()
+    inGuild({ member("Ofa", 1), member("Cobb", 3), member("Cyra", 3) }, function()
+      INFO[7] = infoLine(pol().policy)
+      local ofa, a, b = char("Ofa", 1), char("Cobb", 3), char("Cyra", 3)
+      local odb, adb = pol(true), pol()
+      login(ofa, odb); login(a, adb); login(b, pol())
+      tickAll(200)
+      assert(adb.roster[b.sender] and adb.roster[b.sender].stats.zone == "Duskwood", "Cobb has Cyra's zone")
+      -- Whispers an hour, the officers' by default, opened for the first time: nobody held any of it
+      assert(ofa.C.Policy:Set("whispers", "all") and saveLine(ofa))
+      tickAll(60)
+      assert(a.C.Policy:Route("whispers") == "all" and not a.C.Comm.unheld and not ofa.C.Comm.unheld, "a stat closed by default opened for the first time drops no hold")
+      -- Zone closed: Cobb deletes Cyra's zone, Ofa, an officer, deletes nothing
+      assert(ofa.C.Policy:Set("zone", "self") and saveLine(ofa))
+      tickAll(60)
+      assert(adb.roster[b.sender].stats.zone == nil and odb.roster[b.sender].stats.zone == "Duskwood", "Cobb deleted her zone, Ofa kept it")
+      fire(a, "PLAYER_LOGOUT"); leave(a)
+      assert(type(adb.chars[a.name].hold) == "table", "Cobb's logout keeps a hold")
+      -- Zone opened again while Cobb is away: Cyra, online, deleted Ofa's zone (her next login asks whole), Ofa nothing
+      assert(ofa.C.Policy:Set("zone", "all") and saveLine(ofa))
+      tickAll(60)
+      assert(b.C.Comm.unheld and not ofa.C.Comm.unheld, "Cyra, who deleted values, keeps no hold; Ofa, who deleted none, keeps hers")
+      -- Cobb's login reads the line before its hello: that ask goes whole, and its logout keeps a hold
+      local a2 = char("Cobb", 3)
+      login(a2, adb)
+      tickAll(200)
+      assert(#hexOf(askOf(a2)) == 16, "his login after the opening asks whole: " .. tostring(askOf(a2)))
+      assert(adb.roster[b.sender].stats.zone == "Duskwood", "and he has her zone again")
+      fire(a2, "PLAYER_LOGOUT"); leave(a2)
+      assert(type(adb.chars[a.name].hold) == "table", "that login's logout keeps a hold: one login asks whole")
+      local a3 = char("Cobb", 3)
+      login(a3, adb)
+      tickAll(30)
+      assert(#hexOf(askOf(a3)) == 32, "the next login asks with a since: " .. tostring(askOf(a3)))
+      leave(a3)
+      fire(ofa, "PLAYER_LOGOUT")
+      assert(type(odb.chars[ofa.name].hold) == "table", "Ofa deleted nothing: her logout keeps a hold")
+      leave(ofa); leave(b)
+    end)
+    said[#said + 1] = "a stat opened again asks whole only where its values were deleted, and for one login"
+  end }
+
+  CASES[#CASES + 1] = { "R2 a stat opened: nobody asks the guild, and what came before the read is taken as it opens", function()
+    inGuild({ member("Ofa", 1), member("Mia", 3), member("Zed", 3) }, function()
+      INFO[7] = infoLine(pol(nil, { hearth = "self" }).policy)
+      local ofa, mia, zed = char("Ofa", 1), char("Mia", 3), char("Zed", 3, { hearth = "Stormwind" })
+      local mdb, zdb = pol(nil, { hearth = "self" }), pol(nil, { hearth = "self" })
+      login(ofa, pol(true, { hearth = "self" })); login(mia, mdb); login(zed, zdb)
+      tickAll(200)
+      assert(mdb.roster[zed.sender].stats.hearth == nil and zdb.roster[ofa.sender].stats.hearth == nil, "the officers alone hold the hearths")
+      -- Mia's roster ask went a second ago: her read of the new line waits, and Zed's hearth, sent as he reads it, comes first
+      mia.C.Roster.askedAt = mia.C.Now() - 1
+      local m0, z0 = msgs(mia, "1R"), msgs(zed, "1R")
+      assert(ofa.C.Policy:Set("hearth", "all") and saveLine(ofa))
+      tickAll(4)
+      assert(mia.C.Policy:Route("hearth") == "self" and mdb.roster[zed.sender].stats.hearth == nil, "Mia routes by the line from before: nothing taken yet")
+      tickAll(120)
+      assert(mia.C.Policy:Route("hearth") == "all" and zed.C.Policy:Route("hearth") == "all", "both read the line")
+      assert(msgs(mia, "1R") == m0 and msgs(zed, "1R") == z0, "nobody asked the guild: " .. (msgs(mia, "1R") - m0) .. " and " .. (msgs(zed, "1R") - z0) .. " asks")
+      assert(mdb.roster[zed.sender].stats.hearth == "Stormwind" and mdb.roster[ofa.sender].stats.hearth == "Goldshire",
+        "Mia holds Zed's hearth and Ofa's, kept aside until her read: " .. tostring(mdb.roster[zed.sender].stats.hearth) .. ", " .. tostring(mdb.roster[ofa.sender].stats.hearth))
+      assert(zdb.roster[ofa.sender].stats.hearth == "Goldshire", "Zed holds Ofa's, sent at her click: " .. tostring(zdb.roster[ofa.sender].stats.hearth))
+      -- a value of a stat the line keeps closed (Whispers an hour): aside, never in the record, gone after a while
+      local R = mia.C.Roster
+      R:Apply(zed.sender, { whispers = 7 })
+      assert(mdb.roster[zed.sender].stats.whispers == nil and R.aside and R.aside[zed.sender] and R.aside[zed.sender].v.whispers, "kept aside, not in Zed's record")
+      tickAll(700)
+      assert(R.aside[zed.sender] == nil and mdb.roster[zed.sender].stats.whispers == nil and msgs(mia, "1R") == m0, "gone after a while, never kept, nothing asked")
+      for _, c in ipairs({ ofa, mia, zed }) do leave(c) end
+    end)
+    said[#said + 1] = "a stat opened: nobody asks the guild, what came before the read is taken as it opens, a closed one's goes"
+  end }
+
+  CASES[#CASES + 1] = { "L1 a level-up is patched in place from its club event", function()
+    local guild = { member("Ofa", 0) }
+    for i = 1, 30 do guild[#guild + 1] = member("Lv" .. i, 3) end
+    inGuild(guild, function()
+      local c = char("Ofa", 0)
+      login(c); tickAll(40)
+      local R = c.C.Roster
+      local calls = { sweep = 0, identity = 0 }
+      local rs, ri = R.Sweep, R.Identity
+      R.Sweep = function(...) calls.sweep = calls.sweep + 1; return rs(...) end
+      R.Identity = function(...) calls.identity = calls.identity + 1; return ri(...) end
+      local ver0, lv0, reads0 = R.version, R.levelVersion, c.memberReads or 0
+      -- Lv3 dings: its event names it
+      guild[4].level = 31
+      fire(c, "CLUB_MEMBER_UPDATED", 7, 4)
+      assert(not R.soon and (c.memberReads or 0) - reads0 == 1, "the member read alone, no full read booked")
+      assert(calls.sweep == 0 and calls.identity == 0 and R.version > ver0, "no identity built, no record walked; the rows drawn again")
+      assert(R.byGuid[guidOf("Lv3")].level == 31 and R.maxLevel == 31 and R.levelVersion > lv0, "Lv3 at 31, the cap's top raised: " .. tostring(R.maxLevel))
+      local row
+      for _, r in ipairs(R:Rows()) do if r.guid == guidOf("Lv3") then row = r end end
+      assert(row and row.level == 31, "its row says 31")
+      -- a full read that finds a level alone moved (its event missed): rows only
+      guild[5].level = 32
+      local ver1 = R.version
+      fire(c, "GUILD_ROSTER_UPDATE")
+      assert(calls.sweep == 0 and calls.identity == 0 and R.byGuid[guidOf("Lv4")].level == 32 and R.maxLevel == 32 and R.version > ver1,
+        "a full read with a level alone moved: rows only: " .. calls.identity .. " identities, " .. calls.sweep .. " sweeps")
+      -- a rank moved still reads the guild
+      guild[6].rank = 1
+      fire(c, "CLUB_MEMBER_UPDATED", 7, 6)
+      assert(R.soon, "a rank moved: the full read booked")
+      R.Sweep, R.Identity = rs, ri
+      leave(c)
+    end)
+    said[#said + 1] = "a level-up is patched in place from its club event; a full read with levels alone moved builds no identity"
+  end }
+
+  CASES[#CASES + 1] = { "W1 the wire keeps one sent time a label and a boss's own claim alone", function()
+    inGuild({ member("Ofa", 1), member("Ann", 3), member("Mo", 3) }, function()
+      -- a wire of the old kind: labels and claims kept by their whole text
+      local old = { v = {}, l = { ["e1230:36=Rhahk'Zor"] = EPOCH + 500, ["l1230=1"] = EPOCH + 600, ["l1230=1.2"] = EPOCH + 700 },
+        k = { ["1230@a:x"] = EPOCH + 500, ["1230@b:x"] = EPOCH + 800 } }
+      local was = { v = {}, l = {}, k = {} }
+      for kind, list in pairs(old) do for key in pairs(list) do was[kind][key] = true end end
+      local adb = { chars = { ["Ann-Forever"] = { counters = {}, modules = {}, wire = { club = "7", login = EPOCH + 400, sentAt = old, was = was } } } }
+      local ann, mo = char("Ann", 3, { party = { "Mo" } }), char("Mo", 3, { party = { "Ann" } })
+      login(ann, adb); login(mo)
+      local M = ann.C.Comm
+      assert(size(M.sentAt.l) == 2 and M.sentAt.l.e1230 == EPOCH + 500 and M.sentAt.l.l1230 == EPOCH + 700 and M.was.l.l1230 == "l1230=1.2",
+        "an old wire's labels kept by id, the newest text: " .. json(M.sentAt.l))
+      assert(size(M.sentAt.k) == 1 and M.sentAt.k.e1230 == EPOCH + 500 and M.was.k.e1230 == "1230@a:x", "and a boss's first claim: " .. json(M.sentAt.k))
+      tickAll(60)
+      -- three kills of one boss in a group
+      for _, c in ipairs({ ann, mo }) do c.o.instance, c.o.instanceID, c.o.instName = "party", 36, "The Deadmines"; fire(c, "PLAYER_ENTERING_WORLD", false, false) end
+      for _ = 1, 3 do
+        for _, c in ipairs({ ann, mo }) do fire(c, "ENCOUNTER_END", 1230, "Rhahk'Zor", 1, 5, 1, {}) end
+        tickAll(30)
+      end
+      local claims = {}
+      for _, m in ipairs(ann.sent) do if m.channel == "GUILD" and m.msg:sub(1, 3) == "1K|" then claims[#claims + 1] = m.msg:sub(4) end end
+      assert(#claims == 3, "three claims went: " .. #claims)
+      assert(size(M.sentAt.k) == 1 and M.was.k.e1230 == claims[1], "the wire keeps the boss's own claim alone, the first kill's: " .. json(M.was.k))
+      for key, text in pairs(M.was.l) do assert(key:match("^%a%d+$") and type(text) == "string", "a label kept by its id: " .. key) end
+      assert(M.was.l.e1230 and M.sentAt.l.e1230 == EPOCH + 500, "the boss's label, its text the same, keeps its time: " .. tostring(M.sentAt.l.e1230))
+      for _, c in ipairs({ ann, mo }) do leave(c) end
+    end)
+    said[#said + 1] = "the wire keeps one sent time a label and a boss's own claim alone, an old wire's by id"
+  end }
+
+  CASES[#CASES + 1] = { "Q1 an untrusted member's 1Q starts nothing; one asker's is answered twice a session, its pass once", function()
+    inGuild({ member("Ofa", 1), member("Ann", 3), member("Mal", 3), member("Bo", 3) }, function()
+      local g = guidOf("Mal")
+      local p = pol()
+      p.policy.untrusted, p.policy.trustAt = { [g] = true }, { [g] = EPOCH }
+      local ann = char("Ann", 3, { withStats = true })
+      login(ann, p)
+      tickAll(700)
+      assert(ann.C.Policy:Untrusted(g), "Mal untrusted on Ann's client")
+      local function answers(from)
+        local rec, pass = 0, 0
+        for i = from + 1, #ann.sent do
+          local m = ann.sent[i].msg
+          if m:sub(1, 3) == "1F|" and m:find("level=", 1, true) then rec = rec + 1 end
+          if m:sub(1, 3) == "1F|" and m:find("g2001=", 1, true) then pass = pass + 1 end
+        end
+        return rec, pass
+      end
+      local s0 = #ann.sent
+      for _ = 1, 3 do ann.C.Comm:Receive("1Q|" .. ann.o.guid, "GUILD", "Mal-Forever"); tickAll(200) end
+      local r, ps = answers(s0)
+      assert(r == 0 and ps == 0, "Mal's 1Qs start nothing: " .. r .. " records, " .. ps .. " passes")
+      s0 = #ann.sent
+      for _ = 1, 3 do ann.C.Comm:Receive("1Q|" .. ann.o.guid, "GUILD", "Bo-Forever"); tickAll(200) end
+      tickAll(500)
+      r, ps = answers(s0)
+      assert(r == 2 and ps == 1, "Bo's three 1Qs: the record whole twice, the pass once: " .. r .. " records, " .. ps .. " passes")
+      leave(ann)
+    end)
+    said[#said + 1] = "an untrusted member's 1Q starts nothing; one asker's is answered twice a session, its pass once in half an hour"
+  end }
+
+  CASES[#CASES + 1] = { "N1 Data you share counts finds in Cute's words", function()
+    inGuild({ UIX.member("Rone", 1) }, function()
+      local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, log = { [7] = 2 } }))
+      login(c); tickAll(6)
+      c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+      local QB = c.addons[2].private
+      local disc = QB.Discover.DB()
+      disc.find = { o9001 = { p = { { 1429, 400, 400, 1 } }, b = "A Diary of Your Own", n = 1 } }
+      disc.findN = (tonumber(disc.findN) or 0) + 1
+      c.C.UI:Open("settings", "share")
+      local st = texts(c)
+      assert(st:find("1 new find" .. c.C.UI.Look.DOT, 1, true) and st:find(" confirmed by the guild", 1, true) and not st:find("QuestBank does not have", 1, true),
+        "the footers' words: " .. st)
+      local tip = tipOf(UIX.button(c, "Show finds"))
+      assert(tip:find("what players' games and guides gave foreverrank.com.", 1, true) and not tip:find("QuestBank", 1, true), "the tooltip as M's note: " .. tip)
+      check(c.C.UI.Window("settings").frame, "fix2-cute-core N1 Data you share")
+      leave(c)
+    end)
+    said[#said + 1] = "Data you share counts finds in the footers' words, Show finds' tooltip as M's note"
+  end }
+
+  for _, case in ipairs(CASES) do
+    local ok, err = pcall(case[2])
+    if not ok then failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
+  end
+  assert(#failed == 0, "fix2-cute-core: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
+  print("fix2-cute-core: " .. table.concat(said, "; "))
 end
 
 -- this pass's problems and layouts join the run's; the last pass prints them all

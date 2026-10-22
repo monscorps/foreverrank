@@ -184,7 +184,11 @@ end
 -- when each part's text first went on GUILD, by kind and key (a resend of the same text keeps its time), and that text
 -- (was): what an ask's since is held against (M:Answer). Kept from login to login (M:Wire), so a since from the
 -- asker's last session is answered by what went after it whatever this client did meanwhile, its own logins included
--- (0.9.0 kept them for a login alone, and an asker who had logged out before this client's login had its record whole)
+-- (0.9.0 kept them for a login alone, and an asker who had logged out before this client's login had its record whole).
+-- A value is kept by its id; a label by its id too, its text in was (a label whose text changed went after it); a
+-- kill claim only where it is this character's own of its boss (Rules.lua R.OwnClaims: its first kill in a group), by
+-- that boss's id, since an ask's since is held against those alone (M:Claims). 0.9.1 kept every claim a kill sent and
+-- every text a label ever had, by its whole text, for thirty days, never read again
 M.sentAt = { v = {}, l = {}, k = {} }
 M.was = { v = {}, l = {}, k = {} }
 -- the wholes this client sent on GUILD, by part: its record whole (rec), its statistics pass whole (pass). Each
@@ -393,8 +397,19 @@ local function keep(w)
   for _, kind in ipairs(KINDS) do
     local at = type(w.sentAt) == "table" and type(w.sentAt[kind]) == "table" and w.sentAt[kind] or {}
     local text = type(was[kind]) == "table" and was[kind] or {}
+    local sentAt, kept = M.sentAt[kind], M.was[kind]
     for key, t in pairs(at) do
-      if type(key) == "string" and type(t) == "number" and t >= old and text[key] ~= nil then M.sentAt[kind][key], M.was[kind][key] = t, text[key] end
+      if type(key) == "string" and type(t) == "number" and t >= old and text[key] ~= nil then
+        if kind == "v" or type(text[key]) == "string" then sentAt[key], kept[key] = t, text[key]
+        else
+          -- (a wire of 0.9.1 or before kept a label or a claim by its whole text: kept by its id, a label's newest
+          -- text, a boss's first claim, which is its own; the rest goes)
+          local enc = kind == "k" and key:match("^(%d+)@")
+          local id = (kind == "l" and key:match("^([^=:]+)")) or (enc and "e" .. enc) or nil
+          local was0 = id and sentAt[id]
+          if id and (was0 == nil or (kind == "l" and t > was0) or (kind == "k" and t < was0)) then sentAt[id], kept[id] = t, key end
+        end
+      end
     end
   end
   -- (a whole still on its way when the queue went with the session never went whole)
@@ -493,6 +508,14 @@ function M:AskWhole()
   if self.askOwed == "hello" then self.askOwed = true end
   if not waiting and not self.askOwed and self.sinceLeft then self.sinceLeft = nil; self:Ask() end
 end
+-- (fix2) a stat this file deleted of others' records opened again (Policy.lua P:Rerouted): every record asked whole,
+-- by one login. Where this login's ask has not left (a member offline at the opening reads the line before its hello),
+-- that ask goes whole and its logout keeps a hold as ever (M:AskWhole); where it has, the next login asks whole
+-- (M:Unheld). 0.9.1 took the hold from both, and the login after the whole one asked whole again
+function M:Reopened()
+  local w = self.wire
+  if w and tonumber(w.asked) then self:Unheld() else self:AskWhole() end
+end
 -- what this client takes on the wire, as a text: every stat its registry defines (but the dynamic ones, kept whether
 -- defined or not, and those learned in play), counted and summed by hash. A module switched on or a newer Cute changes
 -- it: values of those stats went while this client dropped them, and a since would never bring them
@@ -519,10 +542,11 @@ function M:SinceHex()
   return string.format("%08x%08x", at, from)
 end
 -- force as a part is chosen: true, every part; a number (an ask's since), every part whose text went on GUILD after it,
--- or never this login; else none (only what changed goes)
-local function forced(force, kind, key)
+-- or never this login; else none (only what changed goes). key: a value's or a label's id, a claim's boss; text: a
+-- label's or a claim's, which went only where it is the one kept (was)
+local function forced(force, kind, key, text)
   if force == true then return true end
-  if type(force) == "number" then local t = M.sentAt[kind][key]; return t == nil or t > force end
+  if type(force) == "number" then local t = M.sentAt[kind][key]; return t == nil or t > force or (text ~= nil and M.was[kind][key] ~= text) end
   return false
 end
 
@@ -676,7 +700,11 @@ local function mark(e, r, kept, back)
   if r == "sent" then
     local at, was, t = not e.target and M.sentAt[e.kind], not e.target and M.was[e.kind], C.ServerNow()
     for _, p in ipairs(kept or {}) do
-      if at and was[p.key] ~= p.s then at[p.key], was[p.key] = t, p.s end
+      if at then
+        -- (a value by its id; a label by its id with its text; a claim only where it is this character's own of its boss)
+        if e.kind == "v" then if was[p.key] ~= p.s then at[p.key], was[p.key] = t, p.s end
+        elseif (e.kind == "l" or p.own) and type(p.id) == "string" then if was[p.id] ~= p.kv then at[p.id], was[p.id] = t, p.kv end end
+      end
       sent[p.key] = p.s
     end
   end
@@ -1190,7 +1218,7 @@ local function sortParts(kind, part, force, targets, guild, mine)
     end
   else
     local sent, q = state(kind)
-    if forced(force, kind, part.key) or not (sent[part.key] or q[part.key]) then guild[#guild + 1] = part end
+    if forced(force, kind, part.id, part.kv) or not (sent[part.key] or q[part.key]) then guild[#guild + 1] = part end
   end
 end
 function M:Labels(only, force, told, whisperOnly)
@@ -1242,7 +1270,13 @@ end
 local function claimsOut(list, force, told, whisperOnly)
   local targets = told or C.Roster:OfficerTargets()
   local parts, mine = {}, {}
-  for _, c in ipairs(list) do sortParts("k", { id = "e" .. c.enc, also = "group", kv = claimText(c.enc, c.t, c.with) }, force, targets, parts, mine) end
+  local owns = C.Rules.OwnClaims()
+  for _, c in ipairs(list) do
+    local kv, own = claimText(c.enc, c.t, c.with), owns[c.enc]
+    -- (own: this character's own claim of the boss, the one the wire keeps when it went, M.sentAt)
+    own = type(own) == "table" and tonumber(own.t) ~= nil and claimText(c.enc, own.t, own.with) == kv or nil
+    sortParts("k", { id = "e" .. c.enc, also = "group", kv = kv, own = own }, force, targets, parts, mine)
+  end
   if not whisperOnly then for _, e in ipairs(pack("1K|", parts, nil, "k")) do queue(e) end end
   whisper(mine, packer("1K|", "k"))
 end
@@ -1691,22 +1725,33 @@ local function sinceOf(since, from)
   if from == nil and (not M.base or since < M.base) then return nil end
   return math.min(since, C.ServerNow())
 end
+-- the asks answered lately, by asker (one ask a sender in ASK_AGAIN seconds starts an answer), and when the statistics
+-- pass last answered each member's (once in GAME_AGAIN seconds a member; an officer's always): a copy that asks every
+-- few seconds makes nobody resend
+local ASK_AGAIN, GAME_AGAIN, POLICY_AGAIN, UNTRUSTED_AGAIN = 180, 1800, 30, 300
+M.answered, M.answeredSince, M.gameAnswered, M.policyAsked = {}, {}, {}, {}
 -- a member who holds no record of yours asks for it whole (1Q: after a since answer or a delta from a sender it holds
--- none of), answered as a fresh ask wanting the whole record, the guild's part alone, once in ASK_AGAIN seconds, and
--- the whole statistics pass with it (the ten-minute pass bounds it): its later asks, since its hold, would never bring
--- what the pass said before (a first build sent the record alone)
-M.wholeAsked, M.wholeAskedOf = {}, {}
+-- none of), answered as a fresh ask wanting the whole record, the guild's part alone, once in ASK_AGAIN seconds and
+-- WHOLE_ASKS times a session at most (an honest asker sends one a session, a /reload one more), and the whole
+-- statistics pass with it once in GAME_AGAIN (the ten-minute pass bounds it too): its later asks, since its hold, would
+-- never bring what the pass said before (a first build sent the record alone). A member the officers marked untrusted
+-- is answered nothing (Receive), as its 1R gets the policy alone: 0.9.1 resent the whole record every three minutes
+-- and the whole pass every ten to any member who sent 1Q
+M.wholeAsked, M.wholeAskedOf, M.wholeAsks, M.wholePassed = {}, {}, {}, {}
+local WHOLE_ASKS = 2
 function M:AskedWhole(sender)
   local who = C.Roster:GuidOf(sender) or sender
   local t = C.Now()
   if M.wholeAsked[who] and t - M.wholeAsked[who] < 180 then return end
-  M.wholeAsked[who] = t
+  if (M.wholeAsks[who] or 0) >= WHOLE_ASKS then return end
+  M.wholeAsked[who], M.wholeAsks[who] = t, (M.wholeAsks[who] or 0) + 1
   local e = self:Entry(who)
   e.rec, e.nr, e.pass = true, 0, C.ServerNow()
   await("rec", e)
   M.answerGuild, M.answerFull = true, true
   self:AnswerSoon()
-  if hasPass() then
+  if hasPass() and not (M.wholePassed[who] and t - M.wholePassed[who] < GAME_AGAIN) then
+    M.wholePassed[who], M.gameAnswered[who] = t, t
     e.pass, e.np = true, 0
     await("pass", e)
     M.answerGameGuild, M.gameFull = true, true
@@ -1938,11 +1983,6 @@ function M:ReplayEarly()
   end)
   step()
 end
--- the asks answered lately, by asker (one ask a sender in ASK_AGAIN seconds starts an answer), and when the statistics
--- pass last answered each member's (once in GAME_AGAIN seconds a member; an officer's always): a copy that asks every
--- few seconds makes nobody resend
-local ASK_AGAIN, GAME_AGAIN, POLICY_AGAIN, UNTRUSTED_AGAIN = 180, 1800, 30, 300
-M.answered, M.answeredSince, M.gameAnswered, M.policyAsked = {}, {}, {}, {}
 
 function M:Receive(text, channel, sender, replayed)
   text, channel, sender = C.Plain(text), C.Plain(channel), C.Plain(sender)
@@ -2142,9 +2182,10 @@ function M:Receive(text, channel, sender, replayed)
       if C.Finds then C.Finds:WordCame() end
     end
   elseif kind == "1Q" then
-    -- (a member asking for this client's record whole, by its GUID: another's is passed by)
+    -- (a member asking for this client's record whole, by its GUID: another's is passed by, and a member the officers
+    -- marked untrusted starts nothing, as with its 1R)
     local g = text:match("^1Q|([^|;=]+)$")
-    if g and g == C.MyGUID() then self:AskedWhole(sender) end
+    if g and g == C.MyGUID() and not C.Policy:Untrusted(R:GuidOf(sender)) then self:AskedWhole(sender) end
   elseif kind == "1L" then
     self:ReceiveLabels(text:match("^1L|(.*)$"), sender)
   elseif kind == "1K" then

@@ -559,9 +559,10 @@ function P:Settle()
     self.settled = settled
     if C.Comm and C.Comm.PolicySettled then C.Comm:PolicySettled(settled) end
   end
-  -- (a member's client that dropped a value while it waited for Guild Info or routed by the line from before, a stat
-  -- the officers opened meanwhile sent once by every client: asked for again, once, as the doubt ends or the line
-  -- changes, so what rarely changes comes again)
+  -- (a member's client that dropped a value while it did not hold the line's policy (Guild Info unread, or in doubt), a
+  -- stat the officers opened meanwhile sent once by every client: asked for again, once, as the doubt ends or the line
+  -- changes, so what rarely changes comes again. One dropped while it routed by the line from before is kept aside and
+  -- taken as the line read opens it: Roster.lua R:ReleaseAside)
   if settled and (self.doubtEnded or self.lineChanged) then
     if lost and C.Comm and C.Comm.Ask and C.Comm.hello and not R:MeOfficer() then
       R.lostUnsettled = nil
@@ -1204,6 +1205,27 @@ local function closedSet()
   for id in pairs(p and type(p.vis) == "table" and p.vis or EMPTY) do if type(id) == "string" and P:Vis(id) == "self" then out[id] = true end end
   return out
 end
+-- the stats this file deleted of others' records because the officers closed them (P:Purge), by guild
+-- (CuteDB.deleted[club][id]): what a reopening asks every record whole for (P:Rerouted). The file's, as the records
+-- are: another character of the account may be the one that sees the stat opened again. make: the guild's set made
+-- where it has none
+local function deletedOf(make)
+  if type(CuteDB) ~= "table" then return nil end
+  local club = tostring(CuteDB.policyClub or "?")
+  local all = type(CuteDB.deleted) == "table" and CuteDB.deleted or nil
+  if not all then
+    if not make then return nil end
+    all = {}
+    CuteDB.deleted = all
+  end
+  local d = all[club]
+  if type(d) ~= "table" then
+    if not make then return nil end
+    d = {}
+    all[club] = d
+  end
+  return d
+end
 -- the route of each value this client has of its own, before a change of the policy
 function P:Routes()
   local out = {}
@@ -1228,14 +1250,21 @@ function P:Rerouted(before)
   if C.Roster and C.Roster.PurgeCheck then C.Roster:PurgeCheck() end
   local grew, closed = before.closed == nil, closedSet()
   if not grew then for id in pairs(closed) do if not before.closed[id] then grew = true break end end end
-  -- (a stat the officers opened again: this client may have deleted it of others while it was closed, and those who
-  -- are offline now never send it again unless it changes. Its next login asks every record whole: Comm.lua M:Unheld)
-  for id in pairs(before.closed or EMPTY) do
-    if not closed[id] then if C.Comm and C.Comm.Unheld then C.Comm:Unheld() end break end
+  -- (a stat the officers opened again that this file deleted of others while it was closed (P:Purge): those who are
+  -- offline now never send it again unless it changes, so every record is asked whole, once (Comm.lua M:Reopened). A
+  -- stat nothing was deleted of costs nothing: an officer's file, a first install, one closed by default opened for
+  -- the first time. 0.9.1 asked on every client for any stat opened, and its every login for a day asked whole)
+  local deleted = deletedOf(false)
+  if deleted then
+    local reopened = false
+    for id in pairs(deleted) do if self:Route(id) ~= "self" then deleted[id] = nil; reopened = true end end
+    if reopened and C.Comm and C.Comm.Reopened then C.Comm:Reopened() end
   end
   local counts, shrank = C.Stats.ReadyCounts(), false
   for id in pairs(before.ready or EMPTY) do if not counts[id] then shrank = true end end
   if grew or shrank then self:Purge(shrank) end
+  -- (values dropped while this client routed by the policy from before, a stat it opens now: taken. Roster.lua)
+  if C.Roster and C.Roster.ReleaseAside then C.Roster:ReleaseAside() end
   -- Ready counts what the guild may see (Stats.lua): read again now, before anything held back leaves by the policy in
   -- force (a line read ends the wait in this same call, and the record released then carried a Ready counted under the
   -- policy held before, an empty slot the line keeps among its gaps); and an officer's client says what the guild
@@ -1275,6 +1304,8 @@ function P:Purge(ready)
   -- (each id routed once, however many records hold it)
   local routes = {}
   local function route(id) local r = routes[id]; if r == nil then r = self:Route(id); routes[id] = r end return r end
+  -- (the stats deleted because the officers keep them: a reopening asks every record whole for those alone, P:Rerouted)
+  local closedGone = nil
   for key, e in pairs(CuteDB.roster or EMPTY) do
     if type(e) == "table" and type(e.stats) == "table" and not R:IsSelfRecord(key, e) then
       for id in pairs(e.stats) do
@@ -1286,6 +1317,7 @@ function P:Purge(ready)
           if type(e.at) == "table" then e.at[id] = nil end
           n = n + 1
           if id == "ready" and ready then readyGone = true end
+          if not unknown and route(id) == "self" then closedGone = closedGone or deletedOf(true); closedGone[id] = true end
         end
       end
       -- (a suspect's reason names the value that could not be: the mark stays, a value the officers keep goes)

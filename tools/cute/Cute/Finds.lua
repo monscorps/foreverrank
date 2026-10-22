@@ -851,16 +851,16 @@ end
 ----------------------------------------------------------------------------
 -- Settings > Data you share (Cute_Quest's section draws these): the line, while there is something to say, and the row
 ----------------------------------------------------------------------------
-local function counts(new, sure2) return (new == 1 and "1 find" or (new .. " finds")) .. " QuestBank does not have yet" .. C.UI.Look.DOT .. sure2 .. " confirmed by the guild" end
+-- (the line in the L and M footers' words, D.FooterText: under Cute the engine's data is no QuestBank's)
 function D.ShareLine(col)
   local new, sure2 = F.Tally()
   if new <= 0 then return end
-  col:Note(counts(new, sure2))
+  col:Note(D.FooterText(new, sure2))
   -- (Show finds while the Map window is there to show them: the Map module on, and no QuestBank loaded beside Cute)
   if not C.Modules.Page("map") then return end
   col:Buttons({ { "Show finds", true, function() F.ShowFinds() end, function(tip)
     tip:AddLine("Show finds", 1, 1, 1)
-    tip:AddLine("The Map window's Finds list: yours, the guild's once two agree, and what QuestBank's data has.", 0.85, 0.85, 0.85, true)
+    tip:AddLine("The Map window's Finds list: yours, the guild's once two agree, and what players' games and guides gave foreverrank.com.", 0.85, 0.85, 0.85, true)
   end } })
 end
 function D.ShareRow(col)
