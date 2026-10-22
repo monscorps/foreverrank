@@ -21804,7 +21804,9 @@ end
 -- D5. The default places under a host that asks for them (Cute's QB.cornerPlace), for the pieces never moved: the step
 -- frame stands where the game's quest tracker stands, its top right corner on the tracker's (read at the tracker's own
 -- size, the scale step of D3 left out), 8 px left of the tracker while it is kept; the arrow at the top's middle, TOP
--- 0 -96; the camp bar and its banner where the engine puts them. At 1920 x 1080 and 1366 x 768 none overlaps another.
+-- 0 -190, under the game's error text (UIErrorsFrame, TOP 0 -122, 512 x 60: merge2 moved it from TOP 0 -96, where
+-- "Not enough rage" stood on it); the camp bar and its banner where the engine puts them. At 1920 x 1080 and 1366 x 768
+-- none overlaps another, the error text among them.
 -- A dragged step frame stays where it was put; QuestBank alone keeps its own places (the engine's cases)
 do
   local cuteSkin = { font = "Fonts\\ARIALN.TTF", INK = { 0.86, 0.86, 0.86 }, SOFT = { 0.58, 0.58, 0.58 }, ACCENT = { 0.96, 0.96, 0.96 }, stop = true, outline = true, Backdrop = function() end }
@@ -21838,8 +21840,9 @@ do
     local sf = boxOf(env.QuestBankStep)
     assert(math.abs(sf.r - tr.r) < 0.5 and math.abs(sf.t - tr.t) < 0.5, string.format("%dx%d: the step frame on the tracker's corner %d, %d: %s", W, H, tr.r, tr.t, say(sf)))
     local ar = boxOf(env.QuestBankArrow)
-    assert(math.abs((ar.l + ar.r) / 2 - W / 2) < 0.5 and math.abs(ar.t - (H - 96)) < 0.5, string.format("%dx%d: the arrow at TOP 0 -96: %s", W, H, say(ar)))
-    local pieces = { { "step frame", sf }, { "arrow", ar } }
+    assert(math.abs((ar.l + ar.r) / 2 - W / 2) < 0.5 and math.abs(ar.t - (H - 190)) < 0.5, string.format("%dx%d: the arrow at TOP 0 -190: %s", W, H, say(ar)))
+    -- (the game's error text, Blizzard_UIErrorsFrame: TOP 0 -122, 512 x 60)
+    local pieces = { { "step frame", sf }, { "arrow", ar }, { "error text", { l = W / 2 - 256, r = W / 2 + 256, t = H - 122, b = H - 182 } } }
     -- (the camp bar where the engine puts it, CENTER 0 -190: its top as Camp.BarTop says, a row of icons under it)
     local ct = H - QB.Camp.BarTop()
     pieces[#pieces + 1] = { "camp bar", { l = W / 2 - 100, r = W / 2 + 100, t = ct, b = ct - 40 } }
@@ -21861,7 +21864,7 @@ do
     local p = env.QuestBankStep.__points[1]
     assert(p.point == "CENTER" and p.x == 100 and p.y == 50, "a dragged place kept")
   end
-  print("windows D5: Cute's default places: the step frame on the hidden tracker's corner (8 px left of it while kept), the arrow at TOP 0 -96, the camp bar the engine's; apart at 1920 x 1080 and 1366 x 768")
+  print("windows D5: Cute's default places: the step frame on the hidden tracker's corner (8 px left of it while kept), the arrow at TOP 0 -190 under the game's error text, the camp bar the engine's; apart at 1920 x 1080 and 1366 x 768")
 end
 
 -- D6. The journal's list tiles under a host's skin that asks (Cute's QB.Skin.tiles): the level range on a 70% black plate
@@ -22066,6 +22069,54 @@ do
   offer.give = was
   env.C_QuestLog.GetQuestsOnMap, c.cvars.questPOI, QB.thinMap = nil, nil, nil
   print("windows D9: fewer pins on the game's map is the host's: QuestBank alone draws every pin as 6.1.1; under the flag a ? the game draws keeps its NPC's ! for the quests it offers")
+end
+
+-- [stage: merge2] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The second merge round: what finds, runs and windows left for each other.
+-- M1. Under a host that asks (Cute's QB.cornerPlace) the arrow's default place is the top's middle under the game's
+-- error text (UIErrorsFrame, Blizzard_UIErrorsFrame: TOP 0 -122, 512 x 60, to 182 px down), as QuestBank's own step
+-- frame is (SF.TOP_Y): the windows round's TOP 0 -96 had "Not enough rage" on the arrow. Never on the step frame: one
+-- dragged into the top's middle has the arrow under it, still under the error text. At 1920 x 1080 and 1366 x 768.
+----------------------------------------------------------------------------
+do
+  local TALL = 143 -- (Arrow.lua: the arrow at its tallest, its frame and the lines under it)
+  local ERR = { half = 256, top = 122, bottom = 182 }
+  for _, ui in ipairs({ { 1920, 1080 }, { 1366, 768 } }) do
+    local W, H = ui[1], ui[2]
+    local c = lookChar("Undererror" .. W, { log = { { 7, 0 }, { 33, 1 }, { 18, 0 } }, ui = ui, host = { cornerPlace = true } })
+    local env, QB, SF = c.env, c.QB, c.QB.StepFrame
+    local T = env.ObjectiveTrackerFrame
+    rawset(T.Header, "GetTop", function() return env.UIParent.__h + T.__points[1].y end)
+    QB:Settings().guide.hideTracker = true; SF.Apply()
+    QB.Arrow:Set(true); QB.Arrow.Place()
+    -- the arrow's box from its point (TOP of UIParent): its middle across from the screen's, its top down from the top
+    local function arrow()
+      local p = env.QuestBankArrow.__points[1]
+      assert(p.point == "TOP" and p.relPoint == "TOP", "the arrow kept by its top: " .. tostring(p.point))
+      local half = (env.QuestBankArrow:GetWidth() or 0) / 2
+      return { x = p.x, half = half, top = -p.y, bottom = -p.y + TALL }
+    end
+    local function apart(a, bx, btop, bbottom, bhalf)
+      return a.x + a.half <= bx - bhalf or bx + bhalf <= a.x - a.half or a.bottom <= btop or bbottom <= a.top
+    end
+    local a = arrow()
+    assert(a.x == 0 and a.top >= ERR.bottom and apart(a, 0, ERR.top, ERR.bottom, ERR.half),
+      string.format("%dx%d: the arrow in the top's middle under the error text: %d, top %d", W, H, a.x, a.top))
+    local bx, top, bottom, half = SF.Box()
+    assert(bx and apart(a, bx, top, bottom, half), string.format("%dx%d: the arrow off the step frame at the tracker's corner", W, H))
+    -- the step frame dragged into the top's middle, over the arrow's place: the arrow under it
+    local g = QB:Settings().guide
+    g.x, g.y = 0, H / 2 - 230; SF.Apply(); QB.Arrow.Place()
+    a = arrow()
+    bx, top, bottom, half = SF.Box()
+    assert(bx and top < 190 + TALL and bottom > 190, string.format("%dx%d: the frame dragged onto the arrow's place: %d..%d", W, H, top, bottom))
+    assert(apart(a, bx, top, bottom, half) and a.top >= bottom and a.top >= ERR.bottom,
+      string.format("%dx%d: the arrow under the dragged frame (its bottom %d): top %d", W, H, bottom, a.top))
+    g.x, g.y = nil, nil; SF.Apply(); QB.Arrow.Place()
+    assert(arrow().top == 190, "the frame back on the tracker's corner: the arrow back at TOP 0 -190")
+  end
+  print("merge2 M1: under Cute's QB.cornerPlace the arrow stands in the top's middle under the game's error text (TOP 0 -190), off the step frame; a frame dragged there has it under it; 1920 x 1080 and 1366 x 768")
 end
 
 local seen = {}

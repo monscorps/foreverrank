@@ -14772,6 +14772,34 @@ do
   end)
 end
 
+-- [stage: merge2] that stage's tests go right below this line
+-- The second merge round: what finds, runs and windows left for each other, each item on one Cute character.
+-- M1: the engine's arrow under Cute stands in the top's middle under the game's error text (UIErrorsFrame, TOP 0
+-- -122, 512 x 60, to 182 px down) and off the step frame (QuestBank's harness weighs the places, its merge2 M1).
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true,
+      log = { [7] = 2, [33] = 1, [18] = 1 } }))
+    login(c); tickAll(6)
+    local QB = c.addons[2].private
+    local said = {}
+    -- M1
+    QB.Arrow:Set(true); QB.Arrow.Place()
+    local f = c.env.QuestBankArrow
+    local p = f.__points[1]
+    local half, top = (f:GetWidth() or 0) / 2, -p.y
+    assert(QB.cornerPlace and p.point == "TOP" and p.relPoint == "TOP" and top >= 182, "the arrow under the game's error text: TOP " .. tostring(p.x) .. " " .. tostring(p.y))
+    local bx, ftop, fbottom, fhalf = QB.StepFrame.Box()
+    assert(c.env.QuestBankStep:IsShown() and bx, "the step frame shows")
+    assert(p.x + half <= bx - fhalf or bx + fhalf <= p.x - half or top + 143 <= ftop or fbottom <= top, "the arrow off the step frame")
+    said[#said + 1] = "the arrow in the top's middle under the error text (TOP " .. p.x .. " " .. p.y .. ") and off the step frame"
+    assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    leave(c)
+    print("merge2: " .. table.concat(said, "; "))
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

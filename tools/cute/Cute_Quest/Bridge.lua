@@ -32,7 +32,8 @@ E.quiet = true
 -- and the quest log away from; in a raid the party sync is silent. Cute's own channel carries what the guild sees
 E.noRaidSync = true
 -- (the windows round) the on-screen pieces' default places, for the ones never moved: the step frame where the game's
--- quest tracker stands (it takes that job: StepFrame.lua place), the arrow at the top's middle (Arrow.lua A.Place)
+-- quest tracker stands (it takes that job: StepFrame.lua place), the arrow at the top's middle under the game's
+-- error text (Arrow.lua A.Place)
 E.cornerPlace = true
 -- (the windows round) fewer pins on the game's world map: none of ours where the game draws one, touching ones merged with
 -- a count (QuestMap.lua QM.Thin); QuestBank alone draws them all
