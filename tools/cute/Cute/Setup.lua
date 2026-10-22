@@ -1,8 +1,8 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- Setup: the first-run card, once per character, and the reload rule's question when Settings closes.
 -- The card (CuteSetupFrame, 480 px, centred): the windows (Guild and Quests always, with the key that opens each; the
--- Dungeons and Gear tabs; Cute's Map with its key), what Cute puts on screen (the step frame and arrow, the camp
--- bar and missing buffs, the interact light) and the two quest choices (Accept for me, the hand-in). Every row starts
+-- Dungeons and Gear tabs; Cute's Map with its key), what Cute puts on screen (the step frame and arrow, Reminders, the
+-- interact light) and the two quest choices (Accept for me, the hand-in). Every row starts
 -- from what this character has saved (its modules, the engine's settings), and only a row with nothing saved starts at
 -- the default: everything on but the two automatic choices. Start writes the choices, marks every row shown answered
 -- (CuteDB.chars[me].setup[row]), keeps the keys (Keys.lua) and reloads; after the reload the quest window opens once (the
@@ -10,8 +10,9 @@
 -- Not now changes nothing and the card never comes back by itself (the menu keeps "Set up Cute..." until Start). A row a
 -- later round adds comes back alone, once. Nothing on it is cut: labels and the note wrap.
 -- Shown 3 s after the first loading screen that is out of combat and outside an instance.
--- With the addon QuestBank loaded its step frame, arrow, camp bar and choices are its own (Cute sets none of
--- QuestBank's settings): those rows give way to one line saying so.
+-- With the addon QuestBank loaded its step frame, arrow, Reminders and choices are its own (Cute sets none of
+-- QuestBank's settings): those rows give way to one line saying so. Reminders is the Camp module (Cute_Quest:camp, on
+-- by default: PageCamp.lua), its row the module's alone; the interact light is its own row, never the module's.
 local _, C = ...
 local S = {}
 C.Setup = S
@@ -59,13 +60,13 @@ local function rows()
     if not dormant() then add({ id = "mapwin", group = "Windows", label = "Map", kind = "check", module = "Cute_Quest:map", key = "map" }) end
     if q then
       add({ id = "step", group = "On screen", label = "Step frame and arrow", kind = "check" })
-      add({ id = "camp", group = "On screen", label = "Camp bar and missing buffs", kind = "check" })
+      add({ id = "camp", group = "On screen", label = "Reminders", kind = "check" })
       add({ id = "light", group = "On screen", label = "Interact light", kind = "check" })
       add({ id = "accept", group = "Quests", label = "Accept for me", kind = "choice" })
       add({ id = "handin", group = "Quests", label = "Hand finished quests in for me", kind = "check" })
     elseif C.Modules.byId.quests then
       -- (the quest window registered and no engine of its own: QuestBank serves it, Bridge.lua's dormant copy)
-      add({ id = "dormant", group = "On screen", kind = "line", label = "QuestBank is loaded: its step frame, arrow and camp bar are its own." })
+      add({ id = "dormant", group = "On screen", kind = "line", label = "QuestBank is loaded: its step frame, arrow and Reminders are its own." })
     end
   end
   local done, shown = answered(), {}
@@ -322,16 +323,16 @@ function S.Go()
   local done = answered()
   local shown = {}
   for _, r in ipairs(p.rows) do if r.kind ~= "line" then done[r.id] = true; shown[r.id] = true end end
-  -- the modules (the reload applies them): each shown tab or switch; Camp on when either of its rows is ticked
+  -- the modules (the reload applies them): each shown tab or switch; Reminders (the Camp module) from its own row alone
   if shown.dungeons then M.Choose("Cute_Quest:journal", p.on.dungeons) end
   if shown.gear then M.Choose("Cute_Quest:gear", p.on.gear) end
   if shown.mapwin then M.Choose("Cute_Quest:map", p.on.mapwin) end
-  if shown.camp or shown.light then M.Choose("Cute_Quest:camp", (p.on.camp or p.on.light) and true or false) end
+  if shown.camp then M.Choose("Cute_Quest:camp", p.on.camp and true or false) end
   -- the engine's settings (the copy's own: never QuestBank's)
   local q = engine()
   if q and q.Apply then
     q.Apply({ step = shown.step and p.on.step, camp = shown.camp and p.on.camp, light = shown.light and p.on.light,
-      accept = shown.accept and p.accept, handin = shown.handin and p.on.handin, campOn = (shown.camp or shown.light) and (p.on.camp or p.on.light) })
+      accept = shown.accept and p.accept, handin = shown.handin and p.on.handin, campOn = shown.camp and p.on.camp })
   end
   -- the keys: the card's choice per window; the Guild key waits for a guild (Keys.lua)
   if type(ch.keys) ~= "table" then ch.keys = {} end

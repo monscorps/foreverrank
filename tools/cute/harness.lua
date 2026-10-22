@@ -13765,7 +13765,7 @@ do
     assert(card and card:IsShown(), "the card, 3 s after the loading screen")
     local function row(label) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == label end) end
     assert(row("Dungeons tab"):GetChecked() and not row("Gear tab"):GetChecked() and row("Map"):GetChecked(), "the tabs as 0.7 left them: Gear off (the map's row Map, its window's from sub-project F)")
-    assert(not row("Camp bar and missing buffs"):GetChecked() and not row("Interact light"):GetChecked() and row("Step frame and arrow"):GetChecked(), "Camp off, the step frame on")
+    assert(not row("Reminders"):GetChecked() and not row("Interact light"):GetChecked() and row("Step frame and arrow"):GetChecked(), "Camp off, the step frame on")
     assert(row("On my route"):GetChecked() and not row("Off"):GetChecked() and not row("Hand finished quests in for me"):GetChecked(), "Accept for me: On my route")
     local keys = {}
     for _, b in ipairs(c.frames) do if rawget(b, "Bind") and b:IsVisible() and b.id then keys[b.id] = b end end
@@ -18403,7 +18403,7 @@ do
     local card = c.env.CuteSetupFrame
     assert(card and card:IsShown(), "the first-run card")
     local function row(label) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == label end) end
-    assert(row("Camp bar and missing buffs"):GetChecked() and row("Interact light"):GetChecked(), "the card: Reminders' row and the light, ticked")
+    assert(row("Reminders"):GetChecked() and row("Interact light"):GetChecked(), "the card: Reminders' row and the light, ticked")
     local start
     for _, b in ipairs(c.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == "Start" then start = b end end
     press(start)
@@ -18918,7 +18918,7 @@ do
     local d = client(true)
     login(d); tick(d, 3)
     local function row(label) return checkBox(d, function(cb) return cb.label and cb.label:GetText() == label end) end
-    local rem = row("Reminders") or row("Camp bar and missing buffs")
+    local rem = row("Reminders")
     assert(rem and rem:GetChecked() and row("Interact light"):GetChecked(), "the card: Reminders' row and the light, ticked")
     click(rem)
     local start
@@ -18934,6 +18934,55 @@ do
     said[#said + 1] = "the card's unticked Reminders: Reminders follow the module"
     leave(e)
     print("hud review: " .. table.concat(said, "; "))
+  end)
+end
+
+-- [stage: merge3] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The third merge round: what the cards, map and hud rounds left for the merge, Cute's side.
+-- P1. The first-run card's row is "Reminders" (QuestBank loaded: "its step frame, arrow and Reminders are its own."), and
+--     it alone chooses the Camp module: unticked with the light ticked, the module off and the light on; ticked with
+--     the light unticked, the module on, Reminders on screen and the light off
+----------------------------------------------------------------------------
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local said = {}
+    local state = {}
+    local function client(card, extra)
+      local o = { modules = { "Cute_Quest" }, addonState = state, quest = true, card = card }
+      for k, v in pairs(extra or {}) do o[k] = v end
+      return newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, o))
+    end
+    local function button(c, label) for _, b in ipairs(c.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == label then return b end end end
+    local function row(c, label) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == label end) end
+    -- P1
+    local c = client(true)
+    login(c); tick(c, 3)
+    assert(c.env.CuteSetupFrame and c.env.CuteSetupFrame:IsShown() and row(c, "Reminders") and row(c, "Interact light"), "the card's rows: Reminders and Interact light")
+    do
+      local q = c.C.API.QuestSetup
+      c.C.API.QuestSetup = nil
+      local line
+      for _, r in ipairs(c.C.Setup.Rows()) do if r.id == "dormant" then line = r.label end end
+      c.C.API.QuestSetup = q
+      assert(line == "QuestBank is loaded: its step frame, arrow and Reminders are its own.", "QuestBank loaded: the card's line: " .. tostring(line))
+    end
+    check(c.env.CuteSetupFrame, "merge3 the setup card's Reminders row")
+    click(row(c, "Reminders"))
+    press(button(c, "Start"))
+    local ch, s = c.env.CuteDB.chars["Rone-Forever"], c.env.CuteQuestDB.settings
+    assert(ch.modules["Cute_Quest:camp"] == false and s.glow.on == true, "Reminders unticked, the light ticked: the module off, the light on: " .. tostring(ch.modules["Cute_Quest:camp"]))
+    leave(c)
+    local d = client(true)
+    login(d); tick(d, 3)
+    click(row(d, "Interact light"))
+    press(button(d, "Start"))
+    ch, s = d.env.CuteDB.chars["Rone-Forever"], d.env.CuteQuestDB.settings
+    assert(ch.modules["Cute_Quest:camp"] == true and s.remind.on == true and s.glow.on == false, "Reminders ticked, the light unticked: the module on, Reminders on screen, the light off")
+    leave(d)
+    said[#said + 1] = "the card's Reminders row alone chooses the module; the light its own"
+    print("merge3: " .. table.concat(said, "; "))
   end)
 end
 
