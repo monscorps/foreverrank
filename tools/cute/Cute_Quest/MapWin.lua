@@ -424,6 +424,8 @@ function MW.Light(ui, key, show)
   ui.mapLit = key
   local v = ui.mapList
   if not (v and ui.frame and ui.frame:IsShown()) then return end
+  -- (the quest to read in the list's place: the row is lit when the list comes back, and the reader's scroll is its own)
+  if QB.Reader.Open(ui) or not (v.host and v.host:IsShown()) then return end
   if key ~= nil and show then
     for i, it in ipairs(v.items) do
       if it.key == key then
@@ -645,9 +647,19 @@ local function zoneYards(m)
   if not (me and w and me.c == w.c) then return math.huge end
   return math.sqrt((w.wx - me.wx) ^ 2 + (w.wy - me.wy) ^ 2)
 end
+-- the quest being read ends (the footer, /cute finds or Show finds opened the list over it), its pins let go
+local function endReading(ui)
+  local r = ui.reading
+  if not r then return nil end
+  ui.reading = nil
+  local MP = engineMap()
+  if MP and MP.focus then MP.Focus(MP.focus) end
+  return r
+end
 function MW.ShowFinds(ui)
+  local r = endReading(ui)
   ui.mapFinds = true
-  ui.mapFindsScroll = ui.scroll.bar:GetValue() or 0
+  ui.mapFindsScroll = r and r.scroll or (ui.scroll.bar:GetValue() or 0)
   ui.scrollTo = 0
   ui:Draw()
 end
@@ -893,7 +905,7 @@ if win then
   local built = win.OnBuilt
   win.OnBuilt = function(self)
     if built then built(self) end
-    self.frame:HookScript("OnHide", function() self.mapClosed = true; self.mapFinds = nil end)
+    self.frame:HookScript("OnHide", function() self.mapClosed = true; self.mapFinds = nil; endReading(self) end)
   end
 end
 

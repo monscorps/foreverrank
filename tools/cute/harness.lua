@@ -15801,6 +15801,44 @@ do
     leave(c)
     said[#said + 1] = "the reader's Show on arrow, Share and Abandon inside M's list at both sizes"
   end)
+  -- K3: the quest to read in M: a pin hovered or clicked meanwhile lights its row for later and leaves the reader's scroll
+  -- alone; M closed ends it (the next open is on your zone's list), and the Finds list opened over it (the footer, /cute
+  -- finds, Show finds) shows
+  isolated({ member("Rone", 1) }, function()
+    local c, QB = mapClient("Rone", 1)
+    local MP = QB.MapPage
+    c.C.UI:Open("map")
+    local ui = c.C.UI.Window("map")
+    MP.Go(1429, "user")
+    ui:Draw()
+    local last = ui.mapList.items[#ui.mapList.items]
+    local lastQuest
+    for _, it in ipairs(ui.mapList.items) do if type(it.key) == "number" then lastQuest = it.key end end
+    assert(lastQuest and last, "the zone's list with its quests")
+    QB.Reader.Read(ui, QB.Quest.Get(7))
+    assert(ui.reading and MP.focus == 7, "reading quest 7, its pins focused")
+    local bar = ui.scroll.bar
+    local set = bar.SetValue
+    local moved = 0
+    bar.SetValue = function(self, v) moved = moved + 1; return set(self, v) end
+    MP.Hover(lastQuest, true)
+    assert(moved == 0 and ui.reading, "a pin hovered while reading: the reader's scroll left alone")
+    MP.Hover(nil, true)
+    MP.Reveal({ lastQuest })
+    assert(moved == 0, "a pin clicked while reading: the same")
+    bar.SetValue = set
+    -- closed: the reader ends, the focus let go; opened again, your zone's list
+    ui.frame:Hide()
+    assert(ui.reading == nil and MP.focus == nil, "M closed: the reader ends, its pins let go")
+    c.C.UI:Open("map")
+    assert(not ui.reading and ui.mapList.host:IsShown() and #ui.mapList.items > 0, "opened again: the zone's list")
+    -- the Finds list over a quest being read
+    QB.Reader.Read(ui, QB.Quest.Get(7))
+    QB.MapWin.OpenFinds()
+    assert(ui.mapFinds and not ui.reading and MP.focus == nil and texts(c):find("Never a book's text or where a key leads.", 1, true), "the Finds list opened while reading: it shows")
+    leave(c)
+    said[#said + 1] = "a pin hovered or clicked while reading leaves the reader's scroll alone; M closed ends the reader; the Finds list opened over it shows"
+  end)
   print("map K: " .. table.concat(said, "; "))
 end
 
