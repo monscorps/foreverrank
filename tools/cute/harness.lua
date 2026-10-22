@@ -20311,7 +20311,8 @@ end
 
 -- U10. Settings > Modules lists the modules by window: Guild (always) with Runs, Achievements and Records under it;
 --     Quests and Route (always) with the Dungeons and Gear tabs under it; then Map and Reminders. One reload line, at
---     the top ("Changes here apply on reload.", "Applies on reload." with Reload now and Undo once a change waits); none
+--     the top ("Module boxes apply on reload; the guild switches apply at once." since fix2-cute-ui V5, "Applies on
+--     reload." with Reload now and Undo once a change waits); none
 --     in the rows' tooltips
 -- the check rows a Settings section shows, top to bottom: { label, x }
 function UIX.rows(c)
@@ -20337,7 +20338,7 @@ do
     assert(x.Runs == g + 20 and x.Achievements == g + 20 and x.Records == g + 20, "Runs, Achievements and Records under Guild")
     assert(q == g and x["Dungeons tab"] == q + 20 and x["Gear tab"] == q + 20 and x.Map == g and x.Reminders == g, "the tabs under Quests and Route; Map and Reminders on their own")
     local function reloadLines() local n = 0; for l in texts(c):gmatch("[^\n]+") do if l ~= "Reload now" and l:lower():find("reload", 1, true) then n = n + 1 end end return n end
-    assert(reloadLines() == 1 and texts(c):find("Changes here apply on reload.", 1, true), "one reload line:\n" .. texts(c))
+    assert(reloadLines() == 1 and texts(c):find("Module boxes apply on reload; the guild switches apply at once.", 1, true), "one reload line:\n" .. texts(c))
     for _, r in ipairs(rows) do assert(not tipOf(r.row):lower():find("reload", 1, true), "no reload in the tooltip of " .. r.label) end
     check(sframe(c), "fix-cute-ui U10 Settings > Modules by window")
     click(UIX.row(c, "Gear tab"))
@@ -21217,6 +21218,7 @@ end
 --     guild"), and Show finds says the Map window's words: never QuestBank, an addon a Cute player does not have
 -- V4. The officer ranks stop at the guild's last rank (GuildControlGetNumRanks, Blizzard_Communities/GuildRoster.lua:137;
 --     9 where the client lacks it): no made-up "rank 4"; the guild master alone "sees every value and sets this list"
+-- V5. Settings > Modules' top line says both: the module boxes apply on reload, the guild switches at once
 ----------------------------------------------------------------------------
 UNDOCUMENTED.GuildControlGetNumRanks = { "Blizzard_Communities/GuildRoster.lua:137 (the roster's rank menu: maxRankOrder, the guild's rank count)", optional = true }
 do
@@ -21339,6 +21341,20 @@ do
       leave(c)
     end)
     said[#said + 1] = "the officer ranks stop at the guild's last; the guild master alone sees and sets"
+  end }
+
+  CASES[#CASES + 1] = { "V5 Settings > Modules' top line: the boxes on reload, the guild switches at once", function()
+    inGuild({ UIX.member("Rone", 1) }, function()
+      local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+      login(c); tickAll(6)
+      c.C.UI:Open("settings", "modules")
+      local t = texts(c)
+      assert(UIX.row(c, "Achievements for the whole guild") and UIX.row(c, "Records for the whole guild"), "the guild switches are there:\n" .. t)
+      assert(t:find("Module boxes apply on reload; the guild switches apply at once.", 1, true) and not t:find("Changes here apply on reload.", 1, true), "the top line says both:\n" .. t)
+      check(sframe(c), "fix2-cute-ui V5 Settings > Modules, the top line")
+      leave(c)
+    end)
+    said[#said + 1] = "Settings > Modules says the boxes reload and the guild switches apply at once"
   end }
 
   for _, case in ipairs(CASES) do

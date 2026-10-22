@@ -682,20 +682,27 @@ end
 -- Records); the always-on base (a module addon's: the quests window with its Route tab) with the quests window's tabs
 -- under it; then the rest (Map, Reminders, any other module addon's). A module with a switch for the whole guild
 -- (def.guildSwitch: Achievements, Records) has it under its row, the officers' to click and greyed for members; it
--- applies at once, as the officers' settings do. A change waits: the boxes show it at once, the one reload line at the
--- top says so with Reload now and Undo, and closing Settings asks (Setup.lua); a few words on the right where something
--- is not as the box says, its notes in the tooltip
+-- applies at once, as the officers' settings do. A box's change waits: the boxes show it at once, the one reload line at
+-- the top says so with Reload now and Undo, and closing Settings asks (Setup.lua); before any, the line says the boxes
+-- apply on reload and the guild switches at once; a few words on the right where something is not as the box says
+-- (never "at once": the line has it), its notes in the tooltip
 local function drawModules(col, officer)
   local M = C.Modules
+  local list = M.Available(officer)
+  local function switchOf(e)
+    local gs = e.def and e.def.guildSwitch
+    if type(gs) == "table" and type(gs.on) == "function" and type(gs.set) == "function" then return gs end
+  end
+  local switches = false
+  for _, e in ipairs(list) do if switchOf(e) then switches = true end end
   col:Head("Modules")
   if M.Staged() then
     col:Note("Applies on reload.")
     col:Buttons({ { "Reload now", not M.InCombat(), function() M.Commit() end, function(tip) tip:AddLine("Reload now", 1, 1, 1); tip:AddLine(M.InCombat() and "After combat." or "Reloads the interface with your changes.", 0.85, 0.85, 0.85, true) end },
       { "Undo", true, function() M.Undo(); redraw() end } })
   else
-    col:Note("Changes here apply on reload.")
+    col:Note(switches and "Module boxes apply on reload; the guild switches apply at once." or "Changes here apply on reload.")
   end
-  local list = M.Available(officer)
   local base, guild, tabs, rest = {}, {}, {}, {}
   for _, e in ipairs(list) do
     if e.base then base[#base + 1] = e
@@ -711,8 +718,8 @@ local function drawModules(col, officer)
       if e.notes then tip:AddLine(e.notes, 0.85, 0.85, 0.85, true) end
       if e.status then tip:AddLine(e.status, 0.7, 0.7, 0.7, true) end
     end, indent)
-    local gs = e.def and e.def.guildSwitch
-    if type(gs) == "table" and type(gs.on) == "function" and type(gs.set) == "function" then
+    local gs = switchOf(e)
+    if gs then
       col:Check(e.title .. " for the whole guild", gs.on(), officer, function(v) gs.set(v); redraw() end,
         not officer and "Set by the officers" or nil, gs.tip, indent + 20)
       local note = officer and gs.note and gs.note()
