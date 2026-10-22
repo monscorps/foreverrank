@@ -17021,6 +17021,36 @@ do local function cardsStage()
       tickAll(5)
       assert(not o.C.Roster:MeOfficer() and next(weeks(o)) == nil, "demoted: the weeks gone")
     end)
+
+    -- CuteRun heard on a frame of its own: every addon's message (DBM's, WeakAuras', Cute's own guild traffic) comes to
+    -- a frame that registers CHAT_MSG_ADDON, and the Runs module's frame ran each through C.Safe (a table and a closure a
+    -- call) only to drop it. The prefix is picked out first, as Comm.lua picks out Cute's: another prefix's message makes
+    -- no garbage, a CuteRun one reaches RunComm once
+    case("CuteRun on a frame of its own", { gmember("Rua", 3) }, function()
+      local c = cchar("Rua", 3)
+      login(c)
+      tickAll(5)
+      assert(c.C.Modules.byId.runs.active and c.C.Runs.events.CHAT_MSG_ADDON == nil, "Runs on, CHAT_MSG_ADDON none of the module's events")
+      local frames = {}
+      for _, f in ipairs(c.frames) do if f.__events.CHAT_MSG_ADDON and f.__scripts.OnEvent and f ~= c.C.Comm.frame then frames[#frames + 1] = f end end
+      local RC = c.C.RunComm
+      local real, got = RC.Receive, 0
+      RC.Receive = function() got = got + 1 end
+      for _, f in ipairs(frames) do f.__scripts.OnEvent(f, "CHAT_MSG_ADDON", "CuteRun", "2H|x", "PARTY", "Someone-Forever") end
+      local once = got
+      local J = rawget(_G, "jit")
+      if J then J.off() end
+      collectgarbage()
+      collectgarbage("stop")
+      local kb = collectgarbage("count")
+      for _ = 1, 3000 do for _, f in ipairs(frames) do f.__scripts.OnEvent(f, "CHAT_MSG_ADDON", "DBM5", "V|123", "RAID", "Someone-Forever") end end
+      local grew = collectgarbage("count") - kb
+      collectgarbage("restart")
+      if J then J.on() end
+      RC.Receive = real
+      assert(once == 1, "a CuteRun message reaches RunComm once: " .. once)
+      assert(got == 1 and grew < 32, string.format("3000 messages of another prefix: none reach RunComm (%d), %.1f KB of garbage", got - 1, grew))
+    end)
     assert(#failed == 0, "fix-cards: " .. #failed .. " case(s) failed:\n  " .. table.concat(failed, "\n  "))
     said[#said + 1] = "the launch audit's cards findings: " .. table.concat(passed, "; ")
   end

@@ -1462,8 +1462,8 @@ local OPEN = { MERCHANT_SHOW = "m", MERCHANT_CLOSED = "m", MAIL_SHOW = "a", MAIL
   BANKFRAME_OPENED = "b", BANKFRAME_CLOSED = "b" }
 local function opened(ev) money.open[OPEN[ev]] = (ev:match("SHOW$") or ev:match("OPENED$")) and true or nil end
 
+-- (CHAT_MSG_ADDON is heard on a frame of its own, below: not one of these)
 local events = {
-  CHAT_MSG_ADDON = function(...) C.RunComm:Receive(...) end,
   ADDON_RESTRICTION_STATE_CHANGED = function(kind, state) C.RunComm:Restriction(kind, state) end,
   GROUP_JOINED = function() R:Roster() end,
   GROUP_LEFT = function() R:Roster() end,
@@ -1556,6 +1556,19 @@ world:SetScript("OnEvent", C.Safe(function(_, _, initial, reloading)
   if money.last == nil then money.last = call("GetMoney") end
   R:World(C.Plain(initial) == true, C.Plain(reloading) == true)
 end, "runs: loading screen"))
+
+-- CHAT_MSG_ADDON on a frame of its own (the launch audit): every addon's message comes to a frame that registers it,
+-- DBM's, WeakAuras', Details' and Cute's own guild traffic in a raid, and the module's frame ran each through C.Safe (a
+-- table and a closure a call) only to drop it. CuteRun's prefix is picked out first, as Comm.lua picks out Cute's (the
+-- payload has no NeverSecret: ChatInfoDocumentation.lua), and only its messages go through C.Safe, the module on
+local heard = CreateFrame("Frame")
+local receive = C.Safe(function(...) C.RunComm:Receive(...) end, "runs: receiving")
+heard:SetScript("OnEvent", function(_, _, prefix, ...)
+  if C.Plain(prefix) ~= C.RunComm.PREFIX then return end
+  local def = C.Modules.byId.runs
+  if def and def.active then receive(prefix, ...) end
+end)
+heard:RegisterEvent("CHAT_MSG_ADDON")
 
 local ticking = false
 local function startTimers()
