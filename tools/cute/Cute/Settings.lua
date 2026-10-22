@@ -199,6 +199,22 @@ function Col:Check(text, on, enabled, fn, right, tip, indent)
   self.y = self.y + rowH
   return cb
 end
+-- (the hud review) under a row, what it keeps hidden: one DIM line at 12 px, indented as the row's label and wrapping
+-- ("Hidden: Eat, Frost Armor"), its Show button on the right, fn the click (Reminders' rows, Cute_Quest's PageCamp.lua)
+function Col:Hidden(text, fn)
+  self.fresh = false
+  local bw = 58
+  local _, h = label(self, self.x + 20, self.y + 4, self.w - 20 - bw - 8, text, DIM, nil, 12)
+  local b = self.p.buttons:Get()
+  b:ClearAllPoints()
+  b:SetPoint("TOPLEFT", self.x + self.w - bw, -self.y - 1)
+  b:SetSize(bw, 20)
+  b:SetLabel("Show")
+  b:SetOn(fn ~= nil)
+  b:SetScript("OnClick", C.Safe(function() if fn then fn(); redraw() end end, "settings: show hidden"))
+  tipOn(b, nil)
+  self.y = self.y + math.max(ROWH, h + 8)
+end
 -- a choice of one among a few: the label in a column of its own, then each option as a box and its word, measured (a
 -- cell is the box, 6 px, the word and 12 px), wrapping under the label where the row is full. A click on the chosen one
 -- keeps it (none: it chooses none, for a choice that may have none, as Role); the section draws again either way

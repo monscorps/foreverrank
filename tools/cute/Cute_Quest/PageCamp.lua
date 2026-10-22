@@ -2,8 +2,9 @@
 -- Reminders (the module keeps its id, camp, and so its saved state): no page of its own. One Settings section: the
 -- engine's rows (Remind.ROWS, the same QuestBank's page draws: your buffs, the party's, camp, upkeep, class, dungeons and
 -- raids) and the interact light's two. The module is the master switch, Reminders and Buffs on screen (remind.on), and
--- applies at once; each row keeps its own state whatever the module does. Under a row, while one of its reminders is
--- hidden for good (Never), an indented row with it, unticked: a tick shows it again. With QuestBank loaded its
+-- applies at once; each row keeps its own state whatever the module does. A row's note under it, DIM; under a row,
+-- while it keeps reminders hidden for good (Never), one DIM line naming them with its Show, which brings that row's
+-- back (the windows design's notes, the reminders design's "Hidden: Eat [Show]"). With QuestBank loaded its
 -- reminders are its own: the section greyed, nothing written.
 local ADDON, QB = ...
 local Cute = Cute
@@ -32,14 +33,15 @@ function Cp.Settings(_, col)
         col:Check(row.label .. ": " .. current, true, false, function() end)
       end
     else
-      col:Check(row.label, r[row.key] ~= false, own, function(on) R.SetRow(row.key, on) end, nil,
-        row.note and function(tip) tip:AddLine(row.label, 1, 1, 1); tip:AddLine(row.note, 0.85, 0.85, 0.85, true) end or nil)
+      col:Check(row.label, r[row.key] ~= false, own, function(on) R.SetRow(row.key, on) end)
     end
-    -- (what this row keeps hidden for good: an indented row each, unticked; a tick shows it again)
-    if own then
-      for _, h in ipairs(R.Hidden(row.key)) do
-        col:Check(h[2], false, true, function(on) if on then R.SetNever(h[1], nil, false) end end, "hidden", nil, 20)
-      end
+    if row.note then col:Note(row.note) end
+    -- (what this row keeps hidden for good, on one line, and its Show)
+    local hidden = own and R.Hidden(row.key) or nil
+    if hidden and #hidden > 0 then
+      local names = {}
+      for i, h in ipairs(hidden) do names[i] = h[2] end
+      col:Hidden("Hidden: " .. table.concat(names, ", "), function() for _, h in ipairs(hidden) do R.SetNever(h[1], nil, false) end end)
     end
   end
   col:Check("Interact light", s.glow.on ~= false, own, function(on) light(s, on) end)

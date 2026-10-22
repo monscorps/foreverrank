@@ -14955,6 +14955,37 @@ do
       return n
     end
     assert(rowsOf("camp") == 8, string.format("Reminders eight rows: %d", rowsOf("camp")))
+    -- (each row's note under it, DIM; under a row that keeps reminders hidden for good, one DIM line naming them with its
+    -- own Show, which brings back that row's alone)
+    local RQ = r.addons[2].private.Remind
+    RQ.SetNever("eat", "Eat"); RQ.SetNever("sit", "Sit"); RQ.SetNever("buff:168", "Frost Armor")
+    r.C.UI:Open("settings", "camp")
+    local rt = texts(r)
+    for _, note in ipairs({ "In a party, not a raid. Thorns only on the tank.", "Each adds XP on Forever. The sleeping bag's quest line too.", "Ammo and the hearthstone with them." }) do
+      assert(rt:find(note, 1, true), "the note under its row: " .. note .. "\n" .. rt)
+    end
+    assert(rt:find("Hidden: Eat, Sit", 1, true) and rt:find("Hidden: Frost Armor", 1, true) and not rt:find("\nEat\n", 1, true), "one Hidden line a row:\n" .. rt)
+    assert(rowsOf("camp") == 8, "still eight rows")
+    -- (the Show beside the camp row's line: the visible one level with it)
+    local function showOf(words)
+      local line
+      for _, o in everything() do if o.__kind == "FontString" and o.__shown and o.__text == words and visible(o) and o.__parent and o.__parent.__client == r then line = o end end
+      for _, b in ipairs(r.frames) do
+        if line and b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == "Show"
+          and math.abs((b.__points[1].y or 0) - (line.__points[1].y or 0)) <= 6 then return b end
+      end
+    end
+    assert(showOf("Hidden: Eat, Sit"), "a Show beside the line")
+    for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+      sizeAll(r, size[1], size[2])
+      r.C.UI:Open("settings", "camp")
+      check(sframe(r), string.format("Settings > Reminders with Hidden lines, %dx%d", size[1], size[2]))
+    end
+    sizeAll(r, 1040, 640)
+    r.C.UI:Open("settings", "camp")
+    press(showOf("Hidden: Eat, Sit"))
+    local nv = RQ.Settings().never
+    assert(nv.eat == nil and nv.sit == nil and nv["buff:168"] == "Frost Armor", "its own Show: the camp row's alone back")
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
       sizeAll(r, size[1], size[2])
       r.C.UI:Open("settings", "camp")
