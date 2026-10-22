@@ -47,8 +47,10 @@ end
 QB.Toggles.map = M.Toggle
 
 local function redraw() Cute.Refresh() end
+-- (with the addon QuestBank loaded this copy sleeps, and QuestBank's own Map page is its map: no window, so M stays the
+-- game's: Keys.lua holds a key only for a window with a page)
 Cute:RegisterModule({ id = "map", addon = ADDON, title = "Map", order = 23, group = "quests", window = "map",
-  notes = "Cute's map on M, our quest list beside it.", page = function(ui, scroll) QB.MapWin.Draw(ui, scroll) end,
+  notes = "Cute's map on M, our quest list beside it.", page = (not QB.dormant) and function(ui, scroll) QB.MapWin.Draw(ui, scroll) end or nil,
   settings = M.Settings, onToggle = M.Toggle,
   events = { QUEST_LOG_UPDATE = redraw, QUEST_ACCEPTED = redraw, QUEST_TURNED_IN = redraw, PLAYER_LEVEL_UP = redraw,
     PLAYER_REGEN_DISABLED = redraw, PLAYER_REGEN_ENABLED = redraw } })

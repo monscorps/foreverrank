@@ -22385,7 +22385,7 @@ do
     MP.Host(box, { strata = "HIGH" })
     -- the data: the guides' book in Elwynn (Data.lua's seed), a lock by a guide's place, a chest two files agree on
     MD.FIND[1429] = { { "b", 0, "654,701", 0, "Archmage Theocritus' Research Journal", "g" }, { "k", 0, "610,220", 0, 216523, "g" },
-      { "h", 4242, "300,300;320,300", 2, "0.0", "p" } }
+      { "h", 4242, "300,300;320,300", 2, "0.0", "p" }, { "r", 7777, "100,100", 2, 30, "f" } }
     -- your notes: a book of your own, a chest, a herb node, a quest object, a rare, the guides' book read, an item read
     local disc = QB.Discover.DB()
     disc.find = {
@@ -22409,6 +22409,7 @@ do
     assert(chests == 2 and by["Rare, level 34"] and by["Rare, level 34"].rare and by.Locked and by.Locked.who == "guides",
       "a chest of the data and one of yours (no herb node, no quest object), a rare by its level, the guides' lock: " .. chests)
     for _, d in ipairs(list) do assert(d.name ~= "A Letter Read in Your Bags", "an item read in your bags has no place on the map") end
+    assert(by["Rare, level 30"] and by["Rare, level 30"].who == "players' games" and not by["Rare, level 30"].mine, "the uploader's data file's rare: players' games")
     local maps = MP.FindMaps()
     local has = false
     for _, m in ipairs(maps) do if m == 1429 then has = true end end

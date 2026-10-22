@@ -36,9 +36,9 @@ K.ALL = WINDOWS
 function K.Windows()
   local out = {}
   for _, w in ipairs(WINDOWS) do
+    -- (a window whose page shows: its module on and drawing one; the Map module beside a loaded QuestBank draws none)
     local spec = C.UI.SPEC[w.id]
-    local def = spec and C.Modules.byId[spec.home]
-    if w.id == "guild" or (def and def.active) or K.Expected(w.id) then out[#out + 1] = w end
+    if w.id == "guild" or (spec and C.Modules.Page(spec.home)) or K.Expected(w.id) then out[#out + 1] = w end
   end
   return out
 end

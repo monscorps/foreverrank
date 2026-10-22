@@ -14991,6 +14991,20 @@ do
     check(ui.frame, "map window, a quest to read")
     press(bandButton(ui, "Back"))
     assert(not ui.reading and MP.focus == nil and #rows(ui) > 0, "Back: the list, the focus let go")
+    -- a quest in your log reads the game's own text for it
+    local held
+    for i, it in ipairs(ui.mapList.items) do if it.key == 7 then ui.scroll.bar:SetValue(ui.mapList.tops[i]) end end
+    for _, r in ipairs(rows(ui)) do if r.mapKey == 7 then held = r end end
+    assert(held, "the quest in your log in the list")
+    press(held)
+    assert(ui.reading and ui.reading.id == 7 and texts(c):find("The words of quest 7.", 1, true) and texts(c):find("Abandon", 1, true), "a quest in your log: the game's text, Abandon")
+    press(bandButton(ui, "Back"))
+    -- a zone with nothing found
+    MP.Go(1433, "user")
+    local nothing = false
+    for _, it in ipairs(ui.mapList.items) do if it.spec.name == "Nothing found here yet." then nothing = true end end
+    assert(nothing, "a zone with nothing found: one line says so")
+    MP.Go(1429, "user")
     said[#said + 1] = "the list: the zone's head, the sections, a quest's second line; a row hovered lights its pins, a pin hovered its row; a click reads it with its pins focused, Back"
     -- C3: the finds
     local disc = QB.Discover.DB()
@@ -15184,7 +15198,19 @@ do
     K.Apply()
     assert(not c.overrides.M and c.overrides.J and c.overrides.L, "the Map module off: M the game's again, J and L kept")
     leave(c)
-    said[#said + 1] = "the M key: held for CuteMapKey while the Map module is on, following the game's World map key (moved to N), its click toggling the window; off, M the game's; Settings > Keys' Map window row"
+    -- QuestBank loaded beside Cute: the copy sleeps, QuestBank's own Map page is its map: no Map window, M the game's
+    local q = newClient(charOf({ "Pim", 3, "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    local isLoaded = q.env.C_AddOns.IsAddOnLoaded
+    q.env.C_AddOns.IsAddOnLoaded = function(x) if x == "QuestBank" then return true, true end return isLoaded(x) end
+    q.env.QuestBankAPI = { version = "6.1.0", logReady = true, state = { level = 5, log = {} }, Settings = function() return { guide = {} } end, MarkDirty = function() end }
+    login(q); tickAll(6)
+    q.C.Modules.Set("Cute_Quest:map", true); tick(q, 1)
+    q.C.Keys.Set("map", "follow")
+    q.C.UI:Open("map")
+    local qw = q.C.UI.Window("map")
+    assert(q.addons[2].private.dormant and not q.overrides.M and not (qw.frame and qw.frame:IsShown()), "QuestBank loaded: no Map window, M the game's")
+    leave(q)
+    said[#said + 1] = "the M key: held for CuteMapKey while the Map module is on, following the game's World map key (moved to N), its click toggling the window; off, M the game's; Settings > Keys' Map window row; with QuestBank loaded no Map window and M the game's"
     -- C7: a character that answered the card before the Map window: the Map row alone, its tick from the old answer
     local state = {}
     local function client(name, rank) return newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true, card = true })) end
