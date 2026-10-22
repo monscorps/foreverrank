@@ -238,8 +238,12 @@ local function fitText(fs, s, room)
       fs:SetText(shown)
       if width(fs) <= room then result = shown; break end
     end
-    while not result and #cut > 1 and not C.IsKstring(cut) do
-      cut = cut:sub(1, -2)
+    while not result and not C.IsKstring(cut) do
+      -- (a whole letter at a time: a UTF-8 lead byte with its continuation bytes, as Stats.lua's CleanText steps back,
+      -- so a name with an o-slash or an a-ring never ends in half a letter; one letter at least stays)
+      local shorter = (cut:gsub("[%z\1-\127\192-\255][\128-\191]*$", ""))
+      if shorter == "" or shorter == cut then break end
+      cut = shorter
       shown = cut .. "..."
       fs:SetText(shown)
       if width(fs) <= room then result = shown end

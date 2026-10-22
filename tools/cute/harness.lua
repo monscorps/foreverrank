@@ -19470,6 +19470,41 @@ do
   end)
 end
 
+-- U5. UI.FitText cuts a name with no space a whole letter at a time: "S\195\184nderg\195\165rd" (an o-slash and an a-ring) at
+--     every width from 8 to 90 px is valid UTF-8, never a lone lead byte before the "..."; one letter at least is kept
+function UIX.utf8(s)
+  local i, n = 1, #s
+  while i <= n do
+    local b = s:byte(i)
+    local len = b < 0x80 and 1 or (b >= 0xF0 and b < 0xF8) and 4 or (b >= 0xE0 and b < 0xF0) and 3 or (b >= 0xC2 and b < 0xE0) and 2 or nil
+    if not len then return false end
+    for j = i + 1, i + len - 1 do local x = s:byte(j); if not x or x < 0x80 or x > 0xBF then return false end end
+    i = i + len
+  end
+  return true
+end
+do
+  isolated({ UIX.member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }))
+    login(c); tick(c, 1)
+    local f = c.env.CreateFrame("Frame", nil, c.env.UIParent)
+    local fs = f:CreateFontString(nil, "OVERLAY")
+    fs:SetFont(c.C.UI.FONT, 12, "")
+    local names = { "S\195\184nderg\195\165rd", "\195\134\195\152\195\133\195\134\195\152\195\133", "Bj\195\184rnst\195\184ren" }
+    for _, name in ipairs(names) do
+      for room = 8, 90 do
+        c.C.UI.FitText(fs, name, room)
+        local shown = fs:GetText()
+        assert(UIX.utf8(shown), string.format("%d px: %q is no valid UTF-8", room, shown))
+        assert(shown == name or shown:sub(-3) == "...", "cut with the dots: " .. shown)
+        assert(#shown > 3 or shown == name, "a letter at least kept: " .. shown)
+      end
+    end
+    leave(c)
+    print("fix-cute-ui U5: UI.FitText cuts a spaceless name with an o-slash, an ae or an a-ring a whole letter at a time, never half of one")
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end
