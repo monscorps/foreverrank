@@ -11,32 +11,65 @@ if QB.dormant then
   -- (an older QuestBank sets no QuestBankAPI: no engine for the pages, which say so and draw nothing more; never
   -- this copy, whose files returned at their second line)
   QB.Engine = QuestBankAPI
+  local A = type(C_AddOns) == "table" and C_AddOns or nil
+  local okV, meta = pcall(A and A.GetAddOnMetadata or error, "QuestBank", "Version")
+  local version = (okV and type(meta) == "string" and meta ~= "") and meta or nil
+  local share
   if type(QB.Engine) ~= "table" then
     QB.Engine = nil
-    local A = type(C_AddOns) == "table" and C_AddOns or nil
-    local ok, v = pcall(A and A.GetAddOnMetadata or error, "QuestBank", "Version")
-    QB.missing = string.format("QuestBank %s or newer is needed; yours is %s.", NEED, (ok and type(v) == "string" and v ~= "") and v or "older")
+    QB.missing = string.format("QuestBank %s or newer is needed; yours is %s.", NEED, version or "older")
+    -- (its settings are QuestBankDB.settings, filled at its own ADDON_LOADED, before Cute loads this copy)
+    local db = type(QuestBankDB) == "table" and QuestBankDB or nil
+    share = db and type(db.settings) == "table" and db.settings.share or nil
   else
     -- (the launch audit) QuestBank's own party sync, beside Cute: never on RAID (as this copy's, E.noRaidSync below) and
     -- never on GUILD, whatever its share.guild says: its 1S carried level, XP, class, a GUID tail and the plan around the
     -- officers' Who sees what. Runtime flags on QuestBank's QB (QuestBankAPI, its Core.lua; Sync.lua reads them), none
-    -- of its saved settings written: guild sharing goes through Cute's Comm alone
+    -- of its saved settings written: guild sharing goes through Cute's Comm alone. A QuestBank reads noRaidSync from
+    -- 6.3.0 and noGuildSync from 6.4.1 on
     QB.Engine.noRaidSync, QB.Engine.noGuildSync = true, true
-    -- (merge4) a QuestBank before 6.4.1 reads no noGuildSync (its Sync.lua has no S.GuildOn) and the same version can be
-    -- either: such a one's share.guild is off for this session alone, and put back as it was at the logout, before the
-    -- game writes QuestBank's saved variables (a crash writes nothing). A box ticked again meanwhile is the player's
-    local Sy = QB.Engine.Sync
-    if not (type(Sy) == "table" and Sy.GuildOn ~= nil) then
-      local ok, s = pcall(QB.Engine.Settings, QB.Engine)
-      local share = ok and type(s) == "table" and s.share or nil
-      if type(share) == "table" and share.guild then
-        share.guild = false
-        local f = CreateFrame("Frame")
-        f:RegisterEvent("PLAYER_LOGOUT")
-        f:SetScript("OnEvent", function() if share.guild == false then share.guild = true end end)
-      end
-    end
+    if type(QB.Engine.version) == "string" then version = QB.Engine.version end
+    local ok, s = pcall(QB.Engine.Settings, QB.Engine)
+    share = ok and type(s) == "table" and s.share or nil
   end
+  -- (merge4, the final audit) an older QuestBank's own switches held instead, for this session alone, and put back as
+  -- they were at the logout, before the game writes QuestBank's saved variables (a crash writes nothing); a box ticked
+  -- again meanwhile is the player's. Its guild share before 6.4.1 (its Sync.lua has no S.GuildOn, and no QuestBankAPI
+  -- before 6.1.0); its group share while you are in a raid before 6.3.0 (no noRaidSync: its group channel is RAID
+  -- there), checked at the load and at each roster change. QuestBank's own roster handler runs before this one, so a
+  -- party turned raid still has it send a "1R" there, which carries nothing, and its share 3 seconds later finds RAID
+  -- held
+  if type(share) ~= "table" then return end
+  local function older(v, than)
+    if type(v) ~= "string" then return true end
+    local a, b = {}, {}
+    for n in v:gmatch("%d+") do a[#a + 1] = tonumber(n) end
+    for n in than:gmatch("%d+") do b[#b + 1] = tonumber(n) end
+    for i = 1, math.max(#a, #b) do
+      if (a[i] or 0) ~= (b[i] or 0) then return (a[i] or 0) < (b[i] or 0) end
+    end
+    return false
+  end
+  local Sy = QB.Engine and QB.Engine.Sync
+  local heldGuild, heldGroup = false, false
+  if not (type(Sy) == "table" and Sy.GuildOn ~= nil) and share.guild then share.guild = false; heldGuild = true end
+  local holdRaid = older(version, "6.3.0")
+  local function raid()
+    local ok, inRaid = pcall(IsInRaid or error)
+    inRaid = ok and inRaid == true
+    if inRaid and share.party then share.party = false; heldGroup = true
+    elseif not inRaid and heldGroup then heldGroup = false; if share.party == false then share.party = true end end
+  end
+  if holdRaid then raid() end
+  if not (heldGuild or holdRaid) then return end
+  local f = CreateFrame("Frame")
+  f:RegisterEvent("PLAYER_LOGOUT")
+  if holdRaid then f:RegisterEvent("GROUP_ROSTER_UPDATE") end
+  f:SetScript("OnEvent", function(_, event)
+    if event == "GROUP_ROSTER_UPDATE" then raid() return end
+    if heldGuild and share.guild == false then share.guild = true end
+    if heldGroup and share.party == false then share.party = true end
+  end)
   return
 end
 QB.Engine = QB

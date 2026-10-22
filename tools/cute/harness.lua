@@ -21248,6 +21248,68 @@ do
     said[#said + 1] = "the interact light has its own section while Reminders is off"
   end }
 
+  -- F1 (robust, should). An older QuestBank beside Cute shared on RAID (before 6.3.0, no noRaidSync) and, before 6.1.0
+  -- (no QuestBankAPI), on GUILD too, around the officers' Who sees what: its guild share is held off for the session, and
+  -- before 6.3.0 its party share while you are in a raid, each put back at the logout
+  CASES[#CASES + 1] = { "F1 an older QuestBank beside Cute: before 6.1.0 its guild share held off, before 6.3.0 its group share in a raid", function()
+    inGuild({ member("Rone", 1) }, function()
+      local function beside(version, withApi)
+        local q = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+        local isLoaded, meta = q.env.C_AddOns.IsAddOnLoaded, q.env.C_AddOns.GetAddOnMetadata
+        q.env.C_AddOns.IsAddOnLoaded = function(x) if x == "QuestBank" then return true, true end return isLoaded(x) end
+        q.env.C_AddOns.GetAddOnMetadata = function(x, field) if x == "QuestBank" then return field == "Version" and version or nil end return meta(x, field) end
+        local raid = false
+        q.env.IsInRaid = function() return raid end
+        local settings = { guide = { on = true, frame = true }, arrow = true, glow = { on = true, style = "sparkle" }, remind = { on = true }, share = { party = true, guild = true }, djShow = { boss = true, rare = true, trash = false, other = true } }
+        if withApi then
+          q.env.QuestBankAPI = {
+            version = version, logReady = true, state = { level = 5, log = {} }, routeNow = { legs = {}, xp = 0, level = 5, t = 0 },
+            Settings = function() return settings end, MarkDirty = function() end, Comma = tostring, Short = tostring, Sync = {},
+            Model = { Busy = function() return false end }, Data = { CAT = {} }, Quest = { Get = function() return nil end },
+            Guide = { Steps = function() return {} end, Text = function(st) return st.text end, TimeToLevel = function() return nil end, MemberSteps = function() return {} end, Reminder = function() return nil end },
+            StepFrame = { Menu = function() end, Apply = function() end, RemindChanged = function() end }, Arrow = { Set = function() end },
+            UI = { PlaceGroups = function() return {}, {}, nil, nil, nil end, Candidates = function() return {} end, QuestClick = function() end, QuestTooltip = function() end },
+            Target = { Route = function() return { legs = {}, xp = 0, level = 5, t = 0 } end }, Run = { Get = function() return nil end },
+            DMap = { Attach = function() end, Refresh = function() end }, Gear = { Attach = function() end, Refresh = function() end, RefreshSoon = function() end },
+            Remind = { Pull = function() return {}, false end },
+          }
+        else
+          q.env.QuestBankAPI = nil
+          q.env.QuestBankDB = { settings = settings }
+        end
+        login(q); tickAll(5)
+        q.C.Modules.Set("Cute_Quest", true); tick(q, 6)
+        assert(q.addons[2].private.dormant == true, version .. ": QuestBank loaded, the copy sleeps")
+        return q, settings.share, function(on) raid = on; fire(q, "GROUP_ROSTER_UPDATE") end
+      end
+      -- 6.0.1: no QuestBankAPI, its settings in QuestBankDB
+      local q, share, raid = beside("6.0.1", false)
+      assert(share.guild == false and share.party == true, "6.0.1: its guild share off for the session, its group share on out of a raid")
+      raid(true)
+      assert(share.party == false, "6.0.1 in a raid: its group share off")
+      raid(false)
+      assert(share.party == true, "out of the raid: on again")
+      raid(true)
+      fire(q, "PLAYER_LOGOUT")
+      assert(share.guild == true and share.party == true, "6.0.1: both put back at the logout")
+      leave(q)
+      -- 6.2.0: QuestBankAPI, no noRaidSync read
+      q, share, raid = beside("6.2.0", true)
+      assert(share.guild == false and share.party == true, "6.2.0: its guild share off (no GuildOn), its group share on")
+      raid(true)
+      assert(share.party == false, "6.2.0 in a raid: its group share off")
+      fire(q, "PLAYER_LOGOUT")
+      assert(share.guild == true and share.party == true, "6.2.0: both put back at the logout")
+      leave(q)
+      -- 6.3.0 reads noRaidSync: its group share left as it is
+      q, share, raid = beside("6.3.0", true)
+      raid(true)
+      assert(share.party == true, "6.3.0 in a raid: its group share as it is (it reads noRaidSync)")
+      leave(q)
+    end)
+    said[#said + 1] = "an older QuestBank's guild share held off before 6.1.0 as after, its group share in a raid before 6.3.0"
+  end }
+
   for _, case in ipairs(CASES) do
     local ok, err = pcall(case[2])
     if not ok then failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
