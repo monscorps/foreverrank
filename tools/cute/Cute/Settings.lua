@@ -542,6 +542,17 @@ end
 -- the pieces on screen: their one lock, the grid, layout mode and the resets (Layout.lua)
 local function drawLayout(col) C.Layout.Draw(col) end
 
+-- a guild rank's name as the game shows it, 0 the guild master: the game's own for the rank order (GuildRoster.lua:45
+-- names its rank menu by GuildControlGetRankName, an undocumented global: /cute api reports it), else a member's rank
+-- as the roster lists it (C_Club's guildRank), else its place
+C.UNDOCUMENTED[#C.UNDOCUMENTED + 1] = "GuildControlGetRankName"
+local function rankName(i)
+  local n = C.Callable("GuildControlGetRankName") and C.Plain(C.Get(GuildControlGetRankName, i + 1)) or nil
+  if type(n) == "string" and n ~= "" then return n end
+  for _, m in ipairs(C.Roster.members or {}) do if m.rank == i and type(m.rankName) == "string" and m.rankName ~= "" then return m.rankName end end
+  return "rank " .. (i + 1)
+end
+
 -- who sees what: the policy, the threshold, the buttons and the two headings in the band, the list under them. A
 -- member reads one line of it: the officers decide, and how many values go to everyone
 local function drawVisibility(col, officer, ui)
@@ -569,12 +580,17 @@ local function drawVisibility(col, officer, ui)
   -- Info has been read)
   local mine = C.Roster:MyRank() or 99
   local editor = officer and C.Policy.Editable()
-  band:Step("Officer ranks: the ranks that see every value and set this list", "0 to " .. thr, false,
+  -- (the ranks by the game's names, never by number: the stepper counts them)
+  local names = {}
+  for i = 0, thr do names[#names + 1] = rankName(i) end
+  local who = #names == 1 and (names[1] .. " alone sees") or (names[1] .. " to " .. names[#names] .. " see")
+  band:Step("Officer ranks: " .. who .. " every value and set this list", tostring(#names), false,
     (editor and thr > 0 and thr - 1 >= mine) and function() C.Policy:SetThreshold(thr - 1); C.Comm:PolicySoon(); redraw() end or nil,
     (editor and thr < 9) and function() C.Policy:SetThreshold(thr + 1); C.Comm:PolicySoon(); redraw() end or nil,
     function(tip)
       tip:AddLine("Officer ranks", 1, 1, 1)
       tip:AddLine("The guild's ranks, from the guild master down, that see every value and set this list and the rules.", 0.85, 0.85, 0.85, true)
+      tip:AddLine((#names == 1 and "Now one rank: " or ("Now " .. #names .. " ranks: ")) .. table.concat(names, ", ") .. ".", 0.7, 0.7, 0.7, true)
       if officer and thr - 1 < mine and thr > 0 then tip:AddLine("It cannot leave your own rank out: an officer of a higher rank can lower it.", 0.7, 0.7, 0.7, true) end
     end)
   band:Buttons({ { "Save to Guild Info", unsaved and st.ok, save, saveTip(st) }, { "Broadcast now", officer, broadcast }, { "Reset to defaults", editor, function()

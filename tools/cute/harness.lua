@@ -568,6 +568,8 @@ local UNDOCUMENTED = {
   GetLootSlotLink = "Mainline/LootFrame.lua:69 and 515",
   -- whether this character may edit Guild Info, which the policy is saved to (Policy.lua P:SaveState)
   CanEditGuildInfo = "Blizzard_Communities/GuildInfo.lua:53 (CommunitiesGuildInfoFrame_UpdatePermissions: the Guild Info edit button by it)",
+  -- a rank's name by its order, 1 the guild master (Settings > Who sees what names the officer ranks by it)
+  GuildControlGetRankName = "Blizzard_Communities/GuildRoster.lua:45 (the roster's rank menu names each rank order by it)",
 }
 
 -- Legacy Challenges as the Legacy window lists them: categories by id (name, parent, how many), achievements by
@@ -758,6 +760,8 @@ local function newClient(o)
       for _, m in ipairs(GUILD) do if m.guid == o.guid then return m.rank <= INFO_EDIT end end
       return false
     end),
+    -- (o.rankNames: the guild's ranks by order; else five)
+    GuildControlGetRankName = api(function(i) return (o.rankNames or { "Guild Master", "Officer", "Veteran", "Raider", "Member" })[i] end),
   }
   if o.withStats then
     -- c.statsEmpty: the list is still empty, as it may be while the data loads at login
@@ -19577,6 +19581,39 @@ do
     leave(m)
   end)
   print("fix-cute-ui U7: no policy, routes by or the untrusted in what members and officers read")
+end
+
+-- U8. Settings > Who sees what names the officer ranks as the game does, never by number: "Guild Master to Officer"
+--     (the game's names for each rank order, GuildControlGetRankName), the stepper counting the ranks, the tooltip
+--     listing them; a step up takes in the next rank by its name, one nobody holds too
+do
+  isolated({ UIX.member("Gwen", 0), UIX.member("Rone", 1), UIX.member("Pim", 3) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { rankNames = { "Guild Master", "Officer", "Veteran", "Raider", "Member" } }))
+    login(c); tickAll(60)
+    local P = c.C.Policy
+    assert(P.Editable() and P:Threshold() == 1, "Guild Info read: the officer ranks editable, down to the officers: " .. tostring(P:Threshold()))
+    c.C.UI:Open("settings", "vis")
+    local function stepTip()
+      for _, fr in ipairs(c.frames) do
+        if fr.__kind == "Button" and fr:IsVisible() and fr.label and fr.label:GetText() == "+" then
+          local tip = tipOf(fr)
+          if tip:find("Officer ranks", 1, true) then return tip, fr end
+        end
+      end
+    end
+    local t = texts(c)
+    assert(t:find("Officer ranks: Guild Master to Officer", 1, true) and not t:find("0 to ", 1, true), "the officer ranks by name:\n" .. t)
+    local tip, plus = stepTip()
+    assert(tip and tip:find("Guild Master, Officer", 1, true), "the tooltip lists them:\n" .. tostring(tip))
+    check(sframe(c), "fix-cute-ui U8 Who sees what, the officer ranks by name")
+    press(plus)
+    t = texts(c)
+    assert(P:Threshold() == 2 and t:find("Officer ranks: Guild Master to Veteran", 1, true), "a step up: Veteran, a rank nobody holds, by its name:\n" .. t)
+    tip = stepTip()
+    assert(tip:find("Guild Master, Officer, Veteran", 1, true), "listed:\n" .. tip)
+    leave(c)
+    print("fix-cute-ui U8: the officer ranks by the game's names, the stepper counting them and its tooltip listing them")
+  end)
 end
 
 -- this pass's problems and layouts join the run's; the last pass prints them all
