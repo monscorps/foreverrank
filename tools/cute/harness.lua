@@ -19333,6 +19333,8 @@ end
 --     no hold, so its next login asks every record whole; so does a registry grown since its last ask
 -- C3. A brand-new member who presses Start on the first-run card at once: the welcome after the reload, never the
 --     changelog line written for upgraders
+-- C4. A member's file keeps none of the halls' store the officers keep: the weekly values of a stat they close, the
+--     Queue's run cards, earns and firsts, a card locked to them, the firsts ledger and the earns remembered
 ----------------------------------------------------------------------------
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "MAGE", level = 30, online = true } end
@@ -19455,6 +19457,30 @@ do
     leave(c2)
   end)
   said[#said + 1] = "a new member's Start in the first seconds: the welcome after the reload, never the changelog"
+  -- C4
+  isolated({ member("Ofa", 0), member("Mo", 3), member("Ann", 3) }, function()
+    local ofa = char("Ofa", 0)
+    local g = guidOf("Ann")
+    local db = { policy = { vis = { deaths_week = "self" }, by = "Ofa-Forever", rank = 0, at = EPOCH, threshold = 1 },
+      halls = { ["7"] = { weeks = { [g] = { n = 100, v = { deaths_week = 5, quests_week = 3 }, p = { n = 99, v = { deaths_week = 2, quests_week = 1 } } } },
+        queue = { { id = "r1", src = "run", what = "a run card" }, { id = "x1", src = "record", what = "a record", lock = true },
+          { id = "d:ach:1", digest = "ach", day = 1, entries = { { id = "a1", src = "ach", what = "an earn" } } },
+          { id = "f1", src = "first", what = "a guild first" }, { id = "dr", src = "draft", what = "my draft" } },
+        firsts = { e = { a12 = { g = g, n = "Ann", t = EPOCH } }, n = 1 }, achSeen = { [g .. ":12"] = 1 }, achSeenN = 1, sets = {}, gone = {} } } }
+    login(ofa, { policy = { vis = { deaths_week = "self" }, by = "Ofa-Forever", mine = true, rank = 0, at = EPOCH, threshold = 1 } })
+    local mo = char("Mo", 3)
+    login(mo, db)
+    tickAll(60)
+    local d = db.halls["7"]
+    local w = d.weeks[g]
+    assert(w.v.deaths_week == nil and w.p.v.deaths_week == nil and w.v.quests_week == 3 and w.p.v.quests_week == 1,
+      "a member's file keeps no weekly value of a stat the officers keep, this week's or last: " .. tostring(w.v.deaths_week) .. " / " .. tostring(w.p.v.deaths_week))
+    local left = {}
+    for _, r in ipairs(d.queue) do left[#left + 1] = r.id end
+    assert(table.concat(left, ",") == "dr" and d.firsts == nil and d.achSeen == nil, "nor the officers' queue, ledger or earns: " .. table.concat(left, ","))
+    for _, x in ipairs({ ofa, mo }) do leave(x) end
+  end)
+  said[#said + 1] = "a member's file keeps none of the halls' store the officers keep: weekly values of a closed stat, the queue's run cards, earns and firsts, the ledger"
   print("fix-cute-core review: " .. table.concat(said, "; "))
 end
 
