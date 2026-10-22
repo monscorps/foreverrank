@@ -12769,6 +12769,53 @@ do
   end)
 end
 
+-- W22 (the review of sub-project C): the quest to read says only what is so for this character, and keeps the rewards
+-- apart as the engine's tooltip does (Lists.lua UI.RewardLines). "Leads to" names the next steps this character can
+-- take (Q.ForMe: a warrior's Kobold Camp Cleanup leads on to Investigate Echo Ridge and the warrior's letter, never the
+-- five other classes' letters); "You get" heads what comes with the quest, "Choose one" a choice ("Reward" for one
+-- alone), "Rewards include" a list that does not say which; the Classic database's rewards say so, DIM
+do
+  isolated({ { name = "Rone-Forever", guid = guidOf("Rone"), rank = 1, rankName = "Officer", class = "WARRIOR", level = 5, online = true } }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, log = { [7] = 2 } }))
+    login(c); tickAll(6)
+    local QB = c.addons[2].private
+    local UI = c.C.UI
+    UI:Open("quests")
+    local L = qwin(c)
+    local function read(id) QB.Reader.Read(L, QB.Quest.Get(id)); return texts(c) end
+    local function names(ids) local out = {}; for _, id in ipairs(ids) do local q = QB.Quest.Get(id); if q then out[#out + 1] = q.name end end; return out end
+    -- Kobold Camp Cleanup's next steps: the warrior's own, and the other classes' left out
+    local q7 = QB.Quest.Get(7)
+    local mine, others = {}, {}
+    for _, id in ipairs(q7.nextSteps or {}) do local nq = QB.Quest.Get(id); if nq then if QB.Quest.ForMe(nq) then mine[#mine + 1] = id else others[#others + 1] = id end end end
+    assert(#mine >= 1 and #others >= 1, "quest 7 leads on to quests for this character and for others: " .. #mine .. " and " .. #others)
+    local t = read(7)
+    assert(t:find("Leads to " .. table.concat(names(mine), ", "), 1, true), "Leads to: this character's next steps:\n" .. t)
+    for _, n in ipairs(names(others)) do assert(not t:find(n, 1, true), "another class's next step left out: " .. n .. "\n" .. t) end
+    check(L.frame, "W22 the quest to read, its next steps")
+    -- the rewards in their groups
+    t = read(103)
+    local rw = QB.Quest.Rewards(QB.Quest.Get(103))
+    assert(rw and #(rw.r or {}) > 0 and #(rw.c or {}) > 1, "quest 103: rewards that come with it and a choice")
+    local get, choose = t:find("You get", 1, true), t:find("Choose one", 1, true)
+    assert(get and choose and get < choose and not t:find("Rewards: choose one", 1, true), "You get, then Choose one:\n" .. t)
+    t = read(704)
+    assert(t:find("Rewards include", 1, true) and not t:find("Choose one", 1, true), "a list that does not say which: Rewards include:\n" .. t)
+    local _, how = QB.Quest.Rewards(QB.Quest.Get(17))
+    assert(how == "catalog" and QB.Data.RCLASSIC and QB.Data.RCLASSIC[17], "quest 17's rewards are the Classic database's")
+    t = read(17)
+    assert(t:find("Reward", 1, true) and t:find("Rewards from Classic data (may differ in Forever)", 1, true), "the Classic database's rewards say so:\n" .. t)
+    local dimLine
+    for _, l in ipairs(L.labels.items) do if l:IsShown() and l:GetText() == "Rewards from Classic data (may differ in Forever)." then dimLine = l end end
+    assert(dimLine and sameColor(dimLine.__color, UI.COLORS.DIM), "and DIM")
+    check(L.frame, "W22 the quest to read, its rewards")
+    QB.Reader.Back(L)
+    assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    leave(c)
+    print(string.format("windows W22: the quest to read: Leads to names this character's %d next steps (%d others' left out); You get, Choose one and Rewards include apart; the Classic database's rewards said so, DIM", #mine, #others))
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

@@ -139,29 +139,36 @@ function R.Draw(ui, scroll)
   if chain or nextSteps then
     head("Chain")
     if chain then line((chain:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")), K.INK, 13) end
-    if type(nextSteps) == "table" and #nextSteps > 0 then
-      local names = {}
-      for _, id in ipairs(nextSteps) do names[#names + 1] = E.Quest.Label(id) end
-      line("Leads to " .. table.concat(names, " and "), K.INK, 13)
+    -- (the next steps this character can take, as the engine's tooltip lists them: Lists.lua, Q.ForMe; a quest that
+    -- leads on to each class's letter names this class's alone)
+    local names = {}
+    for _, id in ipairs(type(nextSteps) == "table" and nextSteps or {}) do
+      local nq = E.Quest.Get(id)
+      if nq and E.Quest.ForMe(nq) then names[#names + 1] = E.Quest.Label(id) end
     end
+    if #names > 0 then line("Leads to " .. table.concat(names, ", "), K.INK, 13) end
   end
-  -- the rewards, an icon and a name each (the item's own icon, 134400 until the client has it)
-  local rw = E.Quest.Rewards(q)
-  local ids = {}
-  for _, list in ipairs({ rw and rw.r or {}, rw and rw.c or {}, rw and rw.u or {} }) do for _, id in ipairs(list) do ids[#ids + 1] = id end end
+  -- the rewards, an icon and a name each (the item's own icon, 134400 until the client has it), in the engine's
+  -- tooltip's groups (Lists.lua UI.RewardLines): what comes with the quest, a choice, and a list that does not say
+  -- which; the Classic database's said so, DIM (the design's section 8)
+  local rw, how = E.Quest.Rewards(q)
   -- (the icons on a host of the reader's own, hidden with it when the list comes back: UI:Host)
   local host = Cute.Host(ui, "reader")
   host:ClearAllPoints(); host:SetPoint("TOPLEFT", 0, 0); host:SetSize(w, 10)
   host.icons = host.icons or {}
   for _, t in ipairs(host.icons) do t:Hide(); if t.edge then t.edge:Hide() end end
-  if #ids > 0 then
-    head((rw and rw.c and #rw.c > 1) and "Rewards: choose one" or "Rewards")
-    for i = 1, math.min(6, #ids) do
-      local id = ids[i]
+  local n, any = 0, false
+  local function items(title, list)
+    if type(list) ~= "table" or #list == 0 then return end
+    any = true
+    head(title)
+    for i = 1, math.min(6, #list) do
+      local id = list[i]
+      n = n + 1
       local name, _, _, icon = E.API.ItemInfo(id)
-      local t = host.icons[i]
+      local t = host.icons[n]
       if not t then
-        t = host:CreateTexture(nil, "ARTWORK"); t:SetSize(28, 28); t:SetTexCoord(0.08, 0.92, 0.08, 0.92); host.icons[i] = t
+        t = host:CreateTexture(nil, "ARTWORK"); t:SetSize(28, 28); t:SetTexCoord(0.08, 0.92, 0.08, 0.92); host.icons[n] = t
         -- (a 1 px edge in the item's quality colour, as the windows draw an item)
         t.edge = host:CreateTexture(nil, "BORDER"); t.edge:SetPoint("TOPLEFT", t, "TOPLEFT", -1, 1); t.edge:SetPoint("BOTTOMRIGHT", t, "BOTTOMRIGHT", 1, -1)
       end
@@ -175,6 +182,13 @@ function R.Draw(ui, scroll)
       line(name or ("Item " .. id), L and L.QualityName(qual) or K.INK, 13, 42, w - 48)
       y = math.max(y, y0 + 32)
     end
+  end
+  items("You get", rw and rw.r)
+  items((rw and rw.c and #rw.c > 1) and "Choose one" or "Reward", rw and rw.c)
+  items("Rewards include", rw and rw.u)
+  if any and how == "catalog" and E.Data.RCLASSIC and E.Data.RCLASSIC[q.id] then
+    y = y + 2
+    line("Rewards from Classic data (may differ in Forever).", K.DIM, 11)
   end
   -- the hand-in, or the giver
   local npc = log and q.turn or (q.give or q.turn)
