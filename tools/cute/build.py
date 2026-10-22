@@ -10,6 +10,7 @@ way the owner does (skipped with --no-zip or when a folder is missing), regenera
 addons/cute/stats.js from the registry (luajit page_stats.lua), stamp the version (Cute.toc), the zip size (KB) and
 the stat counts into addons/cute/index.html between <!--@name--> ... <!--/@name--> markers, then check the page:
   - every local href/src exists beside the page; every site-absolute path exists under the repo
+  - Settings > Data you share and the README promise the uploader on Cute's page only while it offers Cute-Uploader.zip
   - every class the page's own style defines starts with cu- and none appears in forever.css; every class the markup
     uses is defined somewhere (the page's style or forever.css, for the nav)
   - no version number, TODO or placeholder outside the markers and the changelog labels; no middle dots or arrows in
@@ -499,6 +500,23 @@ def check_links(html):
         ok("every local link and image exists")
 
 
+def check_uploader_note(html):
+    """Settings > Data you share (Cute_Quest/PageQuests.lua's notes) and the README may say the uploader comes on Cute's
+    page only while the page offers it: a link to Cute-Uploader.zip (tools/build_uploader.py --cute, at release) that is
+    there beside the page"""
+    notes = re.findall(r'col:Note\("((?:[^"\\]|\\.)*)"\)', open(os.path.join(QUEST, "PageQuests.lua"), encoding="utf-8").read())
+    readme = open(os.path.join(HERE, "README.md"), encoding="utf-8").read()
+    promised = ["Settings: " + n for n in notes if "Cute's page" in n]
+    if "Cute's second download" in readme:
+        promised.append("README: Cute's second download")
+    offered = 'href="Cute-Uploader.zip"' in html and os.path.isfile(os.path.join(PAGE_DIR, "Cute-Uploader.zip"))
+    if promised and not offered:
+        problem("the uploader is promised on Cute's page, which offers no Cute-Uploader.zip (python3 tools/build_uploader.py --cute "
+                "and the page's second download, or drop the words): " + "; ".join(promised))
+    else:
+        ok("the uploader's words and Cute's page agree (%s)" % ("Cute-Uploader.zip offered" if offered else "not promised there"))
+
+
 def check_online(html):
     if "--online" not in sys.argv:
         print("  skip external links (--online fetches them)")
@@ -717,6 +735,7 @@ def main():
     page_rules = rules_of(page_style(html))
     site_rules = rules_of(open(SITE_CSS, encoding="utf-8").read())
     check_links(html)
+    check_uploader_note(html)
     check_online(html)
     check_classes(html, page_rules, site_rules)
     check_stale(html, version)

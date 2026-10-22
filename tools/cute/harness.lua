@@ -14841,6 +14841,8 @@ end
 -- J's Runs tab) is no Lua error, and the delete draws Settings again, the button greyed.
 -- M8: out of any guild no run starts (no report can come of one): no hello on the group channel and no chat line, in
 -- the open world and in a dungeon; the guild's members run and report as ever.
+-- M9: Settings > Data you share and the README promise the uploader on Cute's page only while the page offers
+-- Cute-Uploader.zip (build_uploader.py --cute, at release).
 do
   local CASES = {}
   local function member(name, rank, o)
@@ -15005,6 +15007,21 @@ do
       K.disband(G)
     end)
   end }
+
+  CASES[#CASES + 1] = { "M9 the uploader promised on Cute's page only while it offers it", function() iso({ member("Rone", 1) }, function()
+    local c = questClient()
+    c.C.UI:Open("settings", "share")
+    local shown = texts(c)
+    assert(shown:find("The QuestBank Uploader sends what you found in the world to foreverrank.com", 1, true), "Data you share names the uploader:\n" .. shown)
+    local page = assert(io.open(HERE .. "/../../addons/cute/index.html")):read("*a")
+    local zip = io.open(HERE .. "/../../addons/cute/Cute-Uploader.zip", "rb")
+    local offered = page:find('href="Cute-Uploader.zip"', 1, true) ~= nil and zip ~= nil
+    if zip then zip:close() end
+    local readme = assert(io.open(HERE .. "/README.md")):read("*a")
+    assert(offered or not shown:find("Cute's page", 1, true), "Data you share says the uploader comes on Cute's page, which does not offer it")
+    assert(offered or not readme:find("Cute's second download", 1, true), "the README calls the uploader Cute's second download, which Cute's page does not offer")
+    leave(c)
+  end) end }
 
   local failed = {}
   for _, case in ipairs(CASES) do

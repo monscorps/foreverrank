@@ -5,9 +5,10 @@ hundred facts about its own character, plus what it meets in play (the bosses it
 factions, what it enchants) and the game's own statistics where the client reports them, shares them with the
 guild over the game's addon channel, and shows the whole guild in one window. Officers decide per stat whether members
 see each other's, and what they keep to themselves goes to them alone, never on the guild channel (Privacy and trust).
-Cute has no server: what the guild shares goes over the guild channel alone. The QuestBank Uploader, Cute's second
-download, sends foreverrank.com only what the quest engine noted in the world, from `Cute_Quest.lua` and cut to one
-allow-list (`worker/src/allow.js`); it refuses `Cute.lua`, so never a name nor anything about the guild leaves the game.
+Cute has no server: what the guild shares goes over the guild channel alone. The QuestBank Uploader (packed beside Cute
+as `Cute-Uploader.zip` by `tools/build_uploader.py --cute`, at release, for Cute's page to offer) sends foreverrank.com
+only what the quest engine noted in the world, from `Cute_Quest.lua` and cut to one allow-list (`worker/src/allow.js`);
+it refuses `Cute.lua`, so never a name nor anything about the guild leaves the game.
 
 Learned, not listed. Forever is an exploring game whose content is revealed over time, so the addon fixes no content
 in code: what the guild meets in play is data each client finds, shares on the guild channel and keeps in the saved

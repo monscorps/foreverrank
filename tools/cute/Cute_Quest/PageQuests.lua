@@ -388,6 +388,8 @@ if E then
       end)
     col:Check("Learn quests from the game", s.survey ~= false, true, function(on) if E.Survey and E.Survey.SetOn then E.Survey.SetOn(on) else s.survey = on end end)
     col:Check("Share your quests with your party", s.share.party ~= false, true, function(on) s.share.party = on end)
-    col:Note("The QuestBank Uploader sends what you found in the world to foreverrank.com, never a name or anything about your guild. It comes with Cute on Cute's page at foreverrank.com.")
+    -- (where it comes from, once Cute's page offers Cute-Uploader.zip at release: build.py check_uploader_note holds
+    -- the two together)
+    col:Note("The QuestBank Uploader sends what you found in the world to foreverrank.com, never a name or anything about your guild.")
   end })
 end
