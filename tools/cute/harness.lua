@@ -13083,7 +13083,9 @@ do local function cardsStage()
     tickAll(5)
     assert(moe.C.Policy:Untrusted(una.o.guid), "Una marked untrusted on Moe's client")
     una.C.Halls.answerHeard = true
-    assert(H(una):Publish({ kind = "n", title = "Untrusted", cards = { { guid = moe.o.guid, name = "Moe", class = "DRUID", kind = "shout", title = "T", line = "L", source = "" } } }), "Una's own client publishes")
+    -- (her own client publishes nothing; an edited copy's 1C all the same is nobody's)
+    assert(not H(una):Publish({ kind = "n", title = "Untrusted", cards = { { guid = moe.o.guid, name = "Moe", class = "DRUID", kind = "shout", title = "T", line = "L", source = "" } } }), "Una's own client publishes nothing")
+    una.C.Comm.Queue({ msg = "1C|" .. (una.env.GetServerTime() + 7) .. "|1/1|h=n,Untrusted,Una,,;c=" .. sfx(moe) .. ",Moe,DRUID,,,O,,,T,L,," })
     tickAll(5)
     assert(shownSets(moe) == 1, "an untrusted officer's set ignored")
 
@@ -14381,6 +14383,32 @@ do local function cardsStage()
     assert(bytes < 250000, "the saved queue bounded: " .. bytes)
     said[#said + 1] = string.format("a month of full digests: 300 entries kept, the oldest out first, the queue %d KB", math.ceil(bytes / 1024))
   end)
+
+  -- an officer the officers marked untrusted: Publish greyed (Marked untrusted), no answer to 1G, no 1O, and the
+  -- officer with Cute after them by GUID answers at once
+  isolated({ gmember("Yard", 1, "MAGE"), gmember("Yarn", 1, "PRIEST"), gmember("Yawn", 3, "ROGUE") }, function()
+    local yard, yarn = cchar("Yard", 1), cchar("Yarn", 1, { class = "PRIEST" })
+    login(yard); login(yarn)
+    tickAll(200)
+    assert(H(yarn):Publish({ kind = "n", title = "Held", cards = { { guid = yard.o.guid, name = "Yard", class = "MAGE", kind = "shout", title = "T", line = "L", source = "" } } }), "a set both hold")
+    tickAll(5)
+    yarn.C.Policy:SetUntrusted(yard.o.guid, true)
+    yarn.C.Comm:SendPolicy()
+    tickAll(5)
+    assert(yard.C.Policy:Untrusted(yard.o.guid), "Yard's client knows")
+    local ok, why = H(yard).PublishState({ cards = { { name = "x" } } })
+    assert(not ok and why == "Marked untrusted", "Publish greyed: " .. tostring(why))
+    local o0 = msgs(yard, "1O")
+    yard.C.Records:SetOn("deaths", true)
+    tickAll(65)
+    assert(msgs(yard, "1O") == o0, "no 1O from an untrusted officer")
+    local yawn = cchar("Yawn", 3, { class = "ROGUE" })
+    login(yawn)
+    local a0 = answerMsgs(yard)
+    tickAll(120)
+    assert(answerMsgs(yard) == a0 and #H(yawn).Sets() == 1, "the untrusted officer answers nothing, the other does: " .. (answerMsgs(yard) - a0))
+  end)
+  said[#said + 1] = "an officer marked untrusted publishes nothing, answers no 1G and sends no 1O"
 
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end

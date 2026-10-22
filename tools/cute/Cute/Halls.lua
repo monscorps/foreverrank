@@ -534,6 +534,8 @@ local function setHeard() H.DB().lastSetAt = now() end
 function H.PublishState(set)
   if not (C.Roster and C.Roster:InGuild()) then return false, "Not in a guild" end
   if not officer() then return false, "Officers only" end
+  -- (an officer the officers marked untrusted: every client drops their set, R:OfficerVoice, and shows their guild line)
+  if C.Policy:Untrusted(C.MyGUID()) then return false, "Marked untrusted" end
   if not C.Policy:Settled() then return false, "Waiting for Guild Info" end
   if H.loginAt and gtime() - H.loginAt < LOGIN_WAIT and not H.answerHeard then return false, "Checking for news" end
   if lastSet() and now() - lastSet() < GAP then return false, "Wait a minute" end
@@ -776,7 +778,8 @@ local function recStamp() return C.Records and C.Records.Stamp() or 0 end
 function H:Asked(text, sender)
   local a, ra = text:match("^1G|(%d+)|(%d*)$")
   a, ra = tonumber(a or ""), tonumber(ra or "") or 0
-  if not a or not officer() or (H.Newest() <= a and recStamp() <= ra) then return end
+  -- (an officer marked untrusted answers nothing: nobody takes it, and the next officer by GUID answers at once)
+  if not a or not officer() or C.Policy:Untrusted(C.MyGUID()) or (H.Newest() <= a and recStamp() <= ra) then return end
   local who = C.Roster:GuidOf(sender) or sender
   for k, t in pairs(H.answered) do if now() - t >= ANSWER_AGAIN then H.answered[k] = nil end end
   if H.answered[who] then return end
@@ -795,7 +798,7 @@ function H:Answer(askedAt, recHeard0)
   H.answering = false
   local waiting, recSince = H.waiting, H.waitingRec
   H.waiting, H.waitingRec = {}, nil
-  if not officer() then return end
+  if not officer() or C.Policy:Untrusted(C.MyGUID()) then return end
   local since
   for who, a in pairs(waiting) do since = since and math.min(since, a) or a; H.answered[who] = now() end
   if not since then return end

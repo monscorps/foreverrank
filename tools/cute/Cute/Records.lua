@@ -478,7 +478,8 @@ function Rec.Message()
   return head .. body
 end
 function Rec:Send()
-  if not (officer() and C.Roster:InGuild()) then return end
+  -- (an officer marked untrusted sends nothing: every client refuses their list)
+  if not (officer() and C.Roster:InGuild()) or C.Policy:Untrusted(C.MyGUID()) then return end
   C.Comm.Queue({ msg = Rec.Message() })
   Rec.sentAt = gtime()
   Rec.sent = Rec.sent + 1
