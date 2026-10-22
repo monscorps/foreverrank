@@ -77,25 +77,29 @@ local function bossesOf(d)
   return out
 end
 
--- a dungeon's tooltip: its range and where it comes from, how sure, every boss with how sure and your kills, the loot
+-- an awaited dungeon's rule, in the officers' tooltip and /cute rules; a member reads what it means
+local AWAITED_RULE = "Not placed yet: two members entering it, or a kill there a group mate names back, give it its place, and the guild's kills name its bosses."
+-- a dungeon's tooltip: its range and where it comes from, how sure, every boss with how sure and your kills, the loot.
+-- The research's own names and the rule that places an awaited one are the officers' (a member reads what it means)
 local function dungeonTip(d, extra)
   local R = C.Rules
   local m = R.Model()
   local bosses = bossesOf(d)
   return function(tip)
+    local officer = C.Roster:MeOfficer()
     tip:AddLine(d.name, 1, 1, 1)
     local range, from = R.RangeWords(d)
     tip:AddDoubleLine("Levels " .. range, from, 0.8, 0.8, 0.8, 0.7, 0.7, 0.7)
     tip:AddLine((d.kind == "raid" and "A raid" or "A dungeon") .. (d.new and " new in Forever, " or ", ") .. R.Words(d) .. ".", 0.7, 0.7, 0.7, true)
-    if d.seedName then tip:AddLine("The research calls it " .. d.seedName .. ".", 0.6, 0.6, 0.6, true) end
-    if d.awaited then tip:AddLine("Not placed yet: two members entering it, or a kill there a group mate names back, give it its place, and the guild's kills name its bosses.", 0.6, 0.6, 0.6, true) end
+    if d.seedName and officer then tip:AddLine("The research calls it " .. d.seedName .. ".", 0.6, 0.6, 0.6, true) end
+    if d.awaited then tip:AddLine(officer and AWAITED_RULE or "Its levels and bosses are not known yet: they come as the guild goes inside.", 0.6, 0.6, 0.6, true) end
     for _, enc in ipairs(bosses) do
       local b = m.bosses[enc]
       local mine = killedIt(enc) and "you killed it" or "not by you"
       local st = R.Words(b)
       local dim = b.state == "doubted" and 0.45 or 0.75
       tip:AddDoubleLine(b.name, st .. "; " .. mine, 0.85, 0.85, 0.85, dim, dim, dim)
-      if b.seedName then tip:AddLine("   The research calls it " .. b.seedName .. ".", 0.6, 0.6, 0.6, true) end
+      if b.seedName and officer then tip:AddLine("   The research calls it " .. b.seedName .. ".", 0.6, 0.6, 0.6, true) end
       -- the loot: what the guild saw drop, what research lists and has not been seen, and in how many kills
       local seen, unseen = 0, 0
       for _, ls in pairs(b.loot) do if ls == "seen" then seen = seen + 1 elseif ls ~= "absent" then unseen = unseen + 1 end end
@@ -111,6 +115,23 @@ local function dungeonTip(d, extra)
 end
 
 G.DungeonTip = dungeonTip -- (the harness reads a dungeon's tooltip whether or not it is the pick)
+-- where the knowledge comes from and the awaited rule, for the reports a bug report pastes: /cute diag and /cute rules
+do
+  local coreDiag = C.Diag
+  function C.Diag()
+    local lines = coreDiag and coreDiag() or {}
+    local ok, first, detail = pcall(G.Source)
+    table.insert(lines, math.max(1, #lines), ok and ("diag guide: " .. tostring(first) .. " " .. tostring(detail)) or ("diag guide: " .. tostring(first)))
+    return lines
+  end
+  local R = C.Rules
+  local rulesReport = R.RulesReport
+  function R.RulesReport()
+    local out = rulesReport and rulesReport() or {}
+    out[#out + 1] = "A dungeon the research names and the guild has not met: " .. AWAITED_RULE
+    return out
+  end
+end
 
 ----------------------------------------------------------------------------
 -- you and the guild, per dungeon
@@ -721,6 +742,13 @@ function G.DrawPick(UI, host, y, w, narrow)
   local y0 = y
   y = y + L.FillRow(hd, { kind = "head", bar = K.GROUP, icon = { art = "dungeon" }, name = "Dungeon", who = "the guild's pick" }, w)
   local top = plan.next
+  -- (where the knowledge comes from, research and builds, is the officers' and /cute diag's; a member reads what the
+  -- card means)
+  local sourceTip = function(tip)
+    tip:AddLine(" ")
+    if officer then tip:AddLine(first, 1, 1, 1, true); tip:AddLine(detail, 0.7, 0.7, 0.7, true)
+    else tip:AddLine("Levels and bosses as the guild has met them.", 0.7, 0.7, 0.7, true) end
+  end
   local guildTip = function(tip)
     if officer and plan.guild then
       tip:AddLine(" ")
@@ -743,7 +771,7 @@ function G.DrawPick(UI, host, y, w, narrow)
     y = y + L.FillRow(nr, { kind = "note", x = 10, name = top.line, nameC = K.DIM, tip = function(tip)
       tip:AddLine(top.line, 1, 1, 1, true)
       if top.tip then tip:AddLine(" "); top.tip(tip) end
-      tip:AddLine(" "); tip:AddLine(first, 1, 1, 1, true); tip:AddLine(detail, 0.7, 0.7, 0.7, true)
+      sourceTip(tip)
       guildTip(tip)
     end }, w)
     host.pickShown = nil
@@ -798,7 +826,7 @@ function G.DrawPick(UI, host, y, w, narrow)
           tip:AddDoubleLine(m.name .. " " .. m.level, m.grouped and "in your group" or "", c[1], c[2], c[3], 0.6, 0.6, 0.6)
         end
       end
-      tip:AddLine(" "); tip:AddLine(first, 1, 1, 1, true); tip:AddLine(detail, 0.7, 0.7, 0.7, true)
+      sourceTip(tip)
       guildTip(tip)
       if art and art.OpenDungeon then tip:AddLine("Click: the Dungeons tab on it.", 0.45, 0.45, 0.45) end
     end,

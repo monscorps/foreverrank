@@ -3804,7 +3804,11 @@ do
     tick(slow, 1)
     assert(slow.C.Rules.SeedState() == "fresh" and slow.C.Stats.EnchantKnown(9, "4.1") and slow.C.Sample:Value("unenchanted")[9], "done a frame on: the seed's wrist now asks for an enchant")
     redraw(slow)
-    assert(tipOf(guideHead(slow)):find("From research and the beta, checked against this client", 1, true), "and the Guide's head says where its knowledge comes from")
+    -- (fix-cute-ui: a member's tooltip says what the pick means; where it comes from is /cute diag's)
+    local sd0 = #slow.chat
+    slow.env.SlashCmdList.CUTE("diag")
+    assert(tipOf(guideHead(slow)):find("Levels and bosses as the guild has met them.", 1, true)
+      and table.concat(slow.chat, "\n", sd0 + 1):find("diag guide: From research and the beta, checked against this client", 1, true), "and /cute diag says where the Guide's knowledge comes from")
     leave(slow)
     -- a partial seed: a dungeon without a range, one without a name, one whose range is upside down, a boss without an id,
     -- loot that is no id, an enchant slot past the gear, a recipe without a name, an XP value below zero
@@ -4334,8 +4338,12 @@ do
     -- (the windows round: the pick a card, its name on it and the whole line in its tooltip; no pick, the line itself)
     local shown = cyPlan.next.card and cyPlan.next.card.d.name or cyPlan.next.line
     local headTip = tipOf(guideHead(cy))
-    assert(first:find(shown, 1, true) and headTip:find(cyPlan.next.line, 1, true) and headTip:find(SEEDED and "From research and the beta, checked against this client" or "Nothing shipped with this copy", 1, true),
-      "the page opens on the pick, where it comes from in the head's tooltip:\n" .. headTip)
+    -- (fix-cute-ui: a member's tooltip says what the pick means; where it comes from is /cute diag's)
+    local cd0 = #cy.chat
+    cy.env.SlashCmdList.CUTE("diag")
+    assert(first:find(shown, 1, true) and headTip:find(cyPlan.next.line, 1, true) and headTip:find("Levels and bosses as the guild has met them.", 1, true)
+      and table.concat(cy.chat, "\n", cd0 + 1):find(SEEDED and "diag guide: From research and the beta, checked against this client" or "diag guide: Nothing shipped with this copy", 1, true),
+      "the page opens on the pick, what it means in the head's tooltip, where it comes from in /cute diag:\n" .. headTip)
     -- /cute diag on the officer: the seed's state, with what was learned
     local d0 = #ruler.chat
     ruler.env.SlashCmdList.CUTE("diag")
@@ -19613,6 +19621,47 @@ do
     assert(tip:find("Guild Master, Officer, Veteran", 1, true), "listed:\n" .. tip)
     leave(c)
     print("fix-cute-ui U8: the officer ranks by the game's names, the stepper counting them and its tooltip listing them")
+  end)
+end
+
+-- U9. The dungeon pick's tooltip on L says what the card means to a member ("Levels and bosses as the guild has met
+--     them."), never where the knowledge comes from (research, the beta, builds): that stays for officers, and /cute
+--     diag says it ("diag guide: ..."). A dungeon's tooltip names the research's name for it, and the rule that places
+--     an awaited one, to officers alone; a member reads that its levels are not known yet, and /cute rules has the rule
+do
+  isolated({ UIX.member("Helga", 1), UIX.member("Pim", 3) }, function()
+    local d = { name = "The Test Hold", min = 20, max = 25, kind = "party", seedName = "Test Keep", awaited = true, bosses = {} }
+    local m = newClient(charOf({ "Pim", 3, "Raider", "WARRIOR", 42 }))
+    local o = newClient(charOf({ "Helga", 1, "Officer", "WARRIOR", 42 }))
+    login(m); login(o); tickAll(35)
+    local first, detail = m.C.Guide.Source()
+    openGuide(m); redraw(m)
+    local head = guideHead(m)
+    local tip = head and tipOf(head) or ""
+    assert(tip:find("Levels and bosses as the guild has met them.", 1, true), "the member's pick says what it means:\n" .. tip)
+    -- (the how-sure words beside a range or a boss, "from research", are the Guide's own: the foot alone is the source's)
+    for _, w in ipairs({ first, detail, "Research build", "the beta, checked", "This client is", "Nothing shipped", "The research calls it" }) do
+      assert(not tip:find(w, 1, true), "no source words for a member: " .. w .. "\n" .. tip)
+    end
+    local n0 = #m.chat
+    m.env.SlashCmdList.CUTE("diag")
+    local diag = table.concat(m.chat, "\n", n0 + 1)
+    assert(diag:find("diag guide: " .. first, 1, true) and diag:find(detail, 1, true), "/cute diag says where it comes from:\n" .. diag)
+    local mt = tipText(m.C.Guide.DungeonTip(d))
+    assert(not mt:find("The research calls it", 1, true) and not mt:find("two members entering it", 1, true) and mt:find("Its levels and bosses are not known yet", 1, true), "a member's dungeon tooltip:\n" .. mt)
+    n0 = #m.chat
+    m.env.SlashCmdList.CUTE("rules")
+    local rules = table.concat(m.chat, "\n", n0 + 1)
+    assert(rules:find("two members entering it, or a kill there a group mate names back", 1, true), "/cute rules has the rule:\n" .. rules)
+    -- an officer keeps both
+    openGuide(o); redraw(o)
+    local otip = tipOf(guideHead(o))
+    assert(otip:find(first, 1, true), "the officer's pick says where it comes from:\n" .. otip)
+    local ot = tipText(o.C.Guide.DungeonTip(d))
+    assert(ot:find("The research calls it Test Keep.", 1, true) and ot:find("two members entering it", 1, true), "an officer's dungeon tooltip:\n" .. ot)
+    check(qwin(m).frame, "fix-cute-ui U9 a member's Quests tab")
+    leave(m); leave(o)
+    print("fix-cute-ui U9: the pick's tooltip says what it means to a member; research, builds and rules for officers, /cute diag and /cute rules")
   end)
 end
 
