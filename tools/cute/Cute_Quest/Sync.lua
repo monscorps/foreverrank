@@ -6,8 +6,9 @@
 --   1S|level|xp|fac|class|banked*100|plan*100|at60*100|runMin|runN|runXP|version|guid   status
 --   1Q|part|parts|id.code[have/need],...                                    quests (b banked, a in the log with progress, p to fetch):
 --                                                                              to your group and a /qb sync friend, never the guild
---   1L|id:xp:level,...                                                         XP the game reported
+--   1L|id:xp:level,...                                                         XP the game reported, to your group alone
 --   1R                                                                         please send yours (on GUILD: your status alone)
+--   1H                                                                         the guild's ask: your status alone
 --   1G|text                                                                    the Guide's first step (6.0), for the others' step frames
 local _, QB = ...
 if QB.dormant then return end
@@ -22,10 +23,13 @@ local STALE = 30 * 60
 -- reach you from anyone of your faction)
 local GROUP = { PARTY = true, RAID = true, INSTANCE_CHAT = true }
 S.GROUP = GROUP
+local GROUP_WORD = { PARTY = "party", RAID = "raid", INSTANCE_CHAT = "instance group" }
 -- (the launch audit) GUILD hears your status alone: the quest list goes to your group (and to a friend by /qb sync). Every
 -- login made every QuestBank in the guild send its status and its whole list there (a 1R on GUILD cleared what each had
 -- sent), and each objective ticked sent the list again; only the group reads it (the Party page's dungeons, the
--- group-quest factor). A guild mate's ask is answered with your status, once a guild mate in ASK_GAP seconds
+-- group-quest factor). A guild mate's ask is answered with your status, once a guild mate in ASK_GAP seconds. (The final
+-- audit) the hello asks the guild with 1H, which a QuestBank before this one never answers: their answer to a guild 1R
+-- is their status and their whole list on GUILD
 local ASK_GAP = 600
 S.guildAsked = {}
 
@@ -144,7 +148,14 @@ function S:Broadcast(force)
     if ch ~= "GUILD" and (force or sig ~= self.lastQuests) then for _, m in ipairs(msgs) do queue(m, ch) end end
   end
   self.lastStatus, self.lastQuests = status, sig
-  if force then QB:Print("Shared your quests with " .. table.concat(chans, " and "):lower() .. ".") end
+  if force then
+    -- (the final audit) what went where: the quests to your group, your level and progress to your guild
+    local group, guild
+    for _, ch in ipairs(chans) do if ch == "GUILD" then guild = true else group = GROUP_WORD[ch] or "group" end end
+    if group and guild then QB:Print("Sent your quests to your " .. group .. " and your level and progress to your guild.")
+    elseif guild then QB:Print("Sent your level and progress to your guild.")
+    else QB:Print("Shared your quests with your " .. group .. ".") end
+  end
 end
 
 -- (the review round) the names you sent your quests to (/qb sync Name): a whispered ask ("1R") is answered for them
@@ -152,6 +163,15 @@ end
 -- whispered ask got your level, XP, class, GUID's tail and every quest back, whatever the share settings
 S.asked = {}
 local function baseName(n) return type(n) == "string" and (n:match("^([^%-]+)") or n):lower() or nil end
+-- (the chat's sender name may carry more than the unit's: the first word decides)
+local function firstWord(n) return type(n) == "string" and n:match("^[^%s%-]+") or n end
+-- (the final audit) whether a sender is someone you sent yours to: by the name as typed, or by its first word, as chat
+-- gives a sender the surname a typed name has not
+local function asked(sender)
+  if S.asked[baseName(sender)] then return true end
+  local w = firstWord(sender)
+  return type(w) == "string" and S.asked[w:lower()] == true
+end
 function S:Whisper(name)
   if not self.ready or not name or name == "" then return end
   queue(statusMsg(), "WHISPER", name)
@@ -198,17 +218,20 @@ function S:Changed()
   end, "party sync: sharing"))
 end
 
+-- (the final audit) an XP reading goes to your group alone, while you share with it: on GUILD every quest of your log went
+-- to the guild, whose readings this one no longer takes either (S:Receive)
 function S:QueueLive(id, xp, level)
+  if not (QB:Settings().share.party and groupChannel()) then return end
   self.live[#self.live + 1] = id .. ":" .. xp .. ":" .. level
   if self.liveWaiting then return end
   self.liveWaiting = true
   C_Timer.After(5, QB.Safe(function()
     S.liveWaiting = false
-    local chans = channels()
+    local ch = QB:Settings().share.party and groupChannel()
     while #S.live > 0 do
       local batch = {}
       while #S.live > 0 and #batch < 14 do batch[#batch + 1] = table.remove(S.live, 1) end
-      for _, ch in ipairs(chans) do queue("1L|" .. table.concat(batch, ","), ch) end
+      if ch then queue("1L|" .. table.concat(batch, ","), ch) end
     end
   end, "party sync: XP"))
 end
@@ -275,6 +298,16 @@ local function statusIsMine(msg)
   return tail ~= nil and tail ~= "" and #guid >= 10 and tail == guid:sub(-10)
 end
 
+-- a guild mate's ask: your status alone, once a guild mate in ASK_GAP; nothing sent before is forgotten
+local function answerGuild(sender)
+  local t = now()
+  local at = S.guildAsked[sender]
+  if not at or t - at >= ASK_GAP then
+    S.guildAsked[sender] = t
+    queue(statusMsg(), "GUILD")
+  end
+end
+
 function S:Receive(msg, channel, sender)
   if not sender or type(msg) ~= "string" or #msg > 255 then return end
   -- (guild sharing off, or a host's noGuildSync: nothing taken from the guild either, so a single guild mate's XP
@@ -288,13 +321,17 @@ function S:Receive(msg, channel, sender)
     if v then self:HeardVersion(v, sender) end
     return
   end
-  -- (the launch audit) the realm's version channel carries 1V alone; a step line comes from your group alone, an XP
-  -- reading from your group or the guild you share with. Anyone of your faction can whisper you or speak there: a
-  -- stranger's 1G showed in your step frame, escape codes and all, and their 1L corrected your plan's XP. Your own
-  -- S:Step and QueueLive never whisper either; a whispered status and quest list still come (/qb sync)
+  -- (the launch audit) the realm's version channel carries 1V alone; a step line comes from your group alone, and (the
+  -- final audit) an XP reading too. Anyone of your faction can whisper you or speak there: a stranger's 1G showed in your
+  -- step frame, escape codes and all, and their 1L corrected your plan's XP. Your own S:Step and QueueLive never whisper
+  -- either. (The final audit) a quest list comes from your group, or by whisper from someone you sent yours to (/qb
+  -- sync), and a whispered status from them alone: QuestBank 6.4.0 and older send their list on GUILD, anyone can
+  -- whisper, and every quest on a list ranked higher in your Guide (M.PartyHas) and lost a group quest's solo cost
   if channel == "CHANNEL" then return end
   if kind == "1G" and not GROUP[channel] then return end
-  if kind == "1L" and not (GROUP[channel] or channel == "GUILD") then return end
+  if kind == "1L" and not GROUP[channel] then return end
+  if kind == "1Q" and not (GROUP[channel] or (channel == "WHISPER" and asked(sender))) then return end
+  if kind == "1S" and channel == "WHISPER" and not asked(sender) then return end
   if kind == "1S" and statusIsMine(msg) then
     -- our own echo, under a sender string we didn't recognise: it is us from now on
     S.mySender = sender
@@ -303,7 +340,7 @@ function S:Receive(msg, channel, sender)
     return
   end
   local m = self.members[sender]
-  if not m and kind ~= "1R" then
+  if not m and kind ~= "1R" and kind ~= "1H" then
     m = { key = sender, name = sender:match("^([^%-]+)") or sender }
     self.members[sender] = m
     memberChanged()
@@ -342,22 +379,20 @@ function S:Receive(msg, channel, sender)
       QB.Live.Record(tonumber(id), tonumber(xp), tonumber(lvl), "party")
     end
     if QB.liveVer ~= before then QB:MarkDirty() end
+  elseif kind == "1H" then
+    -- (the final audit) the guild's ask, a hello's: answered as a guild 1R
+    if channel == "GUILD" then answerGuild(sender) end
+    return
   elseif kind == "1R" then
     local target = channel == "WHISPER" and sender or nil
     if target then
       -- (only to someone you sent yours to, and never inside a host: S.asked)
-      if not QB.host and S.asked[baseName(target)] then
+      if not QB.host and asked(target) then
         queue(statusMsg(), "WHISPER", target)
         for _, q in ipairs((questMsgs())) do queue(q, "WHISPER", target) end
       end
     elseif channel == "GUILD" then
-      -- (a guild mate's ask: your status alone, once a guild mate in ASK_GAP; nothing sent before is forgotten)
-      local t = now()
-      local at = S.guildAsked[sender]
-      if not at or t - at >= ASK_GAP then
-        S.guildAsked[sender] = t
-        queue(statusMsg(), "GUILD")
-      end
+      answerGuild(sender)
     else
       self.lastStatus, self.lastQuests = nil, nil
       self:Changed()
@@ -370,9 +405,39 @@ end
 ----------------------------------------------------------------------------
 -- for the Party page
 ----------------------------------------------------------------------------
--- every member's step forgotten (out of a group: G.MemberSteps lists every step held)
+-- a member's step and quest list forgotten, but a /qb sync friend's list (G.MemberSteps lists every step held, and
+-- M.PartyHas and the tooltips read every list)
+local function forget(m)
+  if m.step ~= nil then m.step = nil; memberChanged() end
+  if (m.quests or m.pending) and not asked(m.key) then m.quests, m.pending = nil, nil; memberChanged() end
+end
+-- out of a group: every member's
 function S:DropSteps()
-  for _, m in pairs(self.members) do if m.step ~= nil then m.step = nil; memberChanged() end end
+  for _, m in pairs(self.members) do forget(m) end
+end
+-- (the final audit) the group's names as the game lists them now, by their first word: nil while it hides one or lists
+-- nobody else, and then nothing is dropped (S.GroupUnits walks no raid)
+local function groupNames()
+  local n = GetNumGroupMembers and QB.Plain(GetNumGroupMembers()) or 0
+  if type(n) ~= "number" or n < 2 then return nil end
+  local raid = IsInRaid and QB.Plain(IsInRaid()) == true
+  local out = {}
+  for i = 1, raid and n or math.min(n - 1, 4) do
+    local w = firstWord(UnitName and QB.Plain(UnitName((raid and "raid" or "party") .. i)) or nil)
+    if type(w) ~= "string" or w == "" then return nil end
+    out[w:lower()] = true
+  end
+  return out
+end
+-- (the final audit) one who left your group while you stay in it: theirs forgotten. merge4's DropSteps ran only once you
+-- were out of every group, so a leaver's step stayed on your frame, and a guild mate's 1S kept it there for good
+function S:DropGone()
+  local here = groupNames()
+  if not here then return end
+  for _, m in pairs(self.members) do
+    local w = firstWord(m.name)
+    if not (type(w) == "string" and here[w:lower()]) then forget(m) end
+  end
 end
 function S:Members()
   local out = {}
@@ -609,8 +674,9 @@ function S:Init()
     if event == "CHAT_MSG_ADDON" then
       S:Receive(msg, channel, sender)
     elseif event == "GROUP_ROSTER_UPDATE" then
-      -- (merge4) out of a group: every step heard goes, so a former group mate's never shows in your next group
-      if not (IsInGroup and QB.Plain(IsInGroup()) == true) then S:DropSteps() end
+      -- (merge4) out of a group: every step heard goes, so a former group mate's never shows in your next group; (the final
+      -- audit) and their quest lists. Still in one: what the members who left had
+      if not (IsInGroup and QB.Plain(IsInGroup()) == true) then S:DropSteps() else S:DropGone() end
       local ch = groupChannel()
       if ch and ch ~= S.lastGroup and QB:Settings().share.party then
         S.lastStatus, S.lastQuests = nil, nil
@@ -633,10 +699,10 @@ function S:Init()
   end)
   f:RegisterEvent("CHAT_MSG_ADDON")
   f:RegisterEvent("GROUP_ROSTER_UPDATE")
-  -- say hello once the plan is ready, and keep a run visible to the others
+  -- say hello once the plan is ready (the guild asked with 1H), and keep a run visible to the others
   C_Timer.After(12, QB.Safe(function()
     local chans = channels()
-    for _, ch in ipairs(chans) do queue("1R", ch) end
+    for _, ch in ipairs(chans) do queue(ch == "GUILD" and "1H" or "1R", ch) end
     S:Changed()
   end, "party sync: hello"))
   local beat
@@ -715,9 +781,8 @@ function S.Shareable()
   return out
 end
 
--- the sync record of a party member by name, when they run QuestBank
--- (the chat's sender name may carry more than the unit's: the first word decides)
-local function firstWord(n) return type(n) == "string" and n:match("^[^%s%-]+") or n end
+-- the sync record of a party member by name, when they run QuestBank (firstWord, above: the chat's sender name may
+-- carry more than the unit's)
 function S:MemberByName(name)
   local want = firstWord(name)
   for _, m in pairs(self.members) do if m.name == name or firstWord(m.name) == want then return m end end

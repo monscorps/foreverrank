@@ -21607,6 +21607,152 @@ do
   print("fix2-cute-ui: " .. table.concat(said, "; "))
 end
 
+-- [stage: fix2-engine] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The final audit's engine findings, Cute's side (launch/fix2-engine), a case each; each failed on 0.9.1's files. Every
+-- case runs, and the block fails at its end naming each one that did not hold
+----------------------------------------------------------------------------
+do
+  local CASES, failed, said = {}, {}, {}
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  local function inGuild(guild, fn)
+    local ok, err = true, nil
+    isolated(guild, function() ok, err = pcall(fn) end)
+    if not ok then error(err, 0) end
+  end
+  local function questChar()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(5); tick(c, 6)
+    return c
+  end
+
+  -- A1 (firsthour, must). The interact light's two rows were in Reminders' section alone, which goes while the module is
+  -- off: a light left on had no switch anywhere in Cute's windows, though the card says Settings puts its settings back
+  CASES[#CASES + 1] = { "A1 Reminders off: the interact light keeps a Settings section of its own", function()
+    inGuild({ member("Rone", 1) }, function()
+      local c = questChar()
+      local QB, M, s = c.addons[2].private, c.C.Modules, c.env.CuteQuestDB.settings
+      local function ids() local t = {}; for _, sec in ipairs(c.C.SettingsPage.Sections(true)) do t[#t + 1] = sec.id end return " " .. table.concat(t, " ") .. " " end
+      M.Set("Cute_Quest:camp", true); tick(c, 1)
+      local n = #c.C.SettingsPage.Sections(true)
+      assert(ids():find(" camp ", 1, true) and not ids():find(" light ", 1, true), "Reminders on: the light's rows in its section, none of their own:" .. ids())
+      M.Set("Cute_Quest:camp", false); tick(c, 1)
+      assert(not ids():find(" camp ", 1, true) and ids():find(" light ", 1, true), "Reminders off: the light's own section:" .. ids())
+      assert(#c.C.SettingsPage.Sections(true) == n, "one section in place of the other")
+      QB.Glow.Set(true)
+      c.C.UI:Open("settings", "light")
+      local t = texts(c)
+      assert(t:find("Interact light", 1, true) and t:find("Light style", 1, true), "the section's two rows:\n" .. t)
+      local box = UIX.row(c, "Interact light")
+      assert(box and box:GetChecked() and s.glow.on == true, "the light on: its row ticked")
+      click(box)
+      assert(s.glow.on == false, "its row unticked: the light off")
+      click(UIX.row(c, "Game's"))
+      assert(s.glow.style == "game", "its style chosen there: " .. tostring(s.glow.style))
+      M.Set("Cute_Quest:camp", true); tick(c, 1)
+      leave(c)
+    end)
+    said[#said + 1] = "the interact light has its own section while Reminders is off"
+  end }
+
+  -- F1 (robust, should). An older QuestBank beside Cute shared on RAID (before 6.3.0, no noRaidSync) and, before 6.1.0
+  -- (no QuestBankAPI), on GUILD too, around the officers' Who sees what: its guild share is held off for the session, and
+  -- before 6.3.0 its party share while you are in a raid, each put back at the logout
+  CASES[#CASES + 1] = { "F1 an older QuestBank beside Cute: before 6.1.0 its guild share held off, before 6.3.0 its group share in a raid", function()
+    inGuild({ member("Rone", 1) }, function()
+      local function beside(version, withApi)
+        local q = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+        local isLoaded, meta = q.env.C_AddOns.IsAddOnLoaded, q.env.C_AddOns.GetAddOnMetadata
+        q.env.C_AddOns.IsAddOnLoaded = function(x) if x == "QuestBank" then return true, true end return isLoaded(x) end
+        q.env.C_AddOns.GetAddOnMetadata = function(x, field) if x == "QuestBank" then return field == "Version" and version or nil end return meta(x, field) end
+        local raid = false
+        q.env.IsInRaid = function() return raid end
+        local settings = { guide = { on = true, frame = true }, arrow = true, glow = { on = true, style = "sparkle" }, remind = { on = true }, share = { party = true, guild = true }, djShow = { boss = true, rare = true, trash = false, other = true } }
+        if withApi then
+          q.env.QuestBankAPI = {
+            version = version, logReady = true, state = { level = 5, log = {} }, routeNow = { legs = {}, xp = 0, level = 5, t = 0 },
+            Settings = function() return settings end, MarkDirty = function() end, Comma = tostring, Short = tostring, Sync = {},
+            Model = { Busy = function() return false end }, Data = { CAT = {} }, Quest = { Get = function() return nil end },
+            Guide = { Steps = function() return {} end, Text = function(st) return st.text end, TimeToLevel = function() return nil end, MemberSteps = function() return {} end, Reminder = function() return nil end },
+            StepFrame = { Menu = function() end, Apply = function() end, RemindChanged = function() end }, Arrow = { Set = function() end },
+            UI = { PlaceGroups = function() return {}, {}, nil, nil, nil end, Candidates = function() return {} end, QuestClick = function() end, QuestTooltip = function() end },
+            Target = { Route = function() return { legs = {}, xp = 0, level = 5, t = 0 } end }, Run = { Get = function() return nil end },
+            DMap = { Attach = function() end, Refresh = function() end }, Gear = { Attach = function() end, Refresh = function() end, RefreshSoon = function() end },
+            Remind = { Pull = function() return {}, false end },
+          }
+        else
+          q.env.QuestBankAPI = nil
+          q.env.QuestBankDB = { settings = settings }
+        end
+        login(q); tickAll(5)
+        q.C.Modules.Set("Cute_Quest", true); tick(q, 6)
+        assert(q.addons[2].private.dormant == true, version .. ": QuestBank loaded, the copy sleeps")
+        return q, settings.share, function(on) raid = on; fire(q, "GROUP_ROSTER_UPDATE") end
+      end
+      -- 6.0.1: no QuestBankAPI, its settings in QuestBankDB
+      local q, share, raid = beside("6.0.1", false)
+      assert(share.guild == false and share.party == true, "6.0.1: its guild share off for the session, its group share on out of a raid")
+      raid(true)
+      assert(share.party == false, "6.0.1 in a raid: its group share off")
+      raid(false)
+      assert(share.party == true, "out of the raid: on again")
+      raid(true)
+      fire(q, "PLAYER_LOGOUT")
+      assert(share.guild == true and share.party == true, "6.0.1: both put back at the logout")
+      leave(q)
+      -- 6.2.0: QuestBankAPI, no noRaidSync read
+      q, share, raid = beside("6.2.0", true)
+      assert(share.guild == false and share.party == true, "6.2.0: its guild share off (no GuildOn), its group share on")
+      raid(true)
+      assert(share.party == false, "6.2.0 in a raid: its group share off")
+      fire(q, "PLAYER_LOGOUT")
+      assert(share.guild == true and share.party == true, "6.2.0: both put back at the logout")
+      leave(q)
+      -- 6.3.0 reads noRaidSync: its group share left as it is
+      q, share, raid = beside("6.3.0", true)
+      raid(true)
+      assert(share.party == true, "6.3.0 in a raid: its group share as it is (it reads noRaidSync)")
+      leave(q)
+    end)
+    said[#said + 1] = "an older QuestBank's guild share held off before 6.1.0 as after, its group share in a raid before 6.3.0"
+  end }
+
+  -- I1 (look, should). Under Cute the minimap's menu named the far view "Far zoom" (Settings > Route says "Minimap far
+  -- view"), split Route and Lines (Cute's one row, "Route on the minimap", reads both), and its last line opened
+  -- Settings > Quests, which holds none of its switches
+  CASES[#CASES + 1] = { "I1 the minimap's menu under Cute: Settings > Route's names and one route row; its settings line opens Route", function()
+    inGuild({ member("Rone", 1) }, function()
+      local c = questChar()
+      local s, mini = c.env.CuteQuestDB.settings, c.env.Minimap
+      c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+      mini.__scripts.OnMouseUp(mini, "RightButton"); tick(c, 1)
+      local byText, names = {}, {}
+      for _, e in ipairs(c.contextMenus[#c.contextMenus]) do if e.text then byText[e.text] = e; names[#names + 1] = e.text end end
+      local list = table.concat(names, ", ")
+      assert(byText["Minimap far view"] and byText["Route on the minimap"], "Settings > Route's names: " .. list)
+      assert(not byText["Far zoom"] and not byText["Route"] and not byText["Lines"], "none of QuestBank's: " .. list)
+      local route = byText["Route on the minimap"]
+      assert(route.get() == true, "the route on: ticked")
+      route.set()
+      assert(s.minimapPins == false and s.minimapLines == false and route.get() == false, "unticked: the route's pins and lines off, as Settings' row")
+      route.set()
+      assert(s.minimapPins ~= false and s.minimapLines ~= false, "ticked again: both on")
+      byText["Cute settings"].set()
+      local S = c.C.UI.Window("settings")
+      assert(S.frame:IsShown() and S.section == "route", "its settings line: Settings > Route: " .. tostring(S.section))
+      leave(c)
+    end)
+    said[#said + 1] = "the minimap's menu says Settings > Route's names and opens it"
+  end }
+
+  for _, case in ipairs(CASES) do
+    local ok, err = pcall(case[2])
+    if not ok then failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
+  end
+  assert(#failed == 0, "fix2-engine: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
+  print("fix2-engine: " .. table.concat(said, "; "))
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

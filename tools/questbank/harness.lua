@@ -21515,7 +21515,8 @@ do
   assert(recorded == 1, "the party is still heard")
   QB:Settings().share.guild = true
   hear("1L|118:450:18", "GUILD")
-  assert(recorded == 2, "guild sharing on: the guild is heard as before")
+  -- (fix2-engine L1) an XP reading comes from your group alone, guild sharing on or off
+  assert(recorded == 1, "guild sharing on: a guild mate's reading still corrects nothing")
   QB.Live.Record = record
   QB:Settings().share.guild = false
   -- in a raid: RAID while QuestBank is its own host, nothing with a host's noRaidSync
@@ -24446,7 +24447,8 @@ end
     local steps = G.MemberSteps()
     assert(#steps == 0, "a stranger's whispered step: never on your frame: " .. tostring(steps[1] and steps[1].text))
     assert(recorded[1] == 0, "a whispered XP reading corrects nothing")
-    assert(S.members[stranger] and S.members[stranger].level == 60, "a whispered status still comes (/qb sync)")
+    -- (fix2-engine Q1) a whispered status comes from whom you sent yours to (/qb sync) alone
+    assert(S.members[stranger] == nil, "a stranger's whispered status: not taken")
     hear("1S|60|0|A|WARRIOR|0|0|0|-1|0|0|6.4.0|yyyyyyyyyy", "CHANNEL", spammer)
     hear("1G|Spam", "CHANNEL", spammer)
     hear("1L|118:450:18", "CHANNEL", spammer)
@@ -24774,6 +24776,228 @@ end
     collectgarbage("collect")
   end
   assert(#failed == 0, "merge4: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
+end)()
+
+-- [stage: fix2-engine] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The final audit's engine findings (launch/fix2-engine), a case each; each failed on 6.4.1's files. Every case runs,
+-- and the block fails at its end naming each one that did not hold
+----------------------------------------------------------------------------
+;(function()
+  local CASES = {}
+  -- a character at level o.level in a party and a guild (o.group, o.guild false: out of either), c.party the game's
+  local function char(name, o)
+    o = o or {}
+    local c = newClient({ name = name, level = o.level or 18, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1, race = "Human",
+      log = o.log or {}, done = {}, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Goldshire", guild = o.guild ~= false, group = o.group ~= false })
+    c.party = o.party
+    login(c)
+    return c
+  end
+  local function hearer(c) local f = c.QB.Sync.frame; return function(msg, channel, who) f.__scripts.OnEvent(f, "CHAT_MSG_ADDON", "QuestBank", msg, channel, who) end end
+  local function roster(c) c.QB.Sync.frame.__scripts.OnEvent(c.QB.Sync.frame, "GROUP_ROSTER_UPDATE") end
+  -- the messages a client sent: of a kind (its first letters, or the whole message), on a channel
+  local function sent(c, kind, ch)
+    local n = 0
+    for _, m in ipairs(c.outbox) do if m[1] == "QuestBank" and m[3] == ch and (m[2] == kind or m[2]:sub(1, #kind + 1) == kind .. "|") then n = n + 1 end end
+    return n
+  end
+  local function said(c, from) return (table.concat(c.chat, "\n", from + 1):gsub("|c%x+QuestBank|r ", "")) end
+
+  -- L1 (trust, must). With the guild box on (the default) every non-grey quest in your log went to GUILD as 1L after
+  -- every re-plan, and a guild mate's 1L corrected your plan's XP; Settings and the changelog say the quests and the
+  -- readings are your group's alone
+  CASES[#CASES + 1] = { "L1: XP readings go to your group alone, each once until it changes; none is taken from the guild", function()
+    local c = char("Reader", { level = 5, log = { { 7, 0 } } })
+    local QB, S = c.QB, c.QB.Sync
+    QB:Settings().share.guild = true
+    local q = QB.Quest.Get(7)
+    local listed = q and QB.Model.Listed(q) or 0
+    assert(q and listed > 0 and QB.Model.Pct(q.lvl, 5) >= 100, "Kobold Camp Cleanup pays in full at level 5: " .. tostring(listed))
+    tick(c, 30)
+    c.outbox = {}
+    c.logXP = { [7] = listed }
+    QB:MarkDirty(); tick(c, 30)
+    assert(c.env.QuestBankDB.live and c.env.QuestBankDB.live[7] and c.env.QuestBankDB.live[7].src == "log", "the log's reading kept")
+    assert(sent(c, "1L", "PARTY") == 1, "the reading to the party: " .. sent(c, "1L", "PARTY"))
+    assert(sent(c, "1L", "GUILD") == 0, "never to the guild: " .. sent(c, "1L", "GUILD"))
+    c.outbox = {}
+    QB:MarkDirty(); tick(c, 30)
+    assert(sent(c, "1L", "PARTY") + sent(c, "1L", "GUILD") == 0, "a re-plan with the same reading sends nothing: " .. (sent(c, "1L", "PARTY") + sent(c, "1L", "GUILD")))
+    -- a guild mate's reading corrects nothing; the party's does
+    local n, record = 0, QB.Live.Record
+    QB.Live.Record = function(id, xp, lvl, src) if src == "party" then n = n + 1 end return record(id, xp, lvl, src) end
+    local hear = hearer(c)
+    hear("1L|7:" .. listed * 2 .. ":5", "GUILD", "Mate Steelhand-Forever Normal")
+    assert(n == 0, "a guild mate's reading: not taken")
+    hear("1L|7:" .. listed * 2 .. ":5", "PARTY", "Mate Steelhand-Forever Normal")
+    assert(n == 1, "the party's reading: taken")
+    QB.Live.Record = record
+    -- out of a group: a new reading goes nowhere
+    c.o.group = false; roster(c)
+    c.outbox = {}
+    c.logXP = { [7] = listed * 3 }
+    QB:MarkDirty(); tick(c, 30)
+    assert(sent(c, "1L", "PARTY") + sent(c, "1L", "GUILD") == 0, "out of a group: no reading sent")
+  end }
+
+  -- R1 (trust, must). The quest detail's Report printed "It goes to foreverrank.com with your next upload", but
+  -- QuestBankDB.reports is outside every upload allow-list (the uploader, the page, the Worker, probe_pull.py)
+  CASES[#CASES + 1] = { "R1: a report says it stays in the saved file, never that it is uploaded", function()
+    local c = char("Reporter", { group = false, guild = false })
+    local QB = c.QB
+    local n0 = #c.chat
+    QB.UI.Report(QB.Quest.Get(7), QB.UI.REPORTS[3])
+    local line = said(c, n0)
+    local list = c.env.QuestBankDB.reports
+    assert(type(list) == "table" and list[#list].id == 7, "the report kept in QuestBankDB.reports")
+    assert(not line:find("upload", 1, true) and not line:find("foreverrank.com", 1, true), "no promise of an upload: " .. line)
+    assert(line:find("saved file", 1, true) and line:find("QuestBank.lua", 1, true), "the line says where it is kept: " .. line)
+  end }
+
+  -- N1 (look, must). A forced share (Party's Send now, /qb sync) printed "Shared your quests with guild." though the quest
+  -- list goes to the group alone and the guild hears your status; the button's tooltip said the same
+  CASES[#CASES + 1] = { "N1: Send now says what went where, and its tooltip too", function()
+    local c = char("Sender", { group = false })
+    local QB, S = c.QB, c.QB.Sync
+    QB:Settings().share.guild = true
+    local n0 = #c.chat
+    S:Broadcast(true)
+    local line = said(c, n0)
+    assert(line == "Sent your level and progress to your guild.", "in a guild, out of a group: " .. line)
+    c.o.group = true
+    n0 = #c.chat
+    S:Broadcast(true)
+    line = said(c, n0)
+    assert(line == "Sent your quests to your party and your level and progress to your guild.", "in a party and a guild: " .. line)
+    QB:Settings().share.guild = false
+    n0 = #c.chat
+    S:Broadcast(true)
+    line = said(c, n0)
+    assert(line == "Shared your quests with your party.", "the party alone: " .. line)
+    c.raid = true
+    n0 = #c.chat
+    S:Broadcast(true)
+    line = said(c, n0)
+    c.raid = nil
+    assert(line == "Shared your quests with your raid.", "a raid: " .. line)
+    local UI = QB.UI
+    UI:Open(4); UI:Refresh()
+    local btn = UI.views[4].syncBtn
+    lines = {}
+    btn.__scripts.OnEnter(btn)
+    local tip = table.concat(lines, "\n")
+    if btn.__scripts.OnLeave then btn.__scripts.OnLeave(btn) end
+    UI.frame:Hide()
+    assert(tip:find("Share now: your quests with your group, your level with your guild", 1, true), "the button's tooltip:\n" .. tip)
+  end }
+
+  -- H1 (scale, should). 6.4.1's hello asked the guild with 1R, which every QuestBank 6.4.0 or older there answers with its
+  -- status and its whole quest list on GUILD. The guild's ask is 1H now, which 6.4.0 never answers, and which this one
+  -- answers with the status alone, once an asker in ten minutes
+  CASES[#CASES + 1] = { "H1: the hello asks the guild with 1H, the group with 1R; a 1H is answered with the status alone", function()
+    local c = char("Hello")
+    local QB, S = c.QB, c.QB.Sync
+    QB:Settings().share.guild = true
+    tick(c, 30)
+    assert(sent(c, "1H", "GUILD") == 1 and sent(c, "1R", "GUILD") == 0, "the guild asked with 1H: " .. sent(c, "1H", "GUILD") .. ", 1R " .. sent(c, "1R", "GUILD"))
+    assert(sent(c, "1R", "PARTY") >= 1, "the party asked with 1R")
+    local hear = hearer(c)
+    local asker = "Asker One-Forever Normal"
+    c.outbox = {}
+    hear("1H", "GUILD", asker)
+    tick(c, 40)
+    assert(sent(c, "1S", "GUILD") == 1 and #c.outbox == 1, "a guild mate's 1H: the status on GUILD alone: " .. #c.outbox)
+    assert(S.members[asker] == nil, "the asker is no member")
+    c.outbox = {}
+    hear("1H", "GUILD", asker)
+    tick(c, 40)
+    assert(#c.outbox == 0, "the same ask again within ten minutes: nothing")
+  end }
+
+  -- G1 (robust, should). One who left your group while you stayed in it kept their step on your frame and their quests on
+  -- your tooltips (merge4's DropSteps ran only when you left groups altogether); a guild mate's 1S kept them for good
+  CASES[#CASES + 1] = { "G1: a member who leaves your group loses their step and quests; a hidden name drops nothing", function()
+    local c = char("Stayer", { party = { { "Brann", "PALADIN", 18 }, { "Cora", "MAGE", 18 } } })
+    local QB, S, G = c.QB, c.QB.Sync, c.QB.Guide
+    QB:Settings().share.guild = true
+    local hear = hearer(c)
+    local brann, cora = "Brann Steelhand-Forever Normal", "Cora Steelhand-Forever Normal"
+    for _, who in ipairs({ brann, cora }) do
+      hear("1S|18|100|A|PALADIN|0|0|0|-1|0|0|6.4.1|zzzzzzzzzz", "PARTY", who)
+      hear("1Q|1|1|7.a1/8", "PARTY", who)
+      hear("1G|Kill Kobold Vermin 1/8", "PARTY", who)
+    end
+    assert(#G.MemberSteps() == 2 and S.members[brann].quests, "both steps shown, Brann's quests kept")
+    -- Brann leaves; the game hides the names a while: nothing dropped
+    c.party = { { "Cora", "MAGE", 18 } }
+    local realName = c.env.UnitName
+    c.env.UnitName = function(unit) if unit ~= "player" then return SECRET.str() end return realName(unit) end
+    roster(c)
+    c.env.UnitName = realName
+    assert(#G.MemberSteps() == 2, "a hidden name: nothing dropped")
+    roster(c)
+    local steps = G.MemberSteps()
+    assert(#steps == 1 and steps[1].name == "Cora Steelhand", "Brann gone: Cora's step alone: " .. #steps)
+    assert(S.members[brann].quests == nil and S.members[cora].quests, "Brann's quests gone, Cora's kept")
+    hear("1S|18|160|A|PALADIN|0|0|0|-1|0|0|6.4.1|zzzzzzzzzz", "GUILD", brann)
+    assert(#G.MemberSteps() == 1, "his status on GUILD brings no step back")
+  end }
+
+  -- Q1 (trust, should). 6.4.1 took 1Q from GUILD (6.4.0 and older still send it there) and from anyone's whisper: every
+  -- quest on such a list ranked 1.5 times in the Guide and a group quest lost its solo cost. A quest list comes from your
+  -- group, or by whisper from whom you sent yours to (/qb sync); a whispered status from them alone; out of a group the
+  -- group's lists go
+  CASES[#CASES + 1] = { "Q1: a quest list from your group or a /qb sync friend alone; out of a group the group's lists go", function()
+    local c = char("Lister")
+    local QB, S, M = c.QB, c.QB.Sync, c.QB.Model
+    QB:Settings().share.guild = true
+    local hear = hearer(c)
+    local guildie, stranger, friend, mate = "Guildie Steelhand-Forever Normal", "Grimm Shade-Forever Normal", "Friend Steelhand-Forever Normal", "Mate Steelhand-Forever Normal"
+    hear("1S|18|100|A|MAGE|0|0|0|-1|0|0|6.4.0|aaaaaaaaaa", "GUILD", guildie)
+    hear("1Q|1|1|7.a1/8", "GUILD", guildie)
+    assert(S.members[guildie] and S.members[guildie].level == 18 and S.members[guildie].quests == nil, "a guild mate's status taken, his quest list not")
+    assert(not M.PartyHas(7), "a guild mate's list steers nothing")
+    hear("1S|60|0|A|WARRIOR|0|0|0|-1|0|0|6.4.1|bbbbbbbbbb", "WHISPER", stranger)
+    hear("1Q|1|1|33.a1/8", "WHISPER", stranger)
+    assert(S.members[stranger] == nil and not M.PartyHas(33), "a stranger's whisper: nothing taken")
+    S:Whisper("Friend")
+    hear("1S|18|100|A|MAGE|0|0|0|-1|0|0|6.4.1|cccccccccc", "WHISPER", friend)
+    hear("1Q|1|1|33.a1/8", "WHISPER", friend)
+    assert(S.members[friend] and S.members[friend].quests and M.PartyHas(33), "the friend you sent yours to: status and list taken")
+    hear("1S|18|100|A|MAGE|0|0|0|-1|0|0|6.4.1|dddddddddd", "PARTY", mate)
+    hear("1Q|1|1|7.a1/8", "PARTY", mate)
+    assert(S.members[mate].quests and M.PartyHas(7), "the party's list taken")
+    c.o.group = false; roster(c)
+    assert(S.members[mate].quests == nil and not M.PartyHas(7), "out of the group: the party's list gone")
+    assert(S.members[friend].quests and M.PartyHas(33), "the /qb sync friend's list kept")
+  end }
+
+  -- P1 (look, should). Settings' party row said "Share my quests with my party", under the guild row that names level and
+  -- XP: the group gets the same status and the quest list too, in a raid or an instance group as well
+  CASES[#CASES + 1] = { "P1: Settings' group row says level, XP and quests, and its tooltip where they go", function()
+    local c = lookChar("Rows")
+    local UI = c.QB.UI
+    UI:Open(5); UI:Refresh()
+    local box = UI.views[5].shareParty
+    assert(box.label:GetText() == "Share my level, XP and quests with my group", "the group row's words: " .. tostring(box.label:GetText()))
+    assert(box.__scripts.OnEnter, "the group row has a tooltip")
+    lines = {}
+    box.__scripts.OnEnter(box)
+    local tip = table.concat(lines, "\n")
+    if box.__scripts.OnLeave then box.__scripts.OnLeave(box) end
+    UI.frame:Hide()
+    assert(tip:find("raid", 1, true) and tip:find("instance group", 1, true) and tip:find("quests", 1, true) and tip:find("QuestBank", 1, true),
+      "its tooltip says what goes and to whom:\n" .. tip)
+  end }
+
+  local failed = {}
+  for _, case in ipairs(CASES) do
+    local ok, err = pcall(case[2])
+    if ok then print("fix2-engine: " .. case[1] .. ": ok") else failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
+    collectgarbage("collect")
+  end
+  assert(#failed == 0, "fix2-engine: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
 end)()
 
 local seen = {}

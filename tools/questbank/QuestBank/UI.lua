@@ -2159,7 +2159,9 @@ function UI.WaypointObjective(q)
   if best then QB.API.SetWaypoint(best.m, best.x * 100, best.y * 100, q.name, nil, nil, { qid = q.id, what = "obj" }) else QB:Print("No objective place known for " .. q.name .. " yet.") end
 end
 
--- a problem with a quest, noted for foreverrank.com: it goes up with your next upload
+-- a problem with a quest, noted in QuestBank's saved file (QuestBankDB.reports). (The final audit) it stays on the PC:
+-- reports are outside every upload's allow-list (the uploader, the page, the Worker, probe_pull.py), so the line says
+-- where it is kept and promises no upload
 UI.REPORTS = { "The giver is not where QuestBank says", "The hand-in is somewhere else", "The XP is wrong",
                "The quest does not exist in Forever", "The objectives are somewhere else", "The rewards are wrong" }
 function UI.Report(q, reason)
@@ -2169,7 +2171,7 @@ function UI.Report(q, reason)
   list[#list + 1] = { id = q.id, r = reason, at = time and time() or 0, b = QB.Data.BUILD, lvl = QB.state.level,
                       m = QB.Plain(QB.API.MapID()), wx = me and math.floor(me.wx) or nil, wy = me and math.floor(me.wy) or nil }
   while #list > 100 do table.remove(list, 1) end
-  QB:Print(string.format("Noted for %s: %s. It goes to foreverrank.com with your next upload.", q.name, reason:lower()))
+  QB:Print(string.format("Noted for %s: %s. It is kept in your saved file, QuestBank.lua, and not sent anywhere.", q.name, reason:lower()))
 end
 function UI.ReportMenu(q)
   local items = {}
@@ -3495,7 +3497,8 @@ function UI:CreatePartyView(parent)
   v.syncBtn:SetPoint("BOTTOMLEFT", LEFT + 252, 12)
   v.syncBtn:SetScript("OnClick", QB.Safe(function() if QB.Sync then QB.Sync:Broadcast(true) end end, "send now"))
   tooltip(v.syncBtn, function(tip)
-    tip:AddLine("Send your quests to QuestBank users now", GOLD[1], GOLD[2], GOLD[3])
+    -- (the final audit) as Sync.lua S:Broadcast sends them: the quest list to the group alone, the guild your status
+    tip:AddLine("Share now: your quests with your group, your level with your guild", GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine("Party and guild sharing is set in Settings. /qb sync Name whispers one friend.", 1, 1, 1, true)
   end)
 
@@ -4343,8 +4346,17 @@ function UI:CreateSettingsView(parent)
   v.discText:SetPoint("TOPLEFT", RIGHT, y0 - 100)
   v.discText:SetHeight(72)
   subhead(RIGHT, y0 - 182, "Sharing and chat")
-  v.shareParty = checkRow(p, RIGHT, y0 - 202, "Share my quests with my party", 300)
+  -- (the final audit) the group gets the same status as the guild and the quest list too (Sync.lua S:Broadcast), in a
+  -- raid or an instance group as well: said as the guild row says its own, and as Cute's row has it
+  v.shareParty = checkRow(p, RIGHT, y0 - 202, "Share my level, XP and quests with my group", 300)
   v.shareParty:SetScript("OnClick", function(self) QB:Settings().share.party = self:GetChecked() and true or false; UI:Refresh() end)
+  v.shareParty:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText("Share my level, XP and quests with my group", 1, 1, 1)
+    GameTooltip:AddLine("Your level, your XP into it, your class, the levels your plan reaches, the quests in it and the XP the game shows for them go to your party, raid or instance group. Only members who run QuestBank see them.", nil, nil, nil, true)
+    GameTooltip:Show()
+  end)
+  v.shareParty:SetScript("OnLeave", function() GameTooltip:Hide() end)
   -- (merge4) the guild hears your status alone (Sync.lua S:Broadcast); the quest list goes to the group only
   v.shareGuild = checkRow(p, RIGHT, y0 - 228, "Share my level and progress with my guild", 300)
   v.shareGuild:SetScript("OnClick", function(self) QB:Settings().share.guild = self:GetChecked() and true or false; UI:Refresh() end)

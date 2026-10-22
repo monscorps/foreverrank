@@ -589,18 +589,25 @@ function MV.Wheel(delta)
 end
 
 -- the minimap's menu (a right-click on it, or on a pin: "Waypoint here" first), its switches named as on the
--- Settings page. Built a frame later and owned by UIParent: QuestTrail found a menu owned by a map could crash the client
+-- Settings page. Built a frame later and owned by UIParent: QuestTrail found a menu owned by a map could crash the client.
+-- (The final audit) under a host its Settings' names (host): Cute's Route section says "Minimap far view", and one row,
+-- "Route on the minimap", holds the route's pins and its lines (with), so Lines has no line of its own there (false)
 local SWITCHES = {
-  { "Far zoom", "mmExtended" }, { "Route", "minimapPins" }, { "Lines", "minimapLines" }, { "Golden path", "goldenPath" }, { "Pick-ups", "minimapPickups" },
+  { "Far zoom", "mmExtended", host = "Minimap far view" }, { "Route", "minimapPins", host = "Route on the minimap", with = "minimapLines" },
+  { "Lines", "minimapLines", host = false }, { "Golden path", "goldenPath" }, { "Pick-ups", "minimapPickups" },
   { "Objectives", "minimapObjectives" }, { "Dungeons", "minimapEntrances" }, { "Trails", "walkShow" }, { "Party", "mmParty" },
   { "Quest areas", "mmAreas" }, { "Label", "minimapLabel" },
 }
 function MV.Menu(d)
   if not (MenuUtil and MenuUtil.CreateContextMenu) then return end
-  local function check(root, label, key, after)
-    root:CreateCheckbox(label, function() return QB:Settings()[key] ~= false end, function()
+  -- a switch, or two as one (with): ticked while both are on, a click turning both on or off
+  local function isOn(s, key, with) return s[key] ~= false and (not with or s[with] ~= false) end
+  local function check(root, label, key, after, with)
+    root:CreateCheckbox(label, function() return isOn(QB:Settings(), key, with) end, function()
       local s = QB:Settings()
-      s[key] = s[key] == false
+      local v = not isOn(s, key, with)
+      s[key] = v
+      if with then s[with] = v end
       if after then after(s[key]) end
       QB.Mini.Place()
       if QB.UI and QB.UI.frame and QB.UI.frame:IsShown() then QB.UI:Refresh() end
@@ -614,7 +621,11 @@ function MV.Menu(d)
     check(root, "Back to me after a drag", "mmCenter", function(on) if on then MV.Recentre() end end)
     root:CreateButton("Back to me", function() MV.Recentre() end)
     root:CreateDivider()
-    for _, s in ipairs(SWITCHES) do check(root, s[1], s[2]) end
+    for _, sw in ipairs(SWITCHES) do
+      local label = sw[1]
+      if QB.host and sw.host ~= nil then label = sw.host end
+      if label then check(root, label, sw[2], nil, QB.host and sw.with or nil) end
+    end
     -- Accept for me and what it does outside your route (Auto.lua), a line each, as Settings says them; a click moves on
     local Au = QB.Auto
     if Au and Au.WORDS then
@@ -636,7 +647,11 @@ function MV.Menu(d)
       end
     end
     root:CreateDivider()
-    root:CreateButton((QB.NAME or "QuestBank") .. " settings", function() if QB.UI then QB.UI:Open(5) end end)
+    -- (the final audit) a host's own place for the minimap's settings (Cute: Settings > Route), else the Settings page
+    root:CreateButton((QB.NAME or "QuestBank") .. " settings", function()
+      local U = QB.UI
+      if U and U.OpenMinimapSettings then U.OpenMinimapSettings() elseif U then U:Open(5) end
+    end)
   end)
 end
 function MV.OpenMenu(d)

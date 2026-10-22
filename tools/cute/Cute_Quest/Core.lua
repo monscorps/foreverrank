@@ -1120,10 +1120,12 @@ function Live.Record(id, xp, level, src)
   QuestBankDB.live = QuestBankDB.live or {}
   local old = QuestBankDB.live[id]
   if old and old.src ~= "party" and src == "party" then return end
+  -- (the final audit) told to the group only when new or changed: every re-plan reads the whole log again
+  local same = old ~= nil and old.full == full and old.lvl == level
   QuestBankDB.live[id] = { full = full, lvl = level, src = src, at = date("%Y-%m-%d") }
   if q.liveFull ~= full then QB.liveVer = (QB.liveVer or 0) + 1 end
   q.liveFull = full
-  if QB.Sync and src ~= "party" then QB.Sync:QueueLive(id, full, level) end
+  if QB.Sync and src ~= "party" and not same then QB.Sync:QueueLive(id, full, level) end
 end
 
 function Live.Apply()
