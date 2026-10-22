@@ -261,6 +261,15 @@ Cute.QuestReads = {
   FreeSlots = function() local A = E.API; if A and type(A.FreeSlots) == "function" then return A.FreeSlots() end return nil end,
   Pull = function() local R = E.Remind; if R and type(R.Pull) == "function" then return R.Pull() end return nil, false end,
 }
+-- (the merge3 review) the engine's clock strip where it shows now (Timer.lua's mover, QB.Movers.clock: left, top, width
+-- and height in UIParent's units, at its scale; QuestBank's own while it is loaded), for what Cute shows near the top's
+-- middle (Halls.lua's toast); nil while it is hidden or the engine has no mover for it
+Cute.QuestClock = function()
+  local M = E.Movers and E.Movers.clock
+  local f = M and type(M.frame) == "function" and M.frame() or nil
+  if not (f and f:IsShown() and type(M.rect) == "function") then return nil end
+  return M.rect()
+end
 -- the on-screen switches in Cute's menu (Quests (L) > Step frame, Direction arrow): the engine's own settings, the
 -- copy's (while QuestBank is loaded its settings are its own: none)
 Cute.OnScreen = function()

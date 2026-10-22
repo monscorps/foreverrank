@@ -19147,6 +19147,7 @@ end
 --     now, then the menu's card), ticked; turned off in Settings > Reminders, unticked
 -- P8. Under Cute's lock the minimap's place is Edit Mode's: a place kept from an Alt-drag of 0.8 let go at the first
 --     apply, never put back; a Ctrl-wheel keeps the size alone
+-- P9. A card's toast clears the clock strip at 100%, 150% and 200%; the clock hidden, the toast at its own place
 ----------------------------------------------------------------------------
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
@@ -19291,6 +19292,32 @@ do
     Mini.ResetFree()
     leave(p)
     said[#said + 1] = "under Cute's lock the minimap's place is Edit Mode's"
+    -- P9
+    local t = client(false)
+    login(t); tickAll(6)
+    local QBt = t.addons[2].private
+    local Mc = QBt.Movers.clock
+    QBt:Settings().clock.show = true; QBt.Timer.Apply()
+    local Ht = t.C.Halls
+    -- (the test announcement's toast alone: the cards' own pictures are the cards stage's)
+    local function toast() Ht.toastNow = nil; Ht:ShowToast(Ht.TestSet(false), true) end
+    for _, scale in ipairs({ 1, 1.5, 2 }) do
+      Mc.scale(scale)
+      toast()
+      local tf = Ht.toastFrame
+      GEN = GEN + 1
+      local r = tf and rectOf(tf)
+      local l, top, w, hh = Mc.rect()
+      assert(tf:IsShown() and r and not overlap(r, { l = l, r = l + w, t = top, b = top - hh }, 0),
+        string.format("the toast clears the clock at %d%%: toast %s to %s, clock %s to %s", scale * 100, tostring(r and r.t), tostring(r and r.b), tostring(top), tostring(top - hh)))
+    end
+    check(Ht.toastFrame, "merge3 the toast under the clock at 200%")
+    QBt:Settings().clock.show = false; QBt.Timer.Apply()
+    toast()
+    assert(Ht.toastFrame.__points[1].y == -100, "the clock hidden: the toast at its own place")
+    Mc.set(nil)
+    leave(t)
+    said[#said + 1] = "a card's toast clears the clock strip"
     print("merge3 review: " .. table.concat(said, "; "))
   end)
 end

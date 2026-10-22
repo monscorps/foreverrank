@@ -1179,12 +1179,31 @@ local function names(set, max)
   local more = #(set.cards or {}) - max
   return table.concat(out, ", ") .. (more > 0 and (" and " .. more .. " more") or "")
 end
+-- the toast's place: the top's middle, 100 below the top. (The merge3 review) under the engine's clock strip where the
+-- strip stands there now (Timer.lua: TOP 0 -80, 24 px tall, up to 200% from its mover; Cute_Quest's Band.lua door
+-- Cute.QuestClock), 6 below it, so the clock's text is never covered
+local TOAST_W, TOAST_H, TOAST_Y = 420, 48, -100
+local function placeToast(f)
+  local y = TOAST_Y
+  local door = C.API and C.API.QuestClock
+  if type(door) == "function" then
+    local ok, l, t, w, h = pcall(door)
+    l, t, w, h = tonumber(l), tonumber(t), tonumber(w), tonumber(h)
+    if ok and l and t and w and h then
+      local W, Ht = UIParent:GetWidth() or 1920, UIParent:GetHeight() or 1080
+      local tl, tt = (W - TOAST_W) / 2, Ht + TOAST_Y
+      if l < tl + TOAST_W and tl < l + w and t - h < tt and tt - TOAST_H < t then y = math.min(TOAST_Y, t - h - Ht - 6) end
+    end
+  end
+  f:ClearAllPoints()
+  f:SetPoint("TOP", UIParent, "TOP", 0, y)
+end
 local function toastFrame()
   if H.toastFrame then return H.toastFrame end
   local U = C.UI
   local f = CreateFrame("Button", nil, UIParent, BD)
-  f:SetSize(420, 48)
-  f:SetPoint("TOP", UIParent, "TOP", 0, -100)
+  f:SetSize(TOAST_W, TOAST_H)
+  f:SetPoint("TOP", UIParent, "TOP", 0, TOAST_Y)
   f:SetFrameStrata("DIALOG")
   U.Skin(f, { 0.035, 0.035, 0.035 }, 0.97)
   f.bar = U.Flat(f, "ARTWORK", WHITE, 1)
@@ -1239,6 +1258,7 @@ function H:ShowToast(set, test)
   f.title:SetWidth(396 - lw - 10)
   U.FitText(f.title, set.title or "", 392 - lw - 10)
   U.FitText(f.names, names(set, 3), 392)
+  placeToast(f)
   f:SetAlpha(1)
   f:Show()
   local shown = set
