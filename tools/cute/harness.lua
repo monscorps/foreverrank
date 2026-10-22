@@ -21007,6 +21007,54 @@ do
   end)
 end
 
+-- [stage: pages3] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The third pages round, a case each; every case runs, and the block fails at its end naming each one that did not hold:
+-- P1. QuestBank's privacy line says who hears it in game as QuestBank's Settings hint does: Cute_Quest's copy of Sync
+--     takes a group mate's QuestBank status on QuestBank's prefix and a guild mate's never, so the line names your
+--     group's QuestBank and Cute users and your guild's QuestBank users, and never says QuestBank talks only to
+--     QuestBank users
+----------------------------------------------------------------------------
+do
+  local CASES, failed, said = {}, {}, {}
+  local function read(path) local f = assert(io.open(HERE .. "/../../" .. path)); local s = f:read("*a"); f:close(); return s end
+  -- a piece of the page as a reader sees it: tags out, entities read, white space one space
+  local function plainOf(s)
+    return (s:gsub("<[^>]+>", " "):gsub("&#39;", "'"):gsub("&quot;", '"'):gsub("&lt;", "<"):gsub("&gt;", ">"):gsub("&amp;", "&"):gsub("%s+", " "))
+  end
+
+  CASES[#CASES + 1] = { "P1 QuestBank's privacy line names who hears it as its Settings hint does", function()
+    local status = "1S|5|100|A|WARRIOR|0|0|0|-1|0|0|6.4.2|0000000000"
+    local ok, err = true, nil
+    isolated({ UIX.member("Rone", 1), UIX.member("Pim", 3) }, function() ok, err = pcall(function()
+      local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+      login(c); tickAll(5); tick(c, 6)
+      local QB = c.addons[2].private
+      local f = QB.Sync.frame
+      f.__scripts.OnEvent(f, "CHAT_MSG_ADDON", "QuestBank", status, "GUILD", "Pim-Forever")
+      assert(next(QB.Sync.members) == nil, "a guild mate's QuestBank status: Cute takes nothing")
+      f.__scripts.OnEvent(f, "CHAT_MSG_ADDON", "QuestBank", status, "PARTY", "Pim-Forever")
+      local m = QB.Sync.members["Pim-Forever"]
+      assert(m and m.level == 5 and m.class == "WARRIOR", "a group mate's QuestBank status reaches Cute")
+      leave(c)
+    end) end)
+    if not ok then error(err, 0) end
+    local hint = assert(read("tools/questbank/QuestBank/UI.lua"):match('v%.shareHint:SetText%("To ([^"]-), never in chat'), "QuestBank's Settings hint names who hears your share")
+    local line = plainOf(assert(read("questbank/index.html"):match('<p class="qb%-privacy">(.-)</p>'), "QuestBank's page has its privacy line"))
+    assert(not line:find("only to other QuestBank users", 1, true), "the page says QuestBank talks only to other QuestBank users; a Cute client in the group hears it:\n" .. line)
+    assert(line:lower():find(hint:lower(), 1, true), "the page names who hears QuestBank as its Settings hint does (" .. hint .. "):\n" .. line)
+    assert(line:find("version check", 1, true), "the page still names the realm's version check:\n" .. line)
+    said[#said + 1] = "QuestBank's privacy line: " .. hint
+  end }
+
+  for _, case in ipairs(CASES) do
+    local ok, err = pcall(case[2])
+    if not ok then failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
+  end
+  assert(#failed == 0, "pages3: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
+  print("pages3: " .. table.concat(said, "; "))
+end
+
 -- [stage: merge4] that stage's tests go right below this line
 ----------------------------------------------------------------------------
 -- The merge's integration findings (launch/merge4), a case each; every case runs, and the block fails at its end naming
