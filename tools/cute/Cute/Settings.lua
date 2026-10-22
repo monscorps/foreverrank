@@ -606,20 +606,30 @@ local function drawVisibility(col, officer, ui)
   -- Info has been read)
   local mine = C.Roster:MyRank() or 99
   local editor = officer and C.Policy.Editable()
-  -- (the ranks by the game's names, never by number: the stepper counts them)
+  -- (the ranks by the game's names, never by number: the stepper counts them. (merge5) Never past the guild's last
+  -- rank either: a line saved by 0.9.1's stepper, which went to 9, or by an officer still on it, reaches past it, and
+  -- every rank the guild has is then an officer's; the stepper steps down from the last)
+  local last = lastRank()
+  local shown = math.min(thr, last)
   local names = {}
-  for i = 0, thr do names[#names + 1] = rankName(i) end
+  for i = 0, shown do names[#names + 1] = rankName(i) end
   local who = #names == 1 and (names[1] .. " alone sees every value and sets") or (names[1] .. " to " .. names[#names] .. " see every value and set")
   -- (a step up never past the guild's last rank: no made-up "rank 8" in a guild of six)
   band:Step("Officer ranks: " .. who .. " this list", tostring(#names), false,
-    (editor and thr > 0 and thr - 1 >= mine) and function() C.Policy:SetThreshold(thr - 1); C.Comm:PolicySoon(); redraw() end or nil,
-    (editor and thr < lastRank()) and function() C.Policy:SetThreshold(thr + 1); C.Comm:PolicySoon(); redraw() end or nil,
+    (editor and shown > 0 and shown - 1 >= mine) and function() C.Policy:SetThreshold(shown - 1); C.Comm:PolicySoon(); redraw() end or nil,
+    (editor and thr < last) and function() C.Policy:SetThreshold(thr + 1); C.Comm:PolicySoon(); redraw() end or nil,
     function(tip)
       tip:AddLine("Officer ranks", 1, 1, 1)
       tip:AddLine("The guild's ranks, from the guild master down, that see every value and set this list and the rules.", 0.85, 0.85, 0.85, true)
       tip:AddLine((#names == 1 and "Now one rank: " or ("Now " .. #names .. " ranks: ")) .. table.concat(names, ", ") .. ".", 0.7, 0.7, 0.7, true)
-      if officer and thr - 1 < mine and thr > 0 then tip:AddLine("It cannot leave your own rank out: an officer of a higher rank can lower it.", 0.7, 0.7, 0.7, true) end
+      if thr > last then tip:AddLine("Saved past the guild's last rank: a step down names the ranks there are.", 0.7, 0.7, 0.7, true) end
+      if officer and shown - 1 < mine and shown > 0 then tip:AddLine("It cannot leave your own rank out: an officer of a higher rank can lower it.", 0.7, 0.7, 0.7, true) end
     end)
+  -- (every rank the guild has: every member is an officer and sees every Only-you value)
+  if last > 0 and thr >= last then
+    band:Note(thr > last and "The officer ranks reach past the guild's last rank: every member sees every value."
+      or "That is every rank: every member sees every value.")
+  end
   band:Buttons({ { "Save to Guild Info", unsaved and st.ok, save, saveTip(st) }, { "Broadcast now", officer, broadcast }, { "Reset to defaults", editor, function()
     -- (the visibility only: the rules' thresholds go back to theirs in their own sections, the untrusted on the
     -- Officers page)

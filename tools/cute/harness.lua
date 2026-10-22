@@ -21753,6 +21753,62 @@ do
   print("fix2-engine: " .. table.concat(said, "; "))
 end
 
+-- [stage: merge5] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The integration findings on launch/merge5, Cute's side, a case each; every case runs, and the block fails at its end
+-- naming each one that did not hold:
+-- R1. Officer ranks saved past the guild's last rank (0.9.1's + went to 9, and an officer still on it can save them) name
+--     the ranks there are: no made-up "rank 7", a line saying every member sees every value, and - steps down from the
+--     guild's last rank
+----------------------------------------------------------------------------
+do
+  local CASES, failed, said = {}, {}, {}
+  local function inGuild(guild, fn)
+    local ok, err = true, nil
+    isolated(guild, function() ok, err = pcall(fn) end)
+    if not ok then error(err, 0) end
+  end
+
+  CASES[#CASES + 1] = { "R1 officer ranks saved past the guild's last rank name the ranks there are, and every member sees every value", function()
+    inGuild({ UIX.member("Gwen", 0), UIX.member("Rone", 1), UIX.member("Pim", 2) }, function()
+      local names = { "Guild Master", "Officer", "Member" }
+      local c = newClient(charOf({ "Gwen", 0, "Guild Master", "WARRIOR", 5 }, { rankNames = names }))
+      c.env.GuildControlGetNumRanks = function() return #names end
+      login(c); tickAll(60)
+      local P = c.C.Policy
+      assert(P:SetThreshold(8) and P:Threshold() == 8, "a line saved by 0.9.1's stepper: 8: " .. tostring(P:Threshold()))
+      c.C.UI:Open("settings", "vis")
+      local function step(label)
+        for _, fr in ipairs(c.frames) do
+          if fr.__kind == "Button" and fr:IsVisible() and fr.label and fr.label:GetText() == label and tipOf(fr):find("Officer ranks", 1, true) then return fr end
+        end
+      end
+      local t, tip = texts(c), tipOf(step("-"))
+      assert(not t:find("rank %d") and not tip:find("rank %d"), "no made-up rank:\n" .. t .. "\n--\n" .. tip)
+      assert(t:find("Officer ranks: Guild Master to Member see every value and set this list", 1, true), "the ranks there are, to the last:\n" .. t)
+      assert(t:find("every member sees every value", 1, true), "said: every member sees every value:\n" .. t)
+      assert(tip:find("Now 3 ranks: Guild Master, Officer, Member.", 1, true), "the tooltip counts the guild's ranks:\n" .. tip)
+      local plus = step("+")
+      assert(plus and not plus:IsEnabled(), "+ is off past the last rank")
+      check(sframe(c), "merge5 R1 Who sees what, officer ranks saved past the last rank")
+      press(step("-"))
+      t = texts(c)
+      assert(P:Threshold() == 1 and t:find("Officer ranks: Guild Master to Officer see every value and set this list", 1, true),
+        "a step down from the guild's last rank: " .. tostring(P:Threshold()) .. "\n" .. t)
+      assert(not t:find("every member sees every value", 1, true), "below the last rank, not said:\n" .. t)
+      leave(c)
+    end)
+    said[#said + 1] = "officer ranks saved past the guild's last name the ranks there are and step down from the last"
+  end }
+
+  for _, case in ipairs(CASES) do
+    local ok, err = pcall(case[2])
+    if not ok then failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
+  end
+  assert(#failed == 0, "merge5: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
+  print("merge5: " .. table.concat(said, "; "))
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end
