@@ -350,7 +350,18 @@ function R.Stopped()
     end, "reminders: still"))
   end
 end
-local keySnooze = {} -- [key] = until (GetTime), or { level = n }
+local keySnooze = {} -- [key] = until (GetTime)
+-- (the hud review) Talents' and Train's Not now: until a level, kept on this character across a reload and a login
+-- (QuestBankDB.chars[me].remind.untilLevel[key] = the level it ends at); the table read once a session
+local levelNap
+local function untilLevelDB()
+  if levelNap then return levelNap end
+  local c = QB.Camp and QB.Camp.CharDB and QB.Camp.CharDB()
+  if not c then return nil end
+  if type(c.untilLevel) ~= "table" then c.untilLevel = {} end
+  levelNap = c.untilLevel
+  return levelNap
+end
 function R.Started()
   stillGen = stillGen + 1
   stillAt = nil
@@ -365,18 +376,20 @@ function R.StillFor() return stillAt and (now() - stillAt) or 0 end
 -- a reminder snoozed by itself or by Not now on its own (Talents: until the next level)
 function R.Snoozed(key)
   local v = keySnooze[key]
-  if v == nil then return false end
-  if type(v) == "table" then
-    if (QB.state and QB.state.level or 0) < v.level then return true end
+  if v ~= nil then
+    if now() < v then return true end
     keySnooze[key] = nil
-    return false
   end
-  if now() < v then return true end
-  keySnooze[key] = nil
+  local nap = levelNap or untilLevelDB()
+  local lv = nap and nap[key]
+  if lv == nil then return false end
+  if type(lv) == "number" and (QB.state and QB.state.level or 0) < lv then return true end
+  nap[key] = nil
   return false
 end
 function R.SnoozeKey(key, untilLevel)
-  if untilLevel then keySnooze[key] = { level = untilLevel } else keySnooze[key] = now() + SNOOZE end
+  local nap = untilLevel and untilLevelDB()
+  if nap then nap[key] = untilLevel else keySnooze[key] = now() + SNOOZE end
   R.Dirty("all")
 end
 -- a pause reminder (its record's pause): shown now, it snoozes when you walk off without its click (collect marks it)

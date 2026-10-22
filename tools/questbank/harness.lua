@@ -22745,6 +22745,21 @@ do
     assert(shownCamp(c, "talents") and t:GetAttribute("type1") == "click" and t:GetAttribute("clickbutton") == env.TalentMicroButton and t.word:GetText() == "Talents"
       and t.icon.__tc ~= nil, "hidden by another addon: the class icon, a click is the button's")
     assert(c.QB.API.UnspentTalents() == true and c.env.QuestBankDB.diag.remind.talent == true, "the shared read, and the diagnostic")
+    -- (Not now on Talents: until the next level, kept on this character across a reload)
+    local n = #c.contextMenus
+    t.__scripts.OnClick(t, "RightButton")
+    local m = c.contextMenus[n + 1]
+    assert(m and m[1].text == "Not now", "its menu: Not now")
+    m[1].set(); tick(c, 0)
+    assert(not shownCamp(c, "talents"), "Not now: gone")
+    local r = hud("Tally", "WARRIOR", "Warrior", 1, {}, { level = 10, saved = c.env.QuestBankDB })
+    r.env.TalentMicroButton = r.env.CreateFrame("Button", "TalentMicroButton", r.env.UIParent); r.env.TalentMicroButton:Hide()
+    r.talents = true
+    r.env.C_ClassTalents = { HasUnspentTalentPoints = function() return r.talents end }
+    ev(r, "PLAYER_TALENT_UPDATE"); tick(r, 0)
+    assert(not shownCamp(r, "talents"), "a reload at the same level: still not now")
+    r.level = 11; r.QB.state.level = 11; ev(r, "PLAYER_LEVEL_UP", 11); tick(r, 1)
+    assert(shownCamp(r, "talents"), "the next level: back")
     c.talents = false; ev(c, "PLAYER_TALENT_UPDATE"); tick(c, 0)
     assert(not shownCamp(c, "talents"), "spent: gone")
   end }
