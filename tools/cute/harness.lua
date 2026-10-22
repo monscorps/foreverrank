@@ -15998,6 +15998,24 @@ do
     leave(f)
     said[#said + 1] = "with QuestBank loaded the card asks nothing of the Map window and names J and L"
   end)
+  -- K8: Settings > Data you share's finds line: its Show finds only while the Map window is there to show them
+  isolated({ member("Rone", 1) }, function()
+    local c, QB = mapClient("Rone", 1)
+    local disc = QB.Discover.DB()
+    disc.find = { o9001 = { p = { { 1429, 400, 400, 1 } }, b = "A Diary of Your Own", n = 1 } }
+    disc.findN = (tonumber(disc.findN) or 0) + 1
+    c.C.UI:Open("settings", "share")
+    local st = texts(c)
+    assert(st:find("1 find QuestBank does not have yet", 1, true) and st:find("Show finds", 1, true), "the Map module on: the line and Show finds:\n" .. st)
+    c.C.UI.Window("settings").frame:Hide()
+    c.C.Modules.Set("Cute_Quest:map", false); tick(c, 1)
+    c.C.UI:Open("settings", "share")
+    st = texts(c)
+    assert(st:find("1 find QuestBank does not have yet", 1, true) and not st:find("Show finds", 1, true), "the Map module off: the line, no Show finds:\n" .. st)
+    check(c.C.UI.Window("settings").frame, "map K8 Data you share with the Map module off")
+    leave(c)
+    said[#said + 1] = "Data you share's finds line with Show finds only while the Map window is on"
+  end)
   print("map K: " .. table.concat(said, "; "))
 end
 

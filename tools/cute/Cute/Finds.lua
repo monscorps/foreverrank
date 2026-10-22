@@ -705,6 +705,8 @@ function D.ShareLine(col)
   local new, sure2 = F.Tally()
   if new <= 0 then return end
   col:Note(counts(new, sure2))
+  -- (Show finds while the Map window is there to show them: the Map module on, and no QuestBank loaded beside Cute)
+  if not C.Modules.Page("map") then return end
   col:Buttons({ { "Show finds", true, function() F.ShowFinds() end, function(tip)
     tip:AddLine("Show finds", 1, 1, 1)
     tip:AddLine("The Map window's Finds list: yours, the guild's once two agree, and what QuestBank's data has.", 0.85, 0.85, 0.85, true)
