@@ -221,7 +221,28 @@ Cute.QuestBand = {
     local m = QM and type(QM.DiagLine) == "function" and QM.DiagLine() or "game's map: ?"
     return t .. "; " .. m
   end,
+  -- (merge3) the step frame's line under the steps, as the step frame draws it (Train, Flight path, Sleeping bag: the
+  -- engine's G.Reminder, Remind.lua's record, nil where there is none or the engine has no reminders): its click shows
+  -- its place on the arrow, its right-click is Remind's menu (Not now, Never, Settings), its tooltip Remind's
+  Reminder = function() local G = E.Guide; return G and type(G.Reminder) == "function" and G.Reminder() or nil end,
+  ReminderGo = function(rec) local R = E.Remind; if rec and R and R.Go then R.Go(rec) end end,
+  ReminderMenu = function(owner) local R = E.Remind; if owner and owner.rec and R and R.Menu then R.Menu(owner) end end,
+  ReminderTip = function(owner, rec) local R = E.Remind; if rec and R and R.Tip then R.Tip(owner, rec) end end,
 }
+-- (merge3) Cute's band drawn again when the step frame's line changes (Remind.lua tells the step frame after each refresh;
+-- the copy's alone: QuestBank's own step frame is its own)
+if not QB.dormant and E.StepFrame and type(E.StepFrame.RemindChanged) == "function" then
+  local changed = E.StepFrame.RemindChanged
+  local was, wasText, wasWord
+  E.StepFrame.RemindChanged = function(rec)
+    changed(rec)
+    local text, word = rec and rec.text, rec and rec.word
+    if rec == was and text == wasText and word == wasWord then return end
+    was, wasText, wasWord = rec, text, word
+    local win = Cute.Window and Cute.Window("quests")
+    if win and win.frame and win.frame:IsShown() then Cute.Refresh() end
+  end
+end
 -- (merge3) the reads Cute's dashboard shares with Reminders, one answer for both (the reminders design's section 6;
 -- Remind.lua's QB.API and R.Pull, QuestBank's own while it is loaded): unspent talent points (a boolean), the general
 -- bag slots free, and what Before the pull shows with whether it is on. nil where the engine has none (an older one)

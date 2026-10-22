@@ -525,6 +525,33 @@ local function bandKit(UI)
     r:SetScript("OnLeave", function() GameTooltip:Hide() end)
     kit.next[i] = r
   end
+  -- (merge3) the step frame's line under the next two (Train, Flight path, Sleeping bag: Cute.QuestBand.Reminder), as the
+  -- step frame draws it: a 14 px icon, its words in the ink, its minutes on the right, a 2 px bar at its left in its
+  -- category's colour; a click shows its place on the arrow, a right-click is Remind's menu, the tooltip Remind's
+  local rr = CreateFrame("Button", nil, kit)
+  rr:SetHeight(BAND_NEXT)
+  rr:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  rr.icon = L.MakeSlot(rr, 14)
+  rr.icon:SetPoint("LEFT", 5, 0)
+  rr.bar = L.Flat(rr, "ARTWORK", K.QUEST, 1)
+  rr.bar:SetSize(2, 14)
+  rr.bar:SetPoint("LEFT", 0, 0)
+  rr.text = UI.Text(rr, 12, K.INK, "LEFT")
+  rr.mins = UI.Text(rr, 11, K.INK, "RIGHT")
+  rr:SetHighlightTexture("Interface\\Buttons\\WHITE8x8", "ADD")
+  rr:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.04)
+  rr:SetScript("OnClick", C.Safe(function(self, which)
+    local Q = C.API.QuestBand
+    if not (Q and self.rec) then return end
+    if which == "RightButton" then if Q.ReminderMenu then Q.ReminderMenu(self) end
+    elseif Q.ReminderGo then Q.ReminderGo(self.rec) end
+  end, "band: the line"))
+  rr:SetScript("OnEnter", C.Safe(function(self)
+    local Q = C.API.QuestBand
+    if Q and Q.ReminderTip and self.rec then Q.ReminderTip(self, self.rec) end
+  end, "tooltip"))
+  rr:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  kit.remind = rr
   kit.level = CreateFrame("Button", nil, kit)
   kit.level:SetHeight(16)
   kit.level.text = UI.Text(kit.level, 12, K.INK, "LEFT")
@@ -552,6 +579,7 @@ function G.DrawBand(UI)
   local y = 2
   for _, r in ipairs(kit.next) do r:Hide() end
   kit.step:Hide(); kit.track:Hide(); kit.fill:Hide(); kit.level:Hide(); kit.xp:Hide(); kit.why:Hide()
+  kit.remind:Hide(); kit.remind.rec = nil
   if not (Q and Q.On()) then
     -- (no step yet: the module says why, reading the log or a QuestBank too old for it)
     local why = (Q and Q.Why and Q.Why()) or "Reading your quest log."
@@ -607,6 +635,19 @@ function G.DrawBand(UI)
         r.tip = function(tip) tip:AddLine(full, 1, 1, 1, true) end
         y = y + BAND_NEXT
       end
+    end
+    -- (merge3) the step frame's line, where it has one now
+    local rl = Q.Reminder and Q.Reminder() or nil
+    if rl then
+      local rr = kit.remind
+      rr.rec = rl
+      rr:ClearAllPoints(); rr:SetPoint("TOPLEFT", 0, -y); rr:SetWidth(w); rr:Show()
+      L.FillSlot(rr.icon, { art = { rl.atlas, rl.tex or 134400, rl.tc }, desat = rl.desat == true })
+      rr.bar:SetShown(rl.cat == "xp")
+      local minsW = rl.mins and 60 or 0
+      if rl.mins then put(rr.mins, "RIGHT", 0, 0, minsW, rl.word or "", K.INK, "RIGHT", 11) else rr.mins:Hide() end
+      put(rr.text, "LEFT", 32, 0, w - 32 - minsW - 8, rl.text or rl.name or "", K.INK, "LEFT", 12)
+      y = y + BAND_NEXT
     end
     -- the level: where you stand in it, the time to the next, over the XP bar (what the plan adds in green)
     local xp = Q.XP and Q.XP() or nil

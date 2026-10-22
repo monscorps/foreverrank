@@ -18619,7 +18619,8 @@ do
     local d0 = #c.chat
     c.env.SlashCmdList.CUTE("diag")
     local diag = table.concat(c.chat, "\n", d0 + 1)
-    assert(diag:find("diag layout: step on 100%, arrow on 100%, camp on 100%, buffs on 100%; locked yes; mode on; keys nudged 0, done 0, passed 0", 1, true), "/cute diag's layout line:\n" .. diag)
+    -- (merge3: the clock, off, among the pieces)
+    assert(diag:find("diag layout: step on 100%, arrow on 100%, camp on 100%, buffs on 100%, clock off 100%; locked yes; mode on; keys nudged 0, done 0, passed 0", 1, true), "/cute diag's layout line:\n" .. diag)
     -- (the render pass: the whole screen in layout mode, the movers over their pieces)
     if LAYOUT_OUT then GEN = GEN + 1; layouts[#layouts + 1] = dumpLayout(c.env.UIParent, "E1 layout mode: the movers over the step frame, the arrow, Reminders and Buffs") end
     said[#said + 1] = "a mover for each of the four pieces on, none for a window; the bar"
@@ -18822,7 +18823,7 @@ do
       sizeAll(r2, size[1], size[2])
       r2.C.UI:Open("settings", "layout")
       local t = texts(r2)
-      assert(t:find("The step frame, the arrow, Reminders and Buffs. Windows always move by their header.", 1, true) and t:find("Snap to the grid", 1, true), "Settings > Layout's rows:\n" .. t)
+      assert(t:find("The step frame, the arrow, Reminders, Buffs and the clock. Windows always move by their header.", 1, true) and t:find("Snap to the grid", 1, true), "Settings > Layout's rows:\n" .. t)
       check(sframe(r2), string.format("Settings > Layout, %dx%d", size[1], size[2]))
       r2.C.UI:Open("settings", "keys")
       assert(texts(r2):find("Move frames", 1, true), "Settings > Keys: the Move frames key")
@@ -18958,6 +18959,10 @@ end
 --     points waiting while the old count reads 0 are 1, none are 0), bags_free the general bags' free slots (a
 --     profession's bag left out), and your own row's Ready "gaps" at best while Before the pull shows something, its
 --     names in the tooltip, what is sent unchanged
+-- P4. Cute's band draws the step frame's line (G.Reminder) under the next steps: its words and minutes; a click shows its
+--     place on the arrow, a right-click is Remind's menu, its tooltip Remind's; drawn again when the line changes. The
+--     minimap's Alt-drag stays (Cute's lock keeps it the game's); the clock is a piece of layout mode: its mover, its
+--     place kept, its drag held by the lock
 ----------------------------------------------------------------------------
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
@@ -19054,6 +19059,77 @@ do
     check(f.C.UI.frame, "merge3 Prog, your own Ready")
     leave(f)
     said[#said + 1] = "talents_free and bags_free read what Reminders read; your own Ready waits on Before the pull"
+    -- P4
+    local g = client(false)
+    login(g); tickAll(6)
+    local QB = g.addons[2].private
+    local cur = { text = "Train: 2 new spells \194\183 Llane Beshere", tex = 131146, mins = 3, word = "3 min", name = "Training", why = "Your trainer has new spells.",
+      go = { name = "Llane Beshere", c = 0, wx = -8918, wy = -208 }, clickWord = "show Llane Beshere on the arrow" }
+    local reminder = QB.Guide.Reminder
+    QB.Guide.Reminder = function() return cur end
+    local went, menued, tipped
+    local go, menu, tip = QB.Remind.Go, QB.Remind.Menu, QB.Remind.Tip
+    QB.Remind.Go = function(rec) went = rec end
+    QB.Remind.Menu = function(b) menued = b.rec end
+    QB.Remind.Tip = function(_, rec) tipped = rec end
+    g.C.UI:Open("quests")
+    local L = qwin(g)
+    local rr = L.bandKit and L.bandKit.remind
+    assert(rr and rr:IsShown() and rr.text:GetText() == cur.text and rr.mins:GetText() == "3 min", "the band: the step frame's line, its words and minutes:\n" .. texts(g))
+    press(rr)
+    assert(went == cur, "its click shows its place on the arrow")
+    rr.__scripts.OnClick(rr, "RightButton")
+    assert(menued == cur, "its right-click: Remind's menu")
+    rr.__scripts.OnEnter(rr)
+    assert(tipped == cur, "its tooltip: Remind's")
+    check(L.frame, "merge3 the Quests band with the step frame's line")
+    sizeAll(g, 760, 420); g.C.UI:Open("quests")
+    check(L.frame, "merge3 the Quests band with the step frame's line, 760x420")
+    sizeAll(g, 1040, 640)
+    local nxt = { text = "Learn the flight path: Sentinel Hill", tex = 132239, atlas = "FlightPath", desat = true, mins = 2, word = "2 min", name = "Flight path" }
+    cur = nxt
+    QB.StepFrame.RemindChanged(nxt)
+    tick(g, 1) -- (a window's refresh: once a second at most, UI:Refresh)
+    assert(rr:IsShown() and rr.text:GetText() == nxt.text, "the line changed: the band drawn again")
+    cur = nil
+    QB.StepFrame.RemindChanged(nil)
+    tick(g, 1)
+    assert(not rr:IsShown(), "no line: none in the band")
+    QB.Guide.Reminder, QB.Remind.Go, QB.Remind.Menu, QB.Remind.Tip = reminder, go, menu, tip
+    -- the minimap stays the game's under Cute's lock
+    local MC = g.env.MinimapCluster
+    local moves = 0
+    rawset(MC, "StartMoving", function() moves = moves + 1 end)
+    local alt = g.env.IsAltKeyDown
+    g.env.IsAltKeyDown = function() return true end
+    QB.Mini.DragStart("LeftButton")
+    assert(moves == 0 and not QB.Mini.dragging and g.C.Layout.Locked("minimap"), "the minimap's Alt-drag: Cute's lock keeps it the game's")
+    g.env.IsAltKeyDown = alt
+    -- the clock: a piece of layout mode
+    local Ly = g.C.Layout
+    QB:Settings().clock.show = true; QB.Timer.Apply()
+    local clockF = QB.Timer.frame
+    assert(clockF and clockF:IsShown() and Ly.pieces.clock == QB.Movers.clock, "the clock shown, its mover Cute's")
+    local drags = 0
+    rawset(clockF, "StartMoving", function() drags = drags + 1 end)
+    clockF.__scripts.OnDragStart(clockF); clockF.__scripts.OnDragStop(clockF)
+    assert(drags == 0, "locked: the clock stays")
+    assert(Ly.Enter() and Ly.movers.clock and Ly.movers.clock:IsShown() and Ly.movers.clock.name:GetText() == "Clock", "Move frames: a mover for the clock")
+    check(Ly.movers.clock, "merge3 the clock's mover")
+    QB.Movers.clock.move(300, 500)
+    Ly.Done()
+    assert(Ly.Get().pieces.clock and Ly.Get().pieces.clock.point == "CENTER", "Done: its place in this character's layout")
+    local d0 = #g.chat
+    g.env.SlashCmdList.CUTE("diag")
+    assert(table.concat(g.chat, "\n", d0 + 1):find("clock on 100% moved", 1, true), "/cute diag names the clock")
+    Ly.SetLocked(false)
+    clockF.__scripts.OnDragStart(clockF); clockF.__scripts.OnDragStop(clockF)
+    assert(drags == 1, "unlocked: the clock drags")
+    Ly.SetLocked(true)
+    QB:Settings().clock.show = false; QB.Timer.Apply()
+    assert(#(g.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    leave(g)
+    said[#said + 1] = "the band draws the step frame's line (click, right-click, tooltip, drawn again); the minimap the game's; the clock a piece of layout mode"
     print("merge3: " .. table.concat(said, "; "))
   end)
 end

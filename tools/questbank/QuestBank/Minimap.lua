@@ -1121,6 +1121,10 @@ end
 -- Alt-drag: the whole minimap moves; where it ends up is kept
 function Mini.DragStart(button)
   if button ~= "LeftButton" or not (IsAltKeyDown and IsAltKeyDown()) or (InCombatLockdown and InCombatLockdown()) then return end
+  -- (the layout round) a host's one lock (QB.LayoutLocked: Cute's, which keeps the minimap locked for the game's Edit
+  -- Mode to place); QuestBank alone has none, and Alt-drags it as it always did
+  local h = QB.LayoutLocked
+  if type(h) == "function" and h("minimap") == true then return end
   if not MinimapCluster then return end
   MinimapCluster:SetMovable(true)
   MinimapCluster:StartMoving()

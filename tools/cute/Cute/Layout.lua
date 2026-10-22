@@ -1,8 +1,8 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- Layout: the pieces on screen moved, scaled, shown and locked (the windows design's section 6). Cute's windows are not
 -- among them: they always move by their header and size by their corner (UI.lua); Reset windows puts them back.
---   the pieces   the quest engine's (Cute_Quest's QB.Movers: the step frame, the arrow, Reminders, Buffs), handed over
---                by its Bridge.lua (L.Attach) before the engine's login places them. With the addon QuestBank loaded the
+--   the pieces   the quest engine's (Cute_Quest's QB.Movers: the step frame, the arrow, Reminders, Buffs, the clock),
+--                handed over by its Bridge.lua (L.Attach) before the engine's login places them. With the addon QuestBank loaded the
 --                engine is QuestBank's own: no pieces here, nothing of its settings written, the rows greyed
 --   the lock     one for them all (Lock frames, in the menu and Settings > Layout), on by default: locked, nothing on
 --                screen drags; unlocked, each piece drags where it stands. The engine's own drags and menus ask it
@@ -20,7 +20,7 @@ local _, C = ...
 local L = { on = false, movers = {}, from = nil, keys = { nudged = 0, done = 0, passed = 0 } }
 C.Layout = L
 
-local KEYS = { "step", "arrow", "camp", "buffs" }
+local KEYS = { "step", "arrow", "camp", "buffs", "clock" }
 local GRID, SNAP = 8, 6
 local MIN_PCT, MAX_PCT, PCT_STEP = 50, 200, 5
 local MENU_PCTS = { 80, 100, 120, 150 }
@@ -77,9 +77,10 @@ function L.Attach(movers)
   for _, key in ipairs(KEYS) do
     local m = movers[key]
     if m then
-      -- (each on its own: one piece's error, recorded, leaves the others theirs)
+      -- (each on its own: one piece's error, recorded, leaves the others theirs. A piece a layout has no place for, one
+      -- that came after it was made (the clock, merge3), keeps the engine's own place and the layout takes it)
       C.Safe(function()
-        if lay.fresh then lay.pieces[key] = clean(m.get()) else m.set(clean(lay.pieces[key])) end
+        if lay.fresh or lay.pieces[key] == nil then lay.pieces[key] = clean(m.get()) else m.set(clean(lay.pieces[key])) end
       end, "layout: " .. key)()
     end
   end
@@ -119,15 +120,33 @@ local function pctOf(m)
   return math.floor(((p and tonumber(p.scale)) or 1) * 100 + 0.5)
 end
 local function screen() return UIParent:GetWidth() or 1920, UIParent:GetHeight() or 1080 end
+-- the mover's frame over its piece's rect (mv.l, mv.t, mv.w, mv.h, which the snapping reads): at least 30 px tall, a
+-- piece shorter than its labels (the clock's 24 px strip, merge3) having its mover reach as far above it as below
+local MOVER_MIN_H = 30
+local function placeMover(mv)
+  local hv = math.max(MOVER_MIN_H, mv.h)
+  mv:SetSize(math.max(24, mv.w), hv)
+  mv:ClearAllPoints()
+  mv:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", mv.l, mv.t + (hv - mv.h) / 2)
+end
 -- a mover over its piece, where the piece stands now (its rect), with its name and its scale
 local function sync(mv)
   local m = mover(mv.key)
   if not m then return end
   local l, t, w, h = m.rect()
   mv.l, mv.t, mv.w, mv.h = l, t, w, h
-  mv:SetSize(math.max(24, w), math.max(16, h))
-  mv:ClearAllPoints()
-  mv:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", l, t)
+  placeMover(mv)
+  -- (a mover too short for its two lines, the clock's: the name and the scale side by side)
+  local one = math.max(MOVER_MIN_H, h) < 44
+  if mv.oneLine ~= one then
+    mv.oneLine = one
+    mv.name:ClearAllPoints(); mv.scaleText:ClearAllPoints()
+    if one then
+      mv.name:SetPoint("RIGHT", mv, "CENTER", -3, 0); mv.scaleText:SetPoint("LEFT", mv, "CENTER", 3, 0)
+    else
+      mv.name:SetPoint("BOTTOM", mv, "CENTER", 0, 1); mv.scaleText:SetPoint("TOP", mv, "CENTER", 0, -1)
+    end
+  end
   local on = m.on()
   mv.scaleText:SetText(on and (pctOf(m) .. "%") or ("Hidden" .. DOT .. pctOf(m) .. "%"))
   mv:SetAlpha(on and 1 or 0.5)
@@ -191,8 +210,7 @@ local function follow(mv)
   if L.Get().snap ~= false and not shift() then l, t = snapped(mv, l, t) end
   l, t = clamp(mv, l, t)
   mv.l, mv.t = l, t
-  mv:ClearAllPoints()
-  mv:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", l, t)
+  placeMover(mv)
 end
 local function dragStart(mv)
   if not L.on or inCombat() then return end
@@ -473,7 +491,7 @@ function L.Draw(col)
   col:Head("Layout")
   if why then col:Note(why) end
   col:Check("Lock frames", lay.locked ~= false, why == nil, function(on) L.SetLocked(on) end)
-  col:Note("The step frame, the arrow, Reminders and Buffs. Windows always move by their header.")
+  col:Note("The step frame, the arrow, Reminders, Buffs and the clock. Windows always move by their header.")
   col:Check("Snap to the grid", lay.snap ~= false, why == nil, function(on) lay.snap = on end)
   local after = function(tip) tip:AddLine(fight and "After combat." or (why or ""), 1, 1, 1, true) end
   col:Buttons({

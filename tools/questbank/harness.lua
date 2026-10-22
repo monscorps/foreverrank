@@ -24272,6 +24272,12 @@ end
 -- N1. The planner's hearthstone is Reminders' (Remind.lua R.HEARTHS: 6948, 243229, 284163, then the single-use
 --     282006): API.HasHearth says yes for any of them carried, API.HearthLeft reads the cooldown of the one carried
 --     (the first of the list in the bags); none carried, no hearth
+-- N2. The minimap's Alt-drag waits for a host's one lock (QB.LayoutLocked("minimap"): Cute keeps it locked for the game's
+--     Edit Mode); QuestBank alone has none and drags it as before
+-- N3. The timer strip (Timer.lua) as a host's layout mode moves it (QB.Movers.clock): named Clock, not secure, on as
+--     its setting shows it; rect at the top's middle 80 below the top until moved; move keeps its centre (clock.x,
+--     clock.y in UIParent's units) and places it at once; scale keeps the centre; get and set against UIParent's centre;
+--     its drag waits for a host's lock, and a drop keeps its centre in UIParent's units
 -- N4. API.UnspentTalents (Cute's talents_free and Reminders' Talents) takes HasUnspentTalentPoints' no as the answer
 ----------------------------------------------------------------------------
 do
@@ -24296,6 +24302,63 @@ do
   assert(QB.Remind.HEARTHS[1] == 6948 and #QB.Remind.HEARTHS == 4, "the list is Reminders'")
   c.o.bagSlots = {}
   said[#said + 1] = "the planner's hearthstone is the one carried of Reminders' four"
+  -- N2
+  local Mini, MC = QB.Mini, env.MinimapCluster
+  local moves = 0
+  rawset(MC, "StartMoving", function() moves = moves + 1 end)
+  c.alt = true
+  QB.LayoutLocked = function(key) return key == "minimap" end
+  Mini.DragStart("LeftButton")
+  assert(moves == 0 and not Mini.dragging, "a host's lock: the minimap stays")
+  QB.LayoutLocked = nil
+  Mini.DragStart("LeftButton")
+  assert(moves == 1 and Mini.dragging, "QuestBank alone: Alt-drag as before")
+  Mini.dragging = nil
+  c.alt = false
+  said[#said + 1] = "the minimap's Alt-drag waits for a host's lock"
+  -- N3
+  local T, M, ck = QB.Timer, QB.Movers.clock, QB:Settings().clock
+  local W, H = env.UIParent:GetWidth(), env.UIParent:GetHeight()
+  local function near(a, b) return a and b and math.abs(a - b) < 0.01 end
+  assert(M and M.key == "clock" and M.name == "Clock" and not M.secure, "a mover for the clock, not secure")
+  for _, fn in ipairs({ "frame", "on", "switch", "rect", "move", "scale", "get", "set" }) do assert(type(M[fn]) == "function", "clock." .. fn) end
+  assert(M.on() == false and M.frame() == nil, "off by default, not made")
+  local l, t, w, h = M.rect()
+  assert(near(l, W / 2 - w / 2) and near(t, H - 80) and w == 220 and h == 24, "not made: where it would stand, the top's middle 80 below the top")
+  M.switch(true)
+  local f = T.frame
+  assert(M.on() == true and f and f:IsShown() and M.frame() == f and ck.show == true, "its own switch shows it")
+  assert(f.__points[1].point == "TOP" and near(f.__points[1].y, -80), "at the top's middle")
+  l, t, w, h = M.rect()
+  M.move(400, 600)
+  assert(near(ck.x, 400 + w / 2 - W / 2) and near(ck.y, 600 - h / 2 - H / 2), "moved: its centre kept, in UIParent's units")
+  local p = f.__points[1]
+  assert(p.point == "CENTER" and p.rel == env.UIParent and near(p.x, ck.x) and near(p.y, ck.y), "placed at once")
+  local l2, t2 = M.rect()
+  assert(near(l2, 400) and near(t2, 600), "its rect there")
+  local kept = M.get()
+  assert(kept.point == "CENTER" and near(kept.x, ck.x) and near(kept.y, ck.y) and kept.scale == 1, "get: CENTER against UIParent's centre")
+  M.scale(1.5)
+  local l3, t3, w3, h3 = M.rect()
+  assert(near(ck.scale, 1.5) and near(f:GetScale(), 1.5) and near(f.__points[1].x * 1.5, ck.x) and near(l3 + w3 / 2, 400 + w / 2) and near(t3 - h3 / 2, 600 - h / 2),
+    "at 150%: its centre kept, its points in its own units")
+  M.set(nil)
+  assert(ck.x == nil and ck.y == nil and ck.scale == nil and f.__points[1].point == "TOP" and near(f:GetScale(), 1), "set nil: the default place at 100%")
+  M.set(kept)
+  assert(near(ck.x, kept.x) and near(ck.y, kept.y), "set: back where it was kept")
+  -- its drag: a host's lock holds it; QuestBank alone drags and drops it by its centre
+  local drags = 0
+  rawset(f, "StartMoving", function() drags = drags + 1 end)
+  QB.LayoutLocked = function(key) return key == "clock" end
+  f.__scripts.OnDragStart(f); f.__scripts.OnDragStop(f)
+  assert(drags == 0 and near(ck.x, kept.x), "a host's lock: the clock stays")
+  QB.LayoutLocked = nil
+  rawset(f, "GetCenter", function() return 300, 200 end)
+  f.__scripts.OnDragStart(f); f.__scripts.OnDragStop(f)
+  assert(drags == 1 and near(ck.x, 300 - W / 2) and near(ck.y, 200 - H / 2), "QuestBank alone: dragged, its centre kept: " .. tostring(ck.x) .. ", " .. tostring(ck.y))
+  M.set(nil); M.switch(false)
+  assert(not f:IsShown() and ck.show == false, "its switch hides it")
+  said[#said + 1] = "the clock a mover: rect, move, scale, get and set by its centre; its drag waits for a host's lock"
   -- N4: the talent frame's own answer is the answer, a no included (the old count, which may read wrong on camelot,
   -- only where it gives none)
   local talents, count = false, 2

@@ -306,23 +306,108 @@ local function build()
   end
   f.text = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   f.text:SetPoint("CENTER")
-  f:SetScript("OnDragStart", function(self) self:StartMoving() end)
+  -- (the layout round) a drag waits for a host's one lock (QB.LayoutLocked: Cute's); QuestBank alone has none. The drop
+  -- keeps its centre against UIParent's, in UIParent's units (clock.x, clock.y), as the mover below reads it
+  f:SetScript("OnDragStart", function(self)
+    local h = QB.LayoutLocked
+    if type(h) == "function" and h("clock") == true then return end
+    self.qbMoving = true
+    self:StartMoving()
+  end)
   f:SetScript("OnDragStop", QB.Safe(function(self)
+    if not self.qbMoving then return end
+    self.qbMoving = nil
     self:StopMovingOrSizing()
-    local _, _, _, x, y = self:GetPoint(1)
+    local x, y = self:GetCenter()
+    if not x then return end
+    local k = Timer.ScaleIn(self)
     local c = QB:Settings().clock
-    c.x, c.y = x, y
+    c.x, c.y = x * k - (UIParent:GetWidth() or 1920) / 2, y * k - (UIParent:GetHeight() or 1080) / 2
+    Timer.Place()
   end, "timer strip"))
   f:SetScript("OnMouseUp", QB.Safe(function(_, button)
     if button == "RightButton" then Timer.Set(false) end
   end, "timer strip"))
   f:SetScript("OnShow", function() Timer.Update(); schedule() end)
-  local c = QB:Settings().clock
-  f:ClearAllPoints()
-  if c.x and c.y then f:SetPoint("CENTER", UIParent, "CENTER", c.x, c.y) else f:SetPoint("TOP", UIParent, "TOP", 0, -80) end
+  Timer.frame = f
+  Timer.Place()
   f:Hide()
   return f
 end
+
+-- (the layout round) the strip's scale (clock.scale, 0.5 to 2; 1 where none is kept), and a frame's own against
+-- UIParent's
+local function clockScale()
+  local k = tonumber(QB:Settings().clock.scale)
+  return (k and k >= 0.5 and k <= 2) and k or 1
+end
+function Timer.ScaleIn(f)
+  local fs, us = f:GetEffectiveScale() or 1, UIParent:GetEffectiveScale() or 1
+  return us > 0 and fs / us or 1
+end
+-- where it stands: its centre kept against UIParent's (in UIParent's units, so at any scale), else the top's middle 80
+-- below the top
+function Timer.Place()
+  local f = Timer.frame
+  if not f then return end
+  local c, k = QB:Settings().clock, clockScale()
+  f:SetScale(k)
+  f:ClearAllPoints()
+  if tonumber(c.x) and tonumber(c.y) then f:SetPoint("CENTER", UIParent, "CENTER", c.x / k, c.y / k)
+  else f:SetPoint("TOP", UIParent, "TOP", 0, -80 / k) end
+end
+
+-- (the layout round) the strip as a host's layout mode moves it (QB.Movers: Remind.lua says what each part does): kept by
+-- its centre (clock.x, clock.y), scaled by clock.scale; shown by its own switch (Timer.Set)
+QB.Movers = QB.Movers or {}
+local function clockSize()
+  local f, k = Timer.frame, clockScale()
+  return ((f and f:GetWidth()) or 220) * k, ((f and f:GetHeight()) or 24) * k
+end
+local function screenSize() return UIParent:GetWidth() or 1920, UIParent:GetHeight() or 1080 end
+local function clockCentre()
+  local c = QB:Settings().clock
+  local W, H = screenSize()
+  if tonumber(c.x) and tonumber(c.y) then return W / 2 + c.x, H / 2 + c.y end
+  local _, h = clockSize()
+  return W / 2, H - 80 - h / 2
+end
+local function scaleIn(k)
+  k = tonumber(k)
+  if not k or math.abs(k - 1) < 0.001 then return nil end
+  return math.max(0.5, math.min(2, k))
+end
+QB.Movers.clock = {
+  key = "clock", name = "Clock", order = 5, secure = false,
+  frame = function() return Timer.frame end,
+  on = function() return QB:Opt("clockShow") == true end,
+  switch = function(on) Timer.Set(on) end,
+  rect = function()
+    local w, h = clockSize()
+    local cx, cy = clockCentre()
+    return cx - w / 2, cy + h / 2, w, h
+  end,
+  move = function(left, top)
+    local w, h = clockSize()
+    local W, H = screenSize()
+    local c = QB:Settings().clock
+    c.x, c.y = left + w / 2 - W / 2, top - h / 2 - H / 2
+    Timer.Place()
+  end,
+  scale = function(k) QB:Settings().clock.scale = scaleIn(k); Timer.Place() end,
+  get = function()
+    local c, k = QB:Settings().clock, clockScale()
+    if tonumber(c.x) and tonumber(c.y) then return { point = "CENTER", x = tonumber(c.x), y = tonumber(c.y), scale = k } end
+    return { scale = k }
+  end,
+  set = function(p)
+    local c = QB:Settings().clock
+    local ok = type(p) == "table" and p.point == "CENTER" and tonumber(p.x) and tonumber(p.y)
+    c.x, c.y = ok and tonumber(p.x) or nil, ok and tonumber(p.y) or nil
+    c.scale = type(p) == "table" and scaleIn(p.scale) or nil
+    Timer.Place()
+  end,
+}
 
 -- the strip follows the setting as it applies where you are (QB:Opt("clockShow")); Set writes the plain setting
 function Timer.Apply()
