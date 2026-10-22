@@ -276,11 +276,13 @@ function C.SavedVersions()
   end
 end
 -- the first login on this version: its changelog line, once, ten seconds on, after the login's own lines. A first run
--- (saved variables empty) says hello instead, naming /cute: what changed since a version nobody ran is no news
+-- (saved variables empty) says hello instead, naming /cute: what changed since a version nobody ran is no news. The
+-- first run counts this version told at once and owes the welcome (CuteDB.welcome, C.InitDB): a Start on the
+-- first-run card reloads within seconds, and the login after it took the filled file for an upgrader's
 function C.WhatsNew()
-  if C.firstRun then
+  if CuteDB.welcome then
+    CuteDB.welcome = nil
     C.firstRun = false
-    CuteDB.toldChanges = C.version
     C.Print("/cute or the elf on the minimap opens the guild window.")
     return
   end
@@ -424,6 +426,7 @@ function C.InitDB()
   CuteDB = type(CuteDB) == "table" and CuteDB or {}
   local was = CuteDB.version
   fill(CuteDB, DEFAULTS)
+  if C.firstRun then CuteDB.toldChanges, CuteDB.welcome = C.version, true end
   -- (0.5.x showed every character the Guide as a fixed tab; from 0.6.0 it is a module, and every character starts
   -- with the statistics alone, as What's new says at the first login on it: Settings > Modules switches it on)
   -- before 0.6.0 only the guild channel made records (there were no whispers): each is one heard there (Roster.lua

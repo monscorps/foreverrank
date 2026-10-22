@@ -19331,6 +19331,8 @@ end
 --     What went is kept from login to login: a value unchanged since the last session is not sent again
 -- C2. What a client deleted of others' records and may want back (a stat the officers closed and opened again) leaves it
 --     no hold, so its next login asks every record whole; so does a registry grown since its last ask
+-- C3. A brand-new member who presses Start on the first-run card at once: the welcome after the reload, never the
+--     changelog line written for upgraders
 ----------------------------------------------------------------------------
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "MAGE", level = 30, online = true } end
@@ -19429,6 +19431,30 @@ do
     for _, x in ipairs({ off, b2, a3 }) do leave(x) end
   end)
   said[#said + 1] = "a stat closed and opened again, or a registry that grew, leaves the next login asking whole"
+  -- C3
+  isolated({ member("Coraline", 1), member("Cobb", 3) }, function()
+    local db = {}
+    local c = char("Cobb", 3, { card = true })
+    login(c, db)
+    tick(c, 4)
+    local start
+    for _, x in ipairs(c.frames) do if x.__kind == "Button" and x:IsVisible() and x.label and x.label.GetText and x.label:GetText() == "Start" then start = x end end
+    assert(start, "the first-run card, Start on it")
+    press(start)
+    assert(c.reloads == 1, "Start reloads")
+    leave(c)
+    local c2 = char("Cobb", 3)
+    login(c2, db, true)
+    tick(c2, 15)
+    local welcome, news = 0, 0
+    for _, l in ipairs(c2.chat) do
+      if l:find("/cute or the elf on the minimap opens the guild window.", 1, true) then welcome = welcome + 1 end
+      if l:find("Cute " .. c2.C.version .. "|r: ", 1, true) then news = news + 1 end
+    end
+    assert(welcome == 1 and news == 0 and db.toldChanges == c2.C.version, "a Start in the first seconds: the welcome after the reload, no changelog:\n" .. table.concat(c2.chat, "\n"))
+    leave(c2)
+  end)
+  said[#said + 1] = "a new member's Start in the first seconds: the welcome after the reload, never the changelog"
   print("fix-cute-core review: " .. table.concat(said, "; "))
 end
 
