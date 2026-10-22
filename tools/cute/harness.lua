@@ -21200,6 +21200,62 @@ sys.argv = ["build.py", "--no-zip"]; del build.problems[:]; build.check_zips([ol
   print("merge4: " .. table.concat(said, "; "))
 end
 
+-- [stage: fix2-engine] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The final audit's engine findings, Cute's side (launch/fix2-engine), a case each; each failed on 0.9.1's files. Every
+-- case runs, and the block fails at its end naming each one that did not hold
+----------------------------------------------------------------------------
+do
+  local CASES, failed, said = {}, {}, {}
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  local function inGuild(guild, fn)
+    local ok, err = true, nil
+    isolated(guild, function() ok, err = pcall(fn) end)
+    if not ok then error(err, 0) end
+  end
+  local function questChar()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(5); tick(c, 6)
+    return c
+  end
+
+  -- A1 (firsthour, must). The interact light's two rows were in Reminders' section alone, which goes while the module is
+  -- off: a light left on had no switch anywhere in Cute's windows, though the card says Settings puts its settings back
+  CASES[#CASES + 1] = { "A1 Reminders off: the interact light keeps a Settings section of its own", function()
+    inGuild({ member("Rone", 1) }, function()
+      local c = questChar()
+      local QB, M, s = c.addons[2].private, c.C.Modules, c.env.CuteQuestDB.settings
+      local function ids() local t = {}; for _, sec in ipairs(c.C.SettingsPage.Sections(true)) do t[#t + 1] = sec.id end return " " .. table.concat(t, " ") .. " " end
+      M.Set("Cute_Quest:camp", true); tick(c, 1)
+      local n = #c.C.SettingsPage.Sections(true)
+      assert(ids():find(" camp ", 1, true) and not ids():find(" light ", 1, true), "Reminders on: the light's rows in its section, none of their own:" .. ids())
+      M.Set("Cute_Quest:camp", false); tick(c, 1)
+      assert(not ids():find(" camp ", 1, true) and ids():find(" light ", 1, true), "Reminders off: the light's own section:" .. ids())
+      assert(#c.C.SettingsPage.Sections(true) == n, "one section in place of the other")
+      QB.Glow.Set(true)
+      c.C.UI:Open("settings", "light")
+      local t = texts(c)
+      assert(t:find("Interact light", 1, true) and t:find("Light style", 1, true), "the section's two rows:\n" .. t)
+      local box = UIX.row(c, "Interact light")
+      assert(box and box:GetChecked() and s.glow.on == true, "the light on: its row ticked")
+      click(box)
+      assert(s.glow.on == false, "its row unticked: the light off")
+      click(UIX.row(c, "Game's"))
+      assert(s.glow.style == "game", "its style chosen there: " .. tostring(s.glow.style))
+      M.Set("Cute_Quest:camp", true); tick(c, 1)
+      leave(c)
+    end)
+    said[#said + 1] = "the interact light has its own section while Reminders is off"
+  end }
+
+  for _, case in ipairs(CASES) do
+    local ok, err = pcall(case[2])
+    if not ok then failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
+  end
+  assert(#failed == 0, "fix2-engine: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
+  print("fix2-engine: " .. table.concat(said, "; "))
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end
