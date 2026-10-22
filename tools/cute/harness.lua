@@ -13769,7 +13769,9 @@ do
     assert(card and card:IsShown(), "the card, 3 s after the loading screen")
     local function row(label) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == label end) end
     assert(row("Dungeons tab"):GetChecked() and not row("Gear tab"):GetChecked() and row("Map"):GetChecked(), "the tabs as 0.7 left them: Gear off (the map's row Map, its window's from sub-project F)")
-    assert(not row("Reminders"):GetChecked() and not row("Interact light"):GetChecked() and row("Step frame and arrow"):GetChecked(), "Camp off, the step frame on")
+    -- (merge3) the light its own row, from the light: on in this save (the engine's default, no 0.7 keeping), so ticked;
+    -- Camp off unticks Reminders alone
+    assert(not row("Reminders"):GetChecked() and row("Interact light"):GetChecked() and row("Step frame and arrow"):GetChecked(), "Camp off, the light on as the save has it, the step frame on")
     assert(row("On my route"):GetChecked() and not row("Off"):GetChecked() and not row("Hand finished quests in for me"):GetChecked(), "Accept for me: On my route")
     local keys = {}
     for _, b in ipairs(c.frames) do if rawget(b, "Bind") and b:IsVisible() and b.id then keys[b.id] = b end end
@@ -19140,6 +19142,9 @@ end
 --     the pull starts and when it ends (Reminders' refresh tells Band.lua), with no other draw
 -- P6. With the addon QuestBank loaded, Cute's band follows QuestBank's step-frame line: a hook after QuestBank's own
 --     RemindChanged (hooksecurefunc, its function left as it is) draws the band again, its minutes and its going
+-- P7. The setup card's light row starts from the light, never from the Camp module's choice: on, ticked (a 0.8
+--     character who unticked Camp keeps the light through Start); off only until the card says (a fresh install's Not
+--     now, then the menu's card), ticked; turned off in Settings > Reminders, unticked
 ----------------------------------------------------------------------------
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
@@ -19225,6 +19230,45 @@ do
     check(Lq.frame, "merge3 the Quests band beside QuestBank")
     leave(q)
     said[#said + 1] = "with QuestBank loaded the band follows its step-frame line"
+    -- P7: a 0.8 character, Not now on the card, the Camp module unticked later in Settings > Modules: 0.8's switch kept
+    -- the light (on) in its keeping, which this build gives back (Bridge.lua campChosen)
+    local k = client(false)
+    k.env.CuteQuestDB = { settings = { cuteDefaults = 2, v544 = true, v600 = true, campBar = false, guide = { on = true, frame = true },
+      glow = { on = false, style = "sparkle" }, cuteOff = { camp = { campBar = true, ["glow.on"] = true } } } }
+    login(k, { chars = { ["Rone-Forever"] = { counters = {}, setupLater = true, modules = { ["Cute_Quest:camp"] = false } } } }); tickAll(6)
+    local ks = k.env.CuteQuestDB.settings
+    assert(ks.glow.on == true, "the light on, given back as 0.8 kept it")
+    assert(k.C.Setup.Show(true) and row(k, "Interact light") and row(k, "Interact light"):GetChecked() and not row(k, "Reminders"):GetChecked(),
+      "the menu's card: the light's row ticked, as the light is; Reminders unticked, as the module is")
+    press(button(k, "Start"))
+    assert(ks.glow.on == true and k.env.CuteDB.chars["Rone-Forever"].modules["Cute_Quest:camp"] == false, "Start: the light still on, the module still off")
+    leave(k)
+    -- a fresh install's Not now, a reload, then the menu's card: the light off only until its row says, so ticked
+    local m = client(true)
+    login(m); tick(m, 3)
+    press(button(m, "Not now"))
+    assert(m.env.CuteQuestDB.settings.glow.on == false, "a fresh install: the light off until the card's row")
+    local mdb, mq = m.env.CuteDB, m.env.CuteQuestDB
+    leave(m)
+    local m2 = client(false)
+    m2.env.CuteQuestDB = mq
+    login(m2, mdb, true); tickAll(6)
+    assert(m2.C.Setup.Show(true) and row(m2, "Interact light"):GetChecked(), "after Not now and a reload, the menu's card: the light's row at its default, ticked")
+    press(button(m2, "Start"))
+    assert(m2.env.CuteQuestDB.settings.glow.on == true, "Start: the light on as its row said")
+    leave(m2)
+    -- the light turned off in Settings > Reminders: the card's row unticked
+    local n = client(false)
+    n.env.CuteQuestDB = { settings = { cuteDefaults = 2, v544 = true, v600 = true, guide = { on = true, frame = true }, glow = { on = true, style = "sparkle" } } }
+    login(n); tickAll(6)
+    n.C.UI:Open("settings", "camp")
+    click(row(n, "Interact light"))
+    assert(n.env.CuteQuestDB.settings.glow.on == false, "Settings > Reminders: the light off")
+    hideAll(n)
+    assert(n.C.Setup.Show(true) and not row(n, "Interact light"):GetChecked(), "the menu's card: the light's row unticked, as the player left it")
+    check(n.env.CuteSetupFrame, "merge3 the setup card, the light off")
+    leave(n)
+    said[#said + 1] = "the card's light row starts from the light, never from the Camp module"
     print("merge3 review: " .. table.concat(said, "; "))
   end)
 end

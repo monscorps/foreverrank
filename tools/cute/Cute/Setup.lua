@@ -12,7 +12,9 @@
 -- Shown 3 s after the first loading screen that is out of combat and outside an instance.
 -- With the addon QuestBank loaded its step frame, arrow, Reminders and choices are its own (Cute sets none of
 -- QuestBank's settings): those rows give way to one line saying so. Reminders is the Camp module (Cute_Quest:camp, on
--- by default: PageCamp.lua), its row the module's alone; the interact light is its own row, never the module's.
+-- by default: PageCamp.lua), its row the module's alone; the interact light is its own row, never the module's, and
+-- starts from the light: on, ticked; off, unticked, unless it is off only until this row says (Bridge.lua's LightAsks: a
+-- fresh install, a 0.7 light the account never chose), which starts at the default.
 local _, C = ...
 local S = {}
 C.Setup = S
@@ -98,8 +100,10 @@ function S.Start(id)
     return camp and (not s or s.campBar ~= false)
   end
   if id == "light" then
-    if camp == nil then return true end
-    return camp and (not s or (s.glow and s.glow.on ~= false))
+    -- (merge3) the light as it is, whatever the Camp module's choice: a 0.8 character who unticked Camp keeps a light
+    -- that is on (Bridge.lua gives 0.8's kept light back), and Start never turns it off unasked
+    if not s or type(s.glow) ~= "table" or s.glow.on ~= false then return true end
+    return not saved or (q.LightAsks ~= nil and q.LightAsks() == true)
   end
   if id == "accept" then if saved and s then return s.autoAccept or "off" end return "off" end
   if id == "handin" then if saved and s then return s.autoTurnIn == true end return false end

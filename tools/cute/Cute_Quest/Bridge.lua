@@ -251,12 +251,17 @@ local function firstRun()
   if type(kept) == "table" and kept["remind.on"] == nil and (kept.campBar ~= nil or kept["remind.buffs"] ~= nil or kept["glow.on"] ~= nil) then
     if kept["remind.buffs"] ~= nil then s.remind.buffs = kept["remind.buffs"] end
     if kept["remind.party"] ~= nil then s.remind.party = kept["remind.party"] end
-    if kept["glow.on"] ~= nil and type(s.glow) == "table" and campChosen() then s.glow.on = kept["glow.on"] end
+    if kept["glow.on"] ~= nil and type(s.glow) == "table" then
+      if campChosen() then s.glow.on = kept["glow.on"] elseif s.glow.on == false then s.cuteLightAsks = true end
+    end
     s.cuteOff.camp = { ["remind.on"] = kept.campBar ~= false }
   end
   -- (a fresh install: the interact light off until the first-run card's row says, since the engine's default is on and
   -- the light changes the game's soft-target settings, Glow.lua)
-  if fresh and type(s.glow) == "table" then s.glow.on = false end
+  if fresh and type(s.glow) == "table" then s.glow.on = false; s.cuteLightAsks = true end
+  -- (merge3) cuteLightAsks: the light is off only until the card's row says (the row starts at its default, ticked,
+  -- Setup.lua); the row's answer, Settings > Reminders' Interact light (PageCamp.lua) or a light found on clears it
+  if type(s.glow) ~= "table" or s.glow.on ~= false then s.cuteLightAsks = nil end
   s.cuteGuildOff = true
   if type(s.share) == "table" then s.share.guild = false end
   if not s.cuteDefaults then
@@ -290,6 +295,8 @@ local savedBefore = false -- (read at ADDON_LOADED, before the engine fills its 
 Cute.QuestSetup = {
   Settings = function() return E:Settings() end,
   Saved = function() return savedBefore end,
+  -- (merge3) whether the light is off only until the card's row says (firstRun's cuteLightAsks), not by a choice
+  LightAsks = function() return E:Settings().cuteLightAsks == true end,
   Apply = function(p)
     local s = E:Settings()
     if p.step ~= nil then s.guide.frame = p.step and true or false; s.arrow = p.step and true or false end
@@ -302,7 +309,7 @@ Cute.QuestSetup = {
       s.campBar = true
     end
     -- (the interact light is its own row, whatever the Reminders row says)
-    if p.light ~= nil then s.glow.on = p.light and true or false end
+    if p.light ~= nil then s.glow.on = p.light and true or false; s.cuteLightAsks = nil end
     if p.accept then s.autoAccept = p.accept end
     if p.handin ~= nil then s.autoTurnIn = p.handin and true or false end
   end,

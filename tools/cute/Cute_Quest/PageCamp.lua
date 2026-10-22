@@ -13,7 +13,8 @@ local Cp = {}
 local STYLES = { { "Sparkle", "sparkle" }, { "Light", "light" }, { "Game's", "game" } }
 local TITLE = "Reminders"
 
-local function light(s, on) if E.Glow then E.Glow.Set(on) else s.glow.on = on end end
+-- (merge3) the player's choice: the setup card's light row starts from it now (Bridge.lua's cuteLightAsks cleared)
+local function light(s, on) s.cuteLightAsks = nil; if E.Glow then E.Glow.Set(on) else s.glow.on = on end end
 function Cp.Settings(_, col)
   if not E then return QB.NeedSettings(col, TITLE) end
   local s = E:Settings()
