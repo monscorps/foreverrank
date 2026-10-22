@@ -19339,6 +19339,8 @@ end
 --     read the book, is never drawn or said in the officers' word
 -- C6. What comes before the roster first reads is taken fifty a frame once it does, and what comes meanwhile goes behind
 --     it, so an older record never lands after a newer delta
+-- C7. A login, logout, Away or zone change in the guild reads that one member (its club event names it), another club's
+--     event nothing; an online flip walks no record and builds no identity, a rank moved reads the guild
 ----------------------------------------------------------------------------
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "MAGE", level = 30, online = true } end
@@ -19546,6 +19548,46 @@ do
     end)
   end
   said[#said + 1] = "what came before the roster read is taken fifty a frame, what comes meanwhile behind it"
+  -- C7
+  do
+    local guild = { member("Ofa", 0) }
+    for i = 1, 30 do guild[#guild + 1] = member("Pq" .. i, 3) end
+    isolated(guild, function()
+      local c = char("Ofa", 0)
+      login(c); tickAll(40)
+      local R = c.C.Roster
+      local calls = { sweep = 0, identity = 0 }
+      local rs, ri = R.Sweep, R.Identity
+      R.Sweep = function(...) calls.sweep = calls.sweep + 1; return rs(...) end
+      R.Identity = function(...) calls.identity = calls.identity + 1; return ri(...) end
+      local reads0, ver0 = c.memberReads or 0, R.version
+      -- Pq5 logs out, Pq6 goes Away, Pq7 changes zone: each event names its member
+      guild[6].online = false
+      fire(c, "CLUB_MEMBER_PRESENCE_UPDATED", 7, 6, 3)
+      fire(c, "CLUB_MEMBER_PRESENCE_UPDATED", 7, 7, 4)
+      guild[8].zone = "Tanaris"
+      fire(c, "CLUB_MEMBER_UPDATED", 7, 8)
+      -- another club's (a community): nothing of the guild's
+      fire(c, "CLUB_MEMBER_PRESENCE_UPDATED", 99, 9, 3)
+      assert((c.memberReads or 0) - reads0 == 3 and not R.soon, "each event read its member alone, no full read booked: " .. ((c.memberReads or 0) - reads0) .. " reads")
+      assert(calls.sweep == 0 and calls.identity == 0 and R.version > ver0, "no identity built again, no record walked; the rows drawn again")
+      assert(R.byGuid[guidOf("Pq5")].online == false and R.byGuid[guidOf("Pq7")].zone == "Tanaris", "Pq5 offline, Pq7 in Tanaris")
+      -- a full read that finds an online flip alone: no identity, no sweep, the rows drawn again
+      guild[9].online = false
+      local ver1 = R.version
+      fire(c, "GUILD_ROSTER_UPDATE")
+      assert(calls.sweep == 0 and calls.identity == 0 and R.byGuid[guidOf("Pq8")].online == false and R.version > ver1, "a full read with an online flip alone: rows only")
+      -- a rank changed: the full read, who is who again
+      guild[10].rank = 1
+      fire(c, "CLUB_MEMBER_UPDATED", 7, 10)
+      assert(R.soon, "a rank moved: the full read booked")
+      tick(c, 3)
+      assert(calls.identity >= 1 and R.byGuid[guidOf("Pq9")].rank == 1, "and who is who built again: " .. calls.identity)
+      R.Sweep, R.Identity = rs, ri
+      leave(c)
+    end)
+  end
+  said[#said + 1] = "a login, logout, Away or zone change reads that one member, a rank the guild; an online flip walks no record"
   print("fix-cute-core review: " .. table.concat(said, "; "))
 end
 
