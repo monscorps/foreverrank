@@ -25045,6 +25045,31 @@ end)()
     assert(hint:find("Cute", 1, true) and not hint:find("QuestBank users only", 1, true), "the hint names Cute: " .. hint)
   end }
 
+  -- N2 (look, should). Send now's tooltip always said "your level with your guild", though nothing goes to GUILD with the
+  -- guild box off, out of a guild, or with Cute beside QuestBank (noGuildSync); S:Broadcast's line says so already
+  CASES[#CASES + 1] = { "N2: Send now's tooltip names the guild only where the status goes there", function()
+    local c = char("Button")
+    local QB, UI = c.QB, c.QB.UI
+    QB:Settings().share.guild = true
+    UI:Open(4); UI:Refresh()
+    local btn = UI.views[4].syncBtn
+    local BOTH, GROUP = "Share now: your quests with your group, your level with your guild", "Share now: your quests with your group"
+    local tip = tipOf(btn)
+    assert(tip:find(BOTH, 1, true), "a party and a guild, both shared:\n" .. tip)
+    QB.noGuildSync = true
+    tip = tipOf(btn)
+    assert(tip:find(GROUP, 1, true) and not tip:find("with your guild", 1, true), "Cute beside it (noGuildSync): the group alone:\n" .. tip)
+    QB.noGuildSync = nil
+    QB:Settings().share.guild = false
+    tip = tipOf(btn)
+    assert(tip:find(GROUP, 1, true) and not tip:find("with your guild", 1, true), "the guild box off: the group alone:\n" .. tip)
+    QB:Settings().share.guild = true
+    c.o.guild = false
+    tip = tipOf(btn)
+    assert(tip:find(GROUP, 1, true) and not tip:find("with your guild", 1, true), "in no guild: the group alone:\n" .. tip)
+    UI.frame:Hide()
+  end }
+
   local failed = {}
   for _, case in ipairs(CASES) do
     local ok, err = pcall(case[2])

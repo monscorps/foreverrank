@@ -3497,8 +3497,16 @@ function UI:CreatePartyView(parent)
   v.syncBtn:SetPoint("BOTTOMLEFT", LEFT + 252, 12)
   v.syncBtn:SetScript("OnClick", QB.Safe(function() if QB.Sync then QB.Sync:Broadcast(true) end end, "send now"))
   tooltip(v.syncBtn, function(tip)
-    -- (the final audit) as Sync.lua S:Broadcast sends them: the quest list to the group alone, the guild your status
-    tip:AddLine("Share now: your quests with your group, your level with your guild", GOLD[1], GOLD[2], GOLD[3])
+    -- (the final audit) as Sync.lua S:Broadcast sends them: the quest list to the group alone, the guild your status;
+    -- (merge5) the guild named only where the status goes there, as channels() has it: the guild box ticked, no host
+    -- that shares with the guild itself (S.GuildOn: Cute's noGuildSync) and a guild to send to
+    local S = QB.Sync
+    local group = QB:Settings().share.party
+    local guild = S and S.GuildOn and S.GuildOn() and IsInGuild and IsInGuild()
+    tip:AddLine((group and guild and "Share now: your quests with your group, your level with your guild")
+      or (group and "Share now: your quests with your group") or (guild and "Share now: your level with your guild") or "Share now",
+      GOLD[1], GOLD[2], GOLD[3])
+    if QB.noGuildSync then tip:AddLine("Cute is loaded and shares with your guild itself.", 1, 1, 1, true) end
     tip:AddLine("Party and guild sharing is set in Settings. /qb sync Name whispers one friend.", 1, 1, 1, true)
   end)
 
