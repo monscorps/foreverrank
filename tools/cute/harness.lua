@@ -16903,6 +16903,70 @@ do local function cardsStage()
   end)
   said[#said + 1] = "the live Hall of Shame ranks this week's Deaths this week"
 
+  -- [stage: fix-cards] that stage's tests go right below this line
+  ----------------------------------------------------------------------------
+  -- The launch audit's cards findings (fix-cards, 2026-10-22), a case each. Every case runs, each in a guild of its
+  -- own, and the stage fails naming every case that failed
+  ----------------------------------------------------------------------------
+  do
+    local failed, passed = {}, {}
+    local function case(name, guild, body)
+      isolated(guild, function()
+        local ok, err = pcall(body)
+        if ok then passed[#passed + 1] = name else failed[#failed + 1] = name .. ": " .. tostring(err) end
+      end)
+    end
+
+    -- the officers' toast stands clear of the game's error and progress text (UIErrorsFrame, Blizzard_UIErrorsFrame:
+    -- TOP 0 -122, 512 x 60, its newest line on top, so 122 to 182 px down), which 0.9's place 100 below the top covered
+    -- for the toast's 10 s, and of what is under it (the engine's arrow at 190 under Cute): 20 to 68 px down, above the
+    -- clock strip's default 80. A strip dragged into that place: above it where it leaves room, else under it while that
+    -- ends above the error text, else the screen's top, over as little of it as may be; the game's top-centre widgets
+    -- (a contested zone's score, TOP 0 -15) kept clear where they show
+    case("the toast clear of the error text", { gmember("Tov", 1, "MAGE") }, function()
+      local c = cchar("Tov", 1)
+      login(c)
+      tickAll(30)
+      local Hc, UIP = H(c), c.env.UIParent
+      local W, Ht = UIP:GetWidth(), UIP:GetHeight()
+      local errors = { l = (W - 512) / 2, r = (W + 512) / 2, t = Ht - 122, b = Ht - 182 }
+      local function show() Hc.toastNow = nil; Hc:ShowToast(Hc.TestSet(false), true); GEN = GEN + 1; return rectOf(Hc.toastFrame) end
+      local function down(r) return string.format("%d to %d px down", Ht - r.t, Ht - r.b) end
+      local r = show()
+      assert(r and not overlap(r, errors, 0) and Ht - r.b <= 122, "the toast clears the error text, above it: " .. down(r))
+      assert(Ht - r.t == 20 and Ht - r.b == 68, "20 to 68 px down: " .. down(r))
+      check(Hc.toastFrame, "fix-cards the toast at the top")
+      local strip
+      c.C.API.QuestClock = function() return strip.l, strip.t, strip.w, strip.h end
+      local function at(top, h) strip = { l = W / 2 - 110, t = Ht - top, w = 220, h = h }; return { l = strip.l, r = strip.l + 220, t = Ht - top, b = Ht - top - h } end
+      local s = at(10, 24)
+      r = show()
+      assert(not overlap(r, s, 0) and not overlap(r, errors, 0) and Ht - r.b <= 122, "a strip at 10 px: the toast under it, above the error text: " .. down(r))
+      s = at(60, 24)
+      r = show()
+      assert(not overlap(r, s, 0) and Ht - r.b < 60, "a strip at 60 px: the toast above it: " .. down(r))
+      s = at(46, 48)
+      r = show()
+      assert(not overlap(r, errors, 0) and Ht - r.t == 0, "a strip at 200% where nothing fits: the screen's top, never the error text: " .. down(r))
+      c.C.API.QuestClock = nil
+      local wf = c.env.CreateFrame("Frame", nil, UIP)
+      wf:SetSize(300, 40)
+      wf:SetPoint("TOP", UIP, "TOP", 0, -15)
+      wf.__top = Ht - 15
+      c.env.UIWidgetTopCenterContainerFrame = wf
+      r = show()
+      assert(not overlap(r, { l = W / 2 - 150, r = W / 2 + 150, t = Ht - 15, b = Ht - 55 }, 0) and not overlap(r, errors, 0), "the top-centre widgets kept clear: " .. down(r))
+      wf:Hide()
+      r = show()
+      assert(Ht - r.t == 20, "the widgets gone, the toast at 20 again: " .. down(r))
+      c.env.UIWidgetTopCenterContainerFrame = nil
+      Hc.toastFrame:Hide()
+      if c.C.CardFrame.frame then c.C.CardFrame.frame:Hide() end
+    end)
+    assert(#failed == 0, "fix-cards: " .. #failed .. " case(s) failed:\n  " .. table.concat(failed, "\n  "))
+    said[#said + 1] = "the launch audit's cards findings: " .. table.concat(passed, "; ")
+  end
+
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end
 
@@ -19314,7 +19378,7 @@ do
     check(Ht.toastFrame, "merge3 the toast under the clock at 200%")
     QBt:Settings().clock.show = false; QBt.Timer.Apply()
     toast()
-    assert(Ht.toastFrame.__points[1].y == -100, "the clock hidden: the toast at its own place")
+    assert(Ht.toastFrame.__points[1].y == -20, "the clock hidden: the toast at its own place")
     Mc.set(nil)
     leave(t)
     said[#said + 1] = "a card's toast clears the clock strip"

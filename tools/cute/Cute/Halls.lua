@@ -1147,7 +1147,7 @@ function H.PickStat(period, onPick, owner, allow)
 end
 
 ----------------------------------------------------------------------------
--- showing (9.6): a set first as a toast, one row 420 x 48 at the top centre, 100 below the screen's top: the label in
+-- showing (9.6): a set first as a toast, one row 420 x 48 at the top centre, 20 below the screen's top: the label in
 -- its colour, the title, up to three names in class colour; a click opens the set; it goes after 10 s unless the
 -- mouse is on it. One at a time, three waiting, two an hour, the rest to News quietly; never in combat, an encounter,
 -- a loading screen or a dungeon or raid: waiting ones show after PLAYER_REGEN_ENABLED and out of the instance
@@ -1179,24 +1179,62 @@ local function names(set, max)
   local more = #(set.cards or {}) - max
   return table.concat(out, ", ") .. (more > 0 and (" and " .. more .. " more") or "")
 end
--- the toast's place: the top's middle, 100 below the top. (The merge3 review) under the engine's clock strip where the
--- strip stands there now (Timer.lua: TOP 0 -80, 24 px tall, up to 200% from its mover; Cute_Quest's Band.lua door
--- Cute.QuestClock), 6 below it, so the clock's text is never covered
-local TOAST_W, TOAST_H, TOAST_Y = 420, 48, -100
-local function placeToast(f)
-  local y = TOAST_Y
+-- the toast's place: the top's middle, 20 below the top, so 20 to 68 px down. (The launch audit) 0.9's 100 stood on the
+-- game's error and progress text for the toast's 10 s ("Kobold Vermin slain: 3/8" as a fight ends, when a waiting toast
+-- shows): UIErrorsFrame (Blizzard_UIErrorsFrame: TOP 0 -122, 512 x 60, DIALOG, its newest line on top) is 122 to 182 px
+-- down, and the toast never stands there, nor under it, where the engine's arrow stands under Cute (Arrow.lua A.Place:
+-- TOP 0 -190, the step frame's SF.TOP_Y). 20 clears the engine's clock strip at its default too (Timer.lua: TOP 0 -80,
+-- 24 px tall, up to 200% from its mover; Cute_Quest's Band.lua door Cute.QuestClock). What stands in the toast's column
+-- now, the strip where it was dragged and the game's top-centre widgets where they show (a contested zone's score:
+-- UIWidgetTopCenterContainerFrame, Blizzard_UIWidgets, TOP 0 -15, as tall as what it shows), is kept clear: the place
+-- nearest 20 above the error text that touches none of them, 6 px apart (above a dragged strip before under it, where
+-- that is nearer); where none does, the one over the least of them
+local TOAST_W, TOAST_H, TOAST_Y, TOAST_GAP = 420, 48, -20, 6
+local ERRORS_TOP = 122
+-- (each thing in the toast's column as { top, bottom }, px down from the screen's top)
+local function inColumn()
+  local out = {}
+  local W, Ht = UIParent:GetWidth() or 1920, UIParent:GetHeight() or 1080
+  local tl = (W - TOAST_W) / 2
   local door = C.API and C.API.QuestClock
   if type(door) == "function" then
     local ok, l, t, w, h = pcall(door)
     l, t, w, h = tonumber(l), tonumber(t), tonumber(w), tonumber(h)
-    if ok and l and t and w and h then
-      local W, Ht = UIParent:GetWidth() or 1920, UIParent:GetHeight() or 1080
-      local tl, tt = (W - TOAST_W) / 2, Ht + TOAST_Y
-      if l < tl + TOAST_W and tl < l + w and t - h < tt and tt - TOAST_H < t then y = math.min(TOAST_Y, t - h - Ht - 6) end
+    if ok and l and t and w and h and h > 0 and l < tl + TOAST_W and tl < l + w then out[#out + 1] = { Ht - t, Ht - t + h } end
+  end
+  local wf = UIWidgetTopCenterContainerFrame
+  if type(wf) == "table" and type(wf.IsVisible) == "function" and C.Get(wf.IsVisible, wf) == true then
+    local t, h, k = C.Plain(C.Get(wf.GetTop, wf)), C.Plain(C.Get(wf.GetHeight, wf)), C.Plain(C.Get(wf.GetEffectiveScale, wf))
+    local u = UIParent:GetEffectiveScale() or 1
+    if type(t) == "number" and type(h) == "number" and h > 1 and type(k) == "number" and type(u) == "number" and u > 0 then
+      out[#out + 1] = { Ht - t * k / u, Ht - (t - h) * k / u }
     end
   end
+  return out
+end
+-- the toast's top, px down from the screen's top
+function H.ToastTop()
+  local list = inColumn()
+  local function over(y)
+    local n = 0
+    for _, o in ipairs(list) do n = n + math.max(0, math.min(y + TOAST_H, o[2]) - math.max(y, o[1])) end
+    return n
+  end
+  local want = -TOAST_Y
+  local cands = { want, 0 }
+  for _, o in ipairs(list) do cands[#cands + 1] = o[1] - TOAST_GAP - TOAST_H; cands[#cands + 1] = o[2] + TOAST_GAP end
+  local best, most
+  for _, y in ipairs(cands) do
+    if y >= 0 and y + TOAST_H <= ERRORS_TOP then
+      local n, d = over(y), math.abs(y - want)
+      if not best or n < most or (n == most and (d < math.abs(best - want) or (d == math.abs(best - want) and y < best))) then best, most = y, n end
+    end
+  end
+  return best or want
+end
+local function placeToast(f)
   f:ClearAllPoints()
-  f:SetPoint("TOP", UIParent, "TOP", 0, y)
+  f:SetPoint("TOP", UIParent, "TOP", 0, -H.ToastTop())
 end
 local function toastFrame()
   if H.toastFrame then return H.toastFrame end
