@@ -3804,10 +3804,11 @@ do
     tick(slow, 1)
     assert(slow.C.Rules.SeedState() == "fresh" and slow.C.Stats.EnchantKnown(9, "4.1") and slow.C.Sample:Value("unenchanted")[9], "done a frame on: the seed's wrist now asks for an enchant")
     redraw(slow)
-    -- (fix-cute-ui: a member's tooltip says what the pick means; where it comes from is /cute diag's)
+    -- (fix-cute-ui: a member's tooltip says what the pick means; where it comes from is /cute diag's. fix2-cute-ui V1:
+    -- the guild has met nothing yet, so the foot says nothing of the guild)
     local sd0 = #slow.chat
     slow.env.SlashCmdList.CUTE("diag")
-    assert(tipOf(guideHead(slow)):find("Levels and bosses as the guild has met them.", 1, true)
+    assert(not tipOf(guideHead(slow)):find("as the guild has met them", 1, true)
       and table.concat(slow.chat, "\n", sd0 + 1):find("diag guide: From research and the beta, checked against this client", 1, true), "and /cute diag says where the Guide's knowledge comes from")
     leave(slow)
     -- a partial seed: a dungeon without a range, one without a name, one whose range is upside down, a boss without an id,
@@ -4342,10 +4343,12 @@ do
     -- (the windows round: the pick a card, its name on it and the whole line in its tooltip; no pick, the line itself)
     local shown = cyPlan.next.card and cyPlan.next.card.d.name or cyPlan.next.line
     local headTip = tipOf(guideHead(cy))
-    -- (fix-cute-ui: a member's tooltip says what the pick means; where it comes from is /cute diag's)
+    -- (fix-cute-ui: a member's tooltip says what the pick means; where it comes from is /cute diag's. fix2-cute-ui V1:
+    -- the guild's levels and bosses said where they are the guild's: no seed, all of it; with the seed, the pick's range
+    -- is learned but bosses are the beta's, and the foot says nothing of the guild)
     local cd0 = #cy.chat
     cy.env.SlashCmdList.CUTE("diag")
-    assert(first:find(shown, 1, true) and headTip:find(cyPlan.next.line, 1, true) and headTip:find("Levels and bosses as the guild has met them.", 1, true)
+    assert(first:find(shown, 1, true) and headTip:find(cyPlan.next.line, 1, true) and (headTip:find("Levels and bosses as the guild has met them.", 1, true) ~= nil) == (not SEEDED)
       and table.concat(cy.chat, "\n", cd0 + 1):find(SEEDED and "diag guide: From research and the beta, checked against this client" or "diag guide: Nothing shipped with this copy", 1, true),
       "the page opens on the pick, what it means in the head's tooltip, where it comes from in /cute diag:\n" .. headTip)
     -- /cute diag on the officer: the seed's state, with what was learned
@@ -20278,7 +20281,8 @@ do
     openGuide(m); redraw(m)
     local head = guideHead(m)
     local tip = head and tipOf(head) or ""
-    assert(tip:find("Levels and bosses as the guild has met them.", 1, true), "the member's pick says what it means:\n" .. tip)
+    -- (fix2-cute-ui V1: said where it is so, no seed; the seed's research range, which the guild has not met, not)
+    assert((tip:find("Levels and bosses as the guild has met them.", 1, true) ~= nil) == (m.C.Rules.SeedState() == "none"), "the member's pick says what it means:\n" .. tip)
     -- (the how-sure words beside a range or a boss, "from research", are the Guide's own: the foot alone is the source's)
     for _, w in ipairs({ first, detail, "Research build", "the beta, checked", "This client is", "Nothing shipped", "The research calls it" }) do
       assert(not tip:find(w, 1, true), "no source words for a member: " .. w .. "\n" .. tip)
@@ -21198,6 +21202,65 @@ sys.argv = ["build.py", "--no-zip"]; del build.problems[:]; build.check_zips([ol
   end
   assert(#failed == 0, "merge4: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
   print("merge4: " .. table.concat(said, "; "))
+end
+
+-- [stage: fix2-cute-ui] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The second launch audit's cute-ui findings, a case each; every case runs, and the block fails at its end naming each
+-- one that did not hold:
+-- V1. A member's pick card on L says "Levels and bosses as the guild has met them." only where that is so: its range
+--     and every boss the guild's (no seed: all of it). A research or beta range, or a boss from research, and the
+--     line is not there (each line above says its source)
+----------------------------------------------------------------------------
+do
+  local CASES, failed, said = {}, {}, {}
+  local function inGuild(guild, fn)
+    local ok, err = true, nil
+    isolated(guild, function() ok, err = pcall(fn) end)
+    if not ok then error(err, 0) end
+  end
+
+  CASES[#CASES + 1] = { "V1 a member's pick says the guild's levels and bosses only where they are the guild's", function()
+    inGuild({ UIX.member("Helga", 1), UIX.member("Pim", 3) }, function()
+      local LINE = "Levels and bosses as the guild has met them."
+      local m = newClient(charOf({ "Pim", 3, "Raider", "WARRIOR", 20 }))
+      login(m); tickAll(35)
+      local R = m.C.Rules
+      openGuide(m); redraw(m)
+      local tip = tipOf(guideHead(m))
+      if R.SeedState() == "none" then
+        assert(tip:find(LINE, 1, true), "no seed: every level and boss is the guild's, and the line says so:\n" .. tip)
+        said[#said + 1] = "no seed: the member's line"
+        leave(m)
+        return
+      end
+      assert(R.SeedState() == "fresh", "the seed checked: " .. tostring(R.SeedState()))
+      local _, plan = m.C.Guide.Items(false)
+      local d = assert(plan.next.card, "a level 20 member's pick is a card: " .. tostring(plan.next.line)).d
+      assert(tip:find("Levels " .. d.min .. "-" .. d.max, 1, true) and (tip:find("the research's range", 1, true) or tip:find("the beta's range", 1, true)),
+        "the card's range is the research's:\n" .. tip)
+      assert(not tip:find(LINE, 1, true), "a research range: the line does not say the guild met it:\n" .. tip)
+      -- the range learned from the guild, its bosses still the research's: still not said
+      d.range, d.levels = "learned", 2
+      redraw(m)
+      tip = tipOf(guideHead(m))
+      assert(tip:find("learned from 2 members", 1, true) and not tip:find(LINE, 1, true), "the guild's range, the research's bosses: not said:\n" .. tip)
+      -- and every boss the guild's: said
+      for _, enc in ipairs(d.bosses or {}) do local b = R.Model().bosses[enc]; if b then b.state, b.n = "seen", 2 end end
+      redraw(m)
+      tip = tipOf(guideHead(m))
+      assert(tip:find(LINE, 1, true) and not tip:find("from research;", 1, true), "the guild's range and bosses: said:\n" .. tip)
+      said[#said + 1] = "the member's line only where the range and bosses are the guild's"
+      leave(m)
+    end)
+  end }
+
+  for _, case in ipairs(CASES) do
+    local ok, err = pcall(case[2])
+    if not ok then failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
+  end
+  assert(#failed == 0, "fix2-cute-ui: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
+  print("fix2-cute-ui: " .. table.concat(said, "; "))
 end
 
 -- this pass's problems and layouts join the run's; the last pass prints them all

@@ -76,6 +76,15 @@ local function bossesOf(d)
   end
   return out
 end
+-- whether the guild met a dungeon's levels and bosses: its range the guild's (Rules.lua R.RangeWords: learned, seen or
+-- from the officers) and every boss seen in play or doubted after the guild's runs, none from research or the beta
+local GUILD_RANGE, GUILD_BOSS = { learned = true, seen = true, officers = true }, { seen = true, doubted = true }
+local function guildMet(d)
+  if not GUILD_RANGE[d.range] then return false end
+  local m = C.Rules.Model()
+  for _, enc in ipairs(bossesOf(d)) do if not GUILD_BOSS[m.bosses[enc].state] then return false end end
+  return true
+end
 
 -- an awaited dungeon's rule, in the officers' tooltip and /cute rules; a member reads what it means
 local AWAITED_RULE = "Not placed yet: two members entering it, or a kill there a group mate names back, give it its place, and the guild's kills name its bosses."
@@ -743,12 +752,14 @@ function G.DrawPick(UI, host, y, w, narrow)
   y = y + L.FillRow(hd, { kind = "head", bar = K.GROUP, icon = { art = "dungeon" }, name = "Dungeon", who = "the guild's pick" }, w)
   local top = plan.next
   -- (where the knowledge comes from, research and builds, is the officers' and /cute diag's; a member reads what the
-  -- card means: the guild's levels and bosses, or, while the seed is checked or once the game differs from it, that)
-  local sourceTip = function(tip)
-    tip:AddLine(" ")
+  -- card means: while the seed is checked or once the game differs from it, that; else that the guild met the levels
+  -- and bosses, where it did: the card's range and every boss the guild's (no seed: all of it). A range or a boss from
+  -- research or the beta says so on its own line above, and the foot adds nothing)
+  local sourceTip = function(tip, d)
     local st = C.Rules.SeedState()
-    if officer then tip:AddLine(first, 1, 1, 1, true); tip:AddLine(detail, 0.7, 0.7, 0.7, true)
-    else tip:AddLine((st == "stale" or st == "checking") and first or "Levels and bosses as the guild has met them.", 0.7, 0.7, 0.7, true) end
+    if officer then tip:AddLine(" "); tip:AddLine(first, 1, 1, 1, true); tip:AddLine(detail, 0.7, 0.7, 0.7, true)
+    elseif st == "stale" or st == "checking" then tip:AddLine(" "); tip:AddLine(first, 0.7, 0.7, 0.7, true)
+    elseif st == "none" or (d and guildMet(d)) then tip:AddLine(" "); tip:AddLine("Levels and bosses as the guild has met them.", 0.7, 0.7, 0.7, true) end
   end
   local guildTip = function(tip)
     if officer and plan.guild then
@@ -827,7 +838,7 @@ function G.DrawPick(UI, host, y, w, narrow)
           tip:AddDoubleLine(m.name .. " " .. m.level, m.grouped and "in your group" or "", c[1], c[2], c[3], 0.6, 0.6, 0.6)
         end
       end
-      sourceTip(tip)
+      sourceTip(tip, d)
       guildTip(tip)
       if art and art.OpenDungeon then tip:AddLine("Click: the Dungeons tab on it.", 0.45, 0.45, 0.45) end
     end,
