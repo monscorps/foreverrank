@@ -20679,9 +20679,10 @@ do
       local isLoaded = q.env.C_AddOns.IsAddOnLoaded
       q.env.C_AddOns.IsAddOnLoaded = function(x) if x == "QuestBank" then return true, true end return isLoaded(x) end
       local settings = { guide = { on = true, frame = true }, arrow = true, glow = { on = true, style = "sparkle" }, remind = { on = true }, share = { party = true, guild = true }, djShow = { boss = true, rare = true, trash = false, other = true } }
+      -- (merge4: a QuestBank that reads noGuildSync has Sync.GuildOn; an older one's share.guild is held off, merge4's B1)
       q.env.QuestBankAPI = {
-        version = "6.4.0", logReady = true, state = { level = 5, log = {} }, routeNow = { legs = {}, xp = 0, level = 5, t = 0 },
-        Settings = function() return settings end, MarkDirty = function() end, Comma = tostring, Short = tostring,
+        version = "6.4.1", logReady = true, state = { level = 5, log = {} }, routeNow = { legs = {}, xp = 0, level = 5, t = 0 },
+        Settings = function() return settings end, MarkDirty = function() end, Comma = tostring, Short = tostring, Sync = { GuildOn = function() return false end },
         Model = { Busy = function() return false end }, Data = { CAT = {} }, Quest = { Get = function() return nil end },
         Guide = { Steps = function() return {} end, Text = function(st) return st.text end, TimeToLevel = function() return nil end, MemberSteps = function() return {} end, Reminder = function() return nil end },
         StepFrame = { Menu = function() end, Apply = function() end, RemindChanged = function() end }, Arrow = { Set = function() end },
@@ -21006,6 +21007,8 @@ end
 -- H1. A member promoted while offline logs in to an officer's halls: the members idle since are in This week (its
 --     client kept no weeks while it was a member, and an ask with a since brings only what changed); an officer who
 --     leaves the guild, its weeks gone, keeps no hold, so a rejoin asks every record whole
+-- B1. QuestBank before 6.4.1 beside Cute (no Sync.GuildOn: it reads no noGuildSync) has its guild share off for the
+--     session and put back at the logout; one that reads the flag is left as it is
 ----------------------------------------------------------------------------
 do
   local CASES, failed, said = {}, {}, {}
@@ -21060,6 +21063,41 @@ do
       leave(o2); leave(x)
     end)
     said[#said + 1] = "a member promoted while offline has idle members' weeks; an officer who left keeps no hold"
+  end }
+
+  CASES[#CASES + 1] = { "B1 QuestBank before 6.4.1 beside Cute: its guild share off for the session", function()
+    inGuild({ member("Rone", 1) }, function()
+      local function beside(sync)
+        local q = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+        local isLoaded = q.env.C_AddOns.IsAddOnLoaded
+        q.env.C_AddOns.IsAddOnLoaded = function(x) if x == "QuestBank" then return true, true end return isLoaded(x) end
+        local settings = { guide = { on = true, frame = true }, arrow = true, glow = { on = true, style = "sparkle" }, remind = { on = true }, share = { party = true, guild = true }, djShow = { boss = true, rare = true, trash = false, other = true } }
+        q.env.QuestBankAPI = {
+          version = "6.4.0", logReady = true, state = { level = 5, log = {} }, routeNow = { legs = {}, xp = 0, level = 5, t = 0 },
+          Settings = function() return settings end, MarkDirty = function() end, Comma = tostring, Short = tostring, Sync = sync,
+          Model = { Busy = function() return false end }, Data = { CAT = {} }, Quest = { Get = function() return nil end },
+          Guide = { Steps = function() return {} end, Text = function(st) return st.text end, TimeToLevel = function() return nil end, MemberSteps = function() return {} end, Reminder = function() return nil end },
+          StepFrame = { Menu = function() end, Apply = function() end, RemindChanged = function() end }, Arrow = { Set = function() end },
+          UI = { PlaceGroups = function() return {}, {}, nil, nil, nil end, Candidates = function() return {} end, QuestClick = function() end, QuestTooltip = function() end },
+          Target = { Route = function() return { legs = {}, xp = 0, level = 5, t = 0 } end }, Run = { Get = function() return nil end },
+          DMap = { Attach = function() end, Refresh = function() end }, Gear = { Attach = function() end, Refresh = function() end, RefreshSoon = function() end },
+          Remind = { Pull = function() return {}, false end },
+        }
+        login(q); tickAll(5)
+        q.C.Modules.Set("Cute_Quest", true); tick(q, 6)
+        assert(q.addons[2].private.dormant == true, "QuestBank loaded: the copy sleeps")
+        return q, settings
+      end
+      local q, s = beside({})
+      assert(s.share.guild == false and s.share.party == true, "an older QuestBank: its guild share off for the session, the party's as it was")
+      fire(q, "PLAYER_LOGOUT")
+      assert(s.share.guild == true, "put back at the logout, before its saved variables are written")
+      leave(q)
+      local q2, s2 = beside({ GuildOn = function() return false end })
+      assert(s2.share.guild == true and q2.env.QuestBankAPI.noGuildSync == true, "a QuestBank that reads noGuildSync: its setting as it is")
+      leave(q2)
+    end)
+    said[#said + 1] = "an older QuestBank's guild share held off for the session"
   end }
 
   for _, case in ipairs(CASES) do

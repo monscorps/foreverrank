@@ -22,6 +22,20 @@ if QB.dormant then
     -- officers' Who sees what. Runtime flags on QuestBank's QB (QuestBankAPI, its Core.lua; Sync.lua reads them), none
     -- of its saved settings written: guild sharing goes through Cute's Comm alone
     QB.Engine.noRaidSync, QB.Engine.noGuildSync = true, true
+    -- (merge4) a QuestBank before 6.4.1 reads no noGuildSync (its Sync.lua has no S.GuildOn) and the same version can be
+    -- either: such a one's share.guild is off for this session alone, and put back as it was at the logout, before the
+    -- game writes QuestBank's saved variables (a crash writes nothing). A box ticked again meanwhile is the player's
+    local Sy = QB.Engine.Sync
+    if not (type(Sy) == "table" and Sy.GuildOn ~= nil) then
+      local ok, s = pcall(QB.Engine.Settings, QB.Engine)
+      local share = ok and type(s) == "table" and s.share or nil
+      if type(share) == "table" and share.guild then
+        share.guild = false
+        local f = CreateFrame("Frame")
+        f:RegisterEvent("PLAYER_LOGOUT")
+        f:SetScript("OnEvent", function() if share.guild == false then share.guild = true end end)
+      end
+    end
   end
   return
 end

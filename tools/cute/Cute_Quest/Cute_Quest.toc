@@ -4,7 +4,7 @@
 ## Author: Mikal
 ## Version: 0.9.0
 ## X-License: GPL-3.0-or-later
-## X-QuestBank: 6.4.0
+## X-QuestBank: 6.4.1
 ## Dependencies: Cute
 ## LoadOnDemand: 1
 ## X-Cute-Module: 1
