@@ -15750,6 +15750,7 @@ end
 --      minutes apart, keys a third voice leaves; with Finds open no word for them.
 -- K12. The officers keep Finds and none is online: the finds wait, then go to the first one online.
 -- K13. Sharing off: your own finds are no voice. K14. The store at its cap keeps its index (the garbage measured).
+-- K15. An officer's /reload while a find waits out its half hour: the word says it all the same.
 ----------------------------------------------------------------------------
 do
   local said = {}
@@ -16282,6 +16283,27 @@ do
     assert(n == 2 and #list == 2000 and F.Sure(e), "a find heard again found as it was: two voices, sure")
     leave(ann); leave(ben)
     said[#said + 1] = string.format("the store at its cap: ten finds heard put the oldest out with %.1f KB of garbage, the index kept", used)
+  end)
+  -- K15: an officer's /reload while a find waits out its half hour: the word says it all the same
+  isolated({ fmember("Ofa", 0), fmember("Mia", 3), fmember("Ann", 3), fmember("Cy", 3) }, function()
+    local closed = { gc_finds = "self" }
+    local ofa, mia, ann, cy = fchar("Ofa", 0), fchar("Mia", 3), fchar("Ann", 3), fchar("Cy", 3)
+    login(ofa, fpol(true, closed)); login(mia, fpol(nil, closed)); login(ann, fpol(nil, closed)); login(cy, fpol(nil, closed))
+    tickAll(130)
+    local F = ofa.C.Finds
+    local en = { k = "h", id = 9201, m = 1429, x = 500, y = 500 }
+    F:Receive(F.Pack(en), mia.sender, true); F:Receive(F.Pack(en), ann.sender, true)
+    tickAll(60)
+    local db = ofa.env.CuteDB
+    leave(ofa)
+    local o2 = fchar("Ofa", 0)
+    login(o2, db, true)
+    tickAll(1900)
+    local said2 = false
+    for _, m in ipairs(o2.sent) do if m.msg:sub(1, 3) == "1N|" and m.msg:find("fh", 1, true) then said2 = true end end
+    assert(said2 and rowOf(cy, 1429, 9201) and rowOf(cy, 1429, 9201).sure, "after the officer's /reload the word says it half an hour on")
+    for _, c in ipairs({ o2, mia, ann, cy }) do leave(c) end
+    said[#said + 1] = "an officer's /reload keeps the half-hour word"
   end)
   print("map K: " .. table.concat(said, "; "))
 end

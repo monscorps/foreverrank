@@ -861,10 +861,12 @@ do
   end
 end
 
--- at every loading screen: what waited goes when it may (a relog's queue; an instance left)
+-- at every loading screen: what waited goes when it may (a relog's queue; an instance left), and an officer's word
+-- waiting for a find's half hour has its look again (F:WordLater: the timer a /reload or a relog lost)
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:SetScript("OnEvent", C.Safe(function()
   if not C.loaded then return end
   if #outList() > 0 or next(F.outPings) then F:FlushSoon(5) end
+  F:WordLater()
 end, "finds: start"))
