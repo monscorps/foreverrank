@@ -189,7 +189,8 @@ def parse_savedvariables(text):
 # the rest: characters by name, their bank, plans, travel, runs, settings). Hand-in times are cut to the minute, as is
 # every other ["at"] the client wrote in seconds (time()), and an error keeps its message (which carries the file and
 # line) and where it was caught, never its stack or times. The same
-# list is written in uploader/QuestBank-Uploader.ps1 and worker/src/allow.js; --selftest checks all three agree
+# list is written in uploader/QuestBank-Uploader.ps1, worker/src/allow.js and questbank/index.html's upload script;
+# --selftest checks they all agree
 ALLOW = ("disc", "game", "live", "liveEra", "turnins", "diag", "errors")
 ERROR_KEYS = ("msg", "where", "count", "version")
 SAVEDVARS = ("questbank-savedvars", "cutequest-savedvars")  # the engine's own file, under QuestBank or under Cute
@@ -1863,6 +1864,10 @@ def selftest_finds():
     assert flat(lists(r"\$ErrorKeys\s*=\s*@\(([^)]*)\)", ps1)) == list(ERROR_KEYS), "the uploader's error fields"
     assert flat(lists(r"export const ALLOW = \[([^\]]*)\]", js)) == list(ALLOW), "the Worker's allow-list"
     assert flat(lists(r"export const ERROR_KEYS = \[([^\]]*)\]", js)) == list(ERROR_KEYS), "the Worker's error fields"
+    # (merge2) and the QuestBank page's upload script, which carries its own copy of allow.js (worker/ is no part of the site)
+    page = open(os.path.join(REPO, "questbank", "index.html"), encoding="utf-8").read()
+    assert flat(lists(r"const ALLOW = \[([^\]]*)\]", page)) == list(ALLOW), "the page's allow-list"
+    assert flat(lists(r"const ERROR_KEYS = \[([^\]]*)\]", page)) == list(ERROR_KEYS), "the page's error fields"
     print("selftest OK: the allow-list, Cute's files and the world notes")
 
 

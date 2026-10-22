@@ -542,7 +542,8 @@ global.Image = function () { const i = { }; images.push(i); return i; };
 global.window = { addEventListener() {}, matchMedia() { return { matches: false, addEventListener() {} }; }, innerWidth: 375, scrollY: 0 };
 global.location = { search: "", hash: "" };
 global.URLSearchParams = function () { return { get() { return null; } }; };
-global.FormData = function () { this.parts = []; this.append = (k, v) => this.parts.push(k); };
+let lastForm = null;
+global.FormData = function () { this.parts = []; lastForm = this; this.append = (k, v) => this.parts.push([k, v]); };
 let fetched = [];
 global.fetch = (url) => { fetched.push(url); return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ uploads: 3, last: Date.now() / 1000 - 90 }) }); };
 global.document = {
@@ -601,12 +602,28 @@ ok("gallery: a loaded picture shows its slot, a failed one stays hidden (" + sho
 const form = byId["qb-upform"], stat = byId["qb-upstat"];
 if (!form.listeners.submit) fail("the upload form has no submit handler");
 form.listeners.submit[0]({ preventDefault() {} });
-if (!/Choose your QuestBank\.lua first/.test(stat.textContent)) fail("an empty send is not refused: " + stat.textContent);
+if (!/Choose your QuestBank\.lua or Cute_Quest\.lua first/.test(stat.textContent)) fail("an empty send is not refused: " + stat.textContent);
 if (!fetched.some(u => /\/api\/probe\/stats$/.test(u))) fail("the upload count is not fetched from the Worker");
+// Cute.lua (the guild's roster) is never sent, pasted or chosen
+const before = fetched.length;
+byId["qb-uptext"].value = 'CuteDB = {\n\t["chars"] = {\n\t},\n}';
+form.listeners.submit[0]({ preventDefault() {} });
+if (fetched.length !== before || !/Cute\.lua/.test(stat.textContent)) fail("a pasted Cute.lua is not refused: " + stat.textContent);
+byId["qb-uptext"].value = "";
+byId["qb-upfile"].files = [{ name: "Cute.lua", size: 2048, text() { fail("Cute.lua was read"); return Promise.resolve(""); } }];
+form.listeners.submit[0]({ preventDefault() {} });
+if (fetched.length !== before || !/Cute\.lua/.test(stat.textContent)) fail("a chosen Cute.lua is not refused: " + stat.textContent);
+byId["qb-upfile"].files = [];
+// a QuestBank.lua or Cute_Quest.lua leaves cut to the allow-list (worker/src/allow.js, copied into the page)
+byId["qb-uptext"].value = 'CuteQuestDB = {\n\t["disc"] = {\n\t\t["at"] = 1760000000,\n\t},\n\t["chars"] = {\n\t\t["Helga"] = 1,\n\t},\n\t["settings"] = {\n\t},\n}';
+form.listeners.submit[0]({ preventDefault() {} });
+const sent = lastForm && (lastForm.parts.find(p => p[0] === "text") || [])[1];
+if (!fetched.slice(before).some(u => /\/api\/probe$/.test(u))) fail("a pasted Cute_Quest.lua is not posted to /api/probe");
+else if (typeof sent !== "string" || !/^CuteQuestDB = \{/.test(sent) || !/\["disc"\]/.test(sent) || /Helga|settings/.test(sent) || !/= 29333333,/.test(sent)) fail("the posted file is not cut to the allow-list: " + sent);
 byId["qb-uptext"].value = "QuestBankDB = {}";
 form.listeners.submit[0]({ preventDefault() {} });
 if (!fetched.some(u => /\/api\/probe$/.test(u))) fail("a pasted file is not posted to /api/probe");
-ok("upload box: refuses an empty send, posts text to /api/probe, reads /api/probe/stats; " + fetched.length + " fetches");
+ok("upload box: refuses an empty send and Cute.lua, cuts a Cute_Quest.lua to the allow-list, posts text to /api/probe, reads /api/probe/stats; " + fetched.length + " fetches");
 console.log(process.exitCode ? "FAILED" : "  ok   page script ok under node");
 """
 

@@ -369,10 +369,10 @@
     <details class="qb-fold" id="upload">
       <summary>Upload by hand</summary>
       <div class="qb-fold-body">
-        <p>Your notes are in <code>WTF\Account\&lt;account&gt;\SavedVariables\QuestBank.lua</code> under the game folder, written when you log out or <code>/reload</code>. Drop that file here.</p>
+        <p>Your notes are in <code>WTF\Account\&lt;account&gt;\SavedVariables\QuestBank.lua</code> under the game folder (<code>Cute_Quest.lua</code> with Cute), written when you log out or <code>/reload</code>. Drop that file here: this page cuts it to the notes about the world before it leaves your PC. <code>Cute.lua</code> holds your guild's roster and is never sent.</p>
         <form class="qb-up" id="qb-upform" novalidate>
-          <label class="qb-drop" id="qb-drop"><input type="file" id="qb-upfile" accept=".lua,.txt,text/plain"><span id="qb-dropText">Choose QuestBank.lua, or drop it here</span><small>or paste what is inside it below</small></label>
-          <textarea id="qb-uptext" rows="3" placeholder="...or paste the text of QuestBank.lua here (it starts with QuestBankDB =)" spellcheck="false" aria-label="The text of QuestBank.lua"></textarea>
+          <label class="qb-drop" id="qb-drop"><input type="file" id="qb-upfile" accept=".lua,.txt,text/plain"><span id="qb-dropText">Choose QuestBank.lua or Cute_Quest.lua, or drop it here</span><small>or paste what is inside it below</small></label>
+          <textarea id="qb-uptext" rows="3" placeholder="...or paste the text of QuestBank.lua or Cute_Quest.lua here (it starts with QuestBankDB = or CuteQuestDB =)" spellcheck="false" aria-label="The text of QuestBank.lua or Cute_Quest.lua"></textarea>
           <div class="qb-uprow"><button type="submit" class="qb-dl" id="qb-upbtn">Upload</button><span class="qb-upstat" id="qb-upstat" role="status" aria-live="polite"></span></div>
         </form>
         <p class="qb-upcount" id="qb-upcount">No account, no login. The same file can be sent again after every session; only what's new counts.</p>
@@ -581,6 +581,74 @@
   if (lightX) lightX.addEventListener("click", function () { light.close(); });
   if (light) light.addEventListener("click", function (e) { if (e.target === light) light.close(); });
 
+  // what may leave a player's PC: worker/src/allow.js's allow-list, copied here (worker/ is not part of the site), the
+  // same the uploader and the Worker apply. Kept: the notes about the world (disc), the client's items and spells
+  // (game), the XP the game showed (live, liveEra, turnins) and the client's diagnostics and errors; every time to the
+  // minute; everything else of the file (characters by name, their bank, plans, travel, runs, settings) stays on the PC
+  const ALLOW = ['disc', 'game', 'live', 'liveEra', 'turnins', 'diag', 'errors'];
+  const ERROR_KEYS = ['msg', 'where', 'count', 'version'];
+  const HEAD = /^\s*(QuestBankDB|CuteQuestDB)\s*=\s*\{/;
+  const TOKEN = /"(?:[^"\\]|\\.)*"|--[^\n]*|[{},]/g;
+  const KEY = /^\s*(?:--[^\n]*\n\s*)*\["([^"\\]*)"\]\s*=/;
+  const AT = /(\["at"\]\s*=\s*"\d{4}-\d{2}-\d{2} \d{2}:\d{2}):\d{2}"/g;
+  const SECONDS = /(\["at"\]\s*=\s*)(\d{10})(?![\d.eE])/g;
+  const ERROR_FIELD = new RegExp(
+    '\\["(?!(?:' + ERROR_KEYS.join('|') + ')")[^"\\\\]*"\\]\\s*=\\s*(?:"(?:[^"\\\\]|\\\\.)*"|-?\\d+(?:\\.\\d+)?(?:[eE][-+]?\\d+)?|true|false|nil)\\s*,?',
+    'g');
+  function savedEntries(text) {
+    const m = HEAD.exec(text);
+    if (!m) return null;
+    const open = m.index + m[0].length - 1;
+    let depth = 0, start = open + 1;
+    const raw = [];
+    TOKEN.lastIndex = open;
+    for (let t; (t = TOKEN.exec(text)); ) {
+      const v = t[0];
+      if (v === '{') depth++;
+      else if (v === '}') {
+        if (--depth === 0) {
+          const last = text.slice(start, t.index);
+          if (last.trim()) raw.push(last);
+          const entries = [];
+          for (const e of raw) {
+            const k = KEY.exec(e);
+            if (k) entries.push({ key: k[1], text: e.trim() });
+          }
+          return { name: m[1], entries };
+        }
+      } else if (v === ',' && depth === 1) {
+        raw.push(text.slice(start, t.index));
+        start = t.index + 1;
+      }
+    }
+    return null;
+  }
+  function stripSavedVariables(text) {
+    const sv = savedEntries(text.replace(/^\uFEFF/, ''));
+    if (!sv) return null;
+    let out = sv.name + ' = {\n';
+    for (const e of sv.entries) {
+      if (!ALLOW.includes(e.key)) continue;
+      let body = e.text;
+      if (e.key === 'turnins') body = body.replace(AT, '$1"');
+      if (e.key === 'errors') body = body.replace(ERROR_FIELD, '');
+      else body = body.replace(SECONDS, (_, k, n) => k + Math.floor(Number(n) / 60));
+      out += '\t' + body + ',\n';
+    }
+    return out + '}\n';
+  }
+  // what goes: a QuestBank.lua or Cute_Quest.lua cut to the allow-list; Cute.lua never (its roster, GUIDs and the
+  // officers' values); anything else as it is, for the Worker to judge (an old ForeverProbe export)
+  var NEVER = /^\s*CuteDB\s*=/;
+  var CUTE_LUA = "That is Cute.lua, which holds your guild's roster: it is never sent. Send Cute_Quest.lua, beside it.";
+  function prepare(raw) {
+    var t = String(raw || "").replace(/^\uFEFF/, "").trim();
+    if (NEVER.test(t)) return { error: CUTE_LUA };
+    if (!HEAD.test(t)) return { text: t };
+    var cut = stripSavedVariables(t);
+    return cut ? { text: cut } : { error: "That file is cut short: log out once so the game writes it whole, then send it again." };
+  }
+
   // the upload box: one POST to the ForeverRank Worker, which keeps the text and answers with a summary.
   // ?api=http://127.0.0.1:8787 points it at a local Worker while testing.
   var API = (new URLSearchParams(location.search).get("api") || "https://foreverrank.andustemme.workers.dev").replace(/\/$/, "");
@@ -605,7 +673,7 @@
   refreshCount();
   function pickName() {
     var f = file.files && file.files[0];
-    dropText.textContent = f ? f.name + " (" + Math.max(1, Math.round(f.size / 1024)) + " KB), ready to upload" : "Choose QuestBank.lua, or drop it here";
+    dropText.textContent = f ? f.name + " (" + Math.max(1, Math.round(f.size / 1024)) + " KB), ready to upload" : "Choose QuestBank.lua or Cute_Quest.lua, or drop it here";
   }
   file.addEventListener("change", pickName);
   ["dragenter", "dragover"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("qb-over"); }); });
@@ -617,11 +685,21 @@
   form.addEventListener("submit", function (e) {
     e.preventDefault();
     var f = file.files && file.files[0], t = text.value.trim();
-    if (!f && !t) { say("Choose your QuestBank.lua first.", "qb-err"); return; }
+    if (!f && !t) { say("Choose your QuestBank.lua or Cute_Quest.lua first.", "qb-err"); return; }
     if (f && f.size > 6 * 1024 * 1024) { say("That file is over 6 MB, far more than QuestBank.lua ever is. Check it is QuestBank.lua, or tell the Discord.", "qb-err"); return; }
+    if (f && /^cute\.lua$/i.test(f.name)) { say(CUTE_LUA, "qb-err"); return; }
+    if (f) {
+      btn.disabled = true; say("Reading...");
+      f.text().then(function (raw) { send(raw, f.name); }, function () { say("Could not read that file. Try choosing it again.", "qb-err"); btn.disabled = false; });
+    } else send(t, null);
+  });
+  // the file cut to the allow-list (prepare), then posted: as a file under its own name where one was chosen
+  function send(raw, name) {
+    var p = prepare(raw);
+    if (p.error) { say(p.error, "qb-err"); btn.disabled = false; return; }
     var fd = new FormData();
     fd.append("source", "page");
-    if (f) fd.append("file", f); else fd.append("text", t);
+    if (name) fd.append("file", new Blob([p.text], { type: "text/plain" }), name); else fd.append("text", p.text);
     btn.disabled = true; say("Uploading...");
     fetch(API + "/api/probe", { method: "POST", body: fd }).then(function (r) {
       return r.json().then(function (j) { return j; }, function () { return { error: "The server answered with something unexpected (" + r.status + ")." }; });
@@ -636,7 +714,7 @@
     }).catch(function () {
       say("Could not reach foreverrank.com's server. Check your connection and try again.", "qb-err");
     }).then(function () { btn.disabled = false; });
-  });
+  }
 })();
 </script>
 <script src="/map.js?v=9" defer></script>
