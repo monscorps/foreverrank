@@ -3984,7 +3984,11 @@ if SEEDED then isolated({ { name = "Rulo-Forever", guid = guidOf("Rulo"), rank =
   assert(L.SeedState() == "fresh" and L.BetaAsData() and L.Model().dungeons[36].state == "data" and L.Model().xp[20].state == "data" and L.SlotState(9) == "data",
     "another build: the beta's facts read as research")
   openGuide(later)
-  assert(tipOf(guideHead(later)):find("This client is 1.60.1.70450: what the beta showed counts as research until the guild sees it.", 1, true), "the head's source says so in its tooltip")
+  -- (fix-cute-ui: where the knowledge comes from is /cute diag's; a member's tooltip says what the pick means)
+  local ld0 = #later.chat
+  later.env.SlashCmdList.CUTE("diag")
+  assert(table.concat(later.chat, "\n", ld0 + 1):find("This client is 1.60.1.70450: what the beta showed counts as research until the guild sees it.", 1, true)
+    and not tipOf(guideHead(later)):find("This client is", 1, true), "/cute diag says so, the member's tooltip not")
   check(qwin(later).frame, "member guide, another build")
   local minor = client({ build = "1.61.0.71000" })
   assert(minor.C.Rules.SeedState() == "fresh" and minor.C.Rules.BetaAsData() and minor.C.Rules.Model().dungeons[36].state == "data",

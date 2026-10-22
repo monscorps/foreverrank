@@ -743,11 +743,12 @@ function G.DrawPick(UI, host, y, w, narrow)
   y = y + L.FillRow(hd, { kind = "head", bar = K.GROUP, icon = { art = "dungeon" }, name = "Dungeon", who = "the guild's pick" }, w)
   local top = plan.next
   -- (where the knowledge comes from, research and builds, is the officers' and /cute diag's; a member reads what the
-  -- card means)
+  -- card means: the guild's levels and bosses, or, while the seed is checked or once the game differs from it, that)
   local sourceTip = function(tip)
     tip:AddLine(" ")
+    local st = C.Rules.SeedState()
     if officer then tip:AddLine(first, 1, 1, 1, true); tip:AddLine(detail, 0.7, 0.7, 0.7, true)
-    else tip:AddLine("Levels and bosses as the guild has met them.", 0.7, 0.7, 0.7, true) end
+    else tip:AddLine((st == "stale" or st == "checking") and first or "Levels and bosses as the guild has met them.", 0.7, 0.7, 0.7, true) end
   end
   local guildTip = function(tip)
     if officer and plan.guild then
