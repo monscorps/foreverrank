@@ -24683,6 +24683,8 @@ end
 -- naming each one that did not hold:
 -- Q1. A party member who is also a guild mate keeps their step on your frame after their status comes on GUILD (the
 --     launch audit's filter read the last channel heard); out of a group, every step heard goes
+-- Q2. Under a host (Cute_Quest), /qb discoveries and /qb probe name the host's saved file and its page's uploader, never
+--     QuestBank.lua nor QuestBank Uploader (whose Install puts QuestBank in, which puts the host's copy to sleep)
 ----------------------------------------------------------------------------
 ;(function()
   local CASES = {}
@@ -24722,6 +24724,29 @@ end
     S.frame.__scripts.OnEvent(S.frame, "GROUP_ROSTER_UPDATE")
     hear("1S|18|200|A|PALADIN|0|0|0|-1|0|0|6.4.0|zzzzzzzzzz", "GUILD", mate)
     assert(#G.MemberSteps() == 0, "in another group, a former group mate's old step never shows")
+  end }
+
+  CASES[#CASES + 1] = { "Q2: under a host, /qb discoveries and /qb probe name its saved file and its page's uploader", function()
+    local c = lookChar("Hosted", { host = { NAME = "Cute", host = true, ADDON = "Cute_Quest" } })
+    local function said(cmd)
+      local n = #c.chat
+      c.env.SlashCmdList.QUESTBANK(cmd)
+      return (table.concat(c.chat, "\n", n + 1):gsub("|c%x+QuestBank|r ", ""))
+    end
+    local d = said("discoveries")
+    assert(d:find("Cute_Quest.lua", 1, true) and d:find("Cute's page at foreverrank.com has the uploader", 1, true), "/qb discoveries under Cute: " .. d)
+    assert(not d:find("QuestBank", 1, true) and not d:find("/questbank/", 1, true), "/qb discoveries names nothing of QuestBank: " .. d)
+    local p = said("probe")
+    assert(p:find("Cute now notes what ForeverProbe did", 1, true) and p:find("Cute's page at foreverrank.com has the uploader", 1, true), "/qb probe under Cute: " .. p)
+    assert(not p:find("QuestBank", 1, true) and not p:find("/questbank/", 1, true), "/qb probe names nothing of QuestBank: " .. p)
+    -- QuestBank alone says what it said
+    local q = lookChar("Alone")
+    local n = #q.chat
+    q.env.SlashCmdList.QUESTBANK("discoveries")
+    q.env.SlashCmdList.QUESTBANK("probe")
+    local alone = table.concat(q.chat, "\n", n + 1)
+    assert(alone:find("QuestBank.lua", 1, true) and alone:find("The Windows uploader is QuestBank Uploader: foreverrank.com/questbank/", 1, true)
+      and alone:find(q.QB.Game.RETIRED, 1, true), "QuestBank alone: its own file and uploader: " .. alone)
   end }
 
   local failed = {}

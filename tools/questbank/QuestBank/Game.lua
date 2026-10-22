@@ -30,6 +30,11 @@ local SWEEP_WAIT = 5    -- seconds after the bags change before they are looked 
 local KEEP = { [2] = true, [4] = true, [9] = true } -- weapons, armor, recipes
 Game.MAX_ITEMS, Game.MAX_LINES, Game.PACE, Game.BATCH, Game.LOADS, Game.TRIES = MAX_ITEMS, MAX_LINES, PACE, BATCH, LOADS, TRIES
 Game.RETIRED = "QuestBank now notes what ForeverProbe did. You can delete the ForeverProbe folder from Interface\\AddOns."
+-- (merge4) the same, naming the host the engine runs under (Cute_Quest's Bridge sets QB.NAME)
+function Game.Retired()
+  if QB.NAME then return QB.NAME .. " now notes what ForeverProbe did. You can delete the ForeverProbe folder from Interface\\AddOns." end
+  return Game.RETIRED
+end
 
 local plain = QB.Plain
 
@@ -477,7 +482,7 @@ function Game.Retire()
   local s = QB:Settings()
   if s.toldRetired == QB.version then return end
   s.toldRetired = QB.version
-  QB:Print(Game.RETIRED)
+  QB:Print(Game.Retired())
 end
 
 -- the Settings box. Unticked, what was noted goes too (the loot sources of Loot.lua with it): QuestBank.lua is

@@ -2992,8 +2992,12 @@ slash = function(msg)
       end
     end
 
-    QB:Print(string.format("Noted in game so far: %s, %s, %s%s. They stay in your saved file, QuestBank.lua. Upload it at foreverrank.com/questbank/, or let QuestBank Uploader send it on Windows, and it goes into the next release for everyone.",
-      n(nq, "quest", "quests"), n(nn, "quest NPC", "quest NPCs"), n(nc, "chain step", "chain steps"), game))
+    -- (merge4) under a host (Cute_Quest's Bridge sets QB.NAME), its saved file and its page's uploader: QuestBank
+    -- Uploader's Install offers to put QuestBank in, which puts the host's copy to sleep
+    local tail = QB.NAME and string.format("They stay in your saved file, %s.lua. %s's page at foreverrank.com has the uploader, and what you send goes into the next release for everyone.", QB.ADDON or QB.NAME, QB.NAME)
+      or "They stay in your saved file, QuestBank.lua. Upload it at foreverrank.com/questbank/, or let QuestBank Uploader send it on Windows, and it goes into the next release for everyone."
+    QB:Print(string.format("Noted in game so far: %s, %s, %s%s. %s",
+      n(nq, "quest", "quests"), n(nn, "quest NPC", "quest NPCs"), n(nc, "chain step", "chain steps"), game, tail))
   elseif cmd == "survey" and QB.Survey then
     -- what the quest survey has asked the game on this build (Survey.lua); find <text>: the surveyed quests whose title
     -- has the text, with their rewards
@@ -3072,8 +3076,8 @@ slash = function(msg)
   elseif cmd == "probe" then
     -- not listed anywhere: the old Windows uploader still tells players to type it. ForeverProbe is retired
     QB.NoteAddons()
-    QB:Print(QB.Game and QB.Game.RETIRED or "QuestBank now notes what ForeverProbe did. You can delete the ForeverProbe folder from Interface\\AddOns.")
-    QB:Print("The Windows uploader is QuestBank Uploader: foreverrank.com/questbank/")
+    QB:Print(QB.Game and QB.Game.Retired() or "QuestBank now notes what ForeverProbe did. You can delete the ForeverProbe folder from Interface\\AddOns.")
+    QB:Print(QB.NAME and (QB.NAME .. "'s page at foreverrank.com has the uploader.") or "The Windows uploader is QuestBank Uploader: foreverrank.com/questbank/")
   elseif cmd == "escort" then
     -- 3.3.4 to 3.6.0 corrected the game's number here (on, off); QuestBank only reads it now (QB.EscortLimit)
     local limit, short = QB.EscortLimit()
