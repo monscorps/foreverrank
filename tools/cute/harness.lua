@@ -13523,17 +13523,18 @@ do
     -- 60 + 13 x 22 of the 375 px the design gives the list)
     local ids = {}
     for _, sec in ipairs(sections) do ids[#ids + 1] = sec.id end
-    -- (merge3) the cards round's Halls before it and Achievements and Records after it, under Guild
-    assert(table.concat(ids, " "):find("vis rules halls runs ach records example quests", 1, true), "Settings > Halls, Runs, Achievements and Records under Guild: " .. table.concat(ids, " "))
+    -- (merge3) the cards round's Halls before it, under Guild; (fix-cute-ui) Achievements' and Records' guild switches
+    -- are rows in Settings > Modules, no sections of their own
+    assert(table.concat(ids, " "):find("vis rules halls runs example quests", 1, true), "Settings > Halls and Runs under Guild: " .. table.concat(ids, " "))
     M.Set("Cute_Example", false); tick(c, 1)
     UI.OpenSettings("general")
-    -- (the hud round) Settings > Layout makes fourteen, and (merge3) the cards round's Halls, Achievements and Records
-    -- seventeen: at 760 x 420 the list scrolls, its rows still 22 px, as the owner allows past thirteen; at Settings' own
-    -- 800 x 560 every section fits unscrolled
-    assert(#c.C.SettingsPage.Sections(true) == 17, "every section a player can have: " .. #c.C.SettingsPage.Sections(true))
+    -- (the hud round) Settings > Layout makes fourteen, and (merge3) the cards round's Halls fifteen ((fix-cute-ui)
+    -- Achievements and Records have none): at 760 x 420 the list scrolls, its rows still 22 px, as the owner allows past
+    -- thirteen; at Settings' own 800 x 560 every section fits unscrolled
+    assert(#c.C.SettingsPage.Sections(true) == 15, "every section a player can have: " .. #c.C.SettingsPage.Sections(true))
     local navList
     for _, f in ipairs(c.frames) do if f.section and f:IsVisible() then navList = f.__parent.__scrollParent end end
-    assert(navList and navList.bar:IsShown(), "seventeen at 760 x 420: the list scrolls")
+    assert(navList and navList.bar:IsShown(), "fifteen at 760 x 420: the list scrolls")
     check(S.frame, "W3 settings at 760x420, every section listed")
     sizeAll(c, 800, 560)
     UI.OpenSettings("general")
