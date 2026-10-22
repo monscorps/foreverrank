@@ -25000,6 +25000,60 @@ end)()
   assert(#failed == 0, "fix2-engine: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
 end)()
 
+-- [stage: merge5] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The integration findings on launch/merge5, a case each; each failed on merge5's files before its fix. Every case runs,
+-- and the block fails at its end naming each one that did not hold
+----------------------------------------------------------------------------
+;(function()
+  local CASES = {}
+  local function char(name, o)
+    o = o or {}
+    local c = newClient({ name = name, level = o.level or 18, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1, race = "Human",
+      log = o.log or {}, done = {}, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Goldshire", guild = o.guild ~= false, group = o.group ~= false })
+    login(c)
+    return c
+  end
+  local function hearer(c) local f = c.QB.Sync.frame; return function(msg, channel, who) f.__scripts.OnEvent(f, "CHAT_MSG_ADDON", "QuestBank", msg, channel, who) end end
+  local function roster(c) c.QB.Sync.frame.__scripts.OnEvent(c.QB.Sync.frame, "GROUP_ROSTER_UPDATE") end
+  local function sent(c, kind, ch)
+    local n = 0
+    for _, m in ipairs(c.outbox) do if m[1] == "QuestBank" and m[3] == ch and (m[2] == kind or m[2]:sub(1, #kind + 1) == kind .. "|") then n = n + 1 end end
+    return n
+  end
+  local function tipOf(btn)
+    lines = {}
+    btn.__scripts.OnEnter(btn)
+    local tip = table.concat(lines, "\n")
+    if btn.__scripts.OnLeave then btn.__scripts.OnLeave(btn) end
+    return tip
+  end
+
+  -- W1 (privacy, must). The group row's tooltip said "Only members who run QuestBank see them." and the Settings hint "to
+  -- QuestBank users only": Cute_Quest's copy of the sync takes 1S, 1Q, 1L and 1G on the same prefix from the party, a raid
+  -- and an instance group. The guild's status goes to QuestBank alone (Cute_Quest takes nothing from GUILD)
+  CASES[#CASES + 1] = { "W1: the group row and the sharing hint say Cute's players see the group's share too", function()
+    local c = lookChar("Wording")
+    local UI = c.QB.UI
+    UI:Open(5); UI:Refresh()
+    local v = UI.views[5]
+    local tip = tipOf(v.shareParty)
+    local hint = v.shareHint:GetText()
+    UI.frame:Hide()
+    assert(tip:find("Group members who run QuestBank or Cute see them.", 1, true) and not tip:find("Only members who run QuestBank", 1, true),
+      "the group row's tooltip names Cute:\n" .. tip)
+    assert(hint:find("Cute", 1, true) and not hint:find("QuestBank users only", 1, true), "the hint names Cute: " .. hint)
+  end }
+
+  local failed = {}
+  for _, case in ipairs(CASES) do
+    local ok, err = pcall(case[2])
+    if ok then print("merge5: " .. case[1] .. ": ok") else failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
+    collectgarbage("collect")
+  end
+  assert(#failed == 0, "merge5: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
+end)()
+
 local seen = {}
 local unique = {}
 for _, p in ipairs(problems) do if not seen[p] then seen[p] = true; unique[#unique + 1] = p end end
