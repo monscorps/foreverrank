@@ -29,12 +29,21 @@ class Stmt {
     if (s.startsWith('INSERT INTO audit')) return { meta: {} };
     if (s.startsWith('INSERT INTO probe_uploads')) {
       const [received, ipHash, source, kind, filename, size, hash, summary, body] = this.args;
-      d.uploads.push({ id: d.uploads.length + 1, received, source, kind, filename, size, hash, summary, body });
+      d.uploads.push({ id: d.uploads.length + 1, received, ip_hash: ipHash, source, kind, filename, size, hash, summary, body });
       return { meta: { last_row_id: d.uploads.length } };
     }
     if (s.startsWith('CREATE TABLE IF NOT EXISTS finds_data')) { d.findsTable = true; return { meta: {} }; }
     if (s.startsWith('INSERT INTO finds_data')) { d.finds = { body: this.args[0], updated: this.args[1] }; return { meta: {} }; }
     throw new Error('unexpected run: ' + s);
+  }
+  async all() {
+    const s = this.sql, d = this.db;
+    // the pull: the rows after an id, the columns it names (ip_hash only where it asks for it)
+    const m = /^SELECT (.+) FROM probe_uploads WHERE id > \? ORDER BY id LIMIT \?$/.exec(s);
+    if (!m) throw new Error('unexpected all: ' + s);
+    const cols = m[1].split(',').map((c) => c.trim());
+    const [after, limit] = this.args;
+    return { results: d.uploads.filter((r) => r.id > after).slice(0, limit).map((r) => Object.fromEntries(cols.map((c) => [c, r[c]]))) };
   }
 }
 class DB {
@@ -49,11 +58,11 @@ async function call(path, init = {}) {
   try { body = await res.json(); } catch { body = null; }
   return { status: res.status, body };
 }
-async function upload(text, filename) {
+async function upload(text, filename, ip) {
   const fd = new FormData();
   fd.append('source', 'uploader');
   fd.append('file', new Blob([text], { type: 'text/plain' }), filename);
-  return call('/api/probe', { method: 'POST', body: fd });
+  return call('/api/probe', { method: 'POST', body: fd, headers: ip ? { 'cf-connecting-ip': ip } : {} });
 }
 async function stored(id) {
   const row = env.DB.uploads[id - 1];
@@ -140,6 +149,18 @@ r = await upload('QuestBankDB = {\n["disc"] = {\n', 'QuestBank.lua');
 check('a file cut short is refused', r.status === 400 && /cut short/.test(r.body.error));
 r = await upload('FPROBE2:{"snapshots":[],"meta":{"addon":"0.4.8"}}', 'export.txt');
 check('an old ForeverProbe export is still taken as it is', r.status === 200 && r.body.kind === 'export');
+
+console.log('=== the pull');
+// (fix-data) probe_pull counts a find's witnesses by where the uploads came from: the pull says it, as the address's
+// hash the rate limit keeps (never the address), and only with the admin key
+r = await upload(full('QuestBankDB').replace('["level"] = 20', '["level"] = 22').replace('Linen Cloth', 'Wool Cloth'), 'QuestBank.lua', '203.0.113.7');
+check('an upload from another address is stored', r.status === 200 && r.body.ok && !r.body.duplicate);
+r = await call('/api/probe/pull?after=0&limit=20&body=0');
+check('the pull needs the admin key', r.status === 401);
+r = await call('/api/probe/pull?after=0&limit=20&body=0', { headers: { 'x-admin-key': 'test-admin-key' } });
+const hashes = (r.body && r.body.rows || []).map((x) => x.ip_hash);
+check('the pull says where each upload came from: ' + JSON.stringify(hashes), r.status === 200 && hashes.length === env.DB.uploads.length
+  && hashes.every((h) => /^[0-9a-f]{16}$/.test(h)) && new Set(hashes).size === 2 && !JSON.stringify(r.body).includes('203.0.113.7'));
 
 console.log('=== the finds');
 r = await call('/api/finds.json');

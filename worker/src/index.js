@@ -1013,7 +1013,9 @@ async function handleFindsPost(req, env) {
   return json({ ok: true, rows: data.rows.length, at: data.at });
 }
 
-/** The merge tool's read: rows after an id, bodies as base64 gzip. Only with the admin key. */
+/** The merge tool's read: rows after an id, bodies as base64 gzip, and where each came from as the rate limit's hash of
+ * the address (ip_hash, never the address): probe_pull.py counts two files sent from one address as one witness of a
+ * find, however many tokens they carry. Only with the admin key. */
 async function handleProbePull(req, url, env) {
   const key = req.headers.get('x-admin-key') || '';
   if (!env.PROBE_ADMIN_KEY || !key || (await sha256Hex(key)) !== (await sha256Hex(env.PROBE_ADMIN_KEY)))
@@ -1022,11 +1024,11 @@ async function handleProbePull(req, url, env) {
   const limit = Math.min(20, Math.max(1, Number(url.searchParams.get('limit') || 10)));
   const withBody = url.searchParams.get('body') !== '0';
   const rows = await env.DB.prepare(
-    `SELECT id, received, source, kind, filename, size, hash, summary${withBody ? ', body' : ''} FROM probe_uploads WHERE id > ? ORDER BY id LIMIT ?`
+    `SELECT id, received, ip_hash, source, kind, filename, size, hash, summary${withBody ? ', body' : ''} FROM probe_uploads WHERE id > ? ORDER BY id LIMIT ?`
   ).bind(after, limit).all();
   const out = [];
   for (const r of rows.results || []) {
-    const item = { id: r.id, received: r.received, source: r.source, kind: r.kind, filename: r.filename, size: r.size, hash: r.hash,
+    const item = { id: r.id, received: r.received, ip_hash: r.ip_hash || null, source: r.source, kind: r.kind, filename: r.filename, size: r.size, hash: r.hash,
       summary: (() => { try { return JSON.parse(r.summary); } catch { return null; } })() };
     if (withBody && r.body) {
       const bytes = new Uint8Array(r.body);
