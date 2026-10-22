@@ -46,6 +46,13 @@ SF.SCALES = SCALES
 
 local function settings() return QB:Settings().guide end
 local function fighting() return InCombatLockdown and InCombatLockdown() or false end
+-- (the layout round) the frame's lock: a host's one lock for the on-screen pieces where it sets one (QB.LayoutLocked:
+-- Cute's, which its Bridge.lua sets), else QuestBank's own, guide.locked (Settings and the frame's menu)
+local function locked()
+  local h = QB.LayoutLocked
+  if type(h) == "function" then return h("step") == true end
+  return settings().locked == true
+end
 local trackerOut, trackerHooked, trackerWait = false, false, false -- (the game's quest tracker: SF.Tracker)
 -- (the windows round) its scale while out of sight, the one it had (kept for the session), and Edit Mode open
 local OUT_SCALE = 0.01
@@ -251,7 +258,7 @@ local function build()
     local gold = tone("GOLD")
     f:SetBackdropBorderColor(gold[1], gold[2], gold[3], 0.5)
   end
-  f:SetScript("OnDragStart", function(self) if not settings().locked then self:StartMoving() end end)
+  f:SetScript("OnDragStart", function(self) if not locked() then self.qbDragging = true; self:StartMoving() end end)
   -- (the review round) a right-click anywhere on the frame is its menu, as on a step: the tracker's note under the steps
   -- says "Right-click here", and only the steps took one (a welcome card's own buttons answer for it)
   f:SetScript("OnMouseUp", QB.Safe(function(self, button)
@@ -260,6 +267,8 @@ local function build()
   -- (the review round) kept by its middle against the screen's, where the drag left it, whatever point the game
   -- anchors a moved frame by (place() anchors it so again); the arrow follows it at once
   f:SetScript("OnDragStop", QB.Safe(function(self)
+    if not self.qbDragging then return end -- (a drag the lock refused: its place left alone)
+    self.qbDragging = nil
     self:StopMovingOrSizing()
     local cx, cy = self:GetCenter()
     local fs, us = self:GetEffectiveScale() or 1, UIParent:GetEffectiveScale() or 1
@@ -1332,7 +1341,7 @@ function SF.Apply()
   local f = SF.frame
   if not f then return end
   place(f)
-  f.__dragOff = s.locked and true or nil -- (the drag script reads the setting; the harness reads this flag)
+  f.__dragOff = locked() or nil -- (the drag script reads the lock; the harness reads this flag)
   if STOP and f.qbBackdrop ~= (s.backdrop == true) then
     -- (the stop look stands on the world; "Backdrop behind the step frame" brings the host's flat one back)
     f.qbBackdrop = s.backdrop == true
@@ -1375,7 +1384,12 @@ function SF:Menu(s)
     items[#items + 1] = { "Not now", function() G.Skip(s.qid, "later") end }
     items[#items + 1] = { "Drop " .. name, function() G.Skip(s.qid, "drop") end }
   end
-  items[#items + 1] = { set.locked and "Unlock" or "Lock", function() set.locked = not set.locked; SF.Apply() end }
+  -- (the layout round) a host's one lock where it has one (QB.SetLayoutLocked: Cute's, for every piece on screen)
+  if type(QB.SetLayoutLocked) == "function" then
+    items[#items + 1] = { locked() and "Unlock frames" or "Lock frames", function() QB.SetLayoutLocked(not locked()); SF.Apply() end }
+  else
+    items[#items + 1] = { set.locked and "Unlock" or "Lock", function() set.locked = not set.locked; SF.Apply() end }
+  end
   for _, sc in ipairs(SCALES) do
     items[#items + 1] = { string.format("Scale: %d%%%s", sc * 100, (set.scale or 1) == sc and "  (now)" or ""), function() SF.SetScale(sc) end }
   end
@@ -1411,3 +1425,72 @@ function SF:Init()
   end
   SF.Apply()
 end
+
+-- (the layout round) the frame as a host's layout mode moves it (QB.Movers: Remind.lua says what each part does): kept
+-- by its centre (guide.x/y, in its own units: its scale times them is UIParent's); its scale is SF.SetScale's, its
+-- centre kept; secure, for the quests' item buttons anchored to it
+QB.Movers = QB.Movers or {}
+local function screen() return UIParent:GetWidth() or 1920, UIParent:GetHeight() or 1080 end
+local function frameSize()
+  local f, sc = SF.frame, settings().scale or 1
+  return WIDTH * sc, ((f and f:GetHeight()) or (PAD * 2 + ROW1 + ROW * 3)) * sc
+end
+local function validScale(k)
+  k = tonumber(k) or 1
+  return math.max(0.5, math.min(2, k))
+end
+local function placed()
+  local f = SF.frame
+  if not f then return end
+  place(f)
+  arrowFollows()
+end
+QB.Movers.step = {
+  key = "step", name = "Step frame", order = 1, secure = true,
+  frame = function() return SF.frame end,
+  on = function() local s = settings(); return s.on == true and s.frame == true end,
+  switch = function(on) settings().frame = on and true or false; SF.Apply() end,
+  rect = function()
+    local s, f = settings(), SF.frame
+    local W, H = screen()
+    local w, h = frameSize()
+    local sc = s.scale or 1
+    if type(s.x) == "number" and type(s.y) == "number" then
+      local cx, cy = W / 2 + s.x * sc, H / 2 + s.y * sc
+      return cx - w / 2, cy + h / 2, w, h
+    end
+    -- (its default place, as place() last put it: its middle across, its top down from the screen's top)
+    local mid, top = (f and f.qbX) or 0, (f and f.qbTop) or TOP_Y
+    return W / 2 + mid - w / 2, H - top, w, h
+  end,
+  move = function(left, top)
+    local s = settings()
+    local W, H = screen()
+    local w, h = frameSize()
+    local sc = s.scale or 1
+    s.x, s.y = (left + w / 2 - W / 2) / sc, (top - h / 2 - H / 2) / sc
+    placed()
+  end,
+  scale = function(k)
+    local s = settings()
+    k = validScale(k)
+    local old = s.scale or 1
+    if type(s.x) == "number" and type(s.y) == "number" then s.x, s.y = s.x * old / k, s.y * old / k end
+    SF.SetScale(k)
+    placed()
+  end,
+  get = function()
+    local s = settings()
+    local sc = s.scale or 1
+    if type(s.x) == "number" and type(s.y) == "number" then return { point = "CENTER", x = s.x * sc, y = s.y * sc, scale = sc } end
+    return { scale = sc }
+  end,
+  set = function(p)
+    local s = settings()
+    local sc = validScale(type(p) == "table" and p.scale or 1)
+    local ok = type(p) == "table" and p.point == "CENTER" and tonumber(p.x) and tonumber(p.y)
+    s.x, s.y = ok and p.x / sc or nil, ok and p.y / sc or nil
+    SF.SetScale(sc)
+    placed()
+  end,
+}

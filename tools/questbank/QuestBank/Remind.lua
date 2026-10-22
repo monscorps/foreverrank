@@ -437,19 +437,32 @@ local function piece(name)
   f:Hide()
   return f
 end
+-- (the layout round) a piece's scale (remind.scale for Reminders, remind.bannerScale for Buffs: 0.5 to 2; none is
+-- 100%, as before). The places are kept in UIParent's units, so a scale leaves the piece where it stands: its points
+-- are set in its own units, the place divided by its scale
+local function scaleOf(key)
+  local v = tonumber(R.Settings()[key])
+  if v and v >= 0.5 and v <= 2 then return v end
+  return 1
+end
+local function ownScale(f, k) if f:GetScale() ~= k then f:SetScale(k) end end
 -- where the pieces stand: Reminders by its centre (remind.pos, else CENTER 0 -190), growing both ways; Buffs by its
 -- bottom (remind.bannerPos, else 8 px above Reminders), growing upward
 local function placeBar()
   local f = bar
   local pos = R.Settings().pos
+  local k = scaleOf("scale")
+  ownScale(f, k)
   f:ClearAllPoints()
-  if type(pos) == "table" and pos.x then f:SetPoint("CENTER", UIParent, "BOTTOMLEFT", pos.x, pos.y) else f:SetPoint("CENTER", UIParent, "CENTER", 0, -190) end
+  if type(pos) == "table" and pos.x then f:SetPoint("CENTER", UIParent, "BOTTOMLEFT", pos.x / k, pos.y / k) else f:SetPoint("CENTER", UIParent, "CENTER", 0, -190 / k) end
 end
 local function placeBanner()
   local f = banner
   local pos = R.Settings().bannerPos
+  local k = scaleOf("bannerScale")
+  ownScale(f, k)
   f:ClearAllPoints()
-  if type(pos) == "table" and pos.x then f:SetPoint("BOTTOM", UIParent, "BOTTOMLEFT", pos.x, pos.y) else f:SetPoint("BOTTOM", bar, "TOP", 0, 8) end
+  if type(pos) == "table" and pos.x then f:SetPoint("BOTTOM", UIParent, "BOTTOMLEFT", pos.x / k, pos.y / k) else f:SetPoint("BOTTOM", bar, "TOP", 0, 8 / k) end
 end
 function R.Place()
   if fighting() then return end
@@ -461,20 +474,33 @@ end
 function R.BarTop()
   local pos = R.Settings().pos
   if type(pos) == "table" and pos.x then return nil end
-  -- (its icons' top: the piece is centred at 190 below the middle, its icons PADT under its own top)
-  return (UIParent:GetHeight() or 768) / 2 + 190 - (PADT + ROW_H + PADB) / 2 + PADT
+  -- (its icons' top: the piece is centred at 190 below the middle, its icons PADT under its own top, at its scale)
+  local k = scaleOf("scale")
+  return (UIParent:GetHeight() or 768) / 2 + 190 - (PADT + ROW_H + PADB) * k / 2 + PADT * k
 end
 
--- Alt-drag moves a piece (QuestBank alone; layout mode's movers are the windows design's part E), never in a fight,
--- never while the host's layout lock says no (QB.LayoutLocked, the windows design's QB.Locked when it comes)
+-- (the layout round) a host's one lock for the on-screen pieces (QB.LayoutLocked(key): Cute's, which its Bridge.lua
+-- sets); QuestBank alone has none for these two, which Alt-drag as they did. (QB.Locked, the windows design's name for
+-- it, is taken: Core.lua's QB:Locked(q), a quest behind a step of its chain)
+local function layoutLocked(key)
+  local h = QB.LayoutLocked
+  return type(h) == "function" and h(key) == true
+end
+-- Alt-drag moves a piece (layout mode's movers are a host's: QB.Movers below), never in a fight, never while the
+-- host's lock says no
 local function movable(which)
   if fighting() then return false end
-  if type(QB.LayoutLocked) == "function" and QB.LayoutLocked(which) then return false end
+  if layoutLocked(which) then return false end
   return IsAltKeyDown and IsAltKeyDown() and true or false
 end
 local function moveStart(self, button)
   local f = self.piece
   if button == "LeftButton" and movable(f == banner and "buffs" or "camp") then f:StartMoving(); f.moving = true end
+end
+-- a frame's coordinate in UIParent's units (its own, at its scale against UIParent's)
+local function inParent(f, v)
+  local fs, us = f:GetEffectiveScale() or 1, UIParent:GetEffectiveScale() or 1
+  return us > 0 and v * fs / us or v
 end
 local function moveStop(self)
   local f = self.piece
@@ -486,13 +512,132 @@ local function moveStop(self)
   if not x then return end
   if f == banner then
     local h = (f:GetHeight() or 0) / 2
-    R.Settings().bannerPos = { x = x, y = y - h }
+    R.Settings().bannerPos = { x = inParent(f, x), y = inParent(f, y - h) }
     placeBanner()
   else
-    R.Settings().pos = { x = x, y = y }
+    R.Settings().pos = { x = inParent(f, x), y = inParent(f, y) }
     placeBar()
   end
 end
+
+----------------------------------------------------------------------------
+-- (the layout round) the on-screen pieces for a host's layout mode (Cute's, Cute/Layout.lua; QuestBank has none, and
+-- its players see no change). QB.Movers[key] = { key, name, order, secure, frame(), on(), switch(on), rect(),
+-- move(left, top), scale(k), get(), set(pos) }:
+--   rect     left, top, width, height in UIParent's units from its bottom left: where the piece stands, or would stand
+--            while hidden or not made yet (at least a few icons wide: a mover for an empty piece still shows)
+--   move     its top left there, written to the engine's own place and placed at once
+--   scale    0.5 to 2, the piece kept where its own point stands
+--   get      { point, x, y, scale }: its point against UIParent's same point, in UIParent's units; no point at its
+--            default place
+--   set      a kept one back (nil: the default place at 100%)
+-- secure: it holds the game's secure buttons, so it is moved and scaled out of a fight only. Reminders ("camp") and
+-- Buffs ("buffs") here; the arrow in Arrow.lua, the step frame in StepFrame.lua
+----------------------------------------------------------------------------
+QB.Movers = QB.Movers or {}
+local MOVER_H = PADT + ROW_H + PADB
+local BANNER_MIN_H = PADT + TITLE_H + SIZE + 8 + PADB
+local function screen() return UIParent:GetWidth() or 1920, UIParent:GetHeight() or 1080 end
+local function scaleIn(k)
+  k = tonumber(k)
+  if not k or math.abs(k - 1) < 0.001 then return nil end
+  return math.max(0.5, math.min(2, k))
+end
+local function placeNow(which)
+  if fighting() then return end
+  if which == "bar" and bar then placeBar() end
+  if banner then placeBanner() end -- (Buffs stands on Reminders by default: placed again with it)
+end
+local function barSize()
+  local k = scaleOf("scale")
+  local w = math.max(PADX * 2 + 3 * SIZE + 2 * GAP, bar and bar:GetWidth() or 0)
+  return w * k, MOVER_H * k
+end
+local function barCentre()
+  local pos = R.Settings().pos
+  local W, H = screen()
+  if type(pos) == "table" and pos.x then return pos.x, pos.y end
+  return W / 2, H / 2 - 190
+end
+local function bannerSize()
+  local k = scaleOf("bannerScale")
+  local w = math.max(PADX * 2 + 120, banner and banner:GetWidth() or 0)
+  local h = math.max(BANNER_MIN_H, banner and banner:GetHeight() or 0)
+  return w * k, h * k
+end
+local function bannerBottom()
+  local pos = R.Settings().bannerPos
+  if type(pos) == "table" and pos.x then return pos.x, pos.y end
+  local cx, cy = barCentre()
+  return cx, cy + MOVER_H * scaleOf("scale") / 2 + 8
+end
+QB.Movers.camp = {
+  key = "camp", name = "Reminders", order = 3, secure = true,
+  frame = function() return bar end,
+  on = function() return R.Settings().on ~= false end,
+  switch = function(on) local r = R.Settings(); r.on = on and true or false; QB:Settings().campBar = r.on; R.Dirty("all") end,
+  rect = function()
+    local w, h = barSize()
+    local cx, cy = barCentre()
+    return cx - w / 2, cy + h / 2, w, h
+  end,
+  move = function(left, top)
+    local w, h = barSize()
+    R.Settings().pos = { x = left + w / 2, y = top - h / 2 }
+    placeNow("bar")
+  end,
+  scale = function(k) R.Settings().scale = scaleIn(k); placeNow("bar") end,
+  get = function()
+    local pos, k = R.Settings().pos, scaleOf("scale")
+    if not (type(pos) == "table" and pos.x) then return { scale = k } end
+    local W, H = screen()
+    return { point = "CENTER", x = pos.x - W / 2, y = pos.y - H / 2, scale = k }
+  end,
+  set = function(p)
+    local r = R.Settings()
+    local W, H = screen()
+    r.pos = (type(p) == "table" and p.point == "CENTER" and tonumber(p.x) and tonumber(p.y)) and { x = W / 2 + p.x, y = H / 2 + p.y } or nil
+    r.scale = type(p) == "table" and scaleIn(p.scale) or nil
+    placeNow("bar")
+  end,
+}
+QB.Movers.buffs = {
+  key = "buffs", name = "Buffs", order = 4, secure = true,
+  frame = function() return banner end,
+  on = function() local r = R.Settings(); return r.on ~= false and (r.buffs ~= false or r.party ~= false) end,
+  -- (its own switch: your buffs' row and your party's, the two it shows out of a ready check)
+  switch = function(on)
+    local r = R.Settings()
+    on = on and true or false
+    r.buffs, r.party = on, on
+    if on and r.on == false then r.on = true; QB:Settings().campBar = true end
+    R.Dirty("all")
+  end,
+  rect = function()
+    local w, h = bannerSize()
+    local bx, by = bannerBottom()
+    return bx - w / 2, by + h, w, h
+  end,
+  move = function(left, top)
+    local w, h = bannerSize()
+    R.Settings().bannerPos = { x = left + w / 2, y = top - h }
+    placeNow("banner")
+  end,
+  scale = function(k) R.Settings().bannerScale = scaleIn(k); placeNow("banner") end,
+  get = function()
+    local pos, k = R.Settings().bannerPos, scaleOf("bannerScale")
+    if not (type(pos) == "table" and pos.x) then return { scale = k } end
+    local W = screen()
+    return { point = "BOTTOM", x = pos.x - W / 2, y = pos.y, scale = k }
+  end,
+  set = function(p)
+    local r = R.Settings()
+    local W = screen()
+    r.bannerPos = (type(p) == "table" and p.point == "BOTTOM" and tonumber(p.x) and tonumber(p.y)) and { x = W / 2 + p.x, y = p.y } or nil
+    r.bannerScale = type(p) == "table" and scaleIn(p.scale) or nil
+    placeNow("banner")
+  end,
+}
 
 ----------------------------------------------------------------------------
 -- an icon: the game's secure button with the reminder's art; a left-click as its record says, set out of a fight only

@@ -23031,6 +23031,183 @@ do
   end
 end
 
+----------------------------------------------------------------------------
+-- The hud round, part 2: layout mode's engine side (the windows design's section 6, QuestBank's side). The on-screen
+-- pieces as movers for a host's layout mode (QB.Movers: step, arrow, camp, buffs) and a host's one lock for them all
+-- (QB.LayoutLocked, QB.SetLayoutLocked; QB.Locked is Core.lua's quest lock). QuestBank alone sets neither: its players
+-- see no change.
+-- HL1 QuestBank alone: the arrow drags (it has no lock), the step frame keeps guide.locked, Reminders Alt-drag; the
+--     movers write nothing at login (no arrowScale, remind.scale, remind.bannerScale)
+-- HL2 a host's lock: the arrow's drag start refused, the step frame's lock read through it whatever guide.locked says,
+--     Reminders' Alt-drag refused; the step frame's menu says the host's "Unlock frames" and its click is the host's
+-- HL3 the movers: each named and secure where it holds the game's secure buttons; rect where the piece stands, shown
+--     or not; move puts its top left there and writes the engine's own place (guide.x/y, arrowPos, remind.pos,
+--     remind.bannerPos); get gives { point, x, y, scale } against UIParent's own; set of a kept one puts it back; set
+--     of nil is the default place at 100%
+-- HL4 scale: the step frame's centre kept; QuestBank's arrow at 150% (its frame scaled, its points in UIParent's units
+--     divided by it), the compass at 150% (compassSize 72, its frame at 100%), past 200% and under 50% clamped (96 and
+--     24 px); Reminders and Buffs at their scales, their places kept
+----------------------------------------------------------------------------
+do
+  local c = lookChar("Layouts", { log = { { 7, 0 } } })
+  local env, QB, SF, A, R = c.env, c.QB, c.QB.StepFrame, c.QB.Arrow, c.QB.Remind
+  local s = QB:Settings()
+  A:Set(true)
+  for i = 1, 3 do
+    R.Add({ key = "lay" .. i, piece = "reminders", order = 900 + i, row = "upkeep", groups = { "camp" },
+      read = function(add) local rec = add(); rec.tex, rec.lit, rec.word, rec.name = 134400, false, "Lay", "Lay " .. i end })
+  end
+  R.Refresh()
+  local af, sf, bar, ban = env.QuestBankArrow, env.QuestBankStep, env.QuestBankCampBar, env.QuestBankBuffBanner
+  local said = {}
+  -- HL1
+  assert(QB.LayoutLocked == nil and QB.SetLayoutLocked == nil, "QuestBank alone sets no host lock")
+  assert(s.arrowScale == nil and R.Settings().scale == nil and R.Settings().bannerScale == nil, "nothing written by the movers")
+  local moved = {}
+  local function spy(f) moved[f] = 0; rawset(f, "StartMoving", function() moved[f] = moved[f] + 1 end) end
+  spy(af); spy(sf); spy(bar)
+  af.__scripts.OnDragStart(af); af.__scripts.OnDragStop(af); s.arrowPos = nil; A.Place()
+  assert(moved[af] == 1, "the arrow drags: QuestBank has no lock for it")
+  s.guide.locked = true; SF.Apply()
+  sf.__scripts.OnDragStart(sf)
+  assert(moved[sf] == 0 and sf.__dragOff, "the step frame keeps guide.locked")
+  s.guide.locked = false; SF.Apply()
+  sf.__scripts.OnDragStart(sf)
+  assert(moved[sf] == 1 and not sf.__dragOff, "unlocked, it drags")
+  local icon = env.QuestBankCamp_lay1
+  assert(icon and bar:IsShown(), "Reminders up with its icons")
+  c.alt = true
+  icon.__scripts.OnMouseDown(icon, "LeftButton"); icon.__scripts.OnMouseUp(icon, "LeftButton")
+  c.alt = false
+  assert(moved[bar] == 1, "Reminders: Alt-drag as before")
+  R.Settings().pos = nil; R.Place()
+  said[#said + 1] = "alone: the arrow drags, the step frame keeps guide.locked, Reminders Alt-drags, nothing written"
+  -- HL2
+  local lockedKeys, setTo = {}, nil
+  QB.LayoutLocked = function(key) lockedKeys[key] = true; return true end
+  QB.SetLayoutLocked = function(on) setTo = on end
+  af.__scripts.OnDragStart(af)
+  assert(moved[af] == 1 and not af.qbDragging, "the host's lock: the arrow stays")
+  s.guide.locked = false; SF.Apply()
+  sf.__scripts.OnDragStart(sf)
+  assert(moved[sf] == 1 and sf.__dragOff, "the host's lock: the step frame stays, whatever guide.locked says")
+  c.alt = true
+  icon.__scripts.OnMouseDown(icon, "LeftButton"); icon.__scripts.OnMouseUp(icon, "LeftButton")
+  c.alt = false
+  assert(moved[bar] == 1 and lockedKeys.arrow and lockedKeys.step and lockedKeys.camp, "the host's lock: Reminders stays")
+  SF:Menu(nil)
+  local item
+  for _, it in ipairs(QB.UI.lastMenu or {}) do if it[1] == "Unlock frames" then item = it end end
+  assert(item, "the step frame's menu: the host's lock, Unlock frames")
+  item[2]()
+  assert(setTo == false and s.guide.locked == false, "its click is the host's: guide.locked untouched")
+  QB.LayoutLocked = function() return false end
+  s.guide.locked = true; SF.Apply()
+  sf.__scripts.OnDragStart(sf)
+  assert(moved[sf] == 2 and not sf.__dragOff, "the host unlocked: the step frame drags, whatever guide.locked says")
+  s.guide.locked = false
+  QB.LayoutLocked, QB.SetLayoutLocked = nil, nil
+  SF.Apply()
+  said[#said + 1] = "a host's lock: the arrow, the step frame and Reminders stay; the frame's menu says the host's"
+  -- HL3
+  local M = QB.Movers
+  local W, H = 1600, 1000
+  local NAME = { step = "Step frame", arrow = "Arrow", camp = "Reminders", buffs = "Buffs" }
+  for key, name in pairs(NAME) do
+    local m = M[key]
+    assert(m and m.key == key and m.name == name, "a mover for " .. key)
+    for _, fn in ipairs({ "frame", "on", "switch", "rect", "move", "scale", "get", "set" }) do assert(type(m[fn]) == "function", key .. "." .. fn) end
+    assert(m.on() == true, key .. " on")
+  end
+  assert(M.step.secure and M.camp.secure and M.buffs.secure and not M.arrow.secure, "secure where it holds the game's secure buttons")
+  assert(M.step.frame() == sf and M.arrow.frame() == af and M.camp.frame() == bar and M.buffs.frame() == ban, "their frames")
+  local function near(a, b) return math.abs(a - b) < 0.01 end
+  -- the step frame: its top left to (100, 900), its centre kept by guide.x/y
+  local l, t, w, h = M.step.rect()
+  assert(near(w, sf:GetWidth()) and near(h, sf:GetHeight()), "the step frame's rect at its size: " .. tostring(w) .. " x " .. tostring(h))
+  M.step.move(100, 900)
+  l, t = M.step.rect()
+  assert(near(l, 100) and near(t, 900) and near(s.guide.x, 100 + w / 2 - W / 2) and near(s.guide.y, 900 - h / 2 - H / 2), "moved: guide.x/y " .. tostring(s.guide.x) .. " " .. tostring(s.guide.y))
+  local p = sf.__points[1]
+  assert(p.point == "CENTER" and p.rel == env.UIParent and near(p.x, s.guide.x), "placed at once")
+  local kept = M.step.get()
+  assert(kept.point == "CENTER" and near(kept.x, s.guide.x) and near(kept.y, s.guide.y) and kept.scale == 1, "get: CENTER against UIParent's centre")
+  M.step.set(nil)
+  assert(s.guide.x == nil and s.guide.y == nil and (s.guide.scale or 1) == 1, "set nil: the default place at 100%")
+  M.step.set(kept)
+  assert(near(s.guide.x, kept.x) and near(s.guide.y, kept.y), "set: back where it was kept")
+  -- the arrow: kept by its top
+  local aw, ah = select(3, M.arrow.rect())
+  M.arrow.move(300, 700)
+  local pos = s.arrowPos
+  assert(pos and pos[1] == "TOP" and near(pos[2], 300 + aw / 2 - W / 2) and near(pos[3], 700 - H), "the arrow moved: arrowPos by its top")
+  p = af.__points[1]
+  assert(p.point == "TOP" and near(p.x, pos[2]) and near(p.y, pos[3]), "placed at once")
+  local la, ta = M.arrow.rect()
+  assert(near(la, 300) and near(ta, 700), "its rect there")
+  kept = M.arrow.get()
+  M.arrow.set(nil)
+  assert(s.arrowPos == nil and af.__points[1].y ~= pos[3], "set nil: the default place")
+  M.arrow.set(kept)
+  assert(s.arrowPos[2] == pos[2] and s.arrowPos[3] == pos[3], "set: back")
+  -- Reminders by its centre, Buffs by its bottom (both in UIParent's units from its bottom left)
+  local bw, bh = select(3, M.camp.rect())
+  assert(bw >= bar:GetWidth() and bh == bar:GetHeight(), "Reminders' rect: at least its size")
+  M.camp.move(600, 400)
+  local rp = R.Settings().pos
+  assert(near(rp.x, 600 + bw / 2) and near(rp.y, 400 - bh / 2), "Reminders moved: remind.pos its centre")
+  local nw, nh = select(3, M.buffs.rect())
+  M.buffs.move(620, 600)
+  local bp = R.Settings().bannerPos
+  assert(near(bp.x, 620 + nw / 2) and near(bp.y, 600 - nh), "Buffs moved: remind.bannerPos its bottom")
+  assert(ban.__points[1].point == "BOTTOM" and near(ban.__points[1].x, bp.x), "Buffs placed at once")
+  kept = M.camp.get()
+  assert(kept.point == "CENTER" and near(kept.x, rp.x - W / 2) and near(kept.y, rp.y - H / 2), "Reminders' get against UIParent's centre")
+  local kb = M.buffs.get()
+  assert(kb.point == "BOTTOM" and near(kb.x, bp.x - W / 2) and near(kb.y, bp.y), "Buffs' get against UIParent's bottom")
+  M.camp.set(nil); M.buffs.set(nil)
+  assert(R.Settings().pos == nil and R.Settings().bannerPos == nil, "set nil: their defaults")
+  M.camp.set(kept); M.buffs.set(kb)
+  assert(near(R.Settings().pos.x, rp.x) and near(R.Settings().bannerPos.y, bp.y), "set: back")
+  -- hidden: a rect all the same, where it would stand
+  s.guide.frame = false; SF.Apply()
+  assert(not sf:IsShown() and M.step.on() == false and M.step.rect() ~= nil, "the step frame off: not on, its rect kept")
+  s.guide.frame = true; SF.Apply()
+  said[#said + 1] = "four movers named; rect, move, get and set against UIParent's own points, shown or not"
+  -- HL4
+  M.step.scale(1.5)
+  local l2, t2, w2, h2 = M.step.rect()
+  assert(near(s.guide.scale, 1.5) and near(sf:GetScale(), 1.5) and near(l2 + w2 / 2, 100 + w / 2) and near(t2 - h2 / 2, 900 - h / 2), "the step frame at 150%: its centre kept")
+  M.step.scale(1)
+  M.arrow.move(300, 700)
+  M.arrow.scale(1.5)
+  local la2, ta2 = M.arrow.rect()
+  assert(near(s.arrowScale, 1.5) and near(af:GetScale(), 1.5) and near(ta2, 700), "QuestBank's arrow at 150%: its frame scaled, its top kept")
+  p = af.__points[1]
+  assert(near(p.x * 1.5, s.arrowPos[2]) and near(p.y * 1.5, s.arrowPos[3]), "its points in its own units: UIParent's divided by its scale")
+  assert(near(M.arrow.get().scale, 1.5), "get: 150%")
+  s.arrowStyle = "compass"; A:Restyle()
+  M.arrow.scale(1.5)
+  assert(s.compassSize == 72 and near(af:GetScale(), 1), "the compass at 150%: compassSize 72, its frame at 100% (DialSize keeps the dial sharp)")
+  M.arrow.scale(3)
+  assert(s.compassSize == 96 and near(M.arrow.get().scale, 2), "past 200%: 200%, a 96 px dial")
+  M.arrow.scale(0.4)
+  assert(s.compassSize == 24 and near(M.arrow.get().scale, 0.5), "under 50%: 50%, a 24 px dial")
+  M.arrow.scale(1)
+  s.arrowStyle = "questbank"; A:Restyle()
+  M.arrow.scale(1)
+  assert(near(af:GetScale(), 1), "back at 100%")
+  M.camp.scale(1.2)
+  assert(near(R.Settings().scale, 1.2) and near(bar:GetScale(), 1.2) and near(bar.__points[1].x * 1.2, R.Settings().pos.x), "Reminders at 120%, its centre kept")
+  M.buffs.scale(0.8)
+  assert(near(R.Settings().bannerScale, 0.8) and near(ban:GetScale(), 0.8) and near(ban.__points[1].y * 0.8, R.Settings().bannerPos.y), "Buffs at 80%, its bottom kept")
+  M.camp.set(nil); M.buffs.set(nil); M.step.set(nil); M.arrow.set(nil)
+  assert(R.Settings().scale == nil and R.Settings().bannerScale == nil and s.arrowScale == nil and near(bar:GetScale(), 1), "set nil: 100% again")
+  said[#said + 1] = "scale: the step frame's centre kept, QuestBank's arrow scaled and the compass's dial by compassSize (24 to 96 px), Reminders and Buffs"
+  assert(#(env.QuestBankDB.errors or {}) == 0, "no error recorded")
+  print("hud layout: " .. table.concat(said, "; "))
+end
+
 local seen = {}
 local unique = {}
 for _, p in ipairs(problems) do if not seen[p] then seen[p] = true; unique[#unique + 1] = p end end
