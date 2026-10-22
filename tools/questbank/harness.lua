@@ -22593,6 +22593,22 @@ do
     b.buffs = {}; auraEv(b); tick(b, 5); auraEv(b)
     assert(c.QB.Camp.AcctDB().food == nil or true, "")
     assert(b.env.QuestBankDB.remind.food[4541] == false and not shownCamp(b, "eat"), "a meal with no Well Fed after it: that food dropped")
+    -- (a localised client: the meal told by its own aura, the item's spell, never by the English "Food": Well Fed ten
+    -- seconds on keeps that food. A meal cut short at 5 s tells nothing of its food)
+    local de = hud("Hungrig", "WARRIOR", "Warrior", 1, {}, { level = 10, items = { [990001] = { class = 0, sub = 5, spell = 990002, name = "Gebratener Eber", price = 30 },
+      [990003] = { class = 0, sub = 5, spell = 990004, name = "Altes Brot", price = 2 } }, bags = { { 990001, 3 }, { 990003, 2 } } })
+    local dc = de.QB.Remind.castFrame
+    dc.__scripts.OnEvent(dc, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-9", 990002)
+    de.buffs = { aura(de, "Essen", 990002, 30) }; auraEv(de); tick(de, 5); auraEv(de)
+    de.buffs = { aura(de, "Essen", 990002, 25), aura(de, "Satt", 1248420, 900) }; auraEv(de)
+    local dfood = de.env.QuestBankDB.remind.food or {}
+    assert(dfood[990001] == true, "a localised meal followed by Well Fed: that food kept: " .. tostring(dfood[990001]))
+    de.buffs = {}; auraEv(de); tick(de, 60)
+    dc.__scripts.OnEvent(dc, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-10", 990004)
+    de.buffs = { aura(de, "Essen", 990004, 30) }; auraEv(de); tick(de, 5)
+    de.buffs = {}; auraEv(de); tick(de, 5); auraEv(de)
+    dfood = de.env.QuestBankDB.remind.food or {}
+    assert(dfood[990003] == nil, "a meal cut short at 5 s: nothing learned of it: " .. tostring(dfood[990003]))
   end }
 
   -- 9. the Cozy Sleeping Bag: held, still 20 s out of town, "Sleep" lit; walking away, snoozed; in an inn, nothing. Not

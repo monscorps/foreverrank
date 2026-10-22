@@ -618,7 +618,8 @@ Camp.Diag = diagFire
 -- one at a time: water drunk while Well Fed, or with the meal, is never taught as a food
 ----------------------------------------------------------------------------
 local MEAL = { Food = true, Drink = true, ["Food & Drink"] = true, Refreshment = true }
-local meals = {} -- [item id] = { at = its cast, fed = Well Fed already on then }: the meals begun from your bags
+-- the meals begun from your bags: [item id] = { at = its cast, fed = Well Fed already on then, on = its aura seen }
+local meals = {}
 local itemSpell = {} -- [item id] = its spell id, or false (C_Item.GetItemSpell, read once)
 local function spellOf(id)
   local v = itemSpell[id]
@@ -638,6 +639,14 @@ local function eating(names)
   return false
 end
 Camp.Eating = eating
+-- (the hud review) a meal of that food still on: its own aura, the food's spell on you (C_Item.GetItemSpell: any
+-- language), else an English meal aura's name (6.1.1's only way, which a localised client never matched)
+local function mealOn(id, names, ids)
+  local sp = id and spellOf(id)
+  return (sp ~= nil and ids[sp] ~= nil) or eating(names)
+end
+Camp.MealOn = mealOn
+local MEAL_LONG = 15 -- (a meal gives Well Fed after 10 s of it: one over without it this long never gives it)
 local function foodOK(id)
   local learned = acctDB().food
   local v = type(learned) == "table" and learned[id] or nil
@@ -710,8 +719,14 @@ local function watchMeal(names, ids)
     for id in pairs(meals) do meals[id] = nil end
     return
   end
-  if not eating(names) then
-    for id, m in pairs(meals) do if now() - m.at > 3 then learnFood(id, false); meals[id] = nil end end
+  for id, m in pairs(meals) do
+    if mealOn(id, names, ids) then m.on = true
+    elseif m.on or now() - m.at > 3 then
+      -- (over without Well Fed: that food dropped once the meal lasted long enough to give it; one cut short, by a
+      -- step or a pull, tells nothing)
+      if now() - m.at >= MEAL_LONG then learnFood(id, false) end
+      meals[id] = nil
+    end
   end
 end
 
@@ -1036,7 +1051,7 @@ R.Add({ key = "eat", neverName = "Eat", piece = "reminders", order = 40, row = "
     if fed(names, ids) or not outside(ctx) then lastMeal = nil return end
     local id = Camp.BestFood(false)
     -- (the last piece eaten: its icon stays through the meal, until Well Fed)
-    if not id and lastMeal and eating(names) then id = lastMeal end
+    if not id and lastMeal and mealOn(lastMeal, names, ids) then id = lastMeal end
     if not id then return end
     local e = (QB.Data.FOOD or {})[id]
     local rec = add()
