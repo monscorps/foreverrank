@@ -14597,6 +14597,24 @@ do local function cardsStage()
   end)
   said[#said + 1] = "a first on one member's Cute contested once; a first published or a row removed the officers' word in the ledger"
 
+  -- a set withdrawn frees the items it greyed in the other officers' queues, unless another set still holds them
+  isolated({ gmember("Vim", 1, "MAGE"), gmember("Vox", 1, "PRIEST"), gmember("Vug", 3, "ROGUE") }, function()
+    local vim, vox = cchar("Vim", 1), cchar("Vox", 1, { class = "PRIEST" })
+    login(vim); login(vox)
+    tickAll(200)
+    local card = { guid = guidOf("Vug"), sfx = guidOf("Vug"):match("([^%-]+)$"), name = "Vug", class = "ROGUE", kind = "blooper", title = "Deaths", line = "l", value = "9", valueLabel = "all time", source = "sdeaths" }
+    local it = { id = "x:vug", src = "card", from = "me", what = "Deaths", card = card }
+    assert(H(vox):Queue(it), "Vox's item")
+    local function copyOf(t) local o = {}; for k, v in pairs(t) do o[k] = v end return o end
+    assert(H(vim):Publish({ kind = "s", title = "Shame", cards = { copyOf(card) } }), "Vim publishes the same card")
+    tickAll(5)
+    assert(H(vox).Item("x:vug").pub == "Vim" and not H(vox).Tickable(H(vox).Item("x:vug")), "greyed in Vox's queue")
+    assert(H(vim):Withdraw(H(vim).Sets()[1].at), "withdrawn")
+    tickAll(5)
+    assert(H(vox).Item("x:vug").pub == nil and H(vox).Tickable(H(vox).Item("x:vug")), "free again")
+  end)
+  said[#said + 1] = "a set withdrawn frees the items it greyed in the other officers' queues"
+
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end
 

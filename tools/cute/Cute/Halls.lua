@@ -376,17 +376,27 @@ function H:Unqueue(ids)
 end
 -- an item another officer published greys in this one's queue: "Published by Brann". By its source and its member (an
 -- achievement's source is the achievement's: another member's earn of it is not published)
-function H:Grey(set, by)
-  local srcs = {}
-  for _, c in ipairs(set.cards or {}) do if type(c.source) == "string" and c.source ~= "" then srcs[c.source .. "|" .. (c.sfx or sfxOf(c.guid) or "")] = true end end
-  local function mark(it)
-    local c = it.card
-    if c and srcs[tostring(c.source) .. "|" .. (c.sfx or sfxOf(c.guid) or "")] then it.pub = by; H.ticked[it.id] = nil end
-  end
+local function greyKeys(set, into)
+  into = into or {}
+  for _, c in ipairs(set.cards or {}) do if type(c.source) == "string" and c.source ~= "" then into[c.source .. "|" .. (c.sfx or sfxOf(c.guid) or "")] = true end end
+  return into
+end
+local function eachItem(fn)
   for _, r in ipairs(H.Rows()) do
-    mark(r)
-    for _, e in ipairs(r.entries or {}) do mark(e) end
+    fn(r)
+    for _, e in ipairs(r.entries or {}) do fn(e) end
   end
+end
+local function keyOf(it) local c = it.card; return c and (tostring(c.source) .. "|" .. (c.sfx or sfxOf(c.guid) or "")) end
+function H:Grey(set, by)
+  local srcs = greyKeys(set)
+  eachItem(function(it) local k = keyOf(it); if k and srcs[k] then it.pub = by; H.ticked[it.id] = nil end end)
+end
+-- a set withdrawn: the items it greyed are free again, where no set still held publishes them
+function H:Ungrey(set)
+  local srcs, still = greyKeys(set), {}
+  for _, s in ipairs(H.Sets()) do greyKeys(s, still) end
+  eachItem(function(it) local k = keyOf(it); if it.pub and k and srcs[k] and not still[k] then it.pub = nil end end)
 end
 -- a set's GUILD FIRST cards are the officers' word on those firsts: the ledger takes them (Achievements.lua A.Decide)
 function H.Decided(set)
@@ -641,7 +651,9 @@ end
 function H:Withdrawn(at, when)
   local d = H.DB()
   local sets = d.sets
-  for i = #sets, 1, -1 do if tonumber(sets[i].at) == at then table.remove(sets, i) end end
+  local gone = {}
+  for i = #sets, 1, -1 do if tonumber(sets[i].at) == at then gone[#gone + 1] = table.remove(sets, i) end end
+  if officer() then for _, set in ipairs(gone) do self:Ungrey(set) end end
   local t = now()
   d.gone[tostring(at)] = d.gone[tostring(at)] or ((type(when) == "number" and when > 0 and when <= t + 60) and when or t)
   -- (the last 30 withdrawals kept, so an answer to 1G brings none back)
