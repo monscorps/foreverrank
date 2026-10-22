@@ -134,7 +134,7 @@ local function store()
 end
 F.Store = store
 local function groupOf(e) if e.k == "x" then return "x" .. e.m .. ">" .. (e.m2 or 0) end return e.k .. e.id .. "@" .. e.m end
--- (in memory: the finds by what they are, built again after one goes)
+-- (in memory: the finds by what they are, kept as finds come and go; built again after a prune or a purge)
 local index, indexFor = nil, nil
 local function byGroup(s)
   if index and indexFor == s.list then return index end
@@ -214,7 +214,9 @@ function F:Voters()
 end
 local function drop(s, e)
   for i = #s.list, 1, -1 do if s.list[i] == e then table.remove(s.list, i) end end
-  index = nil
+  -- (out of its group in the index as well: the index stays, never built again for one find gone, as at the cap)
+  local group = index and indexFor == s.list and index[groupOf(e)]
+  if group then for i = #group, 1, -1 do if group[i] == e then table.remove(group, i) end end end
 end
 -- room for one more: past EACH of one member's lone finds that member's oldest goes, past CROSSINGS the oldest crossing,
 -- past ALL the oldest find

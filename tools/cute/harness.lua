@@ -16226,6 +16226,37 @@ do
     leave(ofa); leave(mia)
     said[#said + 1] = "sharing off: your own finds are no voice, nothing of them in the officers' word"
   end)
+  -- K14: the store at its cap of 2,000: a find heard puts the oldest out and keeps its index (no rebuild of 2,000
+  -- groups a find): ten new finds make little garbage, and a find heard again is found as it was
+  isolated({ fmember("Ann", 3), fmember("Ben", 3) }, function()
+    local ann, ben = fchar("Ann", 3), fchar("Ben", 3)
+    login(ann, fpol()); login(ben, fpol())
+    tickAll(10)
+    local F = ben.C.Finds
+    local g = guidOf("Ann")
+    -- (two voices each: one member's lone finds stop at 300)
+    for i = 1, 2000 do
+      local en = { k = "h", id = 30000 + i, m = 1443, x = i % 1000, y = 2 + math.floor(i / 1000) * 100 }
+      F.Voice(g, en); F.Voice("Player-4242-0F0000AA", en)
+    end
+    local list = ben.env.CuteDB.known.finds.list
+    assert(#list == 2000, "the store full: " .. #list)
+    collectgarbage("collect"); collectgarbage("collect")
+    collectgarbage("stop")
+    local k0 = collectgarbage("count")
+    for i = 1, 10 do F.Voice(g, { k = "h", id = 50000 + i, m = 1444, x = i * 30, y = 3 }) end
+    local used = collectgarbage("count") - k0
+    collectgarbage("restart")
+    print(string.format("map K14: ten finds heard into a full store of 2,000: %.1f KB of garbage", used))
+    assert(used < 48, string.format("ten finds into a full store: %.1f KB of garbage, the index built again each time", used))
+    assert(#list == 2000, "still 2,000")
+    local e = F.Voice(guidOf("Ben"), { k = "h", id = 50005, m = 1444, x = 152, y = 4 })
+    local n = 0
+    for _ in pairs(e.v) do n = n + 1 end
+    assert(n == 2 and #list == 2000 and F.Sure(e), "a find heard again found as it was: two voices, sure")
+    leave(ann); leave(ben)
+    said[#said + 1] = string.format("the store at its cap: ten finds heard put the oldest out with %.1f KB of garbage, the index kept", used)
+  end)
   print("map K: " .. table.concat(said, "; "))
 end
 
