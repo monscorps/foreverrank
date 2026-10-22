@@ -21012,7 +21012,7 @@ end
 -- H1. A member promoted while offline logs in to an officer's halls: the members idle since are in This week (its
 --     client kept no weeks while it was a member, and an ask with a since brings only what changed); an officer who
 --     leaves the guild, its weeks gone, keeps no hold, so a rejoin asks every record whole
--- U1. The setup card's line under Map, unticked, says the minimap's far view stays (the Route tab's own row): the wheel
+-- U1. The setup card's line under Map, unticked, says the minimap's far view stays (its row in Settings, Route): the wheel
 --     past the game's widest and a drag; with the far view off, the minimap is the game's
 -- B1. QuestBank before 6.4.1 beside Cute (no Sync.GuildOn: it reads no noGuildSync) has its guild share off for the
 --     session and put back at the logout; one that reads the flag is left as it is
@@ -21082,7 +21082,7 @@ do
       login(c); tick(c, 3)
       assert(c.env.CuteSetupFrame and c.env.CuteSetupFrame:IsShown(), "the card")
       local ON = "Cute's map on M; the minimap's wheel and right-click become Cute's"
-      local FAR = "The minimap stays the game's, but for the far view (Route tab): wheel out past its widest, drag to look around"
+      local FAR = "The minimap stays the game's, but for the far view (Settings, Route): wheel out past its widest, drag to look around"
       local GAME = "The minimap stays the game's"
       assert(UIX.text(c, ON), "ticked, the line as before:\n" .. texts(c))
       click(UIX.row(c, "Map"))
@@ -21211,6 +21211,8 @@ end
 -- V1. A member's pick card on L says "Levels and bosses as the guild has met them." only where that is so: its range
 --     and every boss the guild's (no seed: all of it). A research or beta range, or a boss from research, and the
 --     line is not there (each line above says its source)
+-- V2. The setup card's Map line, unticked, sends the far view to where its switch is: Settings, Route ("Minimap far
+--     view"), not the Route tab
 ----------------------------------------------------------------------------
 do
   local CASES, failed, said = {}, {}, {}
@@ -21253,6 +21255,28 @@ do
       said[#said + 1] = "the member's line only where the range and bosses are the guild's"
       leave(m)
     end)
+  end }
+
+  CASES[#CASES + 1] = { "V2 the card's Map line, unticked, sends the far view to Settings, Route", function()
+    inGuild({ UIX.member("Rone", 1) }, function()
+      local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, card = true }))
+      login(c); tick(c, 3)
+      assert(c.env.CuteSetupFrame and c.env.CuteSetupFrame:IsShown(), "the card")
+      click(UIX.row(c, "Map"))
+      local FAR = "The minimap stays the game's, but for the far view (Settings, Route): wheel out past its widest, drag to look around"
+      assert(UIX.text(c, FAR) and not texts(c):find("Route tab", 1, true), "unticked, the far view by where its switch is:\n" .. texts(c))
+      check(c.env.CuteSetupFrame, "fix2-cute-ui V2 the card, Map unticked")
+      click(UIX.row(c, "Map"))
+      c.env.CuteSetupFrame:Hide()
+      -- where the line sends you: Settings' Route section has the row; the Route tab has none
+      c.C.UI:Open("settings", "route")
+      assert(UIX.row(c, "Minimap far view"), "Settings, Route: the far view's row:\n" .. texts(c))
+      c.C.UI.Window("settings").frame:Hide()
+      c.C.UI:Open("quests", "route")
+      assert(not texts(c):find("far view", 1, true), "the Route tab has no far view:\n" .. texts(c))
+      leave(c)
+    end)
+    said[#said + 1] = "the card sends the far view to Settings, Route"
   end }
 
   for _, case in ipairs(CASES) do
