@@ -17,7 +17,7 @@
 --                layout (CuteDB.layoutDefault) for a character that has none; Copy from takes another character's.
 --                Written back at every drop and at logout (an engine drag or a menu's scale moves the engine's own)
 local _, C = ...
-local L = { on = false, movers = {}, from = nil }
+local L = { on = false, movers = {}, from = nil, keys = { nudged = 0, done = 0, passed = 0 } }
 C.Layout = L
 
 local KEYS = { "step", "arrow", "camp", "buffs" }
@@ -132,7 +132,6 @@ local function sync(mv)
   mv.scaleText:SetText(on and (pctOf(m) .. "%") or ("Hidden" .. DOT .. pctOf(m) .. "%"))
   mv:SetAlpha(on and 1 or 0.5)
 end
-L.Sync = sync
 local function syncAll() for _, mv in pairs(L.movers) do if mv:IsShown() then sync(mv) end end end
 -- the client's layout cache never fights the saved place (the windows design: SetUserPlaced(false) on every moved one)
 local function unplaced(m)
@@ -146,7 +145,6 @@ local function dropped(mv)
   unplaced(mover(mv.key))
   L.Save(mv.key)
 end
-L.Dropped = dropped
 
 -- snapping: the low edge (or the high one) of the mover onto another mover's edge within SNAP px, else its low edge
 -- on the GRID from the screen's middle
@@ -176,7 +174,6 @@ local function snapped(mv, l, t)
   local nb = snapAxis(t - mv.h, mv.h, ys, H / 2)
   return nl, nb + mv.h
 end
-L.Snapped = snapped
 -- within the screen
 local function clamp(mv, l, t)
   local W, H = screen()
@@ -223,7 +220,6 @@ local function wheel(mv, delta)
   m.scale(pct / 100)
   dropped(mv)
 end
-L.Wheel = wheel
 -- a nudge of 1 px from the arrow keys, on the mover under the mouse
 local NUDGE = { UP = { 0, 1 }, DOWN = { 0, -1 }, LEFT = { -1, 0 }, RIGHT = { 1, 0 } }
 local function nudge(mv, key)
@@ -294,12 +290,12 @@ end
 local function onKey(self, key)
   if inCombat() then return end
   local used = false
-  if key == "ESCAPE" then L.Done(); used = true
-  elseif NUDGE[key] and L.hover and L.hover:IsShown() then used = nudge(L.hover, key) end
+  if key == "ESCAPE" then L.Done(); used = true; L.keys.done = L.keys.done + 1
+  elseif NUDGE[key] and L.hover and L.hover:IsShown() then used = nudge(L.hover, key); if used then L.keys.nudged = L.keys.nudged + 1 end end
+  if not used then L.keys.passed = L.keys.passed + 1 end
   -- (a key Layout has no use for goes on to the game: moving, the action bars)
   self:SetPropagateKeyboardInput(not used)
 end
-L.OnKey = onKey
 local function makeBar()
   local UI = C.UI
   local b = CreateFrame("Frame", "CuteLayoutBar", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
@@ -474,6 +470,33 @@ function L.Draw(col)
     { "Reset windows", true, function() L.ResetWindows() end },
     { "Copy from...", why == nil and not fight and #L.Others() > 0, function() L.CopyMenu(C.UI.Window("settings").frame) end },
   })
+end
+
+-- /cute diag's line for what only the live client shows: each piece on or off, its scale and whether it was moved,
+-- the lock, layout mode, and the keys the bar took and passed on (the client's keyboard rules for an addon frame,
+-- SetPropagateKeyboardInput HasRestrictions, SimpleFrameAPIDocumentation.lua:1426). Never a name
+function L.DiagLine()
+  local parts = {}
+  for _, key in ipairs(KEYS) do
+    local m = mover(key)
+    if m then
+      local p = m.get()
+      parts[#parts + 1] = string.format("%s %s %d%%%s", key, m.on() and "on" or "off", pctOf(m), (p and p.point) and " moved" or "")
+    end
+  end
+  local k = L.keys
+  return string.format("diag layout: %s; locked %s; mode %s; keys nudged %d, done %d, passed %d", #parts > 0 and table.concat(parts, ", ") or (L.Why() or "none"),
+    L.Get().locked ~= false and "yes" or "no", L.on and (L.from or "on") or "off", k.nudged, k.done, k.passed)
+end
+do
+  local coreDiag = C.Diag
+  function C.Diag()
+    local lines = coreDiag and coreDiag() or {}
+    local ok, l = pcall(L.DiagLine)
+    -- (before the game buttons' line, which stays the last: Windows.lua's)
+    table.insert(lines, math.max(1, #lines), ok and l or ("diag layout: " .. tostring(l)))
+    return lines
+  end
 end
 
 BINDING_NAME_CUTE_LAYOUT = "Move frames"

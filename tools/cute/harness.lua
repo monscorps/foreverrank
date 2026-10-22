@@ -15026,6 +15026,11 @@ do
     local bt = texts(c)
     for _, w in ipairs({ "Move frames", "Snap", "Reset all", "Done" }) do assert(bt:find(w, 1, true), "the bar says " .. w) end
     check(bar, "E1 the layout mode bar")
+    -- (/cute diag: each piece, the lock, the mode and the keys, numbers only)
+    local d0 = #c.chat
+    c.env.SlashCmdList.CUTE("diag")
+    local diag = table.concat(c.chat, "\n", d0 + 1)
+    assert(diag:find("diag layout: step on 100%, arrow on 100%, camp on 100%, buffs on 100%; locked yes; mode on; keys nudged 0, done 0, passed 0", 1, true), "/cute diag's layout line:\n" .. diag)
     -- (the render pass: the whole screen in layout mode, the movers over their pieces)
     if LAYOUT_OUT then GEN = GEN + 1; layouts[#layouts + 1] = dumpLayout(c.env.UIParent, "E1 layout mode: the movers over the step frame, the arrow, Reminders and Buffs") end
     said[#said + 1] = "a mover for each of the four pieces on, none for a window; the bar"
@@ -15053,7 +15058,23 @@ do
     assert(rp and near(l, mv.l) and near(t, mv.t), "dropped: Reminders moved there")
     local ch = c.env.CuteDB.chars["Rone-Forever"]
     assert(ch.layout and ch.layout.pieces.camp and ch.layout.pieces.camp.point == "CENTER" and near(ch.layout.pieces.camp.x, rp.x - 800), "the drop in this character's layout")
-    drag(c, mv, arrowMv.l + 4, 300)
+    -- (a spot whose left edge is 3 to 5 px off the arrow's, and no other edge near either of its own)
+    local near6
+    for _, d in ipairs({ 4, -4, 3, -3, 5, -5 }) do
+      local v, ok = arrowMv.l + d, true
+      for _, o in pairs(L.movers) do
+        if o ~= mv and o:IsShown() then
+          for _, e in ipairs({ o.l, o.l + o.w }) do
+            for _, mine in ipairs({ v, v + mv.w }) do
+              if not (o == arrowMv and e == o.l and mine == v) and math.abs(mine - e) <= 6 then ok = false end
+            end
+          end
+        end
+      end
+      if ok then near6 = v break end
+    end
+    assert(near6, "a spot beside the arrow's edge alone")
+    drag(c, mv, near6, gb + mv.h)
     assert(mv.l == arrowMv.l, "an edge within 6 px of the arrow's: on it: " .. mv.l .. " vs " .. arrowMv.l)
     c.shift = true
     drag(c, mv, gx, gb + mv.h)
