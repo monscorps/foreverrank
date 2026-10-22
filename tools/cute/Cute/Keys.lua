@@ -183,6 +183,22 @@ local function keyName(key)
   return mods .. key
 end
 K.KeyName = keyName
+-- a box's capture stopped: the keyboard given back (never in a fight: EnableKeyboard is protected then)
+local function stop(self)
+  self.waiting = false
+  pcall(self.EnableKeyboard, self, false)
+  self:SetScript("OnKeyDown", nil)
+end
+-- every box made, so a fight's start stops the one waiting before the lockdown (PLAYER_REGEN_DISABLED comes first): the
+-- fight's first key casts as it should, and is never taken as a window's
+local boxes = setmetatable({}, { __mode = "k" })
+local fight = CreateFrame("Frame")
+fight:RegisterEvent("PLAYER_REGEN_DISABLED")
+fight:SetScript("OnEvent", C.Safe(function()
+  for b in pairs(boxes) do
+    if b.waiting then stop(b); b:Show2(b.onKey and b.shown or K.Text(b.id), false) end
+  end
+end, "keys: a fight"))
 -- a box for a window's key (Settings > Keys, the setup card): box:Bind(id) shows its key and takes a new one; box.onKey
 -- (where set) is told instead of the setting (the card keeps its choice until Start)
 function K.Box(parent)
@@ -202,16 +218,15 @@ function K.Box(parent)
     local w = ((self.label.GetUnboundedStringWidth or self.label.GetStringWidth)(self.label) or 0) + 16
     self:SetWidth(math.max(waiting and 76 or 44, math.ceil(w)))
   end
+  -- (a redraw while it waits, a module's refresh drawing Settings again: the same window's box keeps waiting and says
+  -- so; drawn for another window it stops first. It never shows a key while it still takes the keyboard)
   function b:Bind(id, text)
+    if self.waiting and self.id == id then self:Show2("Press a key", true) return end
+    if self.waiting then stop(self) end
     self.id = id
-    self.waiting = false
     self:Show2(text or K.Text(id), false)
   end
-  local function stop(self)
-    self.waiting = false
-    pcall(self.EnableKeyboard, self, false)
-    self:SetScript("OnKeyDown", nil)
-  end
+  boxes[b] = true
   b:SetScript("OnClick", C.Safe(function(self)
     if inCombat() then return end -- (keyboard capture is protected in a fight: EnableKeyboard, SimpleFrameAPIDocumentation.lua:247)
     if self.waiting then stop(self); self:Show2(self.onKey and self.shown or K.Text(self.id), false) return end
@@ -221,6 +236,8 @@ function K.Box(parent)
     pcall(self.EnableKeyboard, self, true)
     pcall(self.SetPropagateKeyboardInput, self, false)
     self:SetScript("OnKeyDown", C.Safe(function(box, key)
+      -- (a key in a fight is the fight's: nothing is bound; the fight's start stopped the box already)
+      if inCombat() then return end
       key = C.Plain(key)
       if type(key) ~= "string" or MODIFIER[key] then return end
       stop(box)

@@ -245,6 +245,9 @@ local function newObj(kind, template, parent)
         elseif k == "GetFrameLevel" then return self.__frameLevel or 2
         elseif k == "SetFrameLevel" then self.__frameLevel = a[1]
         elseif k == "SetFrameStrata" then self.__strata = a[1]
+        -- (the keyboard a frame takes: EnableKeyboard, and whether a key goes on past it)
+        elseif k == "EnableKeyboard" then self.__keyboard = a[1] and true or false
+        elseif k == "SetPropagateKeyboardInput" then self.__propagate = a[1] and true or false
         -- (a toplevel frame raised to the front of its strata: above every frame raised before it)
         elseif k == "Raise" then RAISED = RAISED + 1; self.__frameLevel = 1000 + RAISED
         -- (the clicks a button hears, RegisterForClicks; a mouse click below delivers only those)
@@ -12813,6 +12816,60 @@ do
     assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
     leave(c)
     print(string.format("windows W22: the quest to read: Leads to names this character's %d next steps (%d others' left out); You get, Choose one and Rewards include apart; the Classic database's rewards said so, DIM", #mine, #others))
+  end)
+end
+
+-- W23 (the review of sub-project C): a key box waiting for a key never takes the keyboard unseen. A redraw of Settings
+-- (a quest event's Cute.Refresh draws an open Settings again, once a second while questing) showed the box idle while
+-- it still took every key, so the next key pressed (W, to walk) became the window's key. The same window's box keeps
+-- waiting and says so now, and a box drawn for another window stops first. A fight starting while one waits stops it
+-- before the lockdown (PLAYER_REGEN_DISABLED), so the fight's first key casts and is never Cute's; a key that reaches
+-- a box in a fight binds nothing
+do
+  isolated({ { name = "Rone-Forever", guid = guidOf("Rone"), rank = 1, rankName = "Officer", class = "WARRIOR", level = 5, online = true } }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    local K = c.C.Keys
+    K.Set("guild", "follow")
+    c.C.UI:Open("settings", "keys")
+    local function box(id) for _, f in ipairs(c.frames) do if rawget(f, "Bind") and f.id == id and f:IsVisible() then return f end end end
+    local b = box("guild")
+    assert(b and b.label:GetText() == "J" and not b.waiting, "the Guild window's box: J")
+    press(b)
+    assert(b.waiting and b.label:GetText() == "Press a key" and b.__keyboard == true, "clicked: waiting for a key")
+    -- a redraw while it waits, Settings' own and a module's refresh
+    c.C.SettingsPage.Redraw()
+    b = box("guild")
+    assert(b and b.waiting and b.label:GetText() == "Press a key" and b.__keyboard == true, "a redraw: still waiting, and it says so: " .. tostring(b and b.label:GetText()))
+    c.C.UI.RefreshAll(); tick(c, 2)
+    b = box("guild")
+    assert(b and b.waiting and b.label:GetText() == "Press a key" and b.__keyboard == true, "a module's refresh: still waiting, and it says so")
+    b.__scripts.OnKeyDown(b, "K")
+    assert(K.Get("guild") == "K" and c.overrides.K and not b.waiting and b.__keyboard == false, "the key pressed is the one taken")
+    -- drawn for another window while it waits: it stops first
+    press(b)
+    assert(b.waiting)
+    b:Bind("quests")
+    assert(not b.waiting and b.__keyboard == false and b.__scripts.OnKeyDown == nil and b.label:GetText() == K.Text("quests"), "drawn for another window: stopped, that window's key shown")
+    -- a fight while it waits: stopped before the lockdown, the old key shown again
+    K.Set("guild", "follow")
+    c.C.UI:Open("settings", "keys")
+    b = box("guild")
+    press(b)
+    local handler = b.__scripts.OnKeyDown
+    assert(b.waiting and handler)
+    fire(c, "PLAYER_REGEN_DISABLED")
+    c.combat = true
+    assert(not b.waiting and b.__keyboard == false and b.__scripts.OnKeyDown == nil and b.label:GetText() == "J", "a fight: the box stops before the lockdown: " .. tostring(b.label:GetText()))
+    -- a key reaching a box in a fight binds nothing
+    b.waiting = true
+    handler(b, "2")
+    c.combat = false
+    fire(c, "PLAYER_REGEN_ENABLED"); tick(c, 1)
+    assert(K.Get("guild") == "follow" and c.overrides["2"] == nil and c.overrides.J, "after the fight: 2 is the game's, J Cute's")
+    hideAll(c)
+    leave(c)
+    print("windows W23: a waiting key box keeps waiting through a redraw and says so, stops when drawn for another window, stops as a fight begins; a key in a fight binds nothing")
   end)
 end
 
