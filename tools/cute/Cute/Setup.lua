@@ -1,11 +1,12 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- Setup: the first-run card, once per character, and the reload rule's question when Settings closes.
 -- The card (CuteSetupFrame, 480 px, centred): the windows (Guild and Quests always, with the key that opens each; the
--- Dungeons and Gear tabs; the game's map with Cute's icons), what Cute puts on screen (the step frame and arrow, the camp
+-- Dungeons and Gear tabs; Cute's Map with its key), what Cute puts on screen (the step frame and arrow, the camp
 -- bar and missing buffs, the interact light) and the two quest choices (Accept for me, the hand-in). Every row starts
 -- from what this character has saved (its modules, the engine's settings), and only a row with nothing saved starts at
 -- the default: everything on but the two automatic choices. Start writes the choices, marks every row shown answered
--- (CuteDB.chars[me].setup[row]), keeps the keys (Keys.lua) and reloads; after the reload the quest window opens once.
+-- (CuteDB.chars[me].setup[row]), keeps the keys (Keys.lua) and reloads; after the reload the quest window opens once (the
+-- map's, for a card that came back with its Map row alone).
 -- Not now changes nothing and the card never comes back by itself (the menu keeps "Set up Cute..." until Start). A row a
 -- later round adds comes back alone, once. Nothing on it is cut: labels and the note wrap.
 -- Shown 3 s after the first loading screen that is out of combat and outside an instance.
@@ -49,8 +50,9 @@ local function rows()
     add({ id = "quests", group = "Windows", label = "Quests and Route", kind = "fixed", key = "quests" })
     add({ id = "dungeons", group = "Windows", label = "Dungeons tab", kind = "check", module = "Cute_Quest:journal", indent = 20 })
     add({ id = "gear", group = "Windows", label = "Gear tab", kind = "check", module = "Cute_Quest:gear", indent = 20 })
-    -- (before Cute's own map window the Map row is the game's map with Cute's icons, and takes no key)
-    add({ id = "mapicons", group = "Windows", label = "Quest icons on the game's map", kind = "check", module = "Cute_Quest:map" })
+    -- (sub-project F) the Map window with its key: row mapwin, whose tick starts from the earlier mapicons answer (the
+    -- game's map with Cute's icons, which took no key); a character who answered that sees this row alone, once
+    add({ id = "mapwin", group = "Windows", label = "Map", kind = "check", module = "Cute_Quest:map", key = "map" })
     if q then
       add({ id = "step", group = "On screen", label = "Step frame and arrow", kind = "check" })
       add({ id = "camp", group = "On screen", label = "Camp bar and missing buffs", kind = "check" })
@@ -84,7 +86,7 @@ function S.Start(id)
   local camp = modOn("Cute_Quest:camp")
   if id == "dungeons" then local v = modOn("Cute_Quest:journal"); if v == nil then return true end return v end
   if id == "gear" then local v = modOn("Cute_Quest:gear"); if v == nil then return true end return v end
-  if id == "mapicons" then local v = modOn("Cute_Quest:map"); if v == nil then return true end return v end
+  if id == "mapwin" or id == "mapicons" then local v = modOn("Cute_Quest:map"); if v == nil then return true end return v end
   if id == "step" then if saved and s then return s.guide.frame ~= false end return true end
   if id == "camp" then
     if camp == nil then return true end
@@ -246,7 +248,11 @@ function S.Draw()
       end
     end
   end
-  local nh = say(f, PAD, y + 10, inner, "J and L open Cute's windows; each window has a button to the game's own. Change any of this later in Settings: right-click the minimap button. Window and tab changes reload; the rest applies at once.", DIM, 12)
+  -- (M named where the Map window is on, or ticked on the card)
+  local mapOn = p.on.mapwin
+  if mapOn == nil then mapOn = C.Modules.OnKey("Cute_Quest:map") end
+  local keys = mapOn and "J, L and M" or "J and L"
+  local nh = say(f, PAD, y + 10, inner, keys .. " open Cute's windows; each window has a button to the game's own. Change any of this later in Settings: right-click the minimap button. Window and tab changes reload; the rest applies at once.", DIM, 12)
   y = y + 10 + nh + 12
   for _, k in ipairs({ "labels", "lines", "checks", "keys" }) do f[k]:HideRest() end
   local fight = inCombat()
@@ -315,7 +321,7 @@ function S.Go()
   -- the modules (the reload applies them): each shown tab or switch; Camp on when either of its rows is ticked
   if shown.dungeons then M.Choose("Cute_Quest:journal", p.on.dungeons) end
   if shown.gear then M.Choose("Cute_Quest:gear", p.on.gear) end
-  if shown.mapicons then M.Choose("Cute_Quest:map", p.on.mapicons) end
+  if shown.mapwin then M.Choose("Cute_Quest:map", p.on.mapwin) end
   if shown.camp or shown.light then M.Choose("Cute_Quest:camp", (p.on.camp or p.on.light) and true or false) end
   -- the engine's settings (the copy's own: never QuestBank's)
   local q = engine()
@@ -327,8 +333,10 @@ function S.Go()
   if type(ch.keys) ~= "table" then ch.keys = {} end
   if shown.guild then ch.keys.guild = p.keys.guild end
   if shown.quests then ch.keys.quests = p.keys.quests end
+  if shown.mapwin then ch.keys.map = p.keys.map end
   ch.setupLater = nil
-  if shown.quests then ch.openAfter = "quests" end
+  -- (the quest window opens once after the reload; a card with the Map row alone, the map)
+  if shown.quests then ch.openAfter = "quests" elseif shown.mapwin and p.on.mapwin then ch.openAfter = "map" end
   card:Hide()
   S.pick = nil
   local reload = (type(C_UI) == "table" and C_UI.Reload) or ReloadUI

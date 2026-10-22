@@ -13742,7 +13742,7 @@ do
     card = c.env.CuteSetupFrame
     assert(card and card:IsShown(), "the card, 3 s after the loading screen")
     local function row(label) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == label end) end
-    assert(row("Dungeons tab"):GetChecked() and not row("Gear tab"):GetChecked() and row("Quest icons on the game's map"):GetChecked(), "the tabs as 0.7 left them: Gear off")
+    assert(row("Dungeons tab"):GetChecked() and not row("Gear tab"):GetChecked() and row("Map"):GetChecked(), "the tabs as 0.7 left them: Gear off (the map's row Map, its window's from sub-project F)")
     assert(not row("Camp bar and missing buffs"):GetChecked() and not row("Interact light"):GetChecked() and row("Step frame and arrow"):GetChecked(), "Camp off, the step frame on")
     assert(row("On my route"):GetChecked() and not row("Off"):GetChecked() and not row("Hand finished quests in for me"):GetChecked(), "Accept for me: On my route")
     local keys = {}
@@ -13775,7 +13775,7 @@ do
     assert(ch.modules["Cute_Quest:gear"] == false and ch.modules["Cute_Quest:journal"] == true and ch.modules["Cute_Quest:map"] == true and ch.modules["Cute_Quest:camp"] == false, "the modules as shown")
     assert(s.autoAccept == "route" and s.autoTurnIn == false and s.guide.frame == true, "the engine's choices as shown")
     assert(ch.keys.guild == "follow" and ch.keys.quests == "5", "the keys: J follows the game's, the quests' 5")
-    for _, id in ipairs({ "guild", "quests", "dungeons", "gear", "mapicons", "step", "camp", "light", "accept", "handin" }) do assert(ch.setup[id] == true, "answered: " .. id) end
+    for _, id in ipairs({ "guild", "quests", "dungeons", "gear", "mapwin", "step", "camp", "light", "accept", "handin" }) do assert(ch.setup[id] == true, "answered: " .. id) end
     assert(ch.openAfter == "quests", "the quest window to open after the reload")
     local db2, qdb = c.env.CuteDB, c.env.CuteQuestDB
     leave(c)
@@ -15132,6 +15132,134 @@ if SEEDED then
     print(string.format("map C5: the quest module keeps %.0f KB with the Map window open on a zone and its Finds list (budget %d KB)", keptKB, KEEP_BUDGET))
     assert(keptKB < KEEP_BUDGET, string.format("the quest module keeps %.0f KB with the map open, over its budget of %d KB", keptKB, KEEP_BUDGET))
     leave(mc)
+  end)
+end
+
+
+-- C6. The M key by override (Keys.lua): while the Map module is on, the map window's keys are held for CuteMapKey,
+--     following the game's World map key (TOGGLEWORLDMAP); the key's click toggles the window; off, no key is held and M
+--     is the game's; Settings > Keys has the Map window's row; the binding is named.
+-- C7. The setup card's Map row (mapwin, with its key): a character that answered the card before it sees the row alone,
+--     its tick from the earlier Map answer; Start writes the module and the key and reloads, and M opens once after;
+--     a fresh character's card has Map with M, and the quest window opens after Start as before.
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  local said = {}
+  isolated({ member("Rone", 1), member("Pim", 3) }, function()
+    -- C6
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    local K = c.C.Keys
+    K.Set("guild", "follow"); K.Set("quests", "follow"); K.Set("map", "follow")
+    assert(not c.overrides.M, "the Map module off: M is the game's")
+    local ids = {}
+    for _, w in ipairs(K.Windows()) do ids[#ids + 1] = w.id end
+    assert(table.concat(ids, " ") == "guild quests", "the windows a key opens, the Map module off: " .. table.concat(ids, " "))
+    c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+    K.Apply()
+    assert(c.overrides.M and c.overrides.M.button == "CuteMapKey" and c.overrides.M.owner == c.env.CuteKeyOwner, "the Map module on: M clicks CuteMapKey, held by CuteKeyOwner")
+    local ui = c.C.UI.Window("map")
+    c.env.CuteMapKey.__scripts.OnClick(c.env.CuteMapKey, "LeftButton")
+    assert(ui.frame and ui.frame:IsShown(), "M opens the Map window")
+    c.env.CuteMapKey.__scripts.OnClick(c.env.CuteMapKey, "LeftButton")
+    assert(not ui.frame:IsShown(), "and closes it")
+    -- the game's map key moved to N: Cute's follows
+    c.bindings.TOGGLEWORLDMAP = { "N" }
+    fire(c, "UPDATE_BINDINGS")
+    assert(c.overrides.N and c.overrides.N.button == "CuteMapKey" and not c.overrides.M, "following the game's World map key: N now")
+    c.bindings.TOGGLEWORLDMAP = { "M" }
+    fire(c, "UPDATE_BINDINGS")
+    -- Settings > Keys: the Map window's row
+    c.C.UI:Open("settings", "keys")
+    assert(texts(c):find("Map window", 1, true) and checkBox(c, function(cb) return cb.label and cb.label:GetText() == "Follow the game's World map key" end), "Settings > Keys: the Map window, following the game's World map key")
+    check(c.C.UI.Window("settings").frame, "map C6 Settings > Keys with the Map window")
+    assert(c.env.BINDING_NAME_CUTE_MAP == "Map window", "the binding's name")
+    -- the module off: no key
+    c.C.Modules.Set("Cute_Quest:map", false); tick(c, 1)
+    K.Apply()
+    assert(not c.overrides.M and c.overrides.J and c.overrides.L, "the Map module off: M the game's again, J and L kept")
+    leave(c)
+    said[#said + 1] = "the M key: held for CuteMapKey while the Map module is on, following the game's World map key (moved to N), its click toggling the window; off, M the game's; Settings > Keys' Map window row"
+    -- C7: a character that answered the card before the Map window: the Map row alone, its tick from the old answer
+    local state = {}
+    local function client(name, rank) return newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true, card = true })) end
+    local p = client("Pim", 3)
+    local answered = { guild = true, quests = true, dungeons = true, gear = true, mapicons = true, step = true, camp = true, light = true, accept = true, handin = true }
+    local db = { version = "0.8.0", chars = { ["Pim-Forever"] = { counters = {}, setup = answered, keys = { guild = "follow", quests = "follow" },
+      modules = { ["Cute_Quest:map"] = false, ["Cute_Quest:journal"] = true } } } }
+    login(p, db); tick(p, 3)
+    local card = p.env.CuteSetupFrame
+    assert(card and card:IsShown(), "the card comes back for the Map row")
+    local function row(label) return checkBox(p, function(cb) return cb.label and cb.label:GetText() == label end) end
+    local map = row("Map")
+    assert(map and not map:GetChecked() and not row("Dungeons tab") and not row("Step frame and arrow"), "the Map row alone, unticked as the old answer left it")
+    local box
+    for _, b in ipairs(p.frames) do if rawget(b, "Bind") and b:IsVisible() and b.id == "map" then box = b end end
+    assert(box and box.label:GetText() == "M", "its key box: M, the game's World map key")
+    assert(texts(p):find("J and L open Cute's windows", 1, true), "unticked, the card's words name J and L")
+    check(card, "map C7 the setup card, the Map row alone")
+    press(map)
+    assert(texts(p):find("J, L and M open Cute's windows", 1, true), "ticked, J, L and M")
+    local start
+    for _, b in ipairs(p.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == "Start" then start = b end end
+    press(start)
+    local ch = p.env.CuteDB.chars["Pim-Forever"]
+    assert(p.reloads == 1 and ch.modules["Cute_Quest:map"] == true and ch.keys.map == "follow" and ch.setup.mapwin == true and ch.openAfter == "map",
+      "Start: the Map module, its key, the row answered, the map to open after the reload")
+    local db2, qdb = p.env.CuteDB, p.env.CuteQuestDB
+    leave(p)
+    local p2 = client("Pim", 3)
+    p2.env.CuteQuestDB = qdb
+    login(p2, db2, true); tickAll(6)
+    local mw = p2.C.UI.Window("map")
+    assert(mw.frame and mw.frame:IsShown() and p2.env.CuteDB.chars["Pim-Forever"].openAfter == nil, "the Map window opened once after Start")
+    assert(p2.overrides.M and p2.overrides.M.button == "CuteMapKey" and not p2.C.Setup.Pending(), "M taken; nothing left to answer")
+    leave(p2)
+    -- a fresh character: Map with M, ticked; the quest window after Start as before
+    local f = client("Rone", 1)
+    login(f); tick(f, 3)
+    local fm = checkBox(f, function(cb) return cb.label and cb.label:GetText() == "Map" end)
+    assert(fm and fm:GetChecked() and texts(f):find("J, L and M open Cute's windows", 1, true), "a fresh character: Map ticked, J, L and M")
+    for _, b in ipairs(f.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == "Start" then start = b end end
+    press(start)
+    local fch = f.env.CuteDB.chars["Rone-Forever"]
+    assert(fch.modules["Cute_Quest:map"] == true and fch.keys.map == "follow" and fch.openAfter == "quests", "Start: the map on with M, the quest window to open after")
+    leave(f)
+    said[#said + 1] = "the card's Map row with M: alone for a character who answered before, from its old answer, J, L and M once ticked; Start the module, the key and M opening once; a fresh character's Map ticked and the quest window after Start"
+  end)
+  print("map C6, C7: " .. table.concat(said, "; "))
+end
+-- C8. On the map window QuestBank's pins are the game's size (Cute's first run: mapIconPct 100; the offer's ! 32 px of
+--     art on its 22 px pin), and a death draws your corpse and the graveyards again while the window shows
+do
+  isolated({ { name = "Rone-Forever", guid = guidOf("Rone"), rank = 1, rankName = "Officer", class = "WARRIOR", level = 5, online = true } }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    local drawn = {}
+    local function provider(name)
+      return { GetMap = function(self) return self.owningMap end, OnAdded = function(self, map) self.owningMap = map end, OnRemoved = function() end,
+        OnShow = function() end, OnHide = function() end, OnMapChanged = function(self) self:RefreshAllData() end,
+        OnCanvasScaleChanged = function() end, OnCanvasSizeChanged = function() end, GetPinTemplate = function() return name end,
+        RemoveAllData = function() end, RefreshAllData = function() drawn[#drawn + 1] = name end }
+    end
+    c.env.DeathMapDataProviderMixin, c.env.SelectableGraveyardDataProviderMixin = provider("corpse"), provider("graveyard")
+    login(c); tickAll(6)
+    local QB = c.addons[2].private
+    c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+    c.C.UI:Open("map")
+    QB.MapPage.Go(1429, "user")
+    assert(QB:Settings().mapIconPct == 100, "Cute's first run: the game's size")
+    local give
+    for _, f in ipairs(QB.QuestMap.pageProvider.active) do if f.data.kind == "give" and not f.data.trivial then give = give or f end end
+    assert(give and give.Texture:GetWidth() == 32 and give:GetWidth() == 22, "an offer on Cute's map: the game's 32 px art on its 22 px pin: " .. tostring(give and give.Texture:GetWidth()))
+    local n = #drawn
+    c.ghost = true
+    fire(c, "PLAYER_DEAD")
+    local corpse, grave = false, false
+    for i = n + 1, #drawn do if drawn[i] == "corpse" then corpse = true elseif drawn[i] == "graveyard" then grave = true end end
+    assert(corpse and grave, "a death: the corpse and the graveyards drawn again")
+    c.ghost = false
+    leave(c)
+    print("map C8: QuestBank's pins on Cute's map at the game's size; a death draws the corpse and the graveyards again")
   end)
 end
 
