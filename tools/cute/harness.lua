@@ -17198,6 +17198,18 @@ do local function cardsStage()
       if fia.C.CardFrame.frame then fia.C.CardFrame.frame:Hide() end
       assert(got == own, "the 1W from this client's own report: " .. tostring(got and got.from))
     end)
+
+    -- the Runs band during a run names who writes the report in words a player knows ("report by Brann"), and nothing
+    -- where that is you: "scribe" is the protocol's word
+    case("the Runs band without the word scribe", { gmember("Bri", 3) }, function()
+      local c = cchar("Bri", 3)
+      login(c)
+      local RU = c.C.RunsUI
+      local mine = RU.BandText({ place = "The Deadmines", t = 750, kind = "d", bosses = 3, scribe = "you" })
+      local theirs = RU.BandText({ place = "The Deadmines", t = 750, kind = "d", bosses = 3, scribe = "Brann" })
+      assert(not mine:find("scribe", 1, true) and not mine:find("report by", 1, true) and mine:find("3 bosses", 1, true), "your own run: " .. mine)
+      assert(theirs:find("report by Brann", 1, true) and not theirs:find("scribe", 1, true), "another's: " .. theirs)
+    end)
     assert(#failed == 0, "fix-cards: " .. #failed .. " case(s) failed:\n  " .. table.concat(failed, "\n  "))
     said[#said + 1] = "the launch audit's cards findings: " .. table.concat(passed, "; ")
   end
