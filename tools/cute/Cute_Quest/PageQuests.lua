@@ -379,6 +379,10 @@ if E then
   Cute.AddSection({ id = "share", title = "Data you share", group = "cute", order = 5, draw = function(_, col)
     local s = E:Settings()
     col:Head("Data you share")
+    -- (sub-project G: the finds of yours QuestBank lacks and how many a guild mate agrees with, and the guild's switch:
+    -- Cute/Finds.lua draws both)
+    local F = Cute.Finds
+    if F and F.ShareLine then F.ShareLine(col) end
     -- (the engine's own switches: Game.lua's notes, Survey.lua's questions to the game; QuestBank's Settings has the same)
     col:Check("Note what the game shows for foreverrank.com", s.noteGame ~= false, true, function(on) if E.Game and E.Game.SetOn then E.Game.SetOn(on) else s.noteGame = on end end,
       nil, function(tip)
@@ -388,6 +392,7 @@ if E then
       end)
     col:Check("Learn quests from the game", s.survey ~= false, true, function(on) if E.Survey and E.Survey.SetOn then E.Survey.SetOn(on) else s.survey = on end end)
     col:Check("Share your quests with your party", s.share.party ~= false, true, function(on) s.share.party = on end)
+    if F and F.ShareRow then F.ShareRow(col) end
     col:Note("The QuestBank Uploader sends what you found in the world to foreverrank.com, never a name or anything about your guild. It comes with Cute on Cute's page at foreverrank.com.")
   end })
 end

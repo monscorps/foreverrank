@@ -15610,6 +15610,124 @@ do
   end)
   print("finds G1-G5: " .. table.concat(said, "; "))
 end
+-- G6: on Cute_Quest, the map, the footers, Settings and Statistics
+do
+  local said = {}
+  local function noted(c, ...) c.C.Finds.door.Noted(...) end
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1), member("Pim", 3) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    local p = newClient(charOf({ "Pim", 3, "Raider", "WARRIOR", 5 }))
+    p.env.C_Map = { GetMapInfo = function(m) return { mapID = m, name = "Map " .. m, mapType = 3 } end }
+    login(c); login(p)
+    tickAll(10)
+    local QB = c.addons[2].private
+    c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+    assert(QB.Finds.host == c.env.Cute.Finds and c.C.Finds.engine, "the engine's host: Cute's door, attached")
+    -- your book, read where it stands: the engine's note, told to the host, counted, one voice
+    local disc = QB.Discover.DB()
+    disc.find = disc.find or {}
+    disc.find.o9101 = { p = { { 1429, 401, 402, 1 } }, b = "Raven Hill Tome", n = 1 }
+    disc.findN = (tonumber(disc.findN) or 0) + 1
+    QB.Finds.Tell("b", 9101, 1429, 401, 402, "Raven Hill Tome", false)
+    local ch = c.env.CuteDB.chars["Rone-Forever"]
+    assert(ch.counters.books_read == 1 and ch.counters.finds_first == 1, "counted: a book read, a find first in the guild")
+    QB.Finds.Tell("b", 9101, 1429, 402, 402, "Raven Hill Tome", false)
+    assert(ch.counters.books_read == 1, "the same book again: counted once")
+    -- a guide's book (the data's) counted, never shared
+    QB.Finds.Tell("b", 9102, 1429, 654, 701, "Archmage Theocritus' Research Journal", true)
+    assert(ch.counters.books_read == 2 and #ch.findsOut == 1, "the data's book: counted, never queued")
+    -- Pim found the same book, and a chest alone
+    tickAll(130)
+    noted(p, "b", 9101, 1429, 404, 400, "Raven Hill Tome")
+    noted(p, "h", 9301, 1429, 250, 250)
+    tickAll(70)
+    local by = {}
+    for _, r in ipairs(c.C.Finds.door.Rows(1429)) do by[r.kind] = r end
+    assert(by.b and by.b.sure and by.b.mates == 1 and by.h and not by.h.sure and by.h.mates == 1, "Rone's client: the book sure with Pim's voice, Pim's chest one voice")
+    local MP = QB.MapPage
+    local new, sure = MP.FindTally()
+    assert(new >= 1 and sure == 1, "the footers' counts: " .. new .. " new, " .. sure .. " confirmed")
+    -- the footers: L and M
+    local L = c.C.UI.Window("quests")
+    c.C.UI:Open("quests")
+    local fq = L.findsFoot
+    assert(fq and fq:IsShown() and fq.text:GetText():find("confirmed by the guild", 1, true) and L.foot == 24, "L's footer: " .. tostring(fq and fq.text:GetText()))
+    for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+      L.frame:SetSize(size[1], size[2]); L:Draw()
+      check(L.frame, "finds G6 the quest window's footer at " .. size[1] .. " x " .. size[2])
+    end
+    local tip = tipOf(fq)
+    assert(tip:find("never a name or anything about your guild", 1, true), "its tooltip: the privacy sentence:\n" .. tip)
+    c.C.UI:Open("map")
+    local mw = c.C.UI.Window("map")
+    assert(mw.findsFoot and mw.findsFoot:IsShown(), "M has the same footer")
+    QB.MapPage.Go(1429, "user")
+    local dim
+    for _, f in ipairs(MP.finds.active) do if f.data.find.dim then dim = f end end
+    assert(dim and dim:GetAlpha() == 0.5 and dim.data.find.kind == "h", "Pim's chest alone: dim on the map, half its alpha")
+    for _, size in ipairs({ { 1120, 640 }, { 860, 500 } }) do
+      mw.frame:SetSize(size[1], size[2]); mw:Draw()
+      check(mw.frame, "finds G6 the Map window's footer at " .. size[1] .. " x " .. size[2])
+    end
+    press(mw.findsFoot)
+    assert(mw.mapFinds, "the footer's click: the Finds list")
+    local t = texts(c)
+    assert(t:find("Raven Hill Tome", 1, true) and not t:find("looted \194\183 a guild mate", 1, true), "the Finds list: the sure book, not the dim chest:\n" .. t)
+    -- Settings > Data you share: the line and the row
+    c.C.UI:Open("settings", "share")
+    local st = texts(c)
+    assert(st:find("QuestBank does not have yet", 1, true) and st:find("1 confirmed by the guild", 1, true) and st:find("Share finds with the guild", 1, true)
+      and st:find("A guild mate's find counts once two of you agree", 1, true), "Data you share: the line and the row:\n" .. st)
+    local sw = c.C.UI.Window("settings")
+    for _, size in ipairs({ { 800, 560 }, { 760, 420 } }) do
+      sw.frame:SetSize(size[1], size[2]); sw:Draw()
+      check(sw.frame, "finds G6 Data you share at " .. size[1] .. " x " .. size[2])
+    end
+    local row = checkBox(c, function(cb) return cb.label and cb.label:GetText() == "Share finds with the guild" end)
+    click(row)
+    assert(c.env.CuteDB.settings.shareFinds == false and #ch.findsOut == 0, "unticked: off, and nothing waits")
+    click(checkBox(c, function(cb) return cb.label and cb.label:GetText() == "Share finds with the guild" end))
+    assert(c.env.CuteDB.settings.shareFinds == true, "ticked again")
+    -- Who sees what: Finds under the discovered
+    c.C.UI:Open("settings", "vis")
+    assert(texts(c):find("Finds", 1, true), "Who sees what: Finds")
+    -- Statistics' Finds category: your counts
+    local board = c.C.Stats.Board()
+    local cat = board.byCat.finds
+    local ids = {}
+    for _, d in ipairs(cat or {}) do ids[#ids + 1] = d.id end
+    table.sort(ids)
+    assert(table.concat(ids, ",") == "books_read,chests_looted,finds_first,rares_seen", "Statistics: the Finds category: " .. table.concat(ids, ","))
+    -- the quest engine's file holds nothing of the guild's
+    local function strings(t, out, seen)
+      out, seen = out or {}, seen or {}
+      if seen[t] then return out end
+      seen[t] = true
+      for k, v in pairs(t) do for _, x in ipairs({ k, v }) do if type(x) == "string" then out[#out + 1] = x elseif type(x) == "table" then strings(x, out, seen) end end end
+      return out
+    end
+    for _, s in ipairs(strings(c.env.CuteQuestDB)) do assert(not s:find(p.o.guid, 1, true), "CuteQuestDB holds a guild mate's GUID") end
+    assert(not disc.find.o9301 and c.env.CuteDB.known.finds, "Pim's chest is CuteDB's alone")
+    -- a find QuestBank's data carries now: dropped as the engine comes up
+    QB.Data.FIND[1429] = QB.Data.FIND[1429] or {}
+    table.insert(QB.Data.FIND[1429], { "h", 9301, "250,250", 2, "0.1", "f" })
+    c.env.Cute.Finds.Attach(c.C.Finds.engine)
+    for _, e in ipairs(c.env.CuteDB.known.finds.list) do assert(e.id ~= 9301, "the data's chest dropped from the guild's") end
+    -- /cute diag: the finds line, no name
+    local line
+    for _, l in ipairs(c.C.Diag()) do if l:find("^diag finds:") then line = l end end
+    assert(line and line:find("engine attached", 1, true) and not line:find("Pim", 1, true) and not line:find("Rone", 1, true), "/cute diag's finds line:\n" .. tostring(line))
+    local errs = {}
+    for _, e in ipairs(c.env.CuteQuestDB.errors or {}) do errs[#errs + 1] = tostring(e.where) .. ": " .. tostring(e.msg) end
+    -- (the client's own quiet notes aside: a call this mock lacks)
+    for _, e in ipairs(c.env.CuteDB.errors or {}) do if tostring(e.where):find("find") or tostring(e.msg):find("[Ff]inds") then errs[#errs + 1] = tostring(e.where) .. ": " .. tostring(e.msg) end end
+    assert(#errs == 0, "no error recorded:\n" .. table.concat(errs, "\n"))
+    leave(c); leave(p)
+    said[#said + 1] = "on Cute_Quest: the host Cute's door; your book counted once and kept, the data's counted never shared; a guild mate's same book confirming it, a chest alone dim at half alpha; L and M's footers with the privacy sentence, laid out at both sizes, a click the Finds list; Data you share's line and row; Finds in Who sees what; Statistics' Finds category; nothing of the guild's in CuteQuestDB; the data's find dropped; /cute diag's line"
+  end)
+  print("finds G6: " .. table.concat(said, "; "))
+end
 
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end

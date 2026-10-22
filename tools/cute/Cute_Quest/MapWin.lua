@@ -493,6 +493,13 @@ local function findRow(ui, f, K, zone)
       t:AddLine("Click: the map goes to it.", 0.5, 0.5, 0.5)
     end }
 end
+-- (sub-project G) the finds a list shows: yours, the data's and the guild's once two agree (a single guild mate's, dim, and
+-- a rare a guild mate sees now are the map's alone)
+local function listed(list)
+  local out = {}
+  for _, f in ipairs(list) do if not (f.dim or f.ping) then out[#out + 1] = f end end
+  return out
+end
 -- a find shown: its zone on the map, panned to its first spot, its pins lit
 function MW.ShowFind(ui, f)
   local MP = engineMap()
@@ -603,7 +610,7 @@ local function zoneList(ui, scroll, m)
   end
   if n == 0 then add({ kind = "note", x = 10, name = "No quests known here at your level." }) end
   -- the finds here, and the way to all of them
-  local finds = E:Settings().mapFinds ~= false and MP.Finds(m) or {}
+  local finds = E:Settings().mapFinds ~= false and listed(MP.Finds(m)) or {}
   add({ kind = "head", bar = K.NEW, icon = { art = { nil, BOOK }, crop = true }, name = "Finds here", who = "All finds", whoC = K.INK,
     fn = function() MW.ShowFinds(ui) end,
     tip = function(t) t:AddLine("All finds", 1, 1, 1); t:AddLine("Click: every find you can see, by zone.", 0.85, 0.85, 0.85, true) end })
@@ -632,7 +639,7 @@ local function findsList(ui, scroll)
   local here = shownMap()
   local zones, total = {}, 0
   for _, m in ipairs(MP.FindMaps()) do
-    local list = MP.Finds(m)
+    local list = listed(MP.Finds(m))
     if #list > 0 then
       zones[#zones + 1] = { m = m, list = list, d = m == here and -1 or zoneYards(m), name = (info(m) and plain(info(m).name)) or (E.Data.MAPNAME and E.Data.MAPNAME[m]) or "?" }
       total = total + #list
@@ -728,7 +735,7 @@ local function layout(ui)
   local inset = fw - 17 - 26 - listW
   ui:SetInset(inset)
   local b = boxOf(ui)
-  local bw, bh = inset - 12, fh - 73 - 14
+  local bw, bh = inset - 12, fh - 73 - 14 - (ui.foot or 0)
   b:SetSize(bw, bh)
   b.inner:SetSize(bw - 2, bh - 2)
   b:Show()
@@ -790,16 +797,94 @@ function MW.Draw(ui, scroll)
   zoneList(ui, scroll, m)
 end
 
+-- the Map window on the Finds list (/cute finds, the footers, Settings > Data you share's Show finds); a character without
+-- the Map module is told where it is switched on
+function MW.OpenFinds()
+  local w = Cute.Window and Cute.Window("map")
+  if not (w and Cute.ModuleOn("map")) then Cute.Print("the finds are on the Map window: tick Map in Settings, Modules.") return end
+  Cute.Open("map")
+  if w.frame and w.frame:IsShown() then MW.ShowFinds(w) end
+end
+
+----------------------------------------------------------------------------
+-- (sub-project G) the footer of L and M, only while there is something to say: the finds of yours QuestBank's data
+-- lacks, and how many of them a guild mate's find agrees with ("14 new finds, a dot, 3 confirmed by the guild", the numbers
+-- in INK), its 2 px NEW bar and the book's icon at 14 px; a click opens M on the Finds list, its tooltip the privacy
+-- sentence (Cute/Finds.lua's words). The scroll area, the side column and the map's box end above it (the window's foot)
+----------------------------------------------------------------------------
+local FOOT = 24
+local function footerOf(ui)
+  local b = ui.findsFoot
+  if b then return b end
+  local K = ui.COLORS
+  b = CreateFrame("Button", nil, ui.content)
+  b:SetPoint("BOTTOMLEFT", 1, 1)
+  b:SetPoint("BOTTOMRIGHT", -10, 1)
+  b:SetHeight(FOOT - 1)
+  b.line = b:CreateTexture(nil, "ARTWORK")
+  b.line:SetColorTexture(K.LINE[1], K.LINE[2], K.LINE[3], 1)
+  b.line:SetPoint("TOPLEFT", 0, 1)
+  b.line:SetPoint("TOPRIGHT", 9, 1)
+  b.line:SetHeight(1)
+  b.bar = b:CreateTexture(nil, "ARTWORK")
+  b.bar:SetColorTexture(K.NEW[1], K.NEW[2], K.NEW[3], 1)
+  b.bar:SetPoint("TOPLEFT", 0, -4)
+  b.bar:SetPoint("BOTTOMLEFT", 0, 4)
+  b.bar:SetWidth(2)
+  b.icon = b:CreateTexture(nil, "ARTWORK")
+  b.icon:SetSize(14, 14)
+  b.icon:SetPoint("LEFT", 10, 0)
+  b.icon:SetTexture(BOOK)
+  b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+  b.text = ui.Text(b, 11, K.DIM, "LEFT")
+  b.text:SetPoint("LEFT", 30, 0)
+  b:SetHighlightTexture("Interface\\Buttons\\WHITE8x8", "ADD")
+  b:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.05)
+  b:SetScript("OnClick", Cute.Safe(function() MW.OpenFinds() end, "the finds' footer"))
+  b:SetScript("OnEnter", Cute.Safe(function(self)
+    local F = Cute.Finds
+    tip(self, "Finds", F and F.PRIVACY)
+    GameTooltip:AddLine("Click: the Map window's Finds list.", 0.5, 0.5, 0.5, true)
+    GameTooltip:Show()
+  end, "the finds' footer"))
+  b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  ui.findsFoot = b
+  return b
+end
+function MW.Footer(ui)
+  local MP, F = engineMap(), Cute.Finds
+  local new, sure = 0, 0
+  if MP and MP.FindTally and F and F.FooterText and Cute.ModuleOn("map") then new, sure = MP.FindTally() end
+  local foot = new > 0 and FOOT or 0
+  if foot > 0 then
+    local b = footerOf(ui)
+    b.text:SetText(F.FooterText(new, sure, ui.Hex(ui.COLORS.INK)))
+    b.text:SetWidth(math.max(60, (ui.frame:GetWidth() or W) - 70))
+    b:Show()
+  elseif ui.findsFoot then
+    ui.findsFoot:Hide()
+  end
+  if (ui.foot or 0) ~= foot then ui.foot = foot; ui:PlaceScroll() end
+end
+
 -- the window: made with the builder the first time it opens (UI.lua UI.BuildWindow), its row the crumbs and layers, the
 -- canvas's place kept between opens; closed, the next open is on your zone again
 local win = Cute.Window and Cute.Window("map")
 if win then
-  win.DrawTabs = function(self) MW.DrawRow(self) end
+  win.DrawTabs = function(self) MW.DrawRow(self); MW.Footer(self) end
   local built = win.OnBuilt
   win.OnBuilt = function(self)
     if built then built(self) end
     self.frame:HookScript("OnHide", function() self.mapClosed = true; self.mapFinds = nil end)
   end
+end
+
+-- (sub-project G) the quest window's footer (L), the Map window's: drawn with its tabs, before each page draws (UI.lua's
+-- drawBody, as the Map window's row)
+do
+  local qw = Cute.Window and Cute.Window("quests")
+  local tabs = qw and qw.DrawTabs
+  if tabs then qw.DrawTabs = function(self, page, officer) tabs(self, page, officer); MW.Footer(self) end end
 end
 
 -- /cute diag's look line (Band.lua's Cute.QuestBand.Diag) ends with the map window's state as only the live client shows
@@ -842,13 +927,7 @@ do
   if core then
     SlashCmdList.CUTE = function(msg)
       local m = (msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-      if m == "finds" then
-        local w = Cute.Window and Cute.Window("map")
-        if not (w and Cute.ModuleOn("map")) then Cute.Print("the finds are on the Map window: tick Map in Settings, Modules.") return end
-        Cute.Open("map")
-        if w.frame and w.frame:IsShown() then MW.ShowFinds(w) end
-        return
-      end
+      if m == "finds" then MW.OpenFinds() return end
       return core(msg)
     end
   end

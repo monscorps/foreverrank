@@ -611,8 +611,13 @@ function MP.FindMaps()
   return out
 end
 -- (sub-project G) the footers' counts: the finds of yours QuestBank's data lacks (new), and how many of them a guild
--- mate's find agrees with (confirmed)
+-- mate's find agrees with (confirmed). Counted again only when the data, your notes or the guild's changed (a window's
+-- footer asks at every draw, and the maps outnumber MP.Finds' memo)
+local tally = {}
 function MP.FindTally()
+  local disc = type(QuestBankDB) == "table" and type(QuestBankDB.disc) == "table" and QuestBankDB.disc or nil
+  local own, n, ver = disc and disc.find, disc and tonumber(disc.findN) or 0, QB.Finds.Ver()
+  if tally.data == QB.Data.FIND and tally.own == own and tally.n == n and tally.ver == ver then return tally.new, tally.sure end
   local new, sure = 0, 0
   for _, m in ipairs(MP.FindMaps()) do
     for _, d in ipairs(MP.Finds(m)) do
@@ -622,6 +627,7 @@ function MP.FindTally()
       end
     end
   end
+  tally = { data = QB.Data.FIND, own = own, n = n, ver = ver, new = new, sure = sure }
   return new, sure
 end
 
