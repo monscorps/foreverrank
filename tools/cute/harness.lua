@@ -14780,6 +14780,7 @@ end
 -- stats.js carries) name the Quests window, never the retired Guide or its Next up.
 -- M3: Data you share's box for the notes says in its tooltip, as QuestBank's does, that where you found things is
 -- noted too.
+-- M4: the README no longer says Cute has no uploader.
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
   isolated({ member("Rone", 1) }, function()
@@ -14818,6 +14819,10 @@ do
     local tip = box and tipOf(box) or ""
     assert(tip:find("and where you found them, with no names in them", 1, true), "Data you share: the notes' tooltip names the places, as QuestBank's:\n" .. tip)
     said[#said + 1] = "Data you share's notes say where you found them"
+    -- M4
+    local readme = assert(io.open(HERE .. "/README.md")):read("*a")
+    assert(not readme:find("No server, no uploader", 1, true) and readme:find("Cute_Quest.lua", 1, true), "the README names the uploader")
+    said[#said + 1] = "the README names the uploader"
     assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
     leave(c)
     print("merge2: " .. table.concat(said, "; "))
