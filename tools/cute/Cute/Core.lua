@@ -275,29 +275,22 @@ function C.SavedVersions()
     if g and type(st.addon_ver) == "string" and not C.Roster:IsSelfRecord(key, e) and not C.Policy:Untrusted(g) then C.SawVersion(st.addon_ver, g) end
   end
 end
--- the first login on this version: its changelog line, once, ten seconds on, after the login's own lines. A first run
--- (saved variables empty) says hello instead, naming /cute: what changed since a version nobody ran is no news
+-- the first login on this version: its changelog line, once, ten seconds on, after the login's own lines; the
+-- versions skipped are not told (0.9.0 printed up to three more, a paragraph each: the page has them). A first run
+-- (saved variables empty) says hello instead, naming /cute: what changed since a version nobody ran is no news. The
+-- first run counts this version told at once and owes the welcome (CuteDB.welcome, C.InitDB): a Start on the
+-- first-run card reloads within seconds, and the login after it took the filled file for an upgrader's
 function C.WhatsNew()
-  if C.firstRun then
+  if CuteDB.welcome then
+    CuteDB.welcome = nil
     C.firstRun = false
-    CuteDB.toldChanges = C.version
     C.Print("/cute or the elf on the minimap opens the guild window.")
     return
   end
   local line = type(C.CHANGES) == "table" and C.CHANGES[C.version] or nil
   if type(line) ~= "string" or line == "" or CuteDB.toldChanges == C.version then return end
-  local was = CuteDB.toldChanges
   CuteDB.toldChanges = C.version
   C.Print(C.COLOR .. "Cute " .. C.version .. "|r: " .. line, true)
-  -- (and the versions between the last one told and this one, newest first, three at most: a 0.5.x user is told the
-  -- Guide moved to Settings, Modules in 0.6.0)
-  if not C.ParseVersion(was) then return end
-  local skipped = {}
-  for v, l in pairs(C.CHANGES) do
-    if type(l) == "string" and l ~= "" and C.VersionNewer(v, was) and C.VersionNewer(C.version, v) then skipped[#skipped + 1] = v end
-  end
-  table.sort(skipped, function(a, b) return C.VersionNewer(a, b) end)
-  for i = 1, math.min(3, #skipped) do C.Print(C.COLOR .. "Cute " .. skipped[i] .. "|r: " .. C.CHANGES[skipped[i]], true) end
 end
 
 ----------------------------------------------------------------------------
@@ -424,6 +417,7 @@ function C.InitDB()
   CuteDB = type(CuteDB) == "table" and CuteDB or {}
   local was = CuteDB.version
   fill(CuteDB, DEFAULTS)
+  if C.firstRun then CuteDB.toldChanges, CuteDB.welcome = C.version, true end
   -- (0.5.x showed every character the Guide as a fixed tab; from 0.6.0 it is a module, and every character starts
   -- with the statistics alone, as What's new says at the first login on it: Settings > Modules switches it on)
   -- before 0.6.0 only the guild channel made records (there were no whispers): each is one heard there (Roster.lua

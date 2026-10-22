@@ -15,9 +15,12 @@
 --                                  went is answered by it). since, in hex right after the fingerprint (a 0.6 or 0.7
 --                                  client reads a field of another length as no fingerprint, which it never answers
 --                                  by): the server time to which the asker holds everything said on GUILD (M:Logout),
---                                  and a responder whose record went whole before it sends only what went after it,
---                                  where its answer to that asker's ask before it had all gone by then (M:Borne). A
---                                  /reload asks nothing (M:Wire). The asker's GUID tells
+--                                  eight digits, then eight of from, when that session began to listen (a 0.9 client
+--                                  reads a since of that length as none, and answers whole). A responder sends only
+--                                  what went after since where the asker listened as its record (or pass) last went
+--                                  whole, or as its answer to the asker's ask of that session went, whichever logins
+--                                  it had since (M:Borne); a 0.9 since (no from) only where its record went whole
+--                                  this login before it. A /reload asks nothing (M:Wire). The asker's GUID tells
 --                                  it its own ask, which the game hands back to it (0.3.0 sent a bare 1R, 0.5.x no
 --                                  stamp: both still answered; they take the GUID to be everything after "1R|", which
 --                                  names nobody they know, so the rest passes them by). stamp: when the officers' word
@@ -178,12 +181,25 @@ local function state(kind, target)
   st.queuedTo[target] = st.queuedTo[target] or {}
   return st.sentTo[target], st.queuedTo[target]
 end
--- when each part's text first went on GUILD this login, by kind and key (a resend of the same text keeps its time):
--- what an ask's since is held against (M:Answer)
+-- when each part's text first went on GUILD, by kind and key (a resend of the same text keeps its time), and that text
+-- (was): what an ask's since is held against (M:Answer). Kept from login to login (M:Wire), so a since from the
+-- asker's last session is answered by what went after it whatever this client did meanwhile, its own logins included
+-- (0.9.0 kept them for a login alone, and an asker who had logged out before this client's login had its record whole)
 M.sentAt = { v = {}, l = {}, k = {} }
+M.was = { v = {}, l = {}, k = {} }
+-- the wholes this client sent on GUILD, by part: its record whole (rec), its statistics pass whole (pass). Each
+-- { q, rec or pass }: q the server time it was queued (the hello's: when the record was released, every part of it
+-- going from then on), then the server time the queue had sent all of it (true while it goes; false where a guild
+-- message was given up meanwhile, M.epoch). The last WHOLES_MAX of each, kept from login to login: an asker that
+-- listened from before q until after it had all gone holds that part whole (M:Borne)
+M.wholes = { rec = {}, pass = {} }
+local WHOLES_MAX = 16
+-- (what is kept from login to login goes after KEEP_FOR seconds: a part forgotten goes again, a whole or an ask
+-- forgotten bears out nothing)
+local KEEP_FOR = 30 * 86400
 
--- what each asker was answered (M.owe, by its GUID, else its sender string; kept across a /reload in the wire): the
--- last OWE_EACH asks heard from it this login, each with the server time it came (at) and how its record (rec) and its
+-- what each asker was answered (M.owe, by its GUID, else its sender string; kept from login to login in the wire): the
+-- last OWE_EACH asks heard from it, each with the server time it came (at) and how its record (rec) and its
 -- statistics pass (pass) were answered: true while the answer waits or is on its way; the server time once the queue
 -- had sent all of it (nothing for the guild left behind it, nothing for the guild given up meanwhile: M.epoch); false
 -- where it was not (an ask within ASK_AGAIN of the last, a pass within GAME_AGAIN, a message given up). An ask's since
@@ -202,11 +218,15 @@ local SENT = { rec = "sentRec", pass = "sentPass" }
 function M:Entry(who)
   local list = self.owe[who]
   if not list then
-    -- (past OWE_MAX askers, the one asked longest ago is forgotten, and an asker with no entry is answered whole)
+    -- (past OWE_MAX askers, the one asked longest ago is forgotten, and an asker with no entry is answered whole: a 0.9
+    -- ask's where it was one of this login's)
     if oweN >= OWE_MAX then
       local old, oldAt
       for w, l in pairs(self.owe) do local a = l[#l] and l[#l].at or 0; if not oldAt or a < oldAt then old, oldAt = w, a end end
-      if old then self.owe[old], oweN, self.oweEvicted = nil, oweN - 1, true end
+      if old then
+        self.owe[old], oweN = nil, oweN - 1
+        if oldAt >= (self.loginAt or 0) then self.oweEvicted = true end
+      end
     end
     list = {}
     self.owe[who], oweN = list, oweN + 1
@@ -216,16 +236,43 @@ function M:Entry(who)
   if #list > OWE_EACH then table.remove(list, 1); list.cut = true end
   return e
 end
--- the since an ask's part (rec or pass) is answered from: s, where the latest ask heard from who before it had that
--- part all sent by then; nil, the whole, where it went after, still waits or never went. An asker heard asking nothing
--- before its since was online as this login's own record and pass went (or asked before this login: its base is later)
-function M:Borne(who, s, part)
+-- (the kept state is this guild's: M:Club)
+local function ours()
+  local w, club = M.wire, C.Roster:ClubId()
+  return w ~= nil and club ~= nil and w.club == tostring(club)
+end
+-- the since an ask's part (rec or pass) is answered from: s, or nil, the whole. An ask that says where the asker's last
+-- session began (from, M:SinceHex) holds this client's part as it stood at s where it listened as that part went whole
+-- (a whole queued at or after from that had all gone by s: M.wholes), or where the latest ask heard from it before s was
+-- one of that session, its part all sent by then. Either holds whichever logins this client had since: what went after
+-- s goes (M.sentAt). A 0.9 ask, which says no from: s where this login's own record went whole before it (sinceOf), and
+-- the latest ask heard from who this login before it had that part all sent by then; an asker heard asking nothing this
+-- login before its since was online as this login's own record and pass went
+function M:Borne(who, s, part, from)
   if s == nil then return nil end
+  if from ~= nil then
+    if not ours() then return nil end
+    for _, w in ipairs(self.wholes[part]) do
+      local d = w[part]
+      if type(d) == "number" and w.q >= from and d <= s then return s end
+    end
+    local list = self.owe[who]
+    for i = #(list or {}), 1, -1 do
+      local e = list[i]
+      if e.at <= s then local d = e[part]; return (e.at >= from and type(d) == "number" and d <= s) and s or nil end
+    end
+    return nil
+  end
   local list = self.owe[who]
   if not list then return (not self.oweEvicted) and s or nil end
+  local login = self.loginAt or 0
   for i = #list, 1, -1 do
     local e = list[i]
-    if e.at <= s then local d = e[part]; return (type(d) == "number" and d <= s) and s or nil end
+    if e.at <= s then
+      if e.at < login then return (not self.oweEvicted) and s or nil end
+      local d = e[part]
+      return (type(d) == "number" and d <= s) and s or nil
+    end
   end
   return (not list.cut) and s or nil
 end
@@ -259,20 +306,36 @@ local function answered(list, part, since, ok)
   waits[list] = left
   drained()
 end
--- (a /reload: the entries as the wire kept them, checked)
-local function restoreOwe(src)
+-- a whole of part (rec, pass) for the guild, queued now (or its parts going from q on): kept with when it had all gone
+-- (M.wholes)
+local function whole(part, q)
+  local list = M.wholes[part]
+  local e = { q = q or C.ServerNow(), [part] = true }
+  list[#list + 1] = e
+  while #list > WHOLES_MAX do table.remove(list, 1) end
+  await(SENT[part], e)
+end
+-- (the entries as the wire kept them, checked: a /reload's as they were, its answers owed again (M:Rearm); a login's
+-- from the last one, an answer that had not gone by its logout never to go (false), an asker not heard in KEEP_FOR
+-- forgotten)
+local function restoreOwe(src, fresh)
   M.owe, oweN = {}, 0
+  local old = C.ServerNow() - KEEP_FOR
   for who, list in pairs(type(src) == "table" and src or {}) do
     if type(who) == "string" and type(list) == "table" and oweN < OWE_MAX then
       local out = { cut = list.cut == true or nil }
       for _, e in ipairs(list) do
         if type(e) == "table" and tonumber(e.at) and #out < OWE_EACH then
           local x = { at = tonumber(e.at), nr = tonumber(e.nr), np = tonumber(e.np) }
-          for _, part in ipairs({ "rec", "pass" }) do local d = e[part]; if type(d) == "number" or type(d) == "boolean" then x[part] = d end end
+          for _, part in ipairs({ "rec", "pass" }) do
+            local d = e[part]
+            if type(d) == "number" or type(d) == "boolean" then x[part] = d end
+            if fresh and d == true then x[part] = false end
+          end
           out[#out + 1] = x
         end
       end
-      if #out > 0 then M.owe[who], oweN = out, oweN + 1 end
+      if #out > 0 and not (fresh and out[#out].at < old) then M.owe[who], oweN = out, oweN + 1 end
     end
   end
 end
@@ -317,17 +380,39 @@ end
 -- logout and at a /reload): a /reload is the same login, so it sends again only what changed since the last send
 -- before it, asks nothing and sends no forced record (0.7.0's /reload asked, and every client online resent its whole
 -- record and statistics). A login starts afresh: its record goes whole, its statistics pass after it. login: when this
--- login began; base: when its record had gone (an ask whose since is later holds it, M:Answer); passAt: the last
--- statistics pass forced for the guild; asked: when an ask of this login left
+-- login began; base: when its record had gone (a 0.9 ask whose since is later holds it, M:Answer); passAt: the last
+-- statistics pass forced for the guild; asked: when an ask of this login left. And from login to login, a /reload or
+-- not: when each part's text went and that text (sentAt, was), the wholes sent (wholes), how each asker was answered
+-- (owe), all of the guild named club (M:Club)
 local function fill(dst, src) for k, v in pairs(type(src) == "table" and src or {}) do if type(k) == "string" then dst[k] = v end end end
+local KINDS = { "v", "l", "k" }
+local function keep(w)
+  local old = C.ServerNow() - KEEP_FOR
+  -- (a 0.9 wire kept the texts as what its login sent: sent, labels, claims)
+  local was = type(w.was) == "table" and w.was or { v = w.sent, l = w.labels, k = w.claims }
+  for _, kind in ipairs(KINDS) do
+    local at = type(w.sentAt) == "table" and type(w.sentAt[kind]) == "table" and w.sentAt[kind] or {}
+    local text = type(was[kind]) == "table" and was[kind] or {}
+    for key, t in pairs(at) do
+      if type(key) == "string" and type(t) == "number" and t >= old and text[key] ~= nil then M.sentAt[kind][key], M.was[kind][key] = t, text[key] end
+    end
+  end
+  -- (a whole still on its way when the queue went with the session never went whole)
+  for part, list in pairs(M.wholes) do
+    for _, e in ipairs(type(w.wholes) == "table" and type(w.wholes[part]) == "table" and w.wholes[part] or {}) do
+      local d = type(e) == "table" and e[part]
+      if type(d) == "number" and tonumber(e.q) and d >= old and #list < WHOLES_MAX then list[#list + 1] = { q = tonumber(e.q), [part] = d } end
+    end
+  end
+end
 function M:Wire(reloading)
   local ch = C.Char()
   local w = ch.wire
   local again = reloading and type(w) == "table" and tonumber(w.login) ~= nil
+  if type(w) == "table" then keep(w) end
   if again then
     fill(STATE.v.sent, w.sent); fill(STATE.l.sent, w.labels); fill(STATE.k.sent, w.claims)
     for t, sent in pairs(type(w.told) == "table" and w.told or {}) do if type(t) == "string" and type(sent) == "table" then fill(state("v", t), sent) end end
-    for kind, at in pairs(type(w.sentAt) == "table" and w.sentAt or {}) do if M.sentAt[kind] then fill(M.sentAt[kind], at) end end
     fill(self.toldTo, w.toldTo)
     self.base, self.passAt = tonumber(w.base), tonumber(w.passAt)
     restoreOwe(w.owe)
@@ -335,18 +420,39 @@ function M:Wire(reloading)
     self.reloaded = true
     -- (an ask of this login that never left goes after the /reload)
     self.askOwed = (not (tonumber(w.asked) and tonumber(w.asked) >= tonumber(w.login))) and "hello" or nil
+  elseif type(w) == "table" then
+    restoreOwe(w.owe, true)
   end
   ch.wire = { login = again and tonumber(w.login) or C.ServerNow(), sent = STATE.v.sent, labels = STATE.l.sent, claims = STATE.k.sent,
-    told = STATE.v.sentTo, sentAt = M.sentAt, toldTo = self.toldTo, base = self.base, passAt = self.passAt, asked = again and tonumber(w.asked) or nil,
-    owe = M.owe, claimsOwed = M.pendingClaims }
+    told = STATE.v.sentTo, sentAt = M.sentAt, was = M.was, wholes = M.wholes, toldTo = self.toldTo, base = self.base, passAt = self.passAt,
+    asked = again and tonumber(w.asked) or nil, owe = M.owe, claimsOwed = M.pendingClaims, club = type(w) == "table" and type(w.club) == "string" and w.club or nil }
   self.wire = ch.wire
+  self.loginAt = ch.wire.login
 end
--- the guild as this character holds it: CuteDB.chars[me].hold = { club, at }, everything sent on GUILD up to at. Moved
--- on at logout (and at a /reload) only where this login's ask left a while before, and nothing heard was lost (the
--- early buffer full): a /reload, which asks nothing, misses what was said during its loading screen, so its hold stays
--- at the last one. The next login's ask carries it as since (M:Ask). Whether each answer to this login's ask came this
--- client cannot know (one may wait out the ten-minute pass, or a responder's lockdown, or not come at all): each
--- responder judges that by the answer it gave (M:Borne), and answers a since it does not bear out whole
+-- the kept state is the guild's it was made in: at the hello (in a guild for sure), one of another guild, or of a 0.9
+-- login (which named none), is forgotten. A /reload's from a 0.9 build names this one
+local function clear(t) for k in pairs(t) do t[k] = nil end end
+function M:Club()
+  local w, club = self.wire, C.Roster:ClubId()
+  if not w or club == nil then return end
+  club = tostring(club)
+  if w.club == club then return end
+  if w.club == nil and self.reloaded then w.club = club return end
+  for _, kind in ipairs(KINDS) do clear(M.sentAt[kind]); clear(M.was[kind]) end
+  for _, list in pairs(M.wholes) do clear(list) end
+  -- (a 0.9 ask then has no list to go by: answered whole)
+  M.owe, oweN, M.oweEvicted = {}, 0, true
+  w.owe, w.club = M.owe, club
+end
+-- the guild as this character holds it: CuteDB.chars[me].hold = { club, at, from, reg }, everything sent on GUILD up
+-- to at, from when this login began to listen (from: its login's start, the channel's from then on), with what it
+-- takes on the wire then (reg: M.Reg). Moved on at logout (and at a /reload) only where this login's ask left a while
+-- before, and nothing heard was lost (the early buffer full): a /reload, which asks nothing, misses what was said
+-- during its loading screen, so its hold stays at the last one. The next login's ask carries at and from (M:Ask).
+-- Whether each answer to this login's ask came this client cannot know (one may wait out the ten-minute pass, or a
+-- responder's lockdown, or not come at all): each responder judges that by what it sent while the asker listened
+-- (M:Borne), and answers a since it does not bear out whole. A client that deleted what it may want back (M:Unheld)
+-- keeps no hold
 local SYNCED_AFTER = 100 -- seconds after the ask left: most answers have come
 -- (and a minute short of the logout: what went on GUILD as it came, still on its way, or sent in its last second (the
 -- server's time counts whole seconds, and a part goes again only where it went after the since) is sent again)
@@ -358,17 +464,43 @@ function M:AskLeft()
   if self.AskWholesSoon then self:AskWholesSoon() end
 end
 function M:Logout()
+  if self.unheld then C.Char().hold = nil return end
   local club = C.Roster:ClubId()
   if club == nil or not self.syncedAt or C.Now() - self.syncedAt < SYNCED_AFTER or self.lost then return end
-  C.Char().hold = { club = tostring(club), at = math.floor(C.ServerNow()) - HOLD_MARGIN }
+  local w = self.wire
+  C.Char().hold = { club = tostring(club), at = math.floor(C.ServerNow()) - HOLD_MARGIN, from = w and tonumber(w.login) and math.floor(w.login) or nil, reg = self.reg }
+end
+-- this client deleted values of others' records it may want back (Policy.lua: a stat the officers closed and opened
+-- again, the Readys a policy change took): what it holds of the guild is not whole, so it keeps no hold, and its next
+-- login asks every record whole
+function M:Unheld()
+  self.unheld = true
+  if CuteDB then C.Char().hold = nil end
+end
+-- what this client takes on the wire, as a text: every stat its registry defines (but the dynamic ones, kept whether
+-- defined or not, and those learned in play), counted and summed by hash. A module switched on or a newer Cute changes
+-- it: values of those stats went while this client dropped them, and a since would never bring them
+function M.Reg()
+  local sum, n = 0, 0
+  for id, def in pairs(C.Stats.byId) do
+    if not C.Stats.IsDynamic(id) and not def.learned then sum = (sum + C.Policy.Fnv(id, 2166136261)) % 4294967296; n = n + 1 end
+  end
+  return n .. ":" .. sum
 end
 -- the since an ask carries, in hex after the policy's fingerprint (a 0.6 or 0.7 client reads that field as a
 -- fingerprint, which it never answers by, and takes one of another length for none; 0.5.x takes the whole ask for a
--- GUID it does not know): nothing where this character holds nothing of this guild
+-- GUID it does not know): the hold's at, then its from, eight digits each (a 0.9 client reads a since of another
+-- length as none, and answers whole); a hold of 0.9 (no from) its at alone. Nothing where this character holds nothing
+-- of this guild, or takes more on the wire than it did then (M.Reg)
 function M:SinceHex()
   local h, club = C.Char().hold, C.Roster:ClubId()
+  self.reg = M.Reg()
   if type(h) ~= "table" or club == nil or h.club ~= tostring(club) or not tonumber(h.at) then return "" end
-  return string.format("%x", math.floor(tonumber(h.at)))
+  local at, from = math.floor(tonumber(h.at)), tonumber(h.from)
+  if from == nil then return string.format("%x", at) end
+  from = math.floor(from)
+  if h.reg ~= self.reg or from < 0 or from > at or at >= 2 ^ 32 then return "" end
+  return string.format("%08x%08x", at, from)
 end
 -- force as a part is chosen: true, every part; a number (an ask's since), every part whose text went on GUILD after it,
 -- or never this login; else none (only what changed goes)
@@ -526,9 +658,9 @@ local function mark(e, r, kept, back)
   local sent, q = state(e.kind, e.target)
   for _, p in ipairs(e.parts) do if q[p.key] == p.s then q[p.key] = nil end end
   if r == "sent" then
-    local at, t = not e.target and M.sentAt[e.kind], C.ServerNow()
+    local at, was, t = not e.target and M.sentAt[e.kind], not e.target and M.was[e.kind], C.ServerNow()
     for _, p in ipairs(kept or {}) do
-      if at and sent[p.key] ~= p.s then at[p.key] = t end
+      if at and was[p.key] ~= p.s then at[p.key], was[p.key] = t, p.s end
       sent[p.key] = p.s
     end
   end
@@ -836,7 +968,8 @@ end
 -- them). A discovery opened goes with its label, which went to the officers alone while it was closed (a member's
 -- client shows no boss it has no name for), and a boss with its kill claims
 function M:Opened(ids)
-  for _, id in ipairs(ids) do self.lastSent[id] = nil end
+  -- (a value that went on GUILD before the officers closed it goes again as new: a member's client deleted it meanwhile)
+  for _, id in ipairs(ids) do self.lastSent[id] = nil; self.was.v[id] = nil end
   if not (self.started and self.hello and C.Roster:InGuild()) or self.holding then return end
   table.sort(ids)
   local guild = partsFor(ids)
@@ -999,8 +1132,13 @@ function M:FullGame(force, told, whisperOnly)
   self:Labels(nil, force, told, whisperOnly)
   self:Claims(force, told, whisperOnly)
   if not told then self.passDone = true end
-  -- (the hello's own pass: it answers the asks heard before this login's record went)
-  if force == false and not told then self.helloPassQueued = true; answered("helloPass", "pass", nil, true) end
+  -- (the hello's own pass: it answers the asks heard before this login's record went. At a login it is whole from the
+  -- release on: what went before it, since the release, went on GUILD as it changed)
+  if force == false and not told then
+    self.helloPassQueued = true
+    answered("helloPass", "pass", nil, true)
+    if not self.reloaded and self.releasedAt and not self.helloWhole then self.helloWhole = true; whole("pass", self.releasedAt) end
+  end
 end
 
 -- the labels: "key=label" for every discovered id with a value in this character's own record, the instance of each
@@ -1446,8 +1584,12 @@ end
 function M:Answer()
   local guild, since = M.answerGuild, (not M.answerFull) and M.answerSince or nil
   M.answerGuild, M.answerFull, M.answerSince = false, nil, nil
+  local q = C.ServerNow()
   M:Full(takeAskers("askers"), not guild, guild and since or nil)
-  if guild then answered("rec", "rec", since, C.Roster:InGuild()) end
+  if guild then
+    answered("rec", "rec", since, C.Roster:InGuild())
+    if since == nil and C.Roster:InGuild() then whole("rec", q) end
+  end
 end
 -- the statistics pass for the guild: what changed since the asks' since, or the whole pass, once in PASS_EVERY seconds
 -- whoever asks (the asks meanwhile wait for the next: 0.7.0 resent it whole for every new asker, about sixty messages a
@@ -1483,8 +1625,12 @@ function M:AnswerGame()
     M.passAt = C.Now()
     if M.wire then M.wire.passAt = M.passAt end
   end
+  local q = C.ServerNow()
   M:FullGame(true, officers, not guild)
-  if guild then answered("pass", "pass", nil, C.Roster:InGuild()) end
+  if guild then
+    answered("pass", "pass", nil, C.Roster:InGuild())
+    if C.Roster:InGuild() then whole("pass", q) end
+  end
 end
 -- the statistics pass for the asks, a minute or so on, once for all that come while it waits
 function M:GameSoon()
@@ -1519,10 +1665,12 @@ function M:AnswerSoon()
     M:Answer()
   end, "comm: answer"))
 end
--- what an ask's since is worth here: the since, where this client's own record went whole on GUILD this login before
--- it (M.base: the asker heard it, or asked after it and had it answered), else nil, the whole record
-local function sinceOf(since)
-  if type(since) ~= "number" or not M.base or since < M.base then return nil end
+-- what an ask's since is worth here (M:Borne judges it): an ask that says where its session began (from) whatever
+-- this login did; a 0.9 ask's where this client's own record went whole on GUILD this login before it (M.base: the
+-- asker heard it, or asked after it and had it answered); else nil, the whole record
+local function sinceOf(since, from)
+  if type(since) ~= "number" then return nil end
+  if from == nil and (not M.base or since < M.base) then return nil end
   return math.min(since, C.ServerNow())
 end
 -- a member who holds no record of yours asks for it whole (1Q: after a since answer or a delta from a sender it holds
@@ -1630,10 +1778,12 @@ end
 -- deltas, to the guild and to each officer (the guild holds the rest: M:Wire)
 function M:ReleaseRecord(told)
   if not self.reloaded then
+    self.releasedAt = C.ServerNow()
     self:Full(told)
     -- (it answers the asks heard before it went)
     self.helloQueued = true
     answered("helloRec", "rec", nil, C.Roster:InGuild())
+    if C.Roster:InGuild() then whole("rec", self.releasedAt) end
     return
   end
   local head = "1D|" .. C.REGVER .. "|"
@@ -1698,8 +1848,10 @@ function M:Left()
   self.holdGen = (self.holdGen or 0) + 1
   -- (another guild, or this one again: its hello asks, and its record goes whole, and no ask of this one is owed)
   self.reloaded, self.base, self.fullOut, self.helloQueued, self.helloPassQueued = nil, nil, nil, nil, nil
+  self.releasedAt, self.helloWhole = nil, nil
   M.owe, oweN, M.pendingClaims = {}, 0, {}
-  if self.wire then self.wire.owe, self.wire.claimsOwed = M.owe, M.pendingClaims end
+  -- (what was kept of the guild it left is forgotten at the next hello: M:Club)
+  if self.wire then self.wire.owe, self.wire.claimsOwed, self.wire.club = M.owe, M.pendingClaims, nil end
   for k in pairs(waits) do waits[k] = {} end
 end
 
@@ -1740,10 +1892,33 @@ M.early, M.waiting = {}, {}
 -- (a guild of hundreds answers a login with hundreds of records: 2000 hold them while C_Club is slow after a restart;
 -- one dropped is a loss this login's hold does not move past, M:Logout)
 local EARLY_CAP, EARLY_EACH = 2000, 32 -- (of one sender: a copy's burst pushes no officer's or member's whispers out)
+-- taken EARLY_SLICE a frame once the roster reads, in the order they came (a full buffer taken at once stalled the game
+-- for half a second); what comes meanwhile of the kinds kept goes behind them (M:Receive), so an older record never
+-- lands after a newer delta of the same sender. earlyOf: how many each sender has waiting (0.9.0 counted them by
+-- walking the buffer at every message), earlyHead: the next to take
+local EARLY_SLICE = 50
+M.earlyOf = {}
+local function takeEarly(m) M:Receive(m[1], m[2], m[3], true) end
 function M:ReplayEarly()
-  local list = self.early
-  self.early = {}
-  for _, m in ipairs(list) do self:Receive(m[1], m[2], m[3]) end
+  if self.replaying then return end
+  self.replaying, self.earlyHead = true, 1
+  local take = C.Safe(takeEarly, "comm: receiving")
+  local step
+  step = C.Safe(function()
+    local list = M.early
+    for i = M.earlyHead, math.min(#list, M.earlyHead + EARLY_SLICE - 1) do
+      local m = list[i]
+      list[i], M.earlyHead = false, i + 1
+      local n = M.earlyOf[m[3]]
+      M.earlyOf[m[3]] = (n and n > 1) and n - 1 or nil
+      take(m)
+    end
+  end, "comm: replay", function()
+    -- (the next frame's booked whatever happened in this one)
+    if M.earlyHead <= #M.early then C_Timer.After(0, step)
+    else M.early, M.earlyOf, M.earlyHead, M.replaying = {}, {}, nil, false end
+  end)
+  step()
 end
 -- the asks answered lately, by asker (one ask a sender in ASK_AGAIN seconds starts an answer), and when the statistics
 -- pass last answered each member's (once in GAME_AGAIN seconds a member; an officer's always): a copy that asks every
@@ -1751,7 +1926,7 @@ end
 local ASK_AGAIN, GAME_AGAIN, POLICY_AGAIN, UNTRUSTED_AGAIN = 180, 1800, 30, 300
 M.answered, M.answeredSince, M.gameAnswered, M.policyAsked = {}, {}, {}, {}
 
-function M:Receive(text, channel, sender)
+function M:Receive(text, channel, sender, replayed)
   text, channel, sender = C.Plain(text), C.Plain(channel), C.Plain(sender)
   if type(text) ~= "string" or type(sender) ~= "string" then return end
   local whispered = channel == "WHISPER"
@@ -1759,10 +1934,12 @@ function M:Receive(text, channel, sender)
   local R = C.Roster
   local kind = text:sub(1, 2)
   if whispered and not WHISPERED[kind] then return end
-  if not R.trusted and (whispered or kind == "1F" or kind == "1D") then
-    local n = 0
-    for _, m in ipairs(self.early) do if m[3] == sender then n = n + 1 end end
-    if #self.early < EARLY_CAP and n < EARLY_EACH then self.early[#self.early + 1] = { text, channel, sender } else self.lost = true end
+  if (not R.trusted or (self.replaying and not replayed)) and (whispered or kind == "1F" or kind == "1D") then
+    local n = self.earlyOf[sender] or 0
+    if #self.early - ((self.earlyHead or 1) - 1) < EARLY_CAP and n < EARLY_EACH then
+      self.early[#self.early + 1] = { text, channel, sender }
+      self.earlyOf[sender] = n + 1
+    else self.lost = true end
     return
   end
   -- the GUID a full record or an ask carries decides whether the message is yours, handed back by the game; a delta
@@ -1770,7 +1947,7 @@ function M:Receive(text, channel, sender)
   -- bears it out (R:Vet): an edited copy can put any member's GUID in its messages, an officer's included, and one the
   -- roster gives a member the sender string does not name is dropped, the sender marked suspect. Who is an officer
   -- goes by the member the sender string names, never by a GUID (R:OfficerSender)
-  local kv, guid, forged, stamp, wstamp, fp, since
+  local kv, guid, forged, stamp, wstamp, fp, since, from
   if kind == "1F" then kv = decodeBody(text:match("^1F|%d+|%d+|[^|]*|(.*)$")); guid = kv.guid
   elseif kind == "1R" then
     local rest = text:match("^1R|(.*)$")
@@ -1778,10 +1955,12 @@ function M:Receive(text, channel, sender)
       guid = rest:match("^([^|]*)")
       local s1, s2, s3 = rest:match("^[^|]*|(%d+)|?(%d*)|?(%x*)$")
       stamp, wstamp = tonumber(s1 or ""), tonumber(s2 or "")
-      -- (the fingerprint's 16 hex digits, then the since in hex where the asker holds the guild from a time: M:Ask)
+      -- (the fingerprint's 16 hex digits, then the since in hex where the asker holds the guild from a time: M:Ask;
+      -- eight digits of since and eight of from where it says where its session began, a 0.9 ask's since alone)
       if s3 and #s3 >= 16 then
         fp = s3:sub(1, 16):lower()
-        if #s3 > 16 and #s3 <= 24 then since = tonumber(s3:sub(17), 16) end
+        if #s3 > 16 and #s3 <= 24 then since = tonumber(s3:sub(17), 16)
+        elseif #s3 == 32 then since, from = tonumber(s3:sub(17, 24), 16), tonumber(s3:sub(25, 32), 16) end
       end
       if guid == "" then guid = nil end
     end
@@ -1882,8 +2061,8 @@ function M:Receive(text, channel, sender)
     -- to its ask before that time bears it out, each part on its own (M:Borne); the earliest of the asks an answer
     -- covers, the whole record where one wants it. Each ask kept with how it was answered, M.owe: one passed by bears
     -- out no since)
-    local s = sinceOf(since)
-    local sRec, sPass = M:Borne(who, s, "rec"), M:Borne(who, s, "pass")
+    local s = sinceOf(since, from)
+    local sRec, sPass = M:Borne(who, s, "rec", from), M:Borne(who, s, "pass", from)
     local ent = M:Entry(who)
     ent.rec, ent.pass = false, false
     if not (fresh or officer) then return end
@@ -2065,6 +2244,8 @@ end
 function M:Hello()
   if self.hello or not self.helloDue or not self.started or not C.Roster:InGuild() then return end
   self.hello, self.holding, self.helloAt = true, true, C.Now()
+  -- (what was kept from earlier logins is this guild's, or forgotten)
+  self:Club()
   self.holdGen = (self.holdGen or 0) + 1
   -- (a /reload asks nothing: the saved records are the guild as it was a moment ago, M:Wire; an ask of this login that
   -- never left goes now. The ask waits for the roster to read: answers that came before it would crowd the early

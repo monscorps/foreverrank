@@ -51,6 +51,7 @@ local function onlinePresences()
   if type(e) == "table" and e.Online then return { [e.Online] = true, [e.OnlineMobile] = true, [e.Away] = true, [e.Busy] = true } end
   return { [1] = true, [2] = true, [4] = true, [5] = true }
 end
+local PRESENT -- (onlinePresences, once a session)
 
 -- a name's first and second words as loose keys (C.Canon: your realm cut, spaces and hyphens one, lower case); nil for
 -- a Kstring, a secret or nothing
@@ -86,6 +87,36 @@ local function guidName(guid)
   return nil
 end
 
+-- one member as the roster keeps it, read from the club (nil where GetMemberInfo gives nothing, or a member with no
+-- name who is not you)
+local function readMember(clubId, mid, myGuid, getInfo)
+  local m = mid ~= nil and C.Get(getInfo or C.Api("C_Club", "GetMemberInfo"), clubId, mid) or nil
+  if type(m) ~= "table" then return nil end
+  local name, guid = C.Plain(m.name), C.Plain(m.guid)
+  name = (type(name) == "string" and name ~= "") and name or nil
+  guid = (type(guid) == "string" and guid ~= "") and guid or nil
+  local isSelf = C.Plain(m.isSelf) == true or (guid ~= nil and guid == myGuid)
+  if not (name or isSelf) then return nil end
+  local order, classID = C.Plain(m.guildRankOrder), C.Plain(m.classID)
+  -- (a class id's file asked once a session: 0.7.0 asked it of every member at every read)
+  local class
+  if type(classID) == "number" then
+    local classes = R.classFiles
+    class = classes[classID]
+    if class == nil then local ci = C.Get(C.Api("C_CreatureInfo", "GetClassInfo"), classID); class = type(ci) == "table" and C.Plain(ci.classFile) or nil; if type(class) == "string" then classes[classID] = class end end
+  end
+  local level, zone, rankName = C.Plain(m.level), C.Plain(m.zone), C.Plain(m.guildRank)
+  local match, from = nil, nil
+  if name and not C.IsKstring(name) then match, from = name, "club"
+  elseif guid then match = guidName(guid); from = match and "guid" or nil end
+  local first, second = words(match)
+  PRESENT = PRESENT or onlinePresences()
+  return { key = guid and ("g:" .. guid) or ("m:" .. tostring(mid)), name = name, guid = guid, id = mid, self = isSelf,
+    match = match, from = from, first = first, second = second, canon = C.Canon(match),
+    rankName = type(rankName) == "string" and rankName or "", rank = type(order) == "number" and order - 1 or 99,
+    level = type(level) == "number" and level or nil, zone = type(zone) == "string" and zone or nil,
+    online = PRESENT[C.Plain(m.presence)] == true, class = type(class) == "string" and class or nil }
+end
 -- the guild through C_Club; nil until the clubs have loaded (INITIAL_CLUBS_LOADED) or when the client lacks it. A
 -- member's name is kept as the client gives it (a Kstring draws itself) and never used as a key; the name it is matched
 -- by (match) is that name where it is plain, else the GUID's, else none (such a member is found by GUID alone).
@@ -99,40 +130,11 @@ local function viaClub()
   if clubId == nil then return nil end
   local members = C.Get(C.Api("C_Club", "GetClubMembers"), clubId)
   if type(members) ~= "table" then return nil end
-  local getInfo, classInfo = C.Api("C_Club", "GetMemberInfo"), C.Api("C_CreatureInfo", "GetClassInfo")
-  local classes = R.classFiles
-  local online = onlinePresences()
-  local myGuid = C.MyGUID()
+  local myGuid, getInfo = C.MyGUID(), C.Api("C_Club", "GetMemberInfo")
   local list, skipped = {}, 0
   for _, mid in ipairs(members) do
-    mid = C.Plain(mid)
-    local m = mid ~= nil and C.Get(getInfo, clubId, mid) or nil
-    if type(m) ~= "table" then skipped = skipped + 1 end
-    if type(m) == "table" then
-      local name, guid = C.Plain(m.name), C.Plain(m.guid)
-      name = (type(name) == "string" and name ~= "") and name or nil
-      guid = (type(guid) == "string" and guid ~= "") and guid or nil
-      local isSelf = C.Plain(m.isSelf) == true or (guid ~= nil and guid == myGuid)
-      if name or isSelf then
-        local order, classID = C.Plain(m.guildRankOrder), C.Plain(m.classID)
-        -- (a class id's file asked once a session: 0.7.0 asked it of every member at every read)
-        local class
-        if type(classID) == "number" then
-          class = classes[classID]
-          if class == nil then local ci = C.Get(classInfo, classID); class = type(ci) == "table" and C.Plain(ci.classFile) or nil; if type(class) == "string" then classes[classID] = class end end
-        end
-        local level, zone, rankName = C.Plain(m.level), C.Plain(m.zone), C.Plain(m.guildRank)
-        local match, from = nil, nil
-        if name and not C.IsKstring(name) then match, from = name, "club"
-        elseif guid then match = guidName(guid); from = match and "guid" or nil end
-        local first, second = words(match)
-        list[#list + 1] = { key = guid and ("g:" .. guid) or ("m:" .. tostring(mid)), name = name, guid = guid, id = mid, self = isSelf,
-          match = match, from = from, first = first, second = second, canon = C.Canon(match),
-          rankName = type(rankName) == "string" and rankName or "", rank = type(order) == "number" and order - 1 or 99,
-          level = type(level) == "number" and level or nil, zone = type(zone) == "string" and zone or nil,
-          online = online[C.Plain(m.presence)] == true, class = type(class) == "string" and class or nil }
-      else skipped = skipped + 1 end
-    end
+    local e = readMember(clubId, C.Plain(mid), myGuid, getInfo)
+    if e then list[#list + 1] = e else skipped = skipped + 1 end
   end
   local info = C.Get(C.Api("C_Club", "GetClubInfo"), clubId)
   local count = type(info) == "table" and C.Plain(info.memberCount) or nil
@@ -193,19 +195,27 @@ function R:Refresh(event)
   self.empties = 0
   self.listedWhole = complete == true
   local members, byGuid, byFirst, seen, sig, names, me, top, unread = {}, {}, {}, {}, {}, {}, nil, nil, 0
+  -- (byId: the members by club member id, for one member's event, R:MemberEvent; flipped: one went online or off since
+  -- the last read)
+  local byId, was, flipped = {}, self.byKey, false
   for _, m in ipairs(list) do
     if not seen[m.key] then
-      seen[m.key] = true
+      seen[m.key] = m
       members[#members + 1] = m
       if m.guid then byGuid[m.guid] = m end
+      if m.id ~= nil then byId[m.id] = m end
+      local w = was and was[m.key]
+      if w and w.online ~= m.online then flipped = true end
       -- the members by their first name, for R:SenderMember (namesakes side by side); a member online whose name reads
       -- in no form may be any of them (R:SenderMember)
       if m.first then local l = byFirst[m.first]; if not l then l = {}; byFirst[m.first] = l end; l[#l + 1] = m
       elseif m.online and not m.self then unread = unread + 1 end
       if m.self then me = m end
       if m.level and (not top or m.level > top) then top = m.level end
-      -- (the name too: a rename, or a GUID's name read at last, changes who a sender string names)
-      sig[#sig + 1] = m.key .. (m.online and "+" or "-") .. m.rank .. ":" .. tostring(m.level) .. ":" .. tostring(m.canon)
+      -- (the name too: a rename, or a GUID's name read at last, changes who a sender string names. Not whether the
+      -- member is online: a login, a logout or an Away in the guild walked every record (R:Sweep) and built who is who
+      -- again, 0.9.0; the unread names online are counted on their own, and the officers online are offSig's)
+      sig[#sig + 1] = m.key .. ":" .. m.rank .. ":" .. tostring(m.level) .. ":" .. tostring(m.canon)
       names[#names + 1] = m.key .. ":" .. tostring(m.canon)
     end
   end
@@ -219,6 +229,7 @@ function R:Refresh(event)
   local changed = signature ~= self.signature or unread ~= (self.unread or 0)
   local first = not self.trusted
   self.members, self.byGuid, self.byFirst, self.self, self.signature, self.unread = members, byGuid, byFirst, me, signature, unread
+  self.byKey, self.byId = seen, byId
   self.trusted = true
   -- (the highest level the roster lists, for the level cap: Rules.lua reads it here, not from every row)
   if top ~= self.maxLevel then self.maxLevel = top; self.levelVersion = self.levelVersion + 1 end
@@ -227,12 +238,7 @@ function R:Refresh(event)
   local adopted = C.Policy and C.Policy.Adopt and C.Policy:Adopt(self:ClubId(), byGuid)
   if adopted then changed = true end
   if changed or first then self:Identity(not (first or adopted)) else self:Changed() end
-  -- (the officers online, by rank, for R:OfficerTargets: built again only when one of them came, went or moved)
-  local offs, thrMax = {}, 0
-  if C.Policy then thrMax = math.max(C.Policy:Threshold(), C.Policy:LineThreshold()) end
-  for _, m in ipairs(members) do if m.online and not m.self and m.rank <= thrMax then offs[#offs + 1] = m.key .. ":" .. m.rank .. ":" .. tostring(m.canon) end end
-  table.sort(offs)
-  self.offSig = table.concat(offs, "|")
+  self:OfficersOnline()
   -- a ding the channel told before this roster had it (R:Apply) is judged now
   step("roster: dings", function() self:Dings() end)
   -- what came before the roster was known, or under an older roster, judged by this one (R:Sweep); then, the first
@@ -306,7 +312,7 @@ function R:Refresh(event)
   -- the officers this client tells its Only-you values: one no more is forgotten (told again when made one again), and
   -- one this refresh made an officer is told now (Comm.lua)
   step("roster: officers", function() if C.Comm and C.Comm.Officers then C.Comm:Officers() end end)
-  if changed then
+  if changed or flipped then
     self.updatedAt = now()
     if C.UI and C.UI.Refresh then C.UI:Refresh() end
     -- (a mate online or off, a level: the quest window's dungeon pick, Guide.lua)
@@ -477,6 +483,40 @@ function R:Soon()
   self.soon = true
   C_Timer.After(2, C.Safe(function() R.soon = false; R:Refresh() end, "roster: soon"))
 end
+-- the officers online, by rank, for R:OfficerTargets: built again only when one of them came, went or moved
+function R:OfficersOnline()
+  local offs, thrMax = {}, 0
+  if C.Policy then thrMax = math.max(C.Policy:Threshold(), C.Policy:LineThreshold()) end
+  for _, m in ipairs(self.members) do if m.online and not m.self and m.rank <= thrMax then offs[#offs + 1] = m.key .. ":" .. m.rank .. ":" .. tostring(m.canon) end end
+  table.sort(offs)
+  self.offSig = table.concat(offs, "|")
+end
+-- one member's event (CLUB_MEMBER_PRESENCE_UPDATED: clubId, memberId, presence; CLUB_MEMBER_UPDATED: clubId, memberId,
+-- ClubDocumentation.lua): that member read again and patched in place where only whether it is online, its zone or its
+-- class moved, the rows drawn again; anything about who it is (its name, rank or level), a member this roster does not
+-- list or one whose name reads in no form (counted among the unread online) is the full read two seconds on. Another
+-- club's (a community) is nothing of the guild's. 0.9.0 read all 500 members two seconds after every login, logout,
+-- Away and zone change in the guild, and walked every record at each online flip
+function R:MemberEvent(clubId, memberId)
+  clubId, memberId = C.Plain(clubId), C.Plain(memberId)
+  -- (an event that names nothing: the full read)
+  if clubId == nil or memberId == nil then return self:Soon() end
+  local guild = C.Get(C.Api("C_Club", "GetGuildClubId"))
+  if guild == nil or tostring(clubId) ~= tostring(guild) then return end
+  local old = self.trusted and self.byId and self.byId[memberId]
+  if not old then return self:Soon() end
+  local m = readMember(guild, memberId, C.MyGUID())
+  if not m or m.key ~= old.key or m.rank ~= old.rank or m.level ~= old.level or m.canon ~= old.canon or m.name ~= old.name or m.self ~= old.self
+    or (not m.first and not m.self and m.online ~= old.online) then return self:Soon() end
+  if m.online == old.online and m.zone == old.zone and m.class == old.class then return end
+  local officer = m.online ~= old.online and not m.self and m.rank <= math.max(C.Policy:Threshold(), C.Policy:LineThreshold())
+  old.online, old.zone, old.class = m.online, m.zone, m.class
+  if officer then self:OfficersOnline() end
+  self.updatedAt = now()
+  self:Changed()
+  if C.UI and C.UI.Refresh then C.UI:Refresh() end
+  if C.Guide and C.Guide.Redraw then C.Guide.Redraw() end
+end
 
 -- the roster asked for (its answer, GUILD_ROSTER_UPDATE, reads Guild Info), every ask Cute makes timed here, so the
 -- next one waits ten seconds after it (R:AskSoon), and a wait for Guild Info knows when its first ask went (Policy.lua)
@@ -516,20 +556,22 @@ function R:AskSoon(still)
 end
 
 local NOW = { GUILD_ROSTER_UPDATE = true, PLAYER_GUILD_UPDATE = true, INITIAL_CLUBS_LOADED = true, CLUB_MEMBERS_UPDATED = true }
-local SOON = { CLUB_MEMBER_UPDATED = true, CLUB_MEMBER_PRESENCE_UPDATED = true, CLUB_MEMBER_ADDED = true, CLUB_MEMBER_REMOVED = true }
+local SOON = { CLUB_MEMBER_ADDED = true, CLUB_MEMBER_REMOVED = true }
+local ONE = { CLUB_MEMBER_UPDATED = true, CLUB_MEMBER_PRESENCE_UPDATED = true }
 
 function R:Start()
   if self.frame then askRoster(); self:Refresh(); return end
   local f = CreateFrame("Frame")
   self.frame = f
-  f:SetScript("OnEvent", C.Safe(function(_, event)
+  f:SetScript("OnEvent", C.Safe(function(_, event, clubId, memberId)
     C.Perf.Count("roster")
     -- (a guild joined or left: the roster asked for, whose answer reads Guild Info)
     if event == "PLAYER_GUILD_UPDATE" then askRoster() end
-    if NOW[event] then R:Refresh(event) elseif SOON[event] then R:Soon() end
+    if NOW[event] then R:Refresh(event) elseif ONE[event] then R:MemberEvent(clubId, memberId) elseif SOON[event] then R:Soon() end
   end, "roster: events"))
   for event in pairs(NOW) do pcall(f.RegisterEvent, f, event) end
   for event in pairs(SOON) do pcall(f.RegisterEvent, f, event) end
+  for event in pairs(ONE) do pcall(f.RegisterEvent, f, event) end
   askRoster()
   self:Refresh()
   -- the game answers a roster request about every ten seconds at most; ask again now and then for ranks and online state

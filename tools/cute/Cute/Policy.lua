@@ -1226,8 +1226,13 @@ function P:Rerouted(before)
   if #opened > 0 and C.Comm and C.Comm.Opened then C.Comm:Opened(opened) end
   -- (the officers' threshold may have changed who this client is)
   if C.Roster and C.Roster.PurgeCheck then C.Roster:PurgeCheck() end
-  local grew = before.closed == nil
-  if not grew then for id in pairs(closedSet()) do if not before.closed[id] then grew = true break end end end
+  local grew, closed = before.closed == nil, closedSet()
+  if not grew then for id in pairs(closed) do if not before.closed[id] then grew = true break end end end
+  -- (a stat the officers opened again: this client may have deleted it of others while it was closed, and those who
+  -- are offline now never send it again unless it changes. Its next login asks every record whole: Comm.lua M:Unheld)
+  for id in pairs(before.closed or EMPTY) do
+    if not closed[id] then if C.Comm and C.Comm.Unheld then C.Comm:Unheld() end break end
+  end
   local counts, shrank = C.Stats.ReadyCounts(), false
   for id in pairs(before.ready or EMPTY) do if not counts[id] then shrank = true end end
   if grew or shrank then self:Purge(shrank) end
@@ -1265,7 +1270,7 @@ function P:Purge(ready)
   if account == nil then self.purgeDue = true; return 0 end
   if account then return 0 end
   ready, self.readyDue, self.purgeDue = self.readyDue, nil, nil
-  local n = 0
+  local n, readyGone, traces = 0, false, 0
   local pending = C.Stats.gamePending == true
   -- (each id routed once, however many records hold it)
   local routes = {}
@@ -1280,6 +1285,7 @@ function P:Purge(ready)
           e.stats[id] = nil
           if type(e.at) == "table" then e.at[id] = nil end
           n = n + 1
+          if id == "ready" and ready then readyGone = true end
         end
       end
       -- (a suspect's reason names the value that could not be: the mark stays, a value the officers keep goes)
@@ -1289,9 +1295,42 @@ function P:Purge(ready)
       end
     end
   end
+  -- (the halls' store, CuteDB.halls[club]: each member's weekly values as the roster took them, kept for Last week,
+  -- go where the officers keep that stat; and what an officer's client alone gathers goes from one that is no
+  -- officer's: the Queue's run cards, earns and firsts, a card locked to the officers, the firsts ledger and the earns
+  -- it remembered. A demoted officer kept them all, and a member the weekly values heard before a stat was closed)
+  local halls = type(CuteDB.halls) == "table" and C.Halls and C.Halls.DB and C.Halls.DB() or nil
+  if halls then
+    for _, rec in pairs(halls.weeks) do
+      if type(rec) == "table" then
+        for _, vals in ipairs({ rec.v or EMPTY, type(rec.p) == "table" and rec.p.v or EMPTY }) do
+          if type(vals) == "table" and vals ~= EMPTY then
+            for id in pairs(vals) do if type(id) ~= "string" or route(id) == "self" then vals[id] = nil; traces = traces + 1 end end
+          end
+        end
+      end
+    end
+    local function theirs(it) return type(it) ~= "table" or it.lock ~= nil or it.src == "run" or it.src == "ach" or it.src == "first" end
+    local keep = {}
+    for _, r in ipairs(halls.queue) do
+      if type(r) == "table" and type(r.entries) == "table" then
+        local left = {}
+        for _, e in ipairs(r.entries) do if not theirs(e) then left[#left + 1] = e end end
+        if #left < #r.entries then traces = traces + #r.entries - #left; r.entries = left end
+        if #left > 0 then keep[#keep + 1] = r end
+      elseif theirs(r) then traces = traces + 1
+      else keep[#keep + 1] = r end
+    end
+    for i = #halls.queue, 1, -1 do halls.queue[i] = nil end
+    for i, r in ipairs(keep) do halls.queue[i] = r end
+    local held = (type(halls.firsts) == "table" and type(halls.firsts.e) == "table" and next(halls.firsts.e) ~= nil)
+      or (type(halls.achSeen) == "table" and next(halls.achSeen) ~= nil)
+    halls.firsts, halls.achSeen, halls.achSeenN = nil, nil, nil
+    if held then traces = traces + 1 end
+  end
   -- (what the guild learned is the account's first guild's, CuteDB.knownClub: another guild's policy takes out only the
   -- traces of the members its roster lists, its own, and nothing of the first guild's)
-  local traces, only = 0, nil
+  local only = nil
   local club = R:ClubId()
   if club ~= nil and CuteDB.knownClub ~= tostring(club) then only = function(g) return R.byGuid[g] ~= nil end end
   if C.Rules and C.Rules.StripTraces then
@@ -1302,6 +1341,9 @@ function P:Purge(ready)
   -- (sub-project G: who saw each find, by GUID, where the officers keep Finds or Zone; a find of yours and the officers'
   -- word stay)
   if self:FindsRoute() == "self" and C.Finds and C.Finds.StripTraces then traces = traces + C.Finds.StripTraces(only) end
+  -- (the Readys a policy change took: each sender's next read says it again, and an offline member's Ready unchanged
+  -- would never come with what changed since this client's last session: Comm.lua M:Unheld)
+  if readyGone and C.Comm and C.Comm.Unheld then C.Comm:Unheld() end
   if n > 0 then
     R:Changed()
     if C.Rules then C.Rules:Dirty(true) end
