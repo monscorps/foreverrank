@@ -25240,6 +25240,29 @@ end)()
     assert(line:find("version check", 1, true), "and the realm's version check:\n" .. line)
   end }
 
+  -- M2 (look, should). Out of a group, the Party page said "Guild members with QuestBank show below." while nothing of
+  -- the guild is taken: Cute beside QuestBank (QB.noGuildSync) or the guild box off. Settings' guild row says QuestBank
+  -- sends nothing to your guild while Cute is loaded
+  CASES[#CASES + 1] = { "M2: out of a group, the Party page names guild members only while guild sharing is live", function()
+    local c = char("Lonely", { group = false })
+    local QB, UI = c.QB, c.QB.UI
+    QB:Settings().share.guild = true
+    QB.noGuildSync = true
+    UI:Open(4); UI:Refresh()
+    local hint = UI.views[4].hint:GetText()
+    assert(hint:find("Group up", 1, true) and not hint:find("Guild members", 1, true), "Cute beside it: no guild members promised: " .. hint)
+    QB.noGuildSync = nil
+    QB:Settings().share.guild = false
+    UI:Refresh()
+    hint = UI.views[4].hint:GetText()
+    assert(not hint:find("Guild members", 1, true), "the guild box off: none promised: " .. hint)
+    QB:Settings().share.guild = true
+    UI:Refresh()
+    hint = UI.views[4].hint:GetText()
+    assert(hint:find("Guild members with QuestBank show below.", 1, true), "QuestBank alone, sharing with the guild: as it was: " .. hint)
+    UI.frame:Hide()
+  end }
+
   local failed = {}
   for _, case in ipairs(CASES) do
     local ok, err = pcall(case[2])

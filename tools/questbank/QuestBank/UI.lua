@@ -3547,8 +3547,12 @@ function UI:RefreshPartyView(v)
   end
   for _, m in ipairs(synced) do if not seen[m.key] and m ~= mine then list[#list + 1] = { m = m } end end
   v.title:SetText(inGroup and string.format("Party of %d", #units) or (#synced > 0 and "QuestBank users" or "Party"))
+  -- (merge6) guild members show below only while the guild is heard (Sync.lua S.GuildOn: the guild box ticked and no
+  -- host that shares with the guild itself, Cute's noGuildSync, under which S:Receive drops every GUILD message)
+  local guildHeard = S and S.GuildOn and S.GuildOn() and IsInGuild and IsInGuild()
   v.hint:SetText(inGroup and "Members with QuestBank share their quests; the others get yours through you: share what they lack, post the next step."
-    or "Group up and the party shows here, QuestBank or not. Guild members with QuestBank show below.")
+    or (guildHeard and "Group up and the party shows here, QuestBank or not. Guild members with QuestBank show below.")
+    or "Group up and the party shows here, QuestBank or not.")
   local shareable = S and S.Shareable() or {}
   local lackAll, lackSet = {}, {}
   v.members:Reset()
