@@ -20,6 +20,31 @@ local function plain(v) if issecretvalue and issecretvalue(v) then return nil en
 local WAY = { flight = { "flight", "flight" }, boat = { "boat", "boat" }, zeppelin = { "zeppelin", "zeppelin" }, tram = { "tram", "tram" },
   portal = { "portal", "portal" }, hearth = { "hearth", "hearthstone" } }
 
+-- (the launch audit) a portal leg's start, as the arrow's step says it (Travel.lua STEP.portal: "Portal in <here> to
+-- <there>"; 6.1.1, "portal to Darnassus" read as the mage spell Portal: Darnassus): of D.LINK's portals (kind "p", your
+-- side's), the end nearest the stop the leg takes you to is where you come out, and the other one's town is where the
+-- portal stands ("Rut'theran Village" for a stop in Darnassus). nil where none is known
+local function portalFrom(stop)
+  local M, D = E.Model, E.Data
+  local w = M and M.World and stop and stop.m and M.World(stop.m, stop.x, stop.y)
+  if not (w and D and type(D.LINK) == "table") then return nil end
+  local fac = E.faction or "A"
+  local best, bd
+  for _, l in ipairs(D.LINK) do
+    local a, b = l[4], l[5]
+    if l[2] == "p" and type(l[1]) == "string" and l[1]:find(fac, 1, true) and type(a) == "table" and type(b) == "table" then
+      for _, ends in ipairs({ { a, b }, { b, a } }) do
+        local near, far = ends[1], ends[2]
+        if near[1] == w.c and type(near[2]) == "number" and type(near[3]) == "number" then
+          local d = (near[2] - w.wx) ^ 2 + (near[3] - w.wy) ^ 2
+          if not bd or d < bd then best, bd = far[7], d end
+        end
+      end
+    end
+  end
+  return type(best) == "string" and best or nil
+end
+
 -- a stop in words: its NPC where it has one alone, and where it is as the map's pins name it (TV.StopPlace:
 -- "Smith Argus, Goldshire"; never Model.lua's "Elwynn Forest (42, 65)", kept for matching); the place alone otherwise
 local function stopName(stop)
@@ -332,7 +357,13 @@ function R.Draw(ui, scroll)
     if wk then
       local art = wk[1]
       if art == "flight" then art = (E.faction == "H") and "wyvern" or "gryphon" end
-      way = { { art = art, crop = true }, string.format("%s to %s, %d min", wk[2], place, math.max(1, mins)) }
+      local words = string.format("%s to %s, %d min", wk[2], place, math.max(1, mins))
+      if leg.kind == "portal" then
+        local from = portalFrom(s)
+        words = from and string.format("Portal in %s to %s, %d min", from, place, math.max(1, mins))
+          or string.format("Through the portal to %s, %d min", place, math.max(1, mins))
+      end
+      way = { { art = art, crop = true }, words }
     end
     local qs, gain = {}, 0
     for _, row in ipairs(leg.rows or {}) do

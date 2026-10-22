@@ -19390,6 +19390,25 @@ do
       for _, c in ipairs({ ann, ben, cy }) do leave(c) end
     end)
   end }
+
+  -- M3 (owner, must). L > Route worded the Rut'theran portal as the mage spell: "portal to Darnassus, 1 min" under the icon
+  -- of Portal: Darnassus (135741), the 6.1.1 complaint the engine's Travel.lua fixed. A portal leg says where the portal
+  -- stands, "Portal in Rut'theran Village to <place>", under the world portal's art (portalpurple, 134492)
+  FECASES[#FECASES + 1] = { "M3: L > Route words the Rut'theran portal as the walk-in portal it is", function()
+    inGuild({ member("Rone", 1) }, function()
+      local c = quest("Rone")
+      login(c); tickAll(6)
+      local QB = c.addons[2].private
+      local art = c.env.Cute.Look.ART.portal
+      assert(art[1] == "portalpurple" and art[2] == 134492, "the portal's art: the world portal's, never the mage spell's: " .. tostring(art[1]) .. " " .. tostring(art[2]))
+      local undo = oneStop(QB, { m = 1457, x = 40, y = 50, name = "Darnassus" }, "portal")
+      c.C.UI:Open("route")
+      local tx = texts(c)
+      undo()
+      assert(tx:find("Portal in Rut'theran Village to ", 1, true) and tx:find(", 1 min", 1, true) and not tx:find("portal to ", 1, true), "the way line:\n" .. tx)
+      leave(c)
+    end)
+  end }
   local failed = {}
   for _, case in ipairs(FECASES) do
     local ok, err = pcall(case[2])
