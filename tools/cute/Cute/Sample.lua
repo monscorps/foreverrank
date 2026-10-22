@@ -40,7 +40,16 @@ function S:Set(id, v)
 end
 function S:Bump(id, n)
   self:Set(id, (self:Counter(id) or 0) + (n or 1))
+  self:Told(id, n or 1)
 end
+-- the hook point (the run report's design, 4.2): every counter bump calls each fn(id, amount), so the Runs module mirrors
+-- jumps, "where are you" and the consumables used without a second set of hooks; S:OnChat's fn(chatType) hears every
+-- line you type (S.quiet while Cute posts a line of its own, which never counts). S.runOn: a run is on (Runs.lua sets
+-- it), so the bag-drop count runs outside raids too and the poll counts the yards you move
+local bumpers, chatters = {}, {}
+function S:OnBump(fn) bumpers[#bumpers + 1] = fn end
+function S:OnChat(fn) chatters[#chatters + 1] = fn end
+function S:Told(id, n) for _, fn in ipairs(bumpers) do fn(id, n) end end
 
 ----------------------------------------------------------------------------
 -- reading
@@ -137,6 +146,8 @@ end
 ----------------------------------------------------------------------------
 local DAILY = { quests_today = true, deaths_today = true, levelups = true }
 local WEEKLY = { logins = true, weekly_raids = true }
+-- (the weekly run stats join it from Runs.lua: Runs, Shout-outs and Bloopers this week)
+S.WEEKLY = WEEKLY
 -- live: called by the ten-minute timer, not by Start (which resets here and then counts the login itself)
 local function dayCheck(live)
   local ch = C.Char()
@@ -167,7 +178,7 @@ end
 -- the ticker: movement, ghosts, taxis, AFK, XP pace, time played
 ----------------------------------------------------------------------------
 local T = { lastPos = nil, stillSince = nil, ghostSince = nil, lastGhostPos = nil, taxiSince = nil, wasAfk = false,
-  xp = {}, sessionStart = nil, sessionXP = 0, falling = -100, mirrorEmpty = {}, whispers = 0 }
+  xp = {}, sessionStart = nil, sessionXP = 0, falling = -100, mirrorEmpty = {}, whispers = 0, runYards = 0 }
 S.track = T
 
 -- the XP left to 60 from (lvl, xp, max): this level's rest plus every level ahead, over the curve the guild has learned
@@ -282,6 +293,13 @@ local function poll()
   local t = gtime()
   if C.Get("IsFalling") == true then T.falling = t end
   for _, name in ipairs(MIRROR) do if mirrorEmpty(name) then T.mirrorEmpty[name] = t end end
+  -- while a run is on, the yards you move alive and not on a taxi: GetUnitSpeed's currentSpeed (yards a second,
+  -- UnitDocumentation.lua; SecretWhenUnitStatsRestricted, and a secret reads as nothing) times the poll, into one
+  -- number kept in place
+  if S.runOn and C.Get("UnitIsDeadOrGhost", "player") ~= true and C.Get("UnitOnTaxi", "player") ~= true then
+    local speed = C.Num("GetUnitSpeed", "player")
+    if speed and speed > 0 and speed < 100 then T.runYards = T.runYards + speed * POLL end
+  end
 end
 
 ----------------------------------------------------------------------------
@@ -452,8 +470,10 @@ on("TIME_PLAYED_MSG", function(total, level)
 end)
 -- consumables that leave your bags in a raid: the potions, elixirs, flasks and food the bag scan counts by class
 -- (in a raid the bags change at every loot and every potion: scanned a second after the last change, not at each)
+-- (and while a run is on, outside raids too: the run's count hears every drop through S:Told, the registry stat
+-- counts raids only)
 local function consumedScan()
-  if not T.inRaid then T.consumables = nil; return end
+  if not (T.inRaid or S.runOn) then T.consumables = nil; return end
   C.Stats.BagClear()
   local total = 0
   for _, id in ipairs({ "potions", "elixirs", "flasks", "food" }) do
@@ -461,11 +481,13 @@ local function consumedScan()
     v = ok and C.Plain(v) or nil
     if type(v) == "number" then total = total + v end
   end
-  if T.consumables and total < T.consumables then S:Bump("consumed", T.consumables - total) end
+  if T.consumables and total < T.consumables then
+    if T.inRaid then S:Bump("consumed", T.consumables - total) else S:Told("consumed", T.consumables - total) end
+  end
   T.consumables = total
 end
 on("BAG_UPDATE_DELAYED", function()
-  if not T.inRaid then T.consumables = nil; return end
+  if not (T.inRaid or S.runOn) then T.consumables = nil; return end
   if T.bagsDue then return end
   T.bagsDue = true
   C_Timer.After(1, C.Safe(function() T.bagsDue = false; consumedScan() end, "sample: consumables"))
@@ -663,8 +685,11 @@ local function hooks()
   -- sender are secret in dungeons and raids
   if C_ChatInfo and C_ChatInfo.SendChatMessage then
     hooksecurefunc(C_ChatInfo, "SendChatMessage", C.Safe(function(text, kind)
+      -- (a line Cute posts itself, Send to party: never yours)
+      if S.quiet then return end
       text, kind = C.Plain(text), C.Plain(kind)
       if type(text) ~= "string" then return end
+      for _, fn in ipairs(chatters) do fn(kind) end
       if kind == "GUILD" then S:Bump("gchat") end
       -- "where are you" counts wherever you type it (say, party, raid, guild, a whisper, a channel: 0.2.0 counted
       -- party and raid only, so the owner's "where are you?" in /say never counted). Whole words only, so "where are

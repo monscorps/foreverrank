@@ -18,6 +18,12 @@ Roster.lua
 Policy.lua
 Comm.lua
 UI.lua
+Cards.lua
+CardFrame.lua
 Guide.lua
+Awards.lua
+RunComm.lua
+Runs.lua
+RunsUI.lua
 Settings.lua
 Bindings.xml
