@@ -66,8 +66,12 @@ local D = {}
 if C.API then C.API.Finds = D end
 F.door = D
 -- (the host's ver, as the engine reads it: what the guild shared, and the policy, whose untrusted marks and routing
--- change which voices count; both only go up)
-local function verNow() return F.ver * 100000 + ((C.Policy and C.Policy.ver) or 0) % 100000 end
+-- change which voices count; both only go up. The roster changes which voices count as well, a member gone or back:
+-- at a change of who is who, F:Voters counts them again and moves F.ver where the count moved)
+local function verNow()
+  if F.Voters then F:Voters() end
+  return F.ver * 100000 + ((C.Policy and C.Policy.ver) or 0) % 100000
+end
 setmetatable(D, { __index = function(_, k) if k == "ver" then return verNow() end end })
 
 ----------------------------------------------------------------------------
@@ -162,11 +166,18 @@ local function match(s, en)
   return best
 end
 local function untrusted(g) return C.Policy:Untrusted(g) end
--- a find's voices that count (the officers' untrusted left out), those of others, and whether yours is one
+-- a voice that counts: yours, or a member's the roster lists now, never one the officers marked untrusted. A GUID the
+-- roster does not list counts for nothing: a member who left, or another guild's (CuteDB.known is the account's, and an
+-- alt in another guild shares it: Policy.lua P:ForClub)
+local function counts(g, me)
+  if untrusted(g) then return false end
+  return g == me or C.Roster.byGuid[g] ~= nil
+end
+-- a find's voices that count, those of others, and whether yours is one
 local function tally(e)
   local me, n, others, mine = C.MyGUID(), 0, 0, false
   for g in pairs(e.v) do
-    if not untrusted(g) then
+    if counts(g, me) then
       n = n + 1
       if g == me then mine = true else others = others + 1 end
     end
@@ -175,6 +186,21 @@ local function tally(e)
 end
 local function sure(e) return e.o == true or (tally(e)) >= 2 end
 F.Sure = sure
+-- the voices that count, counted again when the roster's who is who (Roster.lua R.idVersion) or the policy changed: where
+-- the count moved, the version does (the map and the footers drawn from it again)
+local votersAt, votersPol, voters = nil, nil, nil
+function F:Voters()
+  local R, P = C.Roster, C.Policy
+  local at, pol = R and R.idVersion, P and P.ver
+  if at == votersAt and pol == votersPol then return end
+  votersAt, votersPol = at, pol
+  local s, me, n = store(), C.MyGUID(), 0
+  for _, e in ipairs(s and s.list or {}) do
+    if type(e.v) == "table" then for g in pairs(e.v) do if counts(g, me) then n = n + 1 end end end
+  end
+  if voters ~= nil and n ~= voters then self.ver = self.ver + 1 end
+  voters = n
+end
 local function drop(s, e)
   for i = #s.list, 1, -1 do if s.list[i] == e then table.remove(s.list, i) end end
   index = nil

@@ -16016,6 +16016,53 @@ do
     leave(c)
     said[#said + 1] = "Data you share's finds line with Show finds only while the Map window is on"
   end)
+  -- (the finds in the guild, Cute/Finds.lua: a client with every map known to C_Map.GetMapInfo, as G's)
+  local function fmember(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 20, online = true } end
+  local function fchar(name, rank, extra)
+    local c = newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", "WARRIOR", 20 }, extra))
+    local was = c.env.C_Map and c.env.C_Map.GetMapInfo
+    c.env.C_Map = c.env.C_Map or {}
+    c.env.C_Map.GetMapInfo = function(m) if type(m) ~= "number" or m >= 99000 then return nil end return was and was(m) or { mapID = m, name = "Map " .. m, mapType = 3 } end
+    return c
+  end
+  local function fnoted(c, ...) c.C.Finds.door.Noted(...) end
+  local function frows(c, m) return c.C.Finds.door.Rows(m) end
+  local function fpol(mine, vis) return { policy = { vis = vis or {}, by = "Ofa-Forever", mine = mine or nil, rank = 0, at = EPOCH, threshold = 1 } } end
+  local function rowOf(c, m, id) for _, r in ipairs(frows(c, m)) do if r.id == id and not r.ping then return r end end end
+  local function said1X(c, from, channel)
+    local out = {}
+    for i = from or 1, #c.sent do local m = c.sent[i]; if m.msg:sub(1, 3) == "1X|" and (channel == nil or m.channel == channel) then out[#out + 1] = m end end
+    return out
+  end
+  -- K9: the voices that count are those of members the roster lists now (and yours): GUIDs it does not list (another
+  -- guild's, on an account whose CuteDB.known they share; made up) make nothing sure and show nothing; a member who left
+  -- counts no more, the find one guild mate's again (dim) at the next roster read, and not what a word would say
+  isolated({ fmember("Ann", 3), fmember("Ben", 3), fmember("Cy", 3) }, function()
+    local ann, ben, cy = fchar("Ann", 3), fchar("Ben", 3), fchar("Cy", 3)
+    login(ann, fpol()); login(ben, fpol()); login(cy, fpol())
+    tickAll(130)
+    fnoted(ann, "h", 9201, 1429, 500, 500)
+    tickAll(65)
+    fnoted(ben, "h", 9201, 1429, 506, 500)
+    tickAll(65)
+    local r = rowOf(cy, 1429, 9201)
+    assert(r and r.sure and r.mates == 2, "Ann's and Ben's chest: sure on Cy's client")
+    assert(#cy.C.Finds:WordParts() == 1, "what a word would say: the chest")
+    -- GUIDs the roster does not list
+    local en = { k = "k", id = 9301, m = 1436, x = 300, y = 300 }
+    cy.C.Finds.Voice("Player-4242-0F000001", en)
+    local e = cy.C.Finds.Voice("Player-4242-0F000002", en)
+    assert(not cy.C.Finds.Sure(e) and rowOf(cy, 1436, 9301) == nil, "two GUIDs the roster does not list: nothing sure, nothing shown")
+    assert(#cy.C.Finds:WordParts() == 1, "nor in a word")
+    -- Ben leaves the guild
+    for i = #GUILD, 1, -1 do if GUILD[i].guid == guidOf("Ben") then table.remove(GUILD, i) end end
+    fire(cy, "GUILD_ROSTER_UPDATE")
+    r = rowOf(cy, 1429, 9201)
+    assert(r and not r.sure and r.mates == 1, "Ben gone: one guild mate's again, dim: " .. tostring(r and r.mates))
+    assert(#cy.C.Finds:WordParts() == 0, "and out of a word")
+    for _, c in ipairs({ ann, ben, cy }) do leave(c) end
+    said[#said + 1] = "the voices that count are the roster's members': GUIDs it does not list make nothing sure, a member who left counts no more (dim again, out of the word)"
+  end)
   print("map K: " .. table.concat(said, "; "))
 end
 
