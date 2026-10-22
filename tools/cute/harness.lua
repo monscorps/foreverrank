@@ -13841,7 +13841,7 @@ do local function cardsStage()
     local function toasts(c) return H(c).toastsShown or 0 end
     local function clear(c, secs) assert(Rc(c).OwnClear(36, secs), c.o.name .. "'s clear taken") end
     -- off: Dot and Eli set the first record, quietly everywhere
-    clear(dot, 2000); clear(eli, 2001)
+    clear(dot, 2000); clear(eli, 1999)
     tickAll(125)
     for _, c in ipairs(all) do
       local r = recOf(c, "c36")
@@ -13861,17 +13861,18 @@ do local function cardsStage()
     assert(msgs(ola, "1O") == o0 + 1, "the 1O went at once")
     for _, c in ipairs(all) do assert(Rc(c).IsOn("c36"), c.o.name .. " takes the officers' list") end
     -- Hux and Ike, twenty levels above the Deadmines, beat it by a quarter: quiet
-    clear(hux, 1500); clear(ike, 1501)
+    clear(hux, 1500); clear(ike, 1499)
     tickAll(125)
     for _, c in ipairs(all) do
       local r = recOf(c, "c36")
       assert(r and r.v == 1500 and r.g == hux.o.guid and toasts(c) == 0, c.o.name .. ": a clear above the range, quiet")
     end
-    -- one voice is no record; the second within 5 s makes it, and every client shows it once
+    -- one voice is no record; the second within 5 s makes it, and every client shows it once (each pair's second time a
+    -- little under its first: the record is the larger of the two)
     clear(bea, 1200)
     tickAll(125)
     assert(recOf(ola, "c36").v == 1500 and recOf(dot, "c36").v == 1500, "one voice is no record")
-    clear(cid, 1202)
+    clear(cid, 1198)
     tickAll(125)
     for _, c in ipairs(all) do
       local r = recOf(c, "c36")
@@ -13891,11 +13892,11 @@ do local function cardsStage()
     assert(tipText(function(t) H(dot).CardTip(t, set, set.cards[1]) end):find("two members' times agreed", 1, true), "the card's tooltip says what backs it")
     CF.frame:Hide()
     -- a holder's own improvement is quiet
-    clear(bea, 1100); clear(cid, 1102)
+    clear(bea, 1100); clear(cid, 1098)
     tickAll(125)
     for _, c in ipairs(all) do assert(recOf(c, "c36").v == 1100 and toasts(c) == 1, c.o.name .. ": the holder's own improvement, quiet") end
     -- the second record of the instance today: its News row again, no toast
-    clear(dot, 1000); clear(eli, 1001)
+    clear(dot, 1000); clear(eli, 998)
     tickAll(125)
     for _, c in ipairs(all) do
       assert(recOf(c, "c36").v == 1000 and recOf(c, "c36").g == dot.o.guid and toasts(c) == 1 and newsRecords(c) == 1 and H(c).News("records")[1].cards[1].name == "Dot",
@@ -13903,17 +13904,17 @@ do local function cardsStage()
     end
     -- the next day: within 5% is quiet, past it a toast again
     for _, c in ipairs(all) do c.dayShift = 86400 end
-    clear(bea, 990); clear(cid, 991)
+    clear(bea, 990); clear(cid, 989)
     tickAll(125)
     for _, c in ipairs(all) do assert(recOf(c, "c36").v == 990 and toasts(c) == 1, c.o.name .. ": within 5%, quiet") end
-    clear(eli, 900); clear(dot, 902)
+    clear(eli, 900); clear(dot, 898)
     tickAll(125)
     for _, c in ipairs(all) do assert(recOf(c, "c36").v == 900 and recOf(c, "c36").g == eli.o.guid and toasts(c) == 2 and newsRecords(c) == 2, c.o.name .. ": the next day, a toast again") end
     -- an untrusted member is no voice; a value under two minutes is none
     ola.C.Policy:SetUntrusted(zed.o.guid, true)
     ola.C.Comm:SendPolicy()
     tickAll(5)
-    clear(zed, 800); clear(hux, 801)
+    clear(zed, 800); clear(hux, 799)
     tickAll(125)
     for _, c in ipairs(all) do if c ~= zed then assert(recOf(c, "c36").v == 900, c.o.name .. ": an untrusted voice backs nothing") end end
     ike.C.Comm.Queue({ msg = "1D|4|c36=" .. ike.C.Comm.b36(61) })
@@ -14036,7 +14037,7 @@ do local function cardsStage()
     H(eli).OpenChip("shame")
     assert(not Rc(eli).Active() and not chipOf(eli, "Records"), "off: no Records chip")
     local e0 = recOf(eli, "c36").v
-    clear(bea, 700); clear(cid, 701)
+    clear(bea, 700); clear(cid, 699)
     tickAll(125)
     assert(recOf(eli, "c36").v == e0 and toasts(eli) == 2, "off: no table kept, no toast")
     assert(toasts(dot) == 2 and recOf(dot, "c36").v == 700, "a second record today on the others: quiet, its row again")
@@ -14409,6 +14410,21 @@ do local function cardsStage()
     assert(answerMsgs(yard) == a0 and #H(yawn).Sets() == 1, "the untrusted officer answers nothing, the other does: " .. (answerMsgs(yard) - a0))
   end)
   said[#said + 1] = "an officer marked untrusted publishes nothing, answers no 1G and sends no 1O"
+
+  -- a fastest clear's record is the larger of two agreeing times: one voice a few seconds under a real clear (an edited
+  -- copy's) neither lowers it nor holds it
+  isolated({ lmember("Yell", 1, "MAGE", 30), lmember("Yoke", 3, "ROGUE", 20), lmember("Yurt", 3, "DRUID", 20) }, function()
+    local yell, yoke, yurt = cchar("Yell", 1), cchar("Yoke", 3, { class = "ROGUE", level = 20 }), cchar("Yurt", 3, { class = "DRUID", level = 20 })
+    for _, c in ipairs({ yell, yoke, yurt }) do login(c) end
+    tickAll(100)
+    assert(Rc(yoke).OwnClear(36, 900) and Rc(yurt).OwnClear(36, 896), "a real clear and one four seconds under it")
+    tickAll(125)
+    for _, c in ipairs({ yell, yoke, yurt }) do
+      local r = recOf(c, "c36")
+      assert(r and r.v == 900 and r.g == yoke.o.guid and r.m == 1, c.o.name .. ": the record is the real clear, its holder Yoke: " .. tostring(r and r.v) .. " " .. tostring(r and r.n))
+    end
+  end)
+  said[#said + 1] = "a fastest clear's record the larger of two agreeing times, so one voice under it neither lowers nor holds it"
 
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end

@@ -16,8 +16,9 @@
 --            untrusted, within the stat's bounds; a policy that closes a stat, or a holder marked untrusted, takes its
 --            entry out
 --   Falls    a higher value for "most", a lower one for "fastest". A fastest clear needs two voices: two members'
---            values within five seconds (everyone in a run sets the same time); the smallest backed value is the
---            record, its holder the member it is (ties to the smaller GUID). Live only: a delta (1D) 90 s into a login,
+--            values within five seconds (everyone in a run sets the same time); the record is the larger of the
+--            fastest agreeing pair, so no one voice lowers it, its holder the member it is (ties to the smaller GUID).
+--            Live only: a delta (1D) 90 s into a login,
 --            or your own value changing; a full record (1F) and what changed while you were away update it quietly
 --   On       every record ships off. The officers' list, CuteDB.halls[club].recOn, travels as 1O|<at>|<code>.<code>...
 --            (the stat's code, a statistic by its id, cc for every fastest clear), taken only from a sender
@@ -292,7 +293,9 @@ function Rec.RangeTop(n)
   local d = ok and type(m) == "table" and m.dungeons and m.dungeons[n] or nil
   return d and type(d.max) == "number" and d.max or nil
 end
--- a clear's record (11.3): the smallest value another member's backs within five seconds
+-- a clear's record (11.3): the smallest time another member's backs from at or under it within five seconds, the
+-- larger of the agreeing pair, so no one voice can lower it (an edited copy's a few seconds under a real clear backs
+-- the real one); its holder the member with that time, ties to the smaller GUID
 function Rec:Clear(n, live)
   if type(n) ~= "number" then return end
   local id = "c" .. n
@@ -301,13 +304,15 @@ function Rec:Clear(n, live)
   if C.Policy:Route(id) ~= "all" then return end
   local list = voices(id)
   local best
-  for i, a in ipairs(list) do
-    for j, b in ipairs(list) do if i ~= j and math.abs(a.v - b.v) <= GAP then best = a break end end
-    if best then break end
+  for j = 2, #list do
+    if list[j].v - list[j - 1].v <= GAP then
+      for _, a in ipairs(list) do if a.v == list[j].v then best = a break end end
+      break
+    end
   end
   -- (a faster time no second voice backs: counted, so /cute diag cards says whether a group's times agree in game)
   local first = list[1]
-  if first and first ~= best then
+  if first and not (list[2] and list[2].v - first.v <= GAP) then
     local had = Rec.Entries()[id]
     if not had or first.v < had.v then Rec.lone = Rec.lone + 1 end
   end
