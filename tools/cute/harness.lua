@@ -17115,6 +17115,21 @@ do local function cardsStage()
       boom("runs: test", buttonOf(c, "Show a test report"))
       RU.Test = rt
     end)
+
+    -- New card's Member box finds a member whose name starts with a Norwegian capital, typed in lower case: the
+    -- client's string.lower folds ASCII alone, so "oy" with o-slash found no Oystein
+    case("the Member box folds the Norwegian capitals", { gmember("Lea", 1), gmember("\195\152ystein", 3), gmember("\195\133se", 3), gmember("\195\134sir", 3) }, function()
+      local c = cchar("Lea", 1)
+      login(c)
+      tickAll(30)
+      local Hc = H(c)
+      for _, typed in ipairs({ "\195\184ystein", "\195\184y", "\195\152Y", "\195\152ystein" }) do
+        local row = Hc.FindMember(typed)
+        assert(row and row.short == "\195\152ystein", "typed " .. typed .. ": " .. tostring(row and row.short))
+      end
+      assert((Hc.FindMember("\195\165se") or {}).short == "\195\133se" and (Hc.FindMember("\195\166") or {}).short == "\195\134sir", "a-ring and ae typed small")
+      assert(Hc.FindMember("\195\184x") == nil, "nobody by that start")
+    end)
     assert(#failed == 0, "fix-cards: " .. #failed .. " case(s) failed:\n  " .. table.concat(failed, "\n  "))
     said[#said + 1] = "the launch audit's cards findings: " .. table.concat(passed, "; ")
   end

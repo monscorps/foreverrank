@@ -2015,13 +2015,22 @@ local function kindMenu(owner, c)
   end)
 end
 local function classed(name, class) return "|cff" .. C.UI.Hex(C.UI.ClassColor(class)):sub(5) .. (name or "?") .. "|r" end
--- a member of the roster by what an officer typed: a name whole, else the one name it starts
+-- a member of the roster by what an officer typed: a name whole, else the one name it starts. Both folded to small
+-- letters, the Western capitals too (the client's string.lower folds ASCII alone: "oy" with o-slash found no Oystein in
+-- a Norwegian guild): UTF-8's C3 80 to C3 9E are A-grave to Thorn, each 32 below its small letter, but for C3 97, the
+-- multiplication sign
+local function fold(s)
+  return (s:lower():gsub("\195([\128-\158])", function(c)
+    local b = c:byte()
+    return b == 151 and ("\195" .. c) or ("\195" .. string.char(b + 32))
+  end))
+end
 function H.FindMember(text)
-  text = tostring(text or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+  text = fold(tostring(text or "")):gsub("^%s+", ""):gsub("%s+$", "")
   if text == "" then return nil end
   local found, n = nil, 0
   for _, row in ipairs(C.Roster:Rows()) do
-    local s = (row.short or ""):lower()
+    local s = fold(row.short or "")
     if row.guid and s == text then return row end
     if row.guid and s:sub(1, #text) == text then found, n = row, n + 1 end
   end
