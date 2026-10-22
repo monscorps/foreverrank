@@ -14778,6 +14778,8 @@ end
 -- -122, 512 x 60, to 182 px down) and off the step frame (QuestBank's harness weighs the places, its merge2 M1).
 -- M2: the dungeon pick's two rules in the rules' registry (Rules.lua R.TUNE, which /cute rules prints and the page's
 -- stats.js carries) name the Quests window, never the retired Guide or its Next up.
+-- M3: Data you share's box for the notes says in its tooltip, as QuestBank's does, that where you found things is
+-- noted too.
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
   isolated({ member("Rone", 1) }, function()
@@ -14810,6 +14812,12 @@ do
     local js = assert(io.open(HERE .. "/../../addons/cute/stats.js")):read("*a")
     assert(js:find('"Quests window: members near you"', 1, true) and js:find('"Quests window: dungeons ahead"', 1, true) and not js:find("Next up", 1, true), "the page's stats.js carries the registry's words (build.py writes it)")
     said[#said + 1] = "the pick's two rules name the Quests window (registry, /cute rules, stats.js)"
+    -- M3
+    c.C.UI:Open("settings", "share")
+    local box = checkBox(c, function(cb) return cb.label and cb.label:GetText() == "Note what the game shows for foreverrank.com" end)
+    local tip = box and tipOf(box) or ""
+    assert(tip:find("and where you found them, with no names in them", 1, true), "Data you share: the notes' tooltip names the places, as QuestBank's:\n" .. tip)
+    said[#said + 1] = "Data you share's notes say where you found them"
     assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
     leave(c)
     print("merge2: " .. table.concat(said, "; "))

@@ -22078,6 +22078,7 @@ end
 -- error text (UIErrorsFrame, Blizzard_UIErrorsFrame: TOP 0 -122, 512 x 60, to 182 px down), as QuestBank's own step
 -- frame is (SF.TOP_Y): the windows round's TOP 0 -96 had "Not enough rage" on the arrow. Never on the step frame: one
 -- dragged into the top's middle has the arrow under it, still under the error text. At 1920 x 1080 and 1366 x 768.
+-- M2. Settings' box for the notes says in its tooltip that where you found things is noted too (Finds.lua's places)
 ----------------------------------------------------------------------------
 do
   local TALL = 143 -- (Arrow.lua: the arrow at its tallest, its frame and the lines under it)
@@ -22117,6 +22118,17 @@ do
     assert(arrow().top == 190, "the frame back on the tracker's corner: the arrow back at TOP 0 -190")
   end
   print("merge2 M1: under Cute's QB.cornerPlace the arrow stands in the top's middle under the game's error text (TOP 0 -190), off the step frame; a frame dragged there has it under it; 1920 x 1080 and 1366 x 768")
+end
+do
+  local c = lookChar("Notewhere")
+  c.env.SlashCmdList.QUESTBANK("")
+  c.QB.UI:ShowTab(5)
+  local box = c.QB.UI.views[5].noteGame
+  lines = {}
+  box.__scripts.OnEnter(box)
+  local tip = table.concat(lines, "\n")
+  assert(tip:find("dropped what you loot (by id), and where you found them, with no names in them", 1, true), "the notes' tooltip names the places too:\n" .. tip)
+  print("merge2 M2: Settings' notes box says in its tooltip that where you found things is noted too")
 end
 
 local seen = {}

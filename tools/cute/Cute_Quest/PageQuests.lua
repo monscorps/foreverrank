@@ -380,7 +380,12 @@ if E then
     local s = E:Settings()
     col:Head("Data you share")
     -- (the engine's own switches: Game.lua's notes, Survey.lua's questions to the game; QuestBank's Settings has the same)
-    col:Check("Note what the game shows for foreverrank.com", s.noteGame ~= false, true, function(on) if E.Game and E.Game.SetOn then E.Game.SetOn(on) else s.noteGame = on end end)
+    col:Check("Note what the game shows for foreverrank.com", s.noteGame ~= false, true, function(on) if E.Game and E.Game.SetOn then E.Game.SetOn(on) else s.noteGame = on end end,
+      nil, function(tip)
+        -- (the words of QuestBank's own box, Settings > Data you share: the finds, Finds.lua, are noted under it too)
+        tip:AddLine("Note what the game shows", 1, 1, 1)
+        tip:AddLine("Tooltips of the items you loot, carry or see, the spells you know, and which creatures and chests dropped what you loot (by id), and where you found them, with no names in them, so foreverrank.com can list them. Unticking forgets what was noted.", 0.85, 0.85, 0.85, true)
+      end)
     col:Check("Learn quests from the game", s.survey ~= false, true, function(on) if E.Survey and E.Survey.SetOn then E.Survey.SetOn(on) else s.survey = on end end)
     col:Check("Share your quests with your party", s.share.party ~= false, true, function(on) s.share.party = on end)
     col:Note("The QuestBank Uploader sends what you found in the world to foreverrank.com, never a name or anything about your guild. It comes with Cute on Cute's page at foreverrank.com.")
