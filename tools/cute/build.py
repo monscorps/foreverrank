@@ -12,6 +12,8 @@ addons/cute/stats.js from the registry (luajit page_stats.lua), stamp the versio
 the stat counts into addons/cute/index.html between <!--@name--> ... <!--/@name--> markers (kbu: Cute-Uploader.zip's
 size), then check the page:
   - every local href/src exists beside the page; every site-absolute path exists under the repo
+  - Cute.zip and Cute-Uploader.zip hold the tree's Cute and Cute_Quest byte for byte (with --no-zip, which packs
+    neither, a difference is a warning: the downloads are the last release's)
   - Settings > Data you share and the README promise the uploader on Cute's page only while it offers Cute-Uploader.zip;
     the zip offered is the Cute bundle (Cute.txt, no QuestBank, an uploader that reads Cute_Quest.lua) of Cute.zip's
     version, and the page never offers QuestBank's uploader. --online: the live Worker takes Cute_Quest.lua
@@ -215,6 +217,52 @@ def build_zip():
     if r.returncode != 0:
         sys.exit("tools/build_uploader.py --cute failed:\n" + r.stdout + r.stderr)
     ok("Cute-Uploader.zip built, %d bytes (Cute, Cute_Quest and the uploader)" % os.path.getsize(UPZIP))
+
+
+def zip_stale(zpath, root=HERE):
+    """The files under Cute/ and Cute_Quest/ that differ between a zip and the tree (root/Cute, root/Cute_Quest, as
+    build_zip packs them, .DS_Store aside), or are in only one of the two, sorted. The zip's other folders (the
+    uploader's) are not the tree's"""
+    import zipfile
+    tops = ("Cute", "Cute_Quest")
+    zipped = {}
+    with zipfile.ZipFile(zpath) as z:
+        for info in z.infolist():
+            n = info.filename
+            if n.endswith("/") or n.split("/")[0] not in tops or n.rsplit("/", 1)[-1] == ".DS_Store":
+                continue
+            zipped[n] = z.read(info)
+    tree = {}
+    for top in tops:
+        for dp, _, fns in os.walk(os.path.join(root, top)):
+            for f in fns:
+                if f != ".DS_Store":
+                    full = os.path.join(dp, f)
+                    tree[os.path.relpath(full, root).replace(os.sep, "/")] = full
+    out = []
+    for n in sorted(set(zipped) | set(tree)):
+        if n not in tree or n not in zipped or open(tree[n], "rb").read() != zipped[n]:
+            out.append(n)
+    return out
+
+
+def check_zips(zips=None, root=HERE):
+    """(merge4) each download Cute's page offers holds the tree's Cute and Cute_Quest, byte for byte: a problem where
+    one differs (a zipping build packs both), a warning under --no-zip, whose zips are the last release's"""
+    for zpath in zips if zips is not None else [ZIP, UPZIP]:
+        if not os.path.isfile(zpath):
+            continue
+        stale = zip_stale(zpath, root)
+        name = os.path.basename(zpath)
+        if not stale:
+            ok("%s holds the tree's Cute and Cute_Quest" % name)
+            continue
+        msg = "%s differs from the tree in %d file%s under Cute and Cute_Quest (%s%s)" % (
+            name, len(stale), "" if len(stale) == 1 else "s", ", ".join(stale[:4]), ", ..." if len(stale) > 4 else "")
+        if "--no-zip" in sys.argv:
+            print("  warn " + msg + ": the downloads are not this tree; a build without --no-zip packs them")
+        else:
+            problem(msg)
 
 
 def build_stats():
@@ -850,6 +898,7 @@ def main():
     page_rules = rules_of(page_style(html))
     site_rules = rules_of(open(SITE_CSS, encoding="utf-8").read())
     check_links(html)
+    check_zips()
     check_uploader_note(html)
     check_online(html)
     check_classes(html, page_rules, site_rules)

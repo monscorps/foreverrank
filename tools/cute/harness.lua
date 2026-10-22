@@ -21015,6 +21015,7 @@ end
 -- P1. The hero's privacy line says what goes to your group in the client's own words (Data you share's row) and names
 --     the run report Runs sends
 -- P2. Install says what each download holds: every top folder of Cute.zip and Cute-Uploader.zip is named
+-- Z1. build.py tells a zip whose Cute or Cute_Quest differs from the tree: a problem, a warning under --no-zip
 ----------------------------------------------------------------------------
 do
   local CASES, failed, said = {}, {}, {}
@@ -21158,6 +21159,37 @@ do
     else
       said[#said + 1] = "Install's folders not checked (no unzip here)"
     end
+  end }
+
+  CASES[#CASES + 1] = { "Z1 build.py tells a zip whose Cute or Cute_Quest differs from the tree", function()
+    if not SEEDED then return end
+    local py = [[
+import os, sys, tempfile, zipfile
+sys.path.insert(0, sys.argv[1])
+import build
+d = tempfile.mkdtemp()
+for top in ("Cute", "Cute_Quest"): os.makedirs(os.path.join(d, top))
+open(os.path.join(d, "Cute", "Cute.toc"), "w").write("## Version: 1.0.0\n")
+open(os.path.join(d, "Cute_Quest", "Sync.lua"), "w").write("new\n")
+same, old = os.path.join(d, "same.zip"), os.path.join(d, "old.zip")
+with zipfile.ZipFile(same, "w") as z:
+    z.write(os.path.join(d, "Cute", "Cute.toc"), "Cute/Cute.toc"); z.write(os.path.join(d, "Cute_Quest", "Sync.lua"), "Cute_Quest/Sync.lua")
+    z.writestr("QuestBank_Finds/Finds.lua", "x")
+with zipfile.ZipFile(old, "w") as z:
+    z.write(os.path.join(d, "Cute", "Cute.toc"), "Cute/Cute.toc"); z.writestr("Cute_Quest/Sync.lua", "old\n"); z.writestr("Cute_Quest/Gone.lua", "x")
+print("stale", build.zip_stale(same, d), build.zip_stale(old, d))
+sys.argv = ["build.py"]; del build.problems[:]; build.check_zips([old], d); print("problems", len(build.problems))
+sys.argv = ["build.py", "--no-zip"]; del build.problems[:]; build.check_zips([old], d); print("problems", len(build.problems))
+]]
+    local path = os.tmpname()
+    local f = assert(io.open(path, "w"))
+    f:write(py)
+    f:close()
+    local out = run("python3 -I '" .. path .. "' '" .. HERE .. "'")
+    os.remove(path)
+    assert(out:find("stale [] ['Cute_Quest/Gone.lua', 'Cute_Quest/Sync.lua']", 1, true), "zip_stale names the files that differ, and only those:\n" .. out)
+    assert(out:find("problems 1\n", 1, true) and out:find("warn", 1, true) and out:find("problems 0\n", 1, true), "a problem when zipping, a warning under --no-zip:\n" .. out)
+    said[#said + 1] = "build.py tells a stale zip"
   end }
 
   for _, case in ipairs(CASES) do

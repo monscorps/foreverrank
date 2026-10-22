@@ -1537,7 +1537,8 @@ ones edited by hand), zips both folders (`zip -rq ... Cute Cute_Quest -x "*.DS_S
 never puts QuestBank in, and `QuestBank_Finds`; `--no-zip` keeps the zips you have), regenerates `addons/cute/stats.js`
 from the registry, the window's defaults and the rules' thresholds with their bounds (`page_stats.lua`), stamps the version from `Cute.toc`, the zips' sizes in
 KB and the stat counts into `addons/cute/index.html` between `<!--@name-->` markers, then checks the page: every link
-and image exists, the uploader is promised in Settings and here only while the page offers `Cute-Uploader.zip`, which is
+and image exists, both zips hold the tree's `Cute` and `Cute_Quest` byte for byte (with `--no-zip` a difference is a
+warning, as the downloads are then the last release's), the uploader is promised in Settings and here only while the page offers `Cute-Uploader.zip`, which is
 the Cute bundle of Cute.zip's version (never QuestBank's uploader; `--online`: the live Worker takes `Cute_Quest.lua`), every class is `cu-` and none collides with `forever.css`, no hand-typed version or placeholder is
 left, the changelog's newest entry is the toc's version, the greys pass 4.5:1, a check box's edge 3:1 on the page's
 panels and in the window (UI.lua's EDGE), and the Download button is dark text on
