@@ -14220,6 +14220,40 @@ do local function cardsStage()
   end)
   said[#said + 1] = "a set held shows as the policy holds now: News, the waiting toast, the announcement and the answer to 1G leave a card closed since, a set left with none is none, a NEW RECORD goes with Fastest clears"
 
+  -- Publish greyed keeps its label; why it waits is a line beside the buttons, whole (Checking for news, A card is
+  -- Only you), at the preview's narrowest
+  isolated({ gmember("Ymir", 1, "MAGE"), gmember("Yngve", 3, "ROGUE") }, function()
+    local ymir, yngve = cchar("Ymir", 1), cchar("Yngve", 3, { class = "ROGUE" })
+    login(ymir); login(yngve)
+    tickAll(20)
+    H(ymir).OpenChip("queue")
+    press(buttonOf(ymir, "New card"))
+    typeInto(edits(ymir)[2], "Yngve")
+    ymir.C.UI:Draw()
+    press(buttonOf(ymir, "Preview"))
+    local CF = ymir.C.CardFrame
+    local pub = buttonOf(ymir, "Publish")
+    assert(pub and pub.__disabled and CF.posted:IsShown() and CF.posted:GetText() == "Waiting for Guild Info", "greyed, its label Publish, the reason beside it whole: " .. tostring(CF.posted:GetText()))
+    check(CF.frame, "halls: the preview, Publish waiting for Guild Info")
+    tickAll(40)
+    assert(buttonOf(ymir, "Publish").__disabled and CF.posted:GetText() == "Checking for news", "the reason follows each second: " .. tostring(CF.posted:GetText()))
+    check(CF.frame, "halls: the preview, Publish checking for news")
+    CF.frame:Hide()
+    H(ymir).draft.cards[1].source = "sdeaths"
+    ymir.C.Policy:Set("deaths", "self")
+    tickAll(200)
+    press(buttonOf(ymir, "Preview"))
+    pub = buttonOf(ymir, "Publish")
+    assert(pub and pub.__disabled and CF.posted:GetText() == "A card is Only you", "a card Only you: " .. tostring(CF.posted:GetText()))
+    check(CF.frame, "halls: the preview, a card Only you")
+    ymir.C.Policy:Set("deaths", "all")
+    tickAll(2)
+    assert(not buttonOf(ymir, "Publish").__disabled and (CF.posted:GetText() or "") == "", "free: no reason left")
+    CF.frame:Hide()
+    press(buttonOf(ymir, "Clear"))
+  end)
+  said[#said + 1] = "Publish greyed keeps its label, the reason whole beside it"
+
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end
 

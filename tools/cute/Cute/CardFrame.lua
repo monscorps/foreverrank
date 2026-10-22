@@ -427,21 +427,26 @@ function CF:Announce(set, opts)
       bx = bx - 8
     else b:Hide() end
   end
+  -- (beside the buttons: why Publish waits, in DIM, whole, the button keeping its label)
+  CF.posted:ClearAllPoints()
+  CF.posted:SetPoint("TOPRIGHT", f, "TOPLEFT", bx, -(by + 6))
+  CF.posted:SetWidth(math.min(220, bx - 16))
   CF.posted:SetText("")
   self.publishButton = opts.preview and CF.buttons[2] or nil
   CF:DrawPublish()
   f:Show()
   CF.WatchPublish()
 end
--- Publish's state on the button (the grey words say why: Wait a minute, Checking for news...), once a second while
--- the preview shows
+-- Publish's state on the button, greyed where it waits, and why beside it (Wait a minute, Checking for news...: a
+-- button's 80 units cut most of them), once a second while the preview shows
 function CF:DrawPublish()
   local b = self.publishButton
   if not (b and self.set and self.frame) then return end
   local ok, why = C.Halls.PublishState(self.set)
   b:SetOn(ok and true or false)
-  b:SetLabel(ok and "Publish" or why)
+  b:SetLabel("Publish")
   b.why = ok and "Sends the set to the guild: every member with Cute sees it." or why
+  C.UI.FitText(self.posted, ok and "" or (why or ""), (self.posted:GetWidth() or 220) - 4)
 end
 function CF.WatchPublish()
   if CF.watchingPublish then return end
