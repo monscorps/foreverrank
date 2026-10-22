@@ -15731,6 +15731,48 @@ do
   print("finds G6: " .. table.concat(said, "; "))
 end
 
+----------------------------------------------------------------------------
+-- (map, part 3: the review of F and G) Cute's side
+-- K1. M's legend: under the kind marks the In your log switch and its section's head show an objective's cursor, as its
+--     pins do; with "Our icons on the game's map" unticked, M keeps its pins and its switches lit.
+----------------------------------------------------------------------------
+do
+  local said = {}
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  local function mapClient(name, rank, o)
+    local c = newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, log = o and o.log or { [7] = 2 } }))
+    login(c); tickAll(6)
+    c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+    return c, c.addons[2].private
+  end
+  -- K1
+  isolated({ member("Rone", 1) }, function()
+    local c, QB = mapClient("Rone", 1)
+    local MP, QM = QB.MapPage, QB.QuestMap
+    c.C.UI:Open("map")
+    local ui = c.C.UI.Window("map")
+    MP.Go(1429, "user")
+    ui:Draw()
+    local logSwitch
+    for _, b in ipairs(ui.mapLayers) do if b:IsShown() and b.t and b.t.key == "mapObj" then logSwitch = b end end
+    assert(logSwitch and (logSwitch.icon.__atlas == "Crosshair_Attack_32" or logSwitch.icon.__tex == 131013), "In your log's switch: an objective's cursor: " .. tostring(logSwitch and (logSwitch.icon.__atlas or logSwitch.icon.__tex)))
+    local head
+    for _, it in ipairs(ui.mapList.items) do if it.spec.kind == "head" and it.spec.name == "In your log" then head = it.spec end end
+    assert(head and head.icon.art and head.icon.art[1] == "Crosshair_Attack_32" and not head.icon.poi, "the In your log section's head: the cursor, not the quest disc")
+    -- "Our icons on the game's map" unticked: M keeps its pins and its switches
+    local pins = #QM.pageProvider.active
+    assert(pins > 0, "M's pins")
+    QB:Settings().mapIcons = false; QB:Settings().pins = false
+    QM:Update(); ui:Draw()
+    assert(#QM.pageProvider.active == pins, "our icons on the game's map off: M keeps its pins: " .. #QM.pageProvider.active .. " of " .. pins)
+    for _, b in ipairs(ui.mapLayers) do if b:IsShown() and b.t and b.t.icons then assert(b:GetAlpha() == 1, "its switch lit: " .. b.t.name) end end
+    QB:Settings().mapIcons = nil; QB:Settings().pins = nil
+    leave(c)
+    said[#said + 1] = "M's legend: In your log's switch and head an objective's cursor; with our icons on the game's map off, M's pins and switches kept"
+  end)
+  print("map K: " .. table.concat(said, "; "))
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

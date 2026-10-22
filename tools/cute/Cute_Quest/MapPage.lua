@@ -1168,6 +1168,16 @@ local function layerOn(t)
   return not (t.icons and set.mapIcons == false and not QB.mapWindow) and set[t.key] ~= false
 end
 MP.TOGGLES, MP.LayerOn = TOGGLES, layerOn
+-- a layer's art for its switch (and a host's list's section): its own, but In your log's under a host's kind marks, where
+-- an objective's spot is its kind's cursor and no pin is the quest disc (QB.kindMarks, Pins.lua P.StyleKind): the
+-- attack cursor, the commonest of them. Returns the atlas and the file for it
+function MP.ToggleArt(t)
+  if QB.kindMarks and t.key == "mapObj" then
+    local k = QB.QuestMap.ART.k
+    return k.atlas, k.file
+  end
+  return t.atlas, t.file
+end
 
 local function toggle(f, t, i)
   local DM = QB.DMap
@@ -1177,7 +1187,7 @@ local function toggle(f, t, i)
   b.icon = b:CreateTexture(nil, "ARTWORK")
   b.icon:SetSize(20, 20)
   b.icon:SetPoint("LEFT", 0, 0)
-  QB.Art(b.icon, t.atlas, t.file)
+  QB.Art(b.icon, MP.ToggleArt(t))
   if t.num then
     b.num = b:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
     b.num:SetPoint("CENTER", b.icon, "CENTER", 0, 0)

@@ -22812,6 +22812,18 @@ do
     assert(#MP.finds.active == 2, "and joins zoomed out")
     said[#said + 1] = "finds that touch one pin with their count, its tooltip naming each, lit for each, parting zoomed in"
   end
+  -- R4: the legend
+  do
+    local c = hostChar("Legend", { mapWindow = true, kindMarks = true })
+    local MP = c.QB.MapPage
+    local atlas = MP.ToggleArt(MP.TOGGLES[2])
+    assert(atlas == "Crosshair_Attack_32", "under the kind marks, In your log's switch: an objective's cursor: " .. tostring(atlas))
+    local a1 = MP.ToggleArt(MP.TOGGLES[1])
+    assert(a1 == MP.TOGGLES[1].atlas, "the others their own")
+    local q = hostChar("Legendalone", nil)
+    assert(q.QB.MapPage.ToggleArt(q.QB.MapPage.TOGGLES[2]) == "Quest-In-Progress-Icon-yellow", "QuestBank alone: the quest disc's glyph")
+    said[#said + 1] = "In your log's switch an objective's cursor under the kind marks, QuestBank alone the quest disc's"
+  end
   print("map R: " .. table.concat(said, "; "))
 end
 

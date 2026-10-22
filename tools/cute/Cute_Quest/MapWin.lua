@@ -182,6 +182,24 @@ local function layerOn(t)
   if t == FINDS then return E:Settings().mapFinds ~= false end
   return MP and MP.LayerOn(t) or false
 end
+-- a layer's art: MapPage.lua's for its own (In your log's an objective's cursor under the kind marks, as its pins), the
+-- book for the finds
+local function artOf(t)
+  local MP = engineMap()
+  if MP and MP.ToggleArt and t ~= FINDS then return MP.ToggleArt(t) end
+  return t.atlas, t.file
+end
+-- In your log's section head, as its switch: the quest disc's glyph, or the cursor its pins are under the kind marks
+local function logIcon()
+  local MP = engineMap()
+  for _, t in ipairs(MP and MP.TOGGLES or {}) do
+    if t.key == "mapObj" then
+      local atlas, file = artOf(t)
+      if atlas ~= t.atlas then return { art = { atlas, file } } end
+    end
+  end
+  return { poi = "log" }
+end
 local function toggleLayer(t)
   local MP = engineMap()
   if not MP then return end
@@ -250,7 +268,7 @@ function MW.DrawRow(ui)
       n = n + 1
       local b = ui.mapLayers[n] or layerButton(ui, n)
       b.t = t
-      ui.Art(b.icon, t.atlas, t.file)
+      ui.Art(b.icon, artOf(t))
       b.count:SetText(tostring(c))
       local w = 23 + math.ceil(((b.count.GetUnboundedStringWidth or b.count.GetStringWidth)(b.count) or 0)) + 6
       b:SetWidth(w)
@@ -599,7 +617,7 @@ local function zoneList(ui, scroll, m)
   end)
   local sections = {
     { name = "Ready to hand in", icon = { poi = "ready" }, list = lists.ready, whoC = K.GOOD },
-    { name = "In your log", icon = { poi = "log" }, list = lists.log },
+    { name = "In your log", icon = logIcon(), list = lists.log },
     { name = "To pick up", icon = { art = "accept" }, list = pickup },
   }
   for _, s in ipairs(sections) do
