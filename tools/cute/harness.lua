@@ -19138,6 +19138,8 @@ end
 -- P5. Your own Ready and its tooltip agree while Before the pull shows something: from no gap (durability 80%, potions
 --     in the bags) the cell reads "gaps" and the tooltip names the pull in place of "No gaps."; drawn again when Before
 --     the pull starts and when it ends (Reminders' refresh tells Band.lua), with no other draw
+-- P6. With the addon QuestBank loaded, Cute's band follows QuestBank's step-frame line: a hook after QuestBank's own
+--     RemindChanged (hooksecurefunc, its function left as it is) draws the band again, its minutes and its going
 ----------------------------------------------------------------------------
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
@@ -19181,6 +19183,48 @@ do
     QBh.Remind.Pull = pull
     leave(h)
     said[#said + 1] = "your own Ready and its tooltip agree before the pull, drawn again as it starts and ends"
+    -- P6
+    local q = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    local isLoaded = q.env.C_AddOns.IsAddOnLoaded
+    q.env.C_AddOns.IsAddOnLoaded = function(x) if x == "QuestBank" then return true, true end return isLoaded(x) end
+    local settings = { guide = { on = true, frame = true }, arrow = true, glow = { on = true, style = "sparkle" }, remind = { on = true }, share = { party = true }, djShow = { boss = true, rare = true, trash = false, other = true } }
+    local line = { text = "Train: 2 new spells \194\183 Llane Beshere", tex = 131146, mins = 3, word = "3 min", name = "Training" }
+    local told = 0
+    q.env.QuestBankAPI = {
+      version = "6.3.0", logReady = true, state = { level = 5, log = {} }, routeNow = { legs = {}, xp = 0, level = 5, t = 0 },
+      Settings = function() return settings end, MarkDirty = function() end, Comma = tostring, Short = tostring,
+      Model = { Busy = function() return false end }, Data = { CAT = {} }, Quest = { Get = function() return nil end },
+      Guide = { Steps = function() return { { kind = "objective", qid = 7, text = "Kill Kobold Vermin 3/8" } } end, Text = function(st) return st.text end,
+        TimeToLevel = function() return nil end, MemberSteps = function() return {} end, Reminder = function() return line end },
+      StepFrame = { Menu = function() end, Apply = function() end, RemindChanged = function() told = told + 1 end }, Arrow = { Set = function() end },
+      UI = { PlaceGroups = function() return {}, {}, nil, nil, nil end, Candidates = function() return {} end, QuestClick = function() end, QuestTooltip = function() end },
+      Target = { Route = function() return { legs = {}, xp = 0, level = 5, t = 0 } end }, Run = { Get = function() return nil end },
+      DMap = { Attach = function() end, Refresh = function() end }, Gear = { Attach = function() end, Refresh = function() end, RefreshSoon = function() end },
+      Remind = { Pull = function() return {}, false end },
+    }
+    local API = q.env.QuestBankAPI
+    local sfChanged = API.StepFrame.RemindChanged
+    login(q); tickAll(5)
+    q.C.Modules.Set("Cute_Quest", true); tick(q, 6)
+    assert(q.addons[2].private.dormant == true, "QuestBank loaded: the copy sleeps")
+    openGuide(q)
+    local Lq = qwin(q)
+    local rq = Lq.bandKit and Lq.bandKit.remind
+    assert(rq and rq:IsShown() and rq.text:GetText() == line.text and rq.mins:GetText() == "3 min", "the band: QuestBank's step-frame line:\n" .. texts(q))
+    local hook = q.hooks.RemindChanged
+    assert(type(hook) == "function" and API.StepFrame.RemindChanged == sfChanged, "a hook after QuestBank's own RemindChanged (hooksecurefunc), its function left as it is")
+    -- QuestBank's Reminders refresh as you walk: the minutes, then the line gone once the trainer is visited
+    line = { text = line.text, tex = 131146, mins = 2, word = "2 min", name = "Training" }
+    API.StepFrame.RemindChanged(line); hook(line)
+    tick(q, 1)
+    assert(rq:IsShown() and rq.mins:GetText() == "2 min", "the minutes drawn again: " .. tostring(rq.mins:GetText()))
+    line = nil
+    API.StepFrame.RemindChanged(nil); hook(nil)
+    tick(q, 1)
+    assert(not rq:IsShown() and told == 2, "no line: none in the band; QuestBank's own step frame told each time")
+    check(Lq.frame, "merge3 the Quests band beside QuestBank")
+    leave(q)
+    said[#said + 1] = "with QuestBank loaded the band follows its step-frame line"
     print("merge3 review: " .. table.concat(said, "; "))
   end)
 end

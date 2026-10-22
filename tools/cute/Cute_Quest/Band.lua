@@ -231,18 +231,26 @@ Cute.QuestBand = {
 }
 -- (merge3) Cute's band drawn again when the step frame's line changes, and the dashboard told that Reminders laid their
 -- pieces out (your own Ready follows Before the pull: Cute.QuestReadsChanged). Remind.lua tells the step frame after
--- each refresh; the copy's alone: QuestBank's own step frame is its own
-if not QB.dormant and E.StepFrame and type(E.StepFrame.RemindChanged) == "function" then
-  local changed = E.StepFrame.RemindChanged
-  local was, wasText, wasWord
-  E.StepFrame.RemindChanged = function(rec)
-    changed(rec)
-    if Cute.QuestReadsChanged then Cute.QuestReadsChanged() end
-    local text, word = rec and rec.text, rec and rec.word
-    if rec == was and text == wasText and word == wasWord then return end
-    was, wasText, wasWord = rec, text, word
-    local win = Cute.Window and Cute.Window("quests")
-    if win and win.frame and win.frame:IsShown() then Cute.Refresh() end
+-- each refresh (SF.RemindChanged). The copy's function is wrapped; QuestBank's, while it is loaded (the band and the
+-- reads are QuestBank's then), is hooked after it runs (hooksecurefunc), its own step frame left as it is
+local was, wasText, wasWord
+local function remindChanged(rec)
+  if Cute.QuestReadsChanged then Cute.QuestReadsChanged() end
+  local text, word = rec and rec.text, rec and rec.word
+  if rec == was and text == wasText and word == wasWord then return end
+  was, wasText, wasWord = rec, text, word
+  local win = Cute.Window and Cute.Window("quests")
+  if win and win.frame and win.frame:IsShown() then Cute.Refresh() end
+end
+if E.StepFrame and type(E.StepFrame.RemindChanged) == "function" then
+  if not QB.dormant then
+    local changed = E.StepFrame.RemindChanged
+    E.StepFrame.RemindChanged = function(rec)
+      changed(rec)
+      remindChanged(rec)
+    end
+  elseif type(hooksecurefunc) == "function" then
+    pcall(hooksecurefunc, E.StepFrame, "RemindChanged", Cute.Safe(remindChanged, "quest band: QuestBank's reminders"))
   end
 end
 -- (merge3) the reads Cute's dashboard shares with Reminders, one answer for both (the reminders design's section 6;
