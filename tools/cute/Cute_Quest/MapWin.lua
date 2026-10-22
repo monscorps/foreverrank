@@ -504,36 +504,47 @@ function MW.ShowFind(ui, f)
   MW.Light(ui, f.fkey, false)
 end
 
+-- the band's pieces of the map's own (a kit: shown by the draw that uses it, the band's shared pools left as the reader
+-- has them): the zone's head, and the Finds list's Back, count and words
+local function kit(ui)
+  return ui:Kit("map", function(k)
+    k.name = ui.Text(k, 15, ui.COLORS.WHITE, "LEFT")
+    k.name:SetPoint("TOPLEFT", 4, -6)
+    k.levels = ui.Text(k, 12, ui.COLORS.DIM, "LEFT")
+    k.count = ui.Text(k, 11, ui.COLORS.DIM, "RIGHT")
+    k.count:SetPoint("TOPRIGHT", -4, -9)
+    k.count:SetWidth(90)
+    k.note = ui.Text(k, 12, ui.COLORS.DIM, "LEFT")
+    k.note:SetPoint("TOPLEFT", 4, -30)
+    k.note:SetWordWrap(true)
+    k.back = ui.Button(k, "Back", 70, 20)
+    k.back:SetPoint("TOPLEFT", 0, -3)
+  end)
+end
 -- the zone's head in the band: its name, its levels in their colours, how many quests
 local function head(ui, m, n)
-  local K, L = ui.COLORS, ui.Look
-  local name = ui.bandLabels:Get()
-  name:ClearAllPoints(); name:SetPoint("TOPLEFT", 4, -6)
-  name:SetFont(ui.FONT, 15, ""); name.cuteSize = 15
+  local L = ui.Look
+  local k = kit(ui)
+  k.back:Hide(); k.note:Hide()
   local i = info(m)
   local w = ui.scroll:Width()
-  ui.Color(name, K.WHITE)
-  ui.FitText(name, i and plain(i.name) or "", w - 150)
-  local nw = math.min(w - 150, math.ceil(((name.GetUnboundedStringWidth or name.GetStringWidth)(name) or 0)))
+  k.name:Show()
+  ui.FitText(k.name, i and plain(i.name) or "", w - 150)
+  local nw = math.min(w - 150, math.ceil(((k.name.GetUnboundedStringWidth or k.name.GetStringWidth)(k.name) or 0)))
   local ok, lo, hi = false, nil, nil
   if C_Map and C_Map.GetMapLevels then ok, lo, hi = pcall(C_Map.GetMapLevels, m) end
   lo, hi = ok and plain(lo), ok and plain(hi)
   if type(lo) == "number" and type(hi) == "number" and lo > 0 then
-    local lv = ui.bandLabels:Get()
-    lv:ClearAllPoints(); lv:SetPoint("TOPLEFT", 4 + nw + 8, -9)
-    lv:SetFont(ui.FONT, 12, ""); lv.cuteSize = 12
-    ui.Color(lv, K.DIM)
-    lv:SetText(lo == hi and (ui.Hex(L.LevelColor(lo)) .. lo .. "|r") or (ui.Hex(L.LevelColor(lo)) .. lo .. "|r-" .. ui.Hex(L.LevelColor(hi)) .. hi .. "|r"))
-    lv:SetWidth(60)
+    k.levels:ClearAllPoints(); k.levels:SetPoint("TOPLEFT", 4 + nw + 8, -9)
+    k.levels:SetWidth(60)
+    k.levels:SetText(lo == hi and (ui.Hex(L.LevelColor(lo)) .. lo .. "|r") or (ui.Hex(L.LevelColor(lo)) .. lo .. "|r-" .. ui.Hex(L.LevelColor(hi)) .. hi .. "|r"))
+    k.levels:Show()
+  else
+    k.levels:Hide()
   end
-  if n then
-    local count = ui.bandLabels:Get()
-    count:ClearAllPoints(); count:SetPoint("TOPRIGHT", -4, -9)
-    count:SetFont(ui.FONT, 11, ""); count.cuteSize = 11
-    count:SetWidth(80); count:SetJustifyH("RIGHT")
-    ui.Color(count, K.DIM)
-    count:SetText(n == 1 and "1 quest" or (n .. " quests"))
-  end
+  k.count:SetText(n and (n == 1 and "1 quest" or (n .. " quests")) or "")
+  k.count:SetShown(n ~= nil)
+  k:SetHeight(30)
   ui:SetBand(30)
 end
 
@@ -565,7 +576,9 @@ local function zoneList(ui, scroll, m)
     setList(ui, scroll, items)
     return
   end
-  local lists = MP.lists or { ready = {}, log = {}, pickup = {} }
+  -- (the zone's quests read now: the quest log changes between two map changes)
+  local lists = MP.ZoneQuests(m)
+  MP.lists, MP.zone = lists, true
   local n = #lists.ready + #lists.log + #lists.pickup
   head(ui, m, n)
   local rate = rates()
@@ -627,24 +640,18 @@ local function findsList(ui, scroll)
   end
   table.sort(zones, function(a, b) if a.d ~= b.d then return a.d < b.d end return a.name < b.name end)
   -- the band: Back, how many, and what the list holds
-  local back = ui.bandButtons:Get()
-  back:ClearAllPoints(); back:SetPoint("TOPLEFT", 0, -3); back:SetSize(70, 20)
-  back:SetLabel("Back"); back:SetOn(true)
-  back:SetScript("OnClick", Cute.Safe(function() ui.mapFinds = nil; ui.scrollTo = ui.mapFindsScroll; ui:Draw() end, "map window: back"))
-  back:SetScript("OnEnter", nil); back:SetScript("OnLeave", nil)
-  local count = ui.bandLabels:Get()
-  count:ClearAllPoints(); count:SetPoint("TOPRIGHT", -4, -7); count:SetWidth(160); count:SetJustifyH("RIGHT")
-  count:SetFont(ui.FONT, 11, ""); count.cuteSize = 11
-  ui.Color(count, K.DIM)
-  count:SetText(total == 1 and "1 find" or (total .. " finds"))
+  local k = kit(ui)
+  k.name:Hide(); k.levels:Hide()
+  k.back:Show()
+  k.back:SetScript("OnClick", Cute.Safe(function() ui.mapFinds = nil; ui.scrollTo = ui.mapFindsScroll; ui:Draw() end, "map window: back"))
+  k.count:SetText(total == 1 and "1 find" or (total .. " finds"))
+  k.count:Show()
   local w = scroll:Width()
-  local note = ui.bandLabels:Get()
-  note:ClearAllPoints(); note:SetPoint("TOPLEFT", 4, -30); note:SetWidth(w - 8); note:SetJustifyH("LEFT")
-  note:SetFont(ui.FONT, 12, ""); note.cuteSize = 12
-  note:SetWordWrap(true); note.cuteCut = nil
-  ui.Color(note, K.DIM)
-  note:SetText("Yours, the guild's once two agree, and what players' games and guides gave QuestBank. Never a book's text or where a key leads.")
-  local nh = math.ceil(note:GetStringHeight() or 28)
+  k.note:SetWidth(w - 8)
+  k.note:SetText("Yours, the guild's once two agree, and what players' games and guides gave QuestBank. Never a book's text or where a key leads.")
+  k.note:Show()
+  local nh = math.ceil(k.note:GetStringHeight() or 28)
+  k:SetHeight(30 + nh + 6)
   ui:SetBand(30 + nh + 6)
   local items = {}
   for _, z in ipairs(zones) do
@@ -792,6 +799,39 @@ if win then
   win.OnBuilt = function(self)
     if built then built(self) end
     self.frame:HookScript("OnHide", function() self.mapClosed = true; self.mapFinds = nil end)
+  end
+end
+
+-- /cute diag's look line (Band.lua's Cute.QuestBand.Diag) ends with the map window's state as only the live client shows
+-- it, no names: the canvas's frame strata and a pin's (whether the pins, made at login in the canvas's MEDIUM, follow the
+-- window's HIGH), the wheel's mode (MAP_CANVAS_MOUSE_WHEEL_ZOOM_BEHAVIOR_SMOOTH is 1), the game's providers added and
+-- those waiting for a fight's end, and the area points and map links drawn on the map shown
+function MW.DiagLine()
+  local MP = engineMap()
+  local canvas = MP and MP.canvas
+  if not canvas then return "map window: no canvas" .. (inCombat() and " (a fight)" or "") end
+  local function strata(f) local ok, v = pcall(function() return f:GetFrameStrata() end); return ok and tostring(v) or "?" end
+  local pin = E.QuestMap and E.QuestMap.pageProvider and E.QuestMap.pageProvider.active[1]
+  local waiting = 0
+  for _ in pairs(later) do waiting = waiting + 1 end
+  local sc = canvas.ScrollContainer
+  local function pins(template)
+    local ok, n = pcall(function() return canvas:GetNumActivePinsByTemplate(template) end)
+    return ok and tostring(n) or "?"
+  end
+  return string.format("map window: canvas %s, a pin %s, wheel %s, providers %d (%d waiting), area points %s, map links %s, hosted %s",
+    strata(canvas), pin and strata(pin) or "none", tostring(sc and sc.mouseWheelZoomMode), #(MW.added or {}), waiting,
+    pins("AreaPOIPinTemplate"), pins("MapLinkPinTemplate"), MP.host and "yes" or "no")
+end
+do
+  local band = Cute.QuestBand
+  local diag = band and band.Diag
+  if diag then
+    band.Diag = function()
+      local ok, line = pcall(diag)
+      local okM, map = pcall(MW.DiagLine)
+      return tostring(ok and line or "?") .. "; " .. tostring(okM and map or "map window: ?")
+    end
   end
 end
 

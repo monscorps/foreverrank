@@ -14890,7 +14890,12 @@ do
     return out
   end
   local function rowNamed(ui, name) for _, r in ipairs(rows(ui)) do if r.name:GetText() == name then return r end end end
-  local function bandButton(ui, label) for _, b in ipairs(ui.bandButtons.items) do if b:IsShown() and b.label:GetText() == label then return b end end end
+  local function bandButton(ui, label)
+    for _, b in ipairs(ui.bandButtons.items) do if b:IsShown() and b.label:GetText() == label then return b end end
+    -- (the Finds list's Back: the map's own band kit)
+    local k = ui.kits and ui.kits.map
+    if k and k:IsShown() and k.back:IsShown() and k.back.label:GetText() == label then return k.back end
+  end
   isolated({ member("Rone", 1) }, function()
     local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, log = { [7] = 2 } }))
     providers(c)
@@ -15258,8 +15263,12 @@ do
     for i = n + 1, #drawn do if drawn[i] == "corpse" then corpse = true elseif drawn[i] == "graveyard" then grave = true end end
     assert(corpse and grave, "a death: the corpse and the graveyards drawn again")
     c.ghost = false
+    -- /cute diag's look line: the map window's state, no name
+    local look
+    for _, l in ipairs(c.C.Diag()) do if l:find("^diag look:") then look = l end end
+    assert(look and look:find("map window: canvas", 1, true) and look:find("providers 2", 1, true) and not look:find("Rone", 1, true), "/cute diag's look line ends with the map window's state:\n" .. tostring(look))
     leave(c)
-    print("map C8: QuestBank's pins on Cute's map at the game's size; a death draws the corpse and the graveyards again")
+    print("map C8: QuestBank's pins on Cute's map at the game's size; a death draws the corpse and the graveyards again; /cute diag says the map window's state")
   end)
 end
 
