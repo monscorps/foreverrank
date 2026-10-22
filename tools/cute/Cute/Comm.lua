@@ -184,7 +184,11 @@ end
 -- when each part's text first went on GUILD, by kind and key (a resend of the same text keeps its time), and that text
 -- (was): what an ask's since is held against (M:Answer). Kept from login to login (M:Wire), so a since from the
 -- asker's last session is answered by what went after it whatever this client did meanwhile, its own logins included
--- (0.9.0 kept them for a login alone, and an asker who had logged out before this client's login had its record whole)
+-- (0.9.0 kept them for a login alone, and an asker who had logged out before this client's login had its record whole).
+-- A value is kept by its id; a label by its id too, its text in was (a label whose text changed went after it); a
+-- kill claim only where it is this character's own of its boss (Rules.lua R.OwnClaims: its first kill in a group), by
+-- that boss's id, since an ask's since is held against those alone (M:Claims). 0.9.1 kept every claim a kill sent and
+-- every text a label ever had, by its whole text, for thirty days, never read again
 M.sentAt = { v = {}, l = {}, k = {} }
 M.was = { v = {}, l = {}, k = {} }
 -- the wholes this client sent on GUILD, by part: its record whole (rec), its statistics pass whole (pass). Each
@@ -393,8 +397,19 @@ local function keep(w)
   for _, kind in ipairs(KINDS) do
     local at = type(w.sentAt) == "table" and type(w.sentAt[kind]) == "table" and w.sentAt[kind] or {}
     local text = type(was[kind]) == "table" and was[kind] or {}
+    local sentAt, kept = M.sentAt[kind], M.was[kind]
     for key, t in pairs(at) do
-      if type(key) == "string" and type(t) == "number" and t >= old and text[key] ~= nil then M.sentAt[kind][key], M.was[kind][key] = t, text[key] end
+      if type(key) == "string" and type(t) == "number" and t >= old and text[key] ~= nil then
+        if kind == "v" or type(text[key]) == "string" then sentAt[key], kept[key] = t, text[key]
+        else
+          -- (a wire of 0.9.1 or before kept a label or a claim by its whole text: kept by its id, a label's newest
+          -- text, a boss's first claim, which is its own; the rest goes)
+          local enc = kind == "k" and key:match("^(%d+)@")
+          local id = (kind == "l" and key:match("^([^=:]+)")) or (enc and "e" .. enc) or nil
+          local was0 = id and sentAt[id]
+          if id and (was0 == nil or (kind == "l" and t > was0) or (kind == "k" and t < was0)) then sentAt[id], kept[id] = t, key end
+        end
+      end
     end
   end
   -- (a whole still on its way when the queue went with the session never went whole)
@@ -527,10 +542,11 @@ function M:SinceHex()
   return string.format("%08x%08x", at, from)
 end
 -- force as a part is chosen: true, every part; a number (an ask's since), every part whose text went on GUILD after it,
--- or never this login; else none (only what changed goes)
-local function forced(force, kind, key)
+-- or never this login; else none (only what changed goes). key: a value's or a label's id, a claim's boss; text: a
+-- label's or a claim's, which went only where it is the one kept (was)
+local function forced(force, kind, key, text)
   if force == true then return true end
-  if type(force) == "number" then local t = M.sentAt[kind][key]; return t == nil or t > force end
+  if type(force) == "number" then local t = M.sentAt[kind][key]; return t == nil or t > force or (text ~= nil and M.was[kind][key] ~= text) end
   return false
 end
 
@@ -684,7 +700,11 @@ local function mark(e, r, kept, back)
   if r == "sent" then
     local at, was, t = not e.target and M.sentAt[e.kind], not e.target and M.was[e.kind], C.ServerNow()
     for _, p in ipairs(kept or {}) do
-      if at and was[p.key] ~= p.s then at[p.key], was[p.key] = t, p.s end
+      if at then
+        -- (a value by its id; a label by its id with its text; a claim only where it is this character's own of its boss)
+        if e.kind == "v" then if was[p.key] ~= p.s then at[p.key], was[p.key] = t, p.s end
+        elseif (e.kind == "l" or p.own) and type(p.id) == "string" then if was[p.id] ~= p.kv then at[p.id], was[p.id] = t, p.kv end end
+      end
       sent[p.key] = p.s
     end
   end
@@ -1198,7 +1218,7 @@ local function sortParts(kind, part, force, targets, guild, mine)
     end
   else
     local sent, q = state(kind)
-    if forced(force, kind, part.key) or not (sent[part.key] or q[part.key]) then guild[#guild + 1] = part end
+    if forced(force, kind, part.id, part.kv) or not (sent[part.key] or q[part.key]) then guild[#guild + 1] = part end
   end
 end
 function M:Labels(only, force, told, whisperOnly)
@@ -1250,7 +1270,13 @@ end
 local function claimsOut(list, force, told, whisperOnly)
   local targets = told or C.Roster:OfficerTargets()
   local parts, mine = {}, {}
-  for _, c in ipairs(list) do sortParts("k", { id = "e" .. c.enc, also = "group", kv = claimText(c.enc, c.t, c.with) }, force, targets, parts, mine) end
+  local owns = C.Rules.OwnClaims()
+  for _, c in ipairs(list) do
+    local kv, own = claimText(c.enc, c.t, c.with), owns[c.enc]
+    -- (own: this character's own claim of the boss, the one the wire keeps when it went, M.sentAt)
+    own = type(own) == "table" and tonumber(own.t) ~= nil and claimText(c.enc, own.t, own.with) == kv or nil
+    sortParts("k", { id = "e" .. c.enc, also = "group", kv = kv, own = own }, force, targets, parts, mine)
+  end
   if not whisperOnly then for _, e in ipairs(pack("1K|", parts, nil, "k")) do queue(e) end end
   whisper(mine, packer("1K|", "k"))
 end

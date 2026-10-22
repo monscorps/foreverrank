@@ -21214,6 +21214,8 @@ end
 --     taken once its own read opens the stat; one of a stat that stays closed goes after a while, never kept
 -- L1. A level-up in the guild is patched in place from its club event (the level cap raised): no full read, no identity
 --     built, no record walked; a full read that finds levels alone moved builds none either
+-- W1. The wire keeps one sent time a label and one a boss's own claim (its first kill in a group), not every text a kill
+--     or a growing loot list ever sent; a wire of the old kind is kept by id
 ----------------------------------------------------------------------------
 do
   local CASES, failed, said = {}, {}, {}
@@ -21341,6 +21343,38 @@ do
       leave(c)
     end)
     said[#said + 1] = "a level-up is patched in place from its club event; a full read with levels alone moved builds no identity"
+  end }
+
+  CASES[#CASES + 1] = { "W1 the wire keeps one sent time a label and a boss's own claim alone", function()
+    inGuild({ member("Ofa", 1), member("Ann", 3), member("Mo", 3) }, function()
+      -- a wire of the old kind: labels and claims kept by their whole text
+      local old = { v = {}, l = { ["e1230:36=Rhahk'Zor"] = EPOCH + 500, ["l1230=1"] = EPOCH + 600, ["l1230=1.2"] = EPOCH + 700 },
+        k = { ["1230@a:x"] = EPOCH + 500, ["1230@b:x"] = EPOCH + 800 } }
+      local was = { v = {}, l = {}, k = {} }
+      for kind, list in pairs(old) do for key in pairs(list) do was[kind][key] = true end end
+      local adb = { chars = { ["Ann-Forever"] = { counters = {}, modules = {}, wire = { club = "7", login = EPOCH + 400, sentAt = old, was = was } } } }
+      local ann, mo = char("Ann", 3, { party = { "Mo" } }), char("Mo", 3, { party = { "Ann" } })
+      login(ann, adb); login(mo)
+      local M = ann.C.Comm
+      assert(size(M.sentAt.l) == 2 and M.sentAt.l.e1230 == EPOCH + 500 and M.sentAt.l.l1230 == EPOCH + 700 and M.was.l.l1230 == "l1230=1.2",
+        "an old wire's labels kept by id, the newest text: " .. json(M.sentAt.l))
+      assert(size(M.sentAt.k) == 1 and M.sentAt.k.e1230 == EPOCH + 500 and M.was.k.e1230 == "1230@a:x", "and a boss's first claim: " .. json(M.sentAt.k))
+      tickAll(60)
+      -- three kills of one boss in a group
+      for _, c in ipairs({ ann, mo }) do c.o.instance, c.o.instanceID, c.o.instName = "party", 36, "The Deadmines"; fire(c, "PLAYER_ENTERING_WORLD", false, false) end
+      for _ = 1, 3 do
+        for _, c in ipairs({ ann, mo }) do fire(c, "ENCOUNTER_END", 1230, "Rhahk'Zor", 1, 5, 1, {}) end
+        tickAll(30)
+      end
+      local claims = {}
+      for _, m in ipairs(ann.sent) do if m.channel == "GUILD" and m.msg:sub(1, 3) == "1K|" then claims[#claims + 1] = m.msg:sub(4) end end
+      assert(#claims == 3, "three claims went: " .. #claims)
+      assert(size(M.sentAt.k) == 1 and M.was.k.e1230 == claims[1], "the wire keeps the boss's own claim alone, the first kill's: " .. json(M.was.k))
+      for key, text in pairs(M.was.l) do assert(key:match("^%a%d+$") and type(text) == "string", "a label kept by its id: " .. key) end
+      assert(M.was.l.e1230 and M.sentAt.l.e1230 == EPOCH + 500, "the boss's label, its text the same, keeps its time: " .. tostring(M.sentAt.l.e1230))
+      for _, c in ipairs({ ann, mo }) do leave(c) end
+    end)
+    said[#said + 1] = "the wire keeps one sent time a label and a boss's own claim alone, an old wire's by id"
   end }
 
   for _, case in ipairs(CASES) do
