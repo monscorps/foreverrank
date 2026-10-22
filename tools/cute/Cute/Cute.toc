@@ -22,7 +22,10 @@ UI.lua
 Look.lua
 Cards.lua
 CardFrame.lua
+Halls.lua
 Guide.lua
+Achievements.lua
+Records.lua
 Awards.lua
 RunComm.lua
 Runs.lua

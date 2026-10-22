@@ -26,8 +26,15 @@ local api = C.Api
 local function counters() return C.Char().counters end
 function S:Counter(id) return counters()[id] or 0 end
 -- the window hears of a change only where it shows the stat and its text changed (UI.lua), so the five-second ticker
--- that moves time played and the session draws nothing on a page that does not show them
-local function shown(id, old, new) if C.UI and C.UI.ValueChanged then C.UI:ValueChanged(id, old, new) end end
+-- that moves time played and the session draws nothing on a page that does not show them. S:OnValue's fn(id, old,
+-- new) hears every change of your own values too (Records.lua: the guild's records; it returns at once for a stat
+-- that holds none)
+local valuers = {}
+function S:OnValue(fn) valuers[#valuers + 1] = fn end
+local function shown(id, old, new)
+  if C.UI and C.UI.ValueChanged then C.UI:ValueChanged(id, old, new) end
+  for _, fn in ipairs(valuers) do fn(id, old, new) end
+end
 function S:Set(id, v)
   local old = self.values[id]
   if old == v then return end
@@ -146,13 +153,27 @@ end
 ----------------------------------------------------------------------------
 local DAILY = { quests_today = true, deaths_today = true, levelups = true }
 local WEEKLY = { logins = true, weekly_raids = true }
--- (the weekly run stats join it from Runs.lua: Runs, Shout-outs and Bloopers this week)
+-- (the weekly run stats join it from Runs.lua: Runs, Shout-outs and Bloopers this week; Halls.lua's Deaths and Quests
+-- this week too)
 S.WEEKLY = WEEKLY
+-- the week's key: its Monday's "%Y-%W" (%W counts weeks from the year's first Monday), so the week spanning a new year
+-- keeps one key: Friday 1 January 2027 is in 2026-52 with its Monday, where its own "%Y-%W" says 2027-00. By the
+-- calendar of date("*t") (Lua's os.date table, wday 1 a Sunday and yday from 1; the client's own code reads it,
+-- Blizzard_Communities/GuildNews.lua:107), no clock arithmetic (t: a time, now where nil)
+local function leap(y) return y % 4 == 0 and (y % 100 ~= 0 or y % 400 == 0) end
+function S.WeekKey(t)
+  if not date then return "" end
+  local d = date("*t", t)
+  if type(d) ~= "table" or type(d.wday) ~= "number" or type(d.yday) ~= "number" then return date("%Y-%W", t) end
+  local y, yday = d.year, d.yday - (d.wday + 5) % 7 -- (wday 1 is Sunday: back to the Monday)
+  if yday < 1 then y = y - 1; yday = yday + (leap(y) and 366 or 365) end
+  return string.format("%04d-%02d", y, math.floor((yday - 1) / 7) + 1)
+end
 -- live: called by the ten-minute timer, not by Start (which resets here and then counts the login itself)
 local function dayCheck(live)
   local ch = C.Char()
   local today = date and date("%Y-%m-%d") or ""
-  local week = date and date("%Y-%W") or "" -- %W: the week starts on Monday
+  local week = S.WeekKey() -- (the week starts on Monday)
   local reset = false
   if ch.day ~= today then
     ch.day = today
@@ -161,6 +182,12 @@ local function dayCheck(live)
   end
   if ch.week ~= week then
     local turned = ch.week ~= nil -- (nil: the first run on this character)
+    -- (the values a reset replaces, with the week they were and the week it is: the halls' Last week, Halls.lua)
+    if turned then
+      local was = {}
+      for id in pairs(WEEKLY) do was[id] = counters()[id] end
+      ch.lastWeek = { from = ch.week, to = week, v = was }
+    end
     ch.week = week
     for id in pairs(WEEKLY) do counters()[id] = 0; S.values[id] = 0; S.dirty[id] = true end
     -- a week turning while you play: this session is its first login

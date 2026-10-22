@@ -3,7 +3,10 @@
 -- line and a value; a run report's awards are cards, and so will the halls, the records and the achievements be. It
 -- reads nothing of runs: CardFrame.lua lays cards out, Runs.lua and the others say what is on them.
 --   Cards.Make(parent)    a card, 180 x 372 units
---   Cards.Fill(card, c)   c = { guid, name, class, race, sex, kind, label, title, line, value, valueLabel, headline, tip }
+--   Cards.Fill(card, c)   c = { guid, name, class, race, sex, kind, label, title, line, value, valueLabel, icon, headline,
+--                         guild, tip }; icon: an achievement's, at 36 in the picture's top-right corner; guild: a guild
+--                         card (a guild achievement's), no member: the guild's name in white, the icon at 96 in the
+--                         picture
 --   Cards.Find(guid)      the unit to draw a member by: player, partyN or raidN, target, focus, mouseover, nameplate1
 --                         to 40; only one UnitIsVisible says is in sight and whose identity is plain
 --                         (C_Secrets.ShouldUnitIdentityBeSecret; SetUnit is RequiresDeclassifiedUnitIdentity)
@@ -17,7 +20,7 @@ local Cards = {}
 C.Cards = Cards
 
 -- two tokens beside the windows design's palette, on cards alone (their 3 px bar and their label): STAR, Cute's pink,
--- for GOLD STAR (and later GUILD FIRST and RECORD); BLOOPER for bloopers. Every other kind an EDGE bar, its label WHITE
+-- for GOLD STAR, GUILD FIRST and RECORD; BLOOPER for bloopers. Every other kind an EDGE bar, its label WHITE
 Cards.STAR = { 0.949, 0.541, 0.816 }      -- #F28AD0
 Cards.BLOOPER = { 0.941, 0.486, 0.353 }   -- #F07C5A
 Cards.EDGE = { 0.42, 0.42, 0.42 }         -- #6B6B6B
@@ -25,7 +28,7 @@ Cards.GROUP = { 0.31, 0.82, 0.77 }        -- #4FD1C4, the dungeons-and-raids cat
 local WHITE, INK, DIM = { 0.96, 0.96, 0.96 }, { 0.86, 0.86, 0.86 }, { 0.58, 0.58, 0.58 }
 local PANEL, PANEL2, LINE = { 0.07, 0.07, 0.07 }, { 0.11, 0.11, 0.11 }, { 0.2, 0.2, 0.2 }
 function Cards.KindColor(kind)
-  if kind == "star" then return Cards.STAR end
+  if kind == "star" or kind == "first" or kind == "record" then return Cards.STAR end
   if kind == "blooper" then return Cards.BLOOPER end
   return nil
 end
@@ -139,6 +142,17 @@ function Cards.Make(parent)
   f.portrait:SetSize(96, 96)
   f.portrait:SetPoint("CENTER", f.portraitEdge, "CENTER")
   f.classIcon = f.pic:CreateTexture(nil, "OVERLAY")
+  -- (an achievement's icon over the model or the icons: on a frame above the model's)
+  f.over = CreateFrame("Frame", nil, f.pic)
+  f.over:SetAllPoints()
+  f.over:SetFrameLevel((f.model:GetFrameLevel() or 1) + 2)
+  f.badgeEdge = U.Flat(f.over, "ARTWORK", { 0, 0, 0 }, 1)
+  f.badgeEdge:SetSize(38, 38)
+  f.badgeEdge:SetPoint("TOPRIGHT", -4, -4)
+  f.badge = f.over:CreateTexture(nil, "OVERLAY")
+  f.badge:SetSize(36, 36)
+  f.badge:SetPoint("CENTER", f.badgeEdge, "CENTER")
+  f.badgeEdge:Hide(); f.badge:Hide()
   f.name = U.Text(f, 15, WHITE, "CENTER", 168)
   f.name:SetPoint("TOP", 0, -234)
   f.title = U.Text(f, 13, WHITE, "CENTER", 168)
@@ -172,6 +186,14 @@ local function picture(f, d)
   local U = UI()
   local cc = U.ClassColor(d.class)
   f.model:Hide(); f.tint:Hide(); f.portrait:Hide(); f.portraitEdge:Hide(); f.classIcon:Hide()
+  -- (a guild card: the achievement's icon at 96 where a race portrait sits, with its 1 px black edge)
+  if d.guild then
+    local icon = tonumber(d.icon)
+    local shown = icon ~= nil and f.portrait:SetTexture(icon) ~= false
+    f.portrait:SetShown(shown)
+    f.portraitEdge:SetShown(shown)
+    return "guild"
+  end
   local unit = Cards.Find(d.guid)
   if unit and type(f.model.SetUnit) == "function" then
     local ok = f.model:SetUnit(unit)
@@ -230,7 +252,10 @@ function Cards.Fill(f, d)
     if d.headline then f:SetBackdropBorderColor(WHITE[1], WHITE[2], WHITE[3], 1) else f:SetBackdropBorderColor(0, 0, 0, 1) end
   end
   f.drew = picture(f, d)
-  color(f.name, U.ClassColor(d.class))
+  local icon = tonumber(d.icon)
+  local badge = icon ~= nil and not d.guild and f.badge:SetTexture(icon) ~= false
+  f.badge:SetShown(badge); f.badgeEdge:SetShown(badge)
+  color(f.name, d.guild and WHITE or U.ClassColor(d.class))
   U.FitText(f.name, d.name or "?", 164)
   U.FitText(f.title, d.title or "", 164)
   f.line:SetText(d.line or "")
@@ -240,8 +265,12 @@ function Cards.Fill(f, d)
   f:Show()
 end
 
--- the card screen for a set (the design's unit interface, 2.3): R1 shows a run's report ("report", or "test" for the
--- test report); the halls' announcement and preview modes come with them
+-- the card screen for a set (the design's unit interface, 2.3): a run's report ("report", or "test" for the test
+-- report), a published set ("announce"), an officer's set before it goes ("preview"; a test announcement "testset")
 function Cards:Show(set, mode)
-  if C.CardFrame and C.CardFrame.Report then C.CardFrame:Report(set, { test = mode == "test" }) end
+  local CF = C.CardFrame
+  if not CF then return end
+  if mode == "announce" or mode == "preview" or mode == "testset" then
+    if CF.Announce then CF:Announce(set, { preview = mode == "preview", test = mode == "testset" }) end
+  elseif CF.Report then CF:Report(set, { test = mode == "test" }) end
 end
