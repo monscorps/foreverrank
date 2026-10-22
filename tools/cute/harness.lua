@@ -17130,6 +17130,26 @@ do local function cardsStage()
       assert((Hc.FindMember("\195\165se") or {}).short == "\195\133se" and (Hc.FindMember("\195\166") or {}).short == "\195\134sir", "a-ring and ae typed small")
       assert(Hc.FindMember("\195\184x") == nil, "nobody by that start")
     end)
+
+    -- a "most" record rests on one member's Cute: a value past what the time since Cute began counting allows (Cute's
+    -- counts began with 0.1.0 on 18 October 2026) holds none, so an edited copy's 2^31 jumps does not hold the Records
+    -- chip for good while an honest 500 is the guild's best
+    case("a most record within what time allows", { gmember("Rok", 1), gmember("Ryn", 3), gmember("Rax", 3) }, function()
+      local rok, ryn, rax = cchar("Rok", 1), cchar("Ryn", 3), cchar("Rax", 3)
+      login(rok); login(ryn); login(rax)
+      tickAll(100)
+      local b36 = rok.C.Comm.b36
+      rax.C.Comm.Queue({ msg = "1D|4|jumps=" .. b36(2147483000) })
+      tickAll(3)
+      ryn.C.Comm.Queue({ msg = "1D|4|jumps=" .. b36(500) })
+      tickAll(3)
+      local e = recOf(rok, "jumps")
+      assert(e and e.g == ryn.o.guid and e.v == 500, "Ryn's 500 jumps hold the record, not 2^31: " .. tostring(e and e.v))
+      -- one saved from before (0.9 kept it) goes too
+      Rc(rok).Entries().jumps = { v = 2147483000, g = rax.o.guid, n = "Rax", c = "MAGE", t = rok.C.ServerNow() }
+      rok.C.Policy.ver = rok.C.Policy.ver + 1
+      assert(recOf(rok, "jumps") == nil, "a saved one past the bound dropped")
+    end)
     assert(#failed == 0, "fix-cards: " .. #failed .. " case(s) failed:\n  " .. table.concat(failed, "\n  "))
     said[#said + 1] = "the launch audit's cards findings: " .. table.concat(passed, "; ")
   end
