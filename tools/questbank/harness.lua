@@ -22666,6 +22666,90 @@ do
   end
   print("map G: " .. table.concat(said, "; "))
 end
+----------------------------------------------------------------------------
+-- (map, part 3: the review of F and G) QuestBank's side
+-- R1. "Our icons on the game's map" off (mapIcons false): the game's map draws none of ours, and a host's map window
+--     keeps its quest pins (a zone's and a continent's), each layer by its own switch; a switch flipped there never
+--     turns the game's map's icons on again. QuestBank alone, its page follows that master switch as before.
+-- R2. A merged pin lights for every quest it stands for (a row hovered, a quest read), not only its own.
+-- R3. Finds that would touch on the host's map are one pin with their count on its corner (a book and a lock the guides
+--     put at one spot, a chest beside them), its tooltip naming each, lit for each; zoomed in they part.
+-- R4. Under the kind marks the switch for In your log shows an objective's cursor, as its pins do; QuestBank alone the
+--     quest disc.
+----------------------------------------------------------------------------
+do
+  local said = {}
+  local function hostChar(name, flags, o)
+    o = o or {}
+    local c = newClient({ name = name, level = o.level or 5, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1,
+      race = "Human", log = o.log or {}, done = o.done or {}, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Goldshire" })
+    local env = c.env
+    env.MAP_CANVAS_MOUSE_WHEEL_ZOOM_BEHAVIOR_SMOOTH = 1
+    env.MapCanvasMixin = env.CreateFromMixins(env.MapCanvasMixin, {
+      SetMouseWheelZoomMode = function(self, mode) self.__wheelMode = mode end,
+      GetNormalizedCursorPosition = function() return 0.5, 0.5 end,
+    })
+    env.MapCanvasScrollControllerMixin = env.CreateFromMixins(env.MapCanvasScrollControllerMixin, {
+      OnMouseWheel = function() end, GetScaleForMinZoom = function() return 1 end, GetCanvasScale = function() return 1 end,
+    })
+    env.C_Map.GetMapInfoAtPosition = function() return nil end
+    for k, v in pairs(flags or {}) do c.QB[k] = v end
+    if o.objectives then c.objectives = o.objectives end
+    login(c)
+    if flags and flags.mapWindow then
+      local box = env.CreateFrame("Frame", nil, env.UIParent)
+      box:SetSize(1002, 668)
+      c.QB.MapPage.Host(box, { strata = "HIGH" })
+    end
+    return c
+  end
+  local function redraw(c) local QB = c.QB; QB:Recompute(true); QB.Model.Finish(); QB.Pins:Update(); QB.QuestMap:Update() end
+  local function kinds(layer, kind)
+    local n = 0
+    for _, f in ipairs(layer.active) do if f.data.kind == kind then n = n + 1 end end
+    return n
+  end
+  -- R1
+  do
+    local c = hostChar("Iconsoff", { mapWindow = true, kindMarks = true }, { log = { { 7, 0 }, { 33, 1 } } })
+    local QB = c.QB
+    local MP, QM = QB.MapPage, QB.QuestMap
+    local set = QB:Settings()
+    MP.Go(1429, "user")
+    redraw(c)
+    local gives = kinds(QM.pageProvider, "give")
+    assert(gives > 0, "a host's map with our icons on the game's map: its !")
+    set.mapIcons = false
+    redraw(c)
+    assert(#QM:Build(1429, false) == 0, "our icons on the game's map off: the game's map draws none of ours")
+    assert(kinds(QM.pageProvider, "give") == gives, "and the host's map keeps its own: " .. kinds(QM.pageProvider, "give") .. " of " .. gives)
+    local turn, give = MP.TOGGLES[1], MP.TOGGLES[3]
+    assert(MP.LayerOn(turn) and MP.LayerOn(give), "each of its switches on, by its own key")
+    MP.ToggleLayer("mapGive")
+    assert(set.mapIcons == false and set.mapGive == false and set.mapTurn ~= false and not MP.LayerOn(give) and MP.LayerOn(turn),
+      "a switch flipped on the host's map: that layer alone, the game's map's icons left off")
+    assert(kinds(QM.pageProvider, "give") == 0, "To pick up off: no ! on the host's map")
+    MP.ToggleLayer("mapGive")
+    assert(set.mapIcons == false and set.mapGive == true and kinds(QM.pageProvider, "give") == gives, "and on again, the game's map's icons still off")
+    MP.Go(1415, "user")
+    local onContinent = kinds(QM.pageProvider, "give") + kinds(QM.pageProvider, "turn")
+    assert(onContinent > 0, "the continent's ! and ? with our icons on the game's map off")
+    set.mapIcons = nil
+    said[#said + 1] = "our icons on the game's map off: none on the game's map, the host's map keeping its pins (a zone's and a continent's) by its own switches, a switch flipped there leaving the game's map's off"
+  end
+  -- R1: QuestBank alone, the page follows the master switch
+  do
+    local c = hostChar("Iconsalone", nil, { log = { { 7, 0 } } })
+    local QB = c.QB
+    local MP, QM = QB.MapPage, QB.QuestMap
+    QB:Settings().mapIcons = false
+    assert(#QM:Build(1429, true) == 0 and not MP.LayerOn(MP.TOGGLES[3]), "QuestBank alone: its page follows Quest icons on the world map")
+    MP.ToggleLayer("mapGive")
+    assert(QB:Settings().mapIcons == true and QB:Settings().mapGive == true and QB:Settings().mapTurn == false, "QuestBank alone: a switch flipped with the master off turns that one on alone, as before")
+    said[#said + 1] = "QuestBank alone: its page by the master switch, a switch flipped turning that one on alone"
+  end
+  print("map R: " .. table.concat(said, "; "))
+end
 
 
 local seen = {}

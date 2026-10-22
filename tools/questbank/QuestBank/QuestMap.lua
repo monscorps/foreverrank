@@ -35,9 +35,11 @@ function QM.Draws(mapID)
   return kind == ((Enum and Enum.UIMapType and Enum.UIMapType.Zone) or 3)
 end
 
--- Forever only (as Game.lua tells it); elsewhere the layer does nothing and Settings greys its rows out
+-- Forever only (as Game.lua tells it); elsewhere the layer does nothing and Settings greys its rows out. The master
+-- switch (mapIcons) is the game's map's; on a host's map window (page, under QB.mapWindow) each layer's own switch
+-- alone decides, so "Our icons on the game's map" off (Cute's row) leaves Cute's own map its pins
 function QM.Available() return QB.Game and QB.Game.Forever() or false end
-local function on() return QM.Available() and QB:Settings().mapIcons ~= false end
+local function on(page) return QM.Available() and ((page and QB.mapWindow) or QB:Settings().mapIcons ~= false) end
 
 ----------------------------------------------------------------------------
 -- art: the client's own cursor atlases for each kind of objective, as the minimap and the Route page draw them (file
@@ -531,8 +533,8 @@ end
 function QM:Build(m, page)
   local list = {}
   for r in pairs(also) do if r.m == m then also[r] = nil end end
-  if not (on() and QM.Draws(m)) then
-    if page and QB.mapWindow and on() and QM.IsContinent(m) then return self:Continent(m) end
+  if not (on(page) and QM.Draws(m)) then
+    if page and QB.mapWindow and on(page) and QM.IsContinent(m) then return self:Continent(m) end
     return list
   end
   local set, s = QB:Settings(), QB.state

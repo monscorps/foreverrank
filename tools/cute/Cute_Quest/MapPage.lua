@@ -1093,10 +1093,11 @@ local function separator(f, i)
 end
 
 -- a layer's switch under the map: the game's icon (the route's the super-tracked disc) and how many there are
--- on this map; off, greyed. Its tooltip gives the word
+-- on this map; off, greyed. Its tooltip gives the word. (The review of sub-project F) On a host's map window the master
+-- switch is the game's map's alone (QuestMap.lua's on): each layer is its own switch there
 local function layerOn(t)
   local set = QB:Settings()
-  return not (t.icons and set.mapIcons == false) and set[t.key] ~= false
+  return not (t.icons and set.mapIcons == false and not QB.mapWindow) and set[t.key] ~= false
 end
 MP.TOGGLES, MP.LayerOn = TOGGLES, layerOn
 
@@ -1513,13 +1514,14 @@ function MP.Strip()
   end
 end
 
--- a switch flipped: one of QuestMap.lua's while its master switch is off turns that one on alone
+-- a switch flipped: one of QuestMap.lua's while its master switch is off turns that one on alone (QuestBank's page; a
+-- host's map window flips its own layer and never the game's map's master switch)
 function MP.ToggleLayer(key)
   local set = QB:Settings()
   for _, t in ipairs(TOGGLES) do
     if t.key == key then
       local on = not layerOn(t)
-      if on and t.icons and set.mapIcons == false then
+      if on and t.icons and set.mapIcons == false and not QB.mapWindow then
         set.mapIcons = true
         for _, o in ipairs(TOGGLES) do if o.icons then set[o.key] = false end end
       end
