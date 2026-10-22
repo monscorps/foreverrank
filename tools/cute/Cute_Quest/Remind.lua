@@ -520,7 +520,9 @@ local function moveStop(self)
   local f = self.piece
   if not (f and f.moving) then return end
   f.moving = nil
-  if fighting() then return end -- (a fight began on the way: the piece stays where it was)
+  -- (a fight began on the way: StopMovingOrSizing is protected, SimpleFrameAPIDocumentation.lua:1571, on a piece
+  -- holding the game's secure buttons, so the drag is stopped after the fight, below, the piece at its own place)
+  if fighting() then f.stopAfter = true return end
   f:StopMovingOrSizing()
   local x, y = f:GetCenter()
   if not x then return end
@@ -531,6 +533,24 @@ local function moveStop(self)
   else
     R.Settings().pos = { x = inParent(f, x), y = inParent(f, y) }
     placeBar()
+  end
+end
+-- (the hud review) a drag a fight met: at its start, marked (the mouse let go in it may never come, the holder hidden
+-- under the cursor); after it, stopped and the piece put back at its own place, nothing written
+local function dragsMet()
+  for i = 1, 2 do
+    local f = i == 1 and bar or banner
+    if f and f.moving then f.moving, f.stopAfter = nil, true end
+  end
+end
+local function dragsStop()
+  for i = 1, 2 do
+    local f = i == 1 and bar or banner
+    if f and f.stopAfter then
+      f.stopAfter = nil
+      f:StopMovingOrSizing()
+      if f == banner then placeBanner() else placeBar() end
+    end
   end
 end
 
@@ -1134,6 +1154,7 @@ function R.Shown(which) return shown[which] end
 -- 0.2 s fade in. Without a driver (an old client) the holder goes clear instead
 ----------------------------------------------------------------------------
 local function fightOver()
+  dragsStop()
   after.gen = after.gen + 1
   local gen = after.gen
   after.waiting = true
@@ -1806,6 +1827,7 @@ local auraBits = { player = "buffs", party = "party" }
 function R.OnEvent(event, a1, a2, ...)
   for _, fn in ipairs(hearers[event] or {}) do fn(event, a1, a2, ...) end
   if event == "PLAYER_REGEN_DISABLED" then
+    dragsMet()
     if pull.untilT then pull.untilT = nil end
     after.gen = after.gen + 1 -- (a new fight: the wait after the last one is off)
     after.waiting = true

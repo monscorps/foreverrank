@@ -23167,6 +23167,23 @@ do
     local bp = R.Settings().bannerPos
     assert(type(bp) == "table" and bp.x == 500 and ban.__points[1].point == "BOTTOM" and ban.__points[1].rel == env.UIParent, "a moved Buffs keeps its own point")
     R.Settings().bannerPos = nil; R.Place()
+    -- (an Alt-drag a fight interrupts: stopped once the fight is over, the piece back at its own place, nothing written;
+    -- StopMovingOrSizing is protected, SimpleFrameAPIDocumentation.lua:1571, so never in the fight)
+    local starts, stops = 0, 0
+    rawset(ban, "StartMoving", function() starts = starts + 1 end)
+    rawset(ban, "StopMovingOrSizing", function() if c.combat then error("ADDON_ACTION_BLOCKED: StopMovingOrSizing in a fight", 2) end stops = stops + 1 end)
+    c.alt = true; b1.__scripts.OnMouseDown(b1, "LeftButton"); c.alt = false
+    c.combat = true; ev(c, "PLAYER_REGEN_DISABLED")
+    b1.__scripts.OnMouseUp(b1, "LeftButton")
+    assert(starts == 1 and stops == 0, "in the fight: nothing stopped yet")
+    c.combat = false; ev(c, "PLAYER_REGEN_ENABLED"); tick(c, 3)
+    assert(stops == 1 and R.Settings().bannerPos == nil and ban.__points[1].rel == bar, "after it: stopped, back at its own place, nothing written")
+    -- (the mouse let go in the fight never came, the holder hidden under it: stopped all the same)
+    c.alt = true; b1.__scripts.OnMouseDown(b1, "LeftButton"); c.alt = false
+    c.combat = true; ev(c, "PLAYER_REGEN_DISABLED")
+    c.combat = false; ev(c, "PLAYER_REGEN_ENABLED"); tick(c, 3)
+    assert(starts == 2 and stops == 2 and R.Settings().bannerPos == nil, "no mouse-up: stopped after the fight")
+    rawset(ban, "StartMoving", nil); rawset(ban, "StopMovingOrSizing", nil)
     -- a fight with a secure button on the step frame: its size holds still, laid out after
     local s = c.QB:Settings()
     s.guide.on, s.guide.frame, s.welcome = true, true, nil
