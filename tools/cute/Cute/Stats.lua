@@ -1779,7 +1779,9 @@ function S.ValueCame(id, key)
   if not S.LabelOf(id) then return end
   local e = CuteDB.roster[key]
   local voice = C.Roster and type(e) == "table" and C.Roster:VoiceOf(key, e) or nil
-  if S.Found(id, false, voice, true) and C.Rules and C.Rules.Dirty then C.Rules:Dirty(true) end
+  -- (a guild mate's discovery waits for the next build, as the records' do: urgent, it built the model every three
+  -- seconds while the guild learned its bosses)
+  if S.Found(id, false, voice, true) and C.Rules and C.Rules.Dirty then C.Rules:Dirty() end
 end
 
 -- at login: every label saved defines its stat again, your own first, then the ones two members agree on, then the

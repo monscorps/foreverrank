@@ -19341,6 +19341,7 @@ end
 --     it, so an older record never lands after a newer delta
 -- C7. A login, logout, Away or zone change in the guild reads that one member (its club event names it), another club's
 --     event nothing; an online flip walks no record and builds no identity, a rank moved reads the guild
+-- C8. A guild mate's loot waits for the next build (thirty seconds), not three; a build walks the records fifty a frame
 ----------------------------------------------------------------------------
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "MAGE", level = 30, online = true } end
@@ -19588,6 +19589,39 @@ do
     end)
   end
   said[#said + 1] = "a login, logout, Away or zone change reads that one member, a rank the guild; an online flip walks no record"
+  -- C8
+  do
+    local guild = { member("Ofa", 0) }
+    for i = 1, 299 do guild[#guild + 1] = { name = "Pw" .. i .. "-Forever", guid = string.format("Player-4242-%08X", 0x0D000000 + i), rank = 3, rankName = "Raider", class = "MAGE", level = 30, online = false } end
+    isolated(guild, function()
+      local roster = {}
+      for i = 2, 300 do
+        local st = { guid = guild[i].guid, level = 30, addon_ver = "0.9.0", zone = "Duskwood" }
+        for j = 1, 100 do st["g" .. (3000 + j)] = i + j end
+        for j = 1, 5 do st["e" .. (5000 + j)] = 1; st["k" .. (5000 + j)] = 20 + j end
+        roster[guild[i].name] = { seen = EPOCH + 900, online = false, stats = st, at = {}, ch = true }
+      end
+      local c = char("Ofa", 0)
+      login(c, { roster = roster })
+      tickAll(120)
+      local Rules = c.C.Rules
+      tick(c, 40)
+      -- a build just now; a guild mate's loot seen: it waits for the next build, not three seconds
+      Rules:Rebuild()
+      Rules.due, Rules.dueGen = false, (Rules.dueGen or 0) + 1
+      assert(Rules.LearnLoot(5001, { 1234 }, false, guild[5].guid), "a guild mate's loot, new")
+      assert(Rules.due and Rules.dueAt - c.C.Now() >= 25, "a guild mate's loot waits for the next build: " .. tostring(Rules.dueAt and (Rules.dueAt - c.C.Now())))
+      -- that build: the walk over 299 records in slices of fifty, a frame each, then the model
+      local zero, realAfter = 0, c.env.C_Timer.After
+      c.env.C_Timer.After = function(sec, f) if sec == 0 then zero = zero + 1 end return realAfter(sec, f) end
+      local at0 = Rules.model.at
+      tick(c, 31)
+      c.env.C_Timer.After = realAfter
+      assert(zero >= 5 and Rules.model.at > at0 and Rules.model.bosses ~= nil, "the build's walk in slices, then the model: " .. zero .. " frames after the first")
+      leave(c)
+    end)
+  end
+  said[#said + 1] = "a guild mate's loot waits for the next build; a build walks the records fifty a frame"
   print("fix-cute-core review: " .. table.concat(said, "; "))
 end
 

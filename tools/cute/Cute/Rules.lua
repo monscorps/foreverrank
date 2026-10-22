@@ -368,7 +368,8 @@ local function witnessed(id, guid)
   if id:sub(1, 1) == "i" then return true end
   return R.Corroborated(tonumber(id:sub(2)), guid)
 end
-function R.Members()
+-- (you, first)
+local function membersStart()
   local out, seen = {}, {}
   local me = C.MyGUID() or "me"
   local v = C.Sample and C.Sample.values or {}
@@ -376,25 +377,59 @@ function R.Members()
   for id, x in pairs(C.Char().counters) do if type(id) == "string" and dynamic(id) and type(x) == "number" and x > 0 and witnessed(id, me) then dyn[id] = x end end
   out[1] = { guid = me, me = true, level = num(v.level), dyn = dyn, stats = v }
   seen[me] = true
+  return out, seen
+end
+-- (a saved record, where it speaks for a GUID not counted yet: the number of its values walked)
+local function memberOf(out, seen, key, e, byGuid)
+  local st = type(e) == "table" and type(e.stats) == "table" and e.stats or nil
+  -- (the GUID the roster lets the record speak for: none before the roster is known, Roster.lua R:VoiceOf)
+  local g = st and C.Roster:VoiceOf(key, e)
+  if not (type(g) == "string" and g ~= "" and not seen[g] and not untrusted(g) and not C.Roster:IsSelfRecord(key, e)) then return 0 end
+  seen[g] = true
+  local d, walked = {}, 0
+  for id, x in pairs(st) do
+    walked = walked + 1
+    if type(x) == "number" and x > 0 and type(id) == "string" and dynamic(id) and witnessed(id, g) then d[id] = x end
+  end
+  local m = byGuid[g]
+  out[#out + 1] = { guid = g, level = (m and num(m.level)) or num(st.level), dyn = d, stats = st, key = key }
+  return walked
+end
+-- (R.walked: the evidence a sliced walk gathered for the build it ends with, R:Walk; taken once)
+function R.Members()
+  local w = R.walked
+  if w then R.walked = nil; return w end
+  local out, seen = membersStart()
   local byGuid = C.Roster.byGuid or {}
   local walked = 0
-  for key, e in pairs(CuteDB and CuteDB.roster or {}) do
-    local st = type(e) == "table" and type(e.stats) == "table" and e.stats or nil
-    -- (the GUID the roster lets the record speak for: none before the roster is known, Roster.lua R:VoiceOf)
-    local g = st and C.Roster:VoiceOf(key, e)
-    if type(g) == "string" and g ~= "" and not seen[g] and not untrusted(g) and not C.Roster:IsSelfRecord(key, e) then
-      seen[g] = true
-      local d = {}
-      for id, x in pairs(st) do
-        walked = walked + 1
-        if type(x) == "number" and x > 0 and type(id) == "string" and dynamic(id) and witnessed(id, g) then d[id] = x end
-      end
-      local m = byGuid[g]
-      out[#out + 1] = { guid = g, level = (m and num(m.level)) or num(st.level), dyn = d, stats = st, key = key }
-    end
-  end
+  for key, e in pairs(CuteDB and CuteDB.roster or {}) do walked = walked + memberOf(out, seen, key, e, byGuid) end
   C.Perf.Count("walk", walked)
   return out
+end
+-- the walk over every saved record that a build begins with, WALK_SLICE records a frame (0.9.0 walked a guild's 300
+-- records of 350 values each, about 100,000 values, in the frame it built the model), then the build. A walk begun
+-- later takes its place; a build meanwhile (R:Rebuild called) takes nothing of it
+local WALK_SLICE = 50
+function R:Walk(done)
+  self.walkGen = (self.walkGen or 0) + 1
+  local gen, keys = self.walkGen, {}
+  for key in pairs(CuteDB and CuteDB.roster or {}) do keys[#keys + 1] = key end
+  local out, seen = membersStart()
+  local i, walked = 1, 0
+  local step
+  step = C.Safe(function()
+    if R.walkGen ~= gen then return end
+    local byGuid, roster = C.Roster.byGuid or {}, CuteDB.roster or {}
+    local stop = math.min(#keys, i + WALK_SLICE - 1)
+    for j = i, stop do walked = walked + memberOf(out, seen, keys[j], roster[keys[j]], byGuid) end
+    i = stop + 1
+    if i <= #keys then C_Timer.After(0, step) return end
+    C.Perf.Count("walk", walked)
+    R.walked = out
+    done()
+    R.walked = nil
+  end, "rules: walk")
+  step()
 end
 
 ----------------------------------------------------------------------------
@@ -845,7 +880,8 @@ function R.LearnLoot(enc, ids, own, who)
       end
     end
   end
-  if new then R:Dirty(true) end
+  -- (a guild mate's growth waits for the next build, as the records' do; yours is built a few seconds on)
+  if new then R:Dirty(own == true) end
   return new
 end
 -- what this character saw drop from a boss, for the labels message: item ids in base 36 joined by dots
@@ -1492,8 +1528,10 @@ function R:Dirty(urgent)
   C_Timer.After(wait, C.Safe(function()
     if R.dueGen ~= gen then return end
     R.due = false
-    R:Rebuild()
-    if C.Guide and C.Guide.Redraw then C.Guide.Redraw() end
+    R:Walk(function()
+      R:Rebuild()
+      if C.Guide and C.Guide.Redraw then C.Guide.Redraw() end
+    end)
   end, "rules: rebuild"))
 end
 -- a member's values arrived (Roster.lua): their XP sample learned at once, by the GUID the record speaks for (g: none
