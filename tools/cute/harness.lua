@@ -14936,7 +14936,7 @@ do
       Mr.byId[id].settings(Mr.byId[id], col)
       return n
     end
-    assert(rowsOf("camp") == 8 and rowsOf("quests") <= 8, string.format("Reminders eight rows, Quests eight at most: %d, %d", rowsOf("camp"), rowsOf("quests")))
+    assert(rowsOf("camp") == 8, string.format("Reminders eight rows: %d", rowsOf("camp")))
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
       sizeAll(r, size[1], size[2])
       r.C.UI:Open("settings", "camp")

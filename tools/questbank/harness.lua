@@ -22963,6 +22963,23 @@ do
     assert(f:GetHeight() > h0, "the fight over: laid out with the line")
     G.Reminder = real
     f.item:Hide()
+    -- the route's first leg your hearthstone: the step frame's item button is it (item:<id>), ready; on its cooldown, none
+    local hc = hud("Homeward", "WARRIOR", "Warrior", 1, {}, { level = 20, bags = { { 6948, 1 } } })
+    local hs = hc.QB:Settings()
+    hs.guide.on, hs.guide.frame, hs.welcome = true, true, nil
+    hc.QB.StepFrame.Apply(); hc.QB.Remind.Refresh()
+    local realRoute = hc.QB.Target.Route
+    hc.QB.Target.Route = function() return { legs = { { kind = "hearth" } } } end
+    hc.QB.StepFrame.RefreshItem(hc.QB.Guide.Steps()[1])
+    local hb = hc.env.QuestBankStepItem
+    assert(hb and hb:IsShown() and hb:GetAttribute("type") == "item" and hb:GetAttribute("item") == "item:6948", "Use your Hearthstone: its button, item:6948")
+    hc.hearthCD = hc.clock - 60
+    hc.QB.StepFrame.RefreshItem(hc.QB.Guide.Steps()[1])
+    assert(not hb:IsShown(), "on its cooldown: no button")
+    hc.hearthCD = nil
+    hc.QB.Target.Route = realRoute
+    hc.QB.StepFrame.RefreshItem(hc.QB.Guide.Steps()[1])
+    assert(not hb:IsShown(), "no hearth on the route: no button")
   end }
 
   -- 19. budgets: an idle minute out of a party with nothing timed, no refresh and no clock; one refresh for a burst of 50

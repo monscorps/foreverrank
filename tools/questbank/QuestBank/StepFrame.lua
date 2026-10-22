@@ -504,10 +504,27 @@ local function itemButton(f)
   b:Hide()
   return b
 end
+-- (the hud round) the step's item: its quest's usable item, else, while the route's first leg is your hearthstone, the
+-- hearthstone you carry (Remind.Hearth: 6948, 243229, 284163, then the single-use 282006), ready: "Use your Hearthstone"
+-- had no button
+local function hearthItem()
+  local r = (QB.Target and QB.Target.Route and QB.Target.Route()) or QB.routeNow
+  local leg = r and r.legs and r.legs[1]
+  if not (leg and leg.kind == "hearth" and QB.Remind and QB.Remind.Hearth) then return nil end
+  local id, left = QB.Remind.Hearth()
+  if not id or left > 0 then return nil end
+  return id, nil, (QB.Data.TEX and QB.Data.TEX.hearth) or 134414
+end
+local function itemFor(s)
+  local id, link, tex = G.ItemFor(s)
+  if id then return id, link, tex end
+  return hearthItem()
+end
+SF.ItemFor = itemFor
 function SF.RefreshItem(s)
   local f = SF.frame
   if not f then return end
-  local id, _, tex = G.ItemFor(s)
+  local id, _, tex = itemFor(s)
   local want = id and ("item:" .. id) or nil
   if not f:IsShown() or (f.card and f.card:IsShown()) then want = nil end -- (the frame away or on a card: no button)
   if fighting() then SF.pendingItem = true return end
@@ -984,7 +1001,7 @@ function SF.Refresh()
   lastVer, lastTime, lastRemind, lastMembers, lastNote, lastMins = G.ver, text, remind, G.memberVer, note, mins
   -- the first row makes room for the item button only while one shows (in a fight, as the button stands); the stop
   -- look's button stands left of the frame
-  local itemUp = not STOP and (fighting() and (f.item ~= nil and f.item:IsShown()) or (not fighting() and G.ItemFor(steps[1]) ~= nil))
+  local itemUp = not STOP and (fighting() and (f.item ~= nil and f.item:IsShown()) or (not fighting() and itemFor(steps[1]) ~= nil))
   f.rows[1].text:SetWidth(INNER - TEXT_X - (STOP and MINS_W or 0) - (itemUp and 30 or 0))
   f.rows[1].text.qbText, f.rows[1].text.qbA = nil, nil -- (fitted again at the new width)
   for i = 1, 3 do
