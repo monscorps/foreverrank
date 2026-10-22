@@ -6,11 +6,15 @@
 In order: write the seed (Cute/Known.lua, gen_known.py) and run its selftest (the build stops when either fails), write
 Cute/Changes.lua from the page's changelog (the build stops when the toc's version has no entry), copy QuestBank's
 engine into Cute_Quest (build_quest: the only writer of that folder but its own nine files), zip both folders the
-way the owner does (skipped with --no-zip or when a folder is missing), regenerate
+way the owner does and pack Cute-Uploader.zip beside it (tools/build_uploader.py --cute: the same two folders with the
+uploader that never puts QuestBank in; both skipped with --no-zip or when a folder is missing), regenerate
 addons/cute/stats.js from the registry (luajit page_stats.lua), stamp the version (Cute.toc), the zip size (KB) and
-the stat counts into addons/cute/index.html between <!--@name--> ... <!--/@name--> markers, then check the page:
+the stat counts into addons/cute/index.html between <!--@name--> ... <!--/@name--> markers (kbu: Cute-Uploader.zip's
+size), then check the page:
   - every local href/src exists beside the page; every site-absolute path exists under the repo
-  - Settings > Data you share and the README promise the uploader on Cute's page only while it offers Cute-Uploader.zip
+  - Settings > Data you share and the README promise the uploader on Cute's page only while it offers Cute-Uploader.zip;
+    the zip offered is the Cute bundle (Cute.txt, no QuestBank, an uploader that reads Cute_Quest.lua) of Cute.zip's
+    version, and the page never offers QuestBank's uploader. --online: the live Worker takes Cute_Quest.lua
   - every class the page's own style defines starts with cu- and none appears in forever.css; every class the markup
     uses is defined somewhere (the page's style or forever.css, for the nav)
   - no version number, TODO or placeholder outside the markers and the changelog labels; no middle dots or arrows in
@@ -30,6 +34,7 @@ TOC = os.path.join(ADDON, "Cute.toc")
 PAGE_DIR = os.path.join(ROOT, "addons", "cute")
 PAGE = os.path.join(PAGE_DIR, "index.html")
 ZIP = os.path.join(PAGE_DIR, "Cute.zip")
+UPZIP = os.path.join(PAGE_DIR, "Cute-Uploader.zip")  # Cute's second download (tools/build_uploader.py --cute)
 STATS = os.path.join(PAGE_DIR, "stats.js")
 CHANGES = os.path.join(ADDON, "Changes.lua")
 SITE_CSS = os.path.join(ROOT, "forever.css")
@@ -204,6 +209,11 @@ def build_zip():
         os.remove(ZIP)
     subprocess.run(["zip", "-rq", ZIP, "Cute", "Cute_Quest", "-x", "*.DS_Store"], cwd=HERE, check=True)
     ok("Cute.zip built, %d bytes (Cute and Cute_Quest)" % os.path.getsize(ZIP))
+    # the second download, always with the first: the same folders, the uploader beside them
+    r = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "build_uploader.py"), "--cute", "--out", UPZIP], capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit("tools/build_uploader.py --cute failed:\n" + r.stdout + r.stderr)
+    ok("Cute-Uploader.zip built, %d bytes (Cute, Cute_Quest and the uploader)" % os.path.getsize(UPZIP))
 
 
 def build_stats():
@@ -502,19 +512,76 @@ def check_links(html):
 
 def check_uploader_note(html):
     """Settings > Data you share (Cute_Quest/PageQuests.lua's notes) and the README may say the uploader comes on Cute's
-    page only while the page offers it: a link to Cute-Uploader.zip (tools/build_uploader.py --cute, at release) that is
-    there beside the page"""
+    page only while the page offers it: a link to Cute-Uploader.zip (tools/build_uploader.py --cute, packed with Cute.zip)
+    that is there beside the page. The zip offered is the Cute bundle: Cute.txt beside an uploader that reads
+    Cute_Quest.lua, no QuestBank folder (a loaded QuestBank puts Cute_Quest to sleep), and Cute.zip's Cute; the page
+    never offers QuestBank's uploader, whose Install asks to put QuestBank in. With --online, the live Worker takes
+    Cute_Quest.lua (GET /api/finds.json answers v 1: worker/README.md deploys it before the page goes live)"""
+    import zipfile
     notes = re.findall(r'col:Note\("((?:[^"\\]|\\.)*)"\)', open(os.path.join(QUEST, "PageQuests.lua"), encoding="utf-8").read())
     readme = open(os.path.join(HERE, "README.md"), encoding="utf-8").read()
     promised = ["Settings: " + n for n in notes if "Cute's page" in n]
     if "Cute's second download" in readme:
         promised.append("README: Cute's second download")
-    offered = 'href="Cute-Uploader.zip"' in html and os.path.isfile(os.path.join(PAGE_DIR, "Cute-Uploader.zip"))
+    offered = 'href="Cute-Uploader.zip"' in html and os.path.isfile(UPZIP)
+    if "QuestBank-Uploader.zip" in html:
+        problem("Cute's page offers QuestBank-Uploader.zip, whose Install asks to put QuestBank in (Cute_Quest asleep): offer Cute-Uploader.zip")
     if promised and not offered:
         problem("the uploader is promised on Cute's page, which offers no Cute-Uploader.zip (python3 tools/build_uploader.py --cute "
                 "and the page's second download, or drop the words): " + "; ".join(promised))
+        return
+    if not offered:
+        ok("the uploader's words and Cute's page agree (not promised there)")
+        return
+
+    def toc_ver(z, name):
+        try:
+            m = re.search(r"^## Version:\s*(\S+)", z.read(name).decode("utf-8", "replace"), re.M)
+        except KeyError:
+            return None
+        return m.group(1) if m else None
+    with zipfile.ZipFile(UPZIP) as z:
+        names = z.namelist()
+        script = z.read("QuestBank Uploader/QuestBank-Uploader.ps1").decode("utf-8", "replace") if "QuestBank Uploader/QuestBank-Uploader.ps1" in names else ""
+        up_ver = toc_ver(z, "Cute/Cute.toc")
+        bad = []
+        if "QuestBank Uploader/Cute.txt" not in names:
+            bad.append("no QuestBank Uploader/Cute.txt, so its Install would offer QuestBank")
+        if any(n.startswith("QuestBank/") for n in names):
+            bad.append("a QuestBank folder in it")
+        if "Cute_Quest.lua" not in script:
+            bad.append("its uploader does not read Cute_Quest.lua")
+        if not any(n.startswith("QuestBank_Finds/") for n in names):
+            bad.append("no QuestBank_Finds folder")
+        if not up_ver or "Cute_Quest/Cute_Quest.toc" not in names:
+            bad.append("no Cute or Cute_Quest folder")
+    zip_ver = None
+    if os.path.isfile(ZIP):
+        with zipfile.ZipFile(ZIP) as z:
+            zip_ver = toc_ver(z, "Cute/Cute.toc")
+    if up_ver and zip_ver and up_ver != zip_ver:
+        bad.append("its Cute is %s and Cute.zip's %s (python3 tools/cute/build.py packs both)" % (up_ver, zip_ver))
+    if bad:
+        problem("Cute-Uploader.zip is not Cute's uploader bundle: " + "; ".join(bad))
     else:
-        ok("the uploader's words and Cute's page agree (%s)" % ("Cute-Uploader.zip offered" if offered else "not promised there"))
+        ok("the uploader's words and Cute's page agree (Cute-Uploader.zip offered: Cute %s, the uploader reading Cute_Quest.lua, no QuestBank)" % up_ver)
+    if "--online" not in sys.argv:
+        print("  skip the live Worker's finds round (--online asks it)")
+        return
+    import json, urllib.request
+    url = "https://foreverrank.andustemme.workers.dev/api/finds.json"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (cute build check)"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            body = json.loads(r.read().decode("utf-8", "replace"))
+        live = isinstance(body, dict) and body.get("v") == 1
+    except Exception:  # noqa: BLE001 - any failure is a Worker without the finds round
+        live = False
+    if live:
+        ok("the live Worker is the finds round's: it takes Cute_Quest.lua")
+    else:
+        problem("Cute's page offers the uploader, but the live Worker has no finds round (%s): deploy it first (worker/README.md), "
+                "or every Cute_Quest.lua sent gets 'not a QuestBank.lua file'" % url)
 
 
 def check_online(html):
@@ -724,6 +791,8 @@ def main():
     counts = build_stats()
     html = open(PAGE, encoding="utf-8").read()
     values = {"v": version, "kb": str(kb)}
+    if os.path.isfile(UPZIP):
+        values["kbu"] = str(int(round(os.path.getsize(UPZIP) / 1024.0)))
     values.update({k: str(v) for k, v in counts.items()})
     stamped, n = stamp(html, values)
     if stamped != html:

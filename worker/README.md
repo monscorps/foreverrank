@@ -19,7 +19,9 @@ main on push, and this Worker goes live only by the owner's deploy, so the relea
 
 1. Deploy the Worker (the deploy, below) and check `/api/finds.json` answers.
 2. Rebuild the uploaders from `uploader/` as it is now: `python3 tools/build_uploader.py` (QuestBank-Uploader.zip,
-   which reads `Cute_Quest.lua` too) and `python3 tools/build_uploader.py --cute` (Cute-Uploader.zip, for Cute's page).
+   which reads `Cute_Quest.lua` too) and `python3 tools/build_uploader.py --cute` (Cute-Uploader.zip, Cute's second
+   download; `python3 tools/cute/build.py` packs it with Cute.zip, and with `--online` stops while the live Worker has
+   no finds round).
 3. `python3 -I tools/questbank/build_page.py --online`: it stops while the zip does not read `Cute_Quest.lua` or the
    live Worker has no finds round.
 4. Only then push main.

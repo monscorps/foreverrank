@@ -19322,6 +19322,35 @@ do
   end)
 end
 
+-- [stage: fix-data] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- D1. Settings > Data you share says where a Cute player gets the uploader: Cute's page, which offers Cute-Uploader.zip
+--     (build_uploader.py --cute: the uploader that never puts QuestBank in) beside Cute.zip, the zip beside the page; the
+--     page never sends a Cute player to QuestBank's uploader, whose Install offers QuestBank (Cute_Quest asleep)
+----------------------------------------------------------------------------
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  local ok, err
+  isolated({ member("Rone", 1) }, function() ok, err = pcall(function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    c.C.UI:Open("settings", "share")
+    local shown = texts(c)
+    assert(shown:find("The QuestBank Uploader sends what you found in the world to foreverrank.com", 1, true), "Data you share names the uploader:\n" .. shown)
+    assert(shown:find("It comes with Cute on Cute's page at foreverrank.com.", 1, true), "Data you share says where the uploader comes from:\n" .. shown)
+    local page = assert(io.open(HERE .. "/../../addons/cute/index.html")):read("*a")
+    assert(page:find('href="Cute-Uploader.zip"', 1, true), "Cute's page offers Cute-Uploader.zip")
+    assert(page:find('href="Cute.zip"', 1, true), "Cute's page still offers Cute.zip")
+    assert(not page:find("QuestBank-Uploader.zip", 1, true), "Cute's page never offers QuestBank's uploader")
+    local zip = io.open(HERE .. "/../../addons/cute/Cute-Uploader.zip", "rb")
+    assert(zip, "Cute-Uploader.zip is beside Cute's page")
+    zip:close()
+    leave(c)
+  end) end)
+  assert(ok, "fix-data D1: " .. tostring(err))
+  print("fix-data: Data you share names Cute's page, which offers Cute-Uploader.zip")
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end
