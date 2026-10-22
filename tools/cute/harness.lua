@@ -13045,7 +13045,7 @@ do local function cardsStage()
     press(buttonOf(ofa, "Preview"))
     local CF = ofa.C.CardFrame
     assert(CF.frame:IsShown() and CF.preview and CF.label:GetText() == "GUILD NEWS PREVIEW", "the preview: " .. tostring(CF.label:GetText()))
-    assert(CF.gone:IsShown() and CF.gone:GetText():find("Guild chat: Cute \194\183 From the runs: Mel (Headliner), Moe (Floor Inspector)", 1, true), "the guild line under the cards: " .. tostring(CF.gone:GetText()))
+    assert(CF.chat:IsShown() and CF.chat:GetText():find("Guild chat: Cute \194\183 From the runs: Mel (Headliner), Moe (Floor Inspector)", 1, true), "the guild line under the cards: " .. tostring(CF.chat:GetText()))
     check(CF.frame, "halls: the preview, two cards")
     local sent0 = msgs(ofa, "1C")
     press(buttonOf(ofa, "Publish"))
@@ -14150,7 +14150,7 @@ do local function cardsStage()
     assert(not H(ylva).draft.chat and chatBox() and not chatBox():GetChecked(), "the guild chat line unticked at first")
     press(buttonOf(ylva, "Preview"))
     local CF = ylva.C.CardFrame
-    assert(CF.preview and not (CF.gone:IsShown() and CF.gone:GetText():find("Guild chat", 1, true)), "the preview shows no guild line")
+    assert(CF.preview and not (CF.chat and CF.chat:IsShown()), "the preview shows no guild line")
     press(buttonOf(ylva, "Publish"))
     assert(#ylva.guildOut == 0, "nothing posted in guild chat the officer never ticked: " .. #ylva.guildOut)
     tickAll(65)
@@ -14289,6 +14289,38 @@ do local function cardsStage()
     assert(H(yoyo).Sets()[1].cards[2].line == H(yara).SHAME_LINES[2], "its comma kept on the wire: " .. tostring(H(yoyo).Sets()[1].cards[2].line))
   end)
   said[#said + 1] = "Preview shows what goes out: commas kept on the wire, a title cut where Publish cuts it, a name with a two-byte letter whole"
+
+  -- Preview's guild chat line whole, on two lines at most (the frame widening where two at its width are not enough),
+  -- and none promised while the game holds chat back
+  isolated({ gmember("Yak", 1, "MAGE"), gmember("Yew", 3, "ROGUE"), gmember("Yelp", 3, "DRUID") }, function()
+    local yak = cchar("Yak", 1)
+    login(yak)
+    tickAll(200)
+    local function draft(n)
+      local cards = {}
+      for k = 1, n do cards[k] = { guid = guidOf(k % 2 == 1 and "Yew" or "Yelp"), name = k % 2 == 1 and "Yew" or "Yelp", class = "ROGUE", kind = "ach",
+        title = n == 2 and (k == 1 and "Legacy of the Wilds" or "Explorer of the Barrens") or string.rep("Abcdefgh ", 3):sub(1, 24), line = "l", source = "" } end
+      H(yak).draft = { mode = "set", kind = "n", title = "Achievements", chat = true, cards = cards }
+      H(yak).Preview()
+    end
+    local CF = yak.C.CardFrame
+    for _, n in ipairs({ 2, 5 }) do
+      draft(n)
+      local line = "Guild chat: " .. H(yak).ChatLine(CF.set)
+      assert(CF.chat and CF.chat:IsShown() and CF.chat:GetText() == line, n .. " cards, the whole line: " .. tostring(CF.chat and CF.chat:GetText()))
+      check(CF.frame, "halls: the preview's guild line, " .. n .. " cards")
+    end
+    yak.chatLocked = true
+    draft(2)
+    assert(CF.chat:IsShown() and CF.chat:GetText() == "No guild chat line: the game holds chat back here.", "the lockdown: no line promised: " .. tostring(CF.chat:GetText()))
+    check(CF.frame, "halls: the preview in the chat lockdown")
+    yak.chatLocked = false
+    tickAll(2)
+    assert(CF.chat:GetText():find("^Guild chat: "), "the lockdown over: the line again, as Publish's state follows each second")
+    CF.frame:Hide()
+    H(yak).draft = nil
+  end)
+  said[#said + 1] = "Preview's guild line whole on two lines at most, none promised in the chat lockdown"
 
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end

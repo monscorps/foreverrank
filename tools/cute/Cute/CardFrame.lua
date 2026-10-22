@@ -335,6 +335,12 @@ function CF:Posted(id) if self.frame and self.frame:IsShown() and self.rep and s
 -- cards; a test Close alone
 ----------------------------------------------------------------------------
 local FACT_W = 100 -- ("Members ranked" at 11)
+-- the guild chat line under a preview's cards: the line Publish posts, or why none goes now
+local function chatText(set)
+  local HL = C.Halls
+  if not HL.ChatState() then return "No guild chat line: the game holds chat back here." end
+  return "Guild chat: " .. HL.ChatLine(set)
+end
 function CF:Announce(set, opts)
   opts = opts or {}
   if type(set) ~= "table" then return end
@@ -367,6 +373,13 @@ function CF:Announce(set, opts)
   local width = CF.title.GetUnboundedStringWidth or CF.title.GetStringWidth
   CF.title:SetText(set.title or ""); CF.sub:SetText(sub)
   local need = x0 + math.max(width(CF.title), width(CF.sub)) + 20 + factsW + 40
+  -- (a preview's guild chat line, whole on two lines at most: the frame as wide as two lines of it need)
+  local chat = opts.preview and set.chat and chatText(set) or nil
+  if chat then
+    if not CF.chat then CF.chat = U.Text(f, 11, DIM, "LEFT", 900); CF.chat:SetWordWrap(true) end
+    CF.chat:SetText(chat)
+    need = math.max(need, math.ceil(width(CF.chat) / 2) + 24 + 32)
+  end
   local w = math.max(CF.Width(#cards), math.min(980, math.ceil(need)))
   f:SetSize(w, H_SET)
   local uw = UIParent and UIParent:GetWidth() or 1600
@@ -397,12 +410,13 @@ function CF:Announce(set, opts)
     else card:Hide() end
   end
   for i = 1, 10 do CF.mentions[i]:Hide() end
-  -- (a preview: the guild chat line the set would post, where the officer ticked it)
-  if opts.preview and set.chat then
-    CF.gone:ClearAllPoints(); CF.gone:SetPoint("TOPLEFT", 16, -472); CF.gone:SetWidth(w - 32)
-    U.FitText(CF.gone, "Guild chat: " .. HL.ChatLine(set), w - 36)
-    CF.gone:Show()
-  else CF.gone:Hide() end
+  -- (a preview: the guild chat line the set would post, where the officer ticked it, whole; or that none goes while
+  -- the game holds chat back, Halls.lua H.ChatState)
+  CF.gone:Hide()
+  if chat then
+    CF.chat:ClearAllPoints(); CF.chat:SetPoint("TOPLEFT", 16, -472); CF.chat:SetWidth(w - 32)
+    CF.chat:Show()
+  elseif CF.chat then CF.chat:Hide() end
   local by = H_SET - 58
   local list
   if opts.preview then
@@ -442,11 +456,17 @@ end
 function CF:DrawPublish()
   local b = self.publishButton
   if not (b and self.set and self.frame) then return end
+  if self.chat and self.chat:IsShown() and self.set.chat then self.chat:SetText(chatText(self.set)) end
   local ok, why = C.Halls.PublishState(self.set)
   b:SetOn(ok and true or false)
   b:SetLabel("Publish")
   b.why = ok and "Sends the set to the guild: every member with Cute sees it." or why
   C.UI.FitText(self.posted, ok and "" or (why or ""), (self.posted:GetWidth() or 220) - 4)
+end
+-- (a report draws on the same frame: a preview's guild line goes as one opens)
+do
+  local report = CF.Report
+  function CF:Report(rep, opts) if CF.chat then CF.chat:Hide() end return report(self, rep, opts) end
 end
 function CF.WatchPublish()
   if CF.watchingPublish then return end
