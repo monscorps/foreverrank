@@ -57,8 +57,11 @@ local function queue(msg, channel, target)
   if not pumping then pumping = true; C_Timer.After(0.05, pump) end
 end
 
+-- (a host that routes what its guild sees, Cute, sets QB.noRaidSync: a guild raid reaches members its officers kept these
+-- values from, so in a raid the party sync says nothing; QuestBank alone keeps RAID, its players' own choice)
 local function groupChannel()
   if not (IsInGroup and IsInGroup()) then return nil end
+  if QB.noRaidSync and IsInRaid and IsInRaid() then return nil end
   if LE_PARTY_CATEGORY_INSTANCE and IsInGroup(LE_PARTY_CATEGORY_INSTANCE) and not IsInGroup(LE_PARTY_CATEGORY_HOME) then return "INSTANCE_CHAT" end
   return (IsInRaid and IsInRaid()) and "RAID" or "PARTY"
 end
@@ -257,6 +260,8 @@ end
 
 function S:Receive(msg, channel, sender)
   if not sender or type(msg) ~= "string" or #msg > 255 then return end
+  -- (guild sharing off: nothing taken from the guild either, so a single guild mate's XP reading corrects nothing)
+  if channel == "GUILD" and not QB:Settings().share.guild then return end
   if isMe(sender) then return end
   local kind = msg:sub(1, 2)
   if kind == "1V" then

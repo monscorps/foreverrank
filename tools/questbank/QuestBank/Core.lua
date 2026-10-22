@@ -1290,7 +1290,7 @@ local DEFAULTS = {
   -- your heading, its glow and pulses; the default again since 5.4.4) or QuestTrail's compass ("compass")
   arrowStyle = "questbank",
   -- QuestBank's quest icons on the world map and the Map page, in percent of the game's own pins' art (their click area
-  -- stays the game's): half since 5.4.4
+  -- stays the game's): half since 5.4.4 for a save without one; a new install takes the game's own size (QB:Settings)
   mapIconPct = 50,
   -- the minimap's far zoom over the game's tiles and its drag (MinimapView.lua); back to you after a drag; your party
   -- and the quest's areas on the far ground; the stops the strokes join (MinimapRoute.lua; QuestTrail's 16)
@@ -1354,6 +1354,9 @@ function QB:Settings()
   end
   -- (6.1.1's new switch inside a table a save already has: the default)
   if type(s.guide) == "table" and s.guide.hideTracker == nil then s.guide.hideTracker = true end
+  -- (the windows round) a new install draws the quest icons at the game's own size: half-size art beside the game's
+  -- full-size pins looked soft ("icons on map are scuffed as they are wrong size"); a save keeps the size it has
+  if fresh then s.mapIconPct = 100 end
   db.turnins = db.turnins or {}
   db.runs = db.runs or {}
   db.plans = db.plans or {}

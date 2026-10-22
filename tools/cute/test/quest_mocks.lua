@@ -149,18 +149,8 @@ return function(env, c, o, newObj, api, secret)
   for _, key in ipairs({ "ZoomIn", "ZoomOut" }) do env.Minimap[key] = newObj("Button", nil, env.Minimap); env.Minimap[key]:Hide() end
   env.IsIndoors = function() return c.indoors or false end
   env.IsMouseButtonDown = function(b) return b == "LeftButton" and c.leftDown or false end
-  -- the context menus (431-447): entries recorded in c.contextMenus, as MenuUtil's root gets them
-  c.contextMenus = {}
-  env.MenuUtil = { CreateContextMenu = function(owner, gen)
-    local entries, root = {}, {}
-    function root:CreateCheckbox(text, get, set) entries[#entries + 1] = { kind = "check", text = text, get = get, set = set } end
-    function root:CreateButton(text, fn) entries[#entries + 1] = { kind = "button", text = text, set = fn } end
-    function root:CreateDivider() entries[#entries + 1] = { kind = "divider" } end
-    function root:CreateTitle(text) entries[#entries + 1] = { kind = "title", text = text } end
-    gen(owner, root)
-    entries.owner = owner
-    c.contextMenus[#c.contextMenus + 1] = entries
-  end }
+  -- the context menus (431-447): entries recorded in c.contextMenus, as MenuUtil's root gets them (Cute's harness makes
+  -- the menus for every client, with submenus: kept)
   -- the minimap's tracking list and the game's menu hook (449-454), the professions, the CVars (455-466)
   c.tracking = { { name = "Battlemaster", filterID = 4, active = false }, { name = "Target", filterID = 16384, active = false },
                  { name = "Focus", filterID = 32768, active = false } }
@@ -314,8 +304,21 @@ return function(env, c, o, newObj, api, secret)
   env.IsQuestCompletable = function() return c.completable and true or false end
   env.QuestGetAutoAccept = function() return false end
   env.ConfirmAcceptQuest = function() error("the quest engine called ConfirmAcceptQuest: the escort prompt is the player's to answer", 2) end
+  -- (Cute's own Settings asks with one, its reload rule: Cute/Setup.lua; the engine never)
+  local function fromEngine() local info = debug.getinfo(3, "S"); return info and info.source and info.source:find("^@Cute_Quest/") ~= nil end
+  local cuteShow = env.StaticPopup_Show
   env.StaticPopup_Hide = function() error("the quest engine hid a Blizzard popup (StaticPopup_Hide)", 2) end
-  env.StaticPopup_Show = function() error("the quest engine showed a Blizzard popup (StaticPopup_Show)", 2) end
+  env.StaticPopup_Show = function(...)
+    if fromEngine() then error("the quest engine showed a Blizzard popup (StaticPopup_Show)", 2) end
+    return cuteShow(...)
+  end
+  -- a quest's own text in your log (GetQuestLogQuestText(questLogIndex): Mainline/QuestMapFrame.lua:40), c.questText by id
+  env.GetQuestLogQuestText = function(index)
+    local list = logList()
+    local e = list[(index or 0) - 1]
+    if not e then return nil end
+    return (c.questText or {})[e[1]] or ("The words of quest " .. e[1] .. "."), "Its objectives."
+  end
   env.QuestFlagsPVP = function() return c.pvpQuest or false end
   env.GetQuestMoneyToGet = function() return c.questCost or 0 end
   env.GetNumActiveQuests = function() return #(c.greetActive or {}) end
@@ -477,6 +480,10 @@ return function(env, c, o, newObj, api, secret)
       return { mapID = id, mapType = kind, parentMapID = kind == 1 and 0 or (kind == 3 and not ISLE[id]) and continentOf(id) or 947, name = mapName(id) }
     end),
     MapHasArt = api(function(id) return not (c.noArt or {})[id] end),
+    -- a zone's art layer as the game's map canvas reads it (MapDocumentation.lua: UiMapLayerInfo; the tiles row by row,
+    -- Blizzard_MapCanvasDetailLayer.lua:50-70): a Classic zone's 1002 x 668 in 256 px tiles, stand-in file ids
+    GetMapArtLayers = api(function(id) if (c.noArt or {})[id] then return {} end return { { layerWidth = 1002, layerHeight = 668, tileWidth = 256, tileHeight = 256, minScale = 1, maxScale = 1, additionalZoomSteps = 0 } } end),
+    GetMapArtLayerTextures = api(function(id, layer) if (c.noArt or {})[id] then return {} end local out = {}; for k = 1, 12 do out[k] = 900000 + k end; return out end),
     GetMapChildrenInfo = api(function(id)
       local out = {}
       if id == 947 then

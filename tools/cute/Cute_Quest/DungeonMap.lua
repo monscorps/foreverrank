@@ -547,19 +547,40 @@ local function build(page, pw, ph)
   return f
 end
 
--- a dungeon's cover on a texture w x h: the journal's art whole; a loading screen (Forever's own dungeons: 2992 x 1684,
--- the picture the middle 68% of its height, transparent above and below) cut to the band across its middle that fills
--- the texture without squeezing it
+-- a dungeon's cover on a texture w x h: a loading screen (Forever's own dungeons: 2992 x 1684, the picture the middle
+-- 68% of its height, transparent above and below) cut to the band across its middle that fills the texture without
+-- squeezing it; the Encounter Journal's own art (UI-EJ-DUNGEONBUTTON-*) as the journal cuts it: 175 x 95 of its
+-- 256 x 128 file, at texcoords 0-0.684 by 0-0.742 (Blizzard_EncounterJournal.xml:320-328; the whole file left an empty
+-- strip on the right), filling the texture unsqueezed from its middle, and never past 1.5 times its size (wider than
+-- that, the art takes 1.5x from the texture's left). Returns the width the art takes; the LFG background is whole
 local LOADING_ASPECT, LOADING_ART = 2992 / 1684, 0.68
+local EJ_W, EJ_H, EJ_U, EJ_V, EJ_MAX = 175, 95, 0.68359375, 0.7421875, 1.5
 local function setCover(t, d, cat, w, h)
   t:SetTexture(d.cover or cat.bg)
+  if d.cover and d.coverKind == "DUNGEONBUTTON" then
+    local s = math.min(EJ_MAX, math.max(w / EJ_W, h / EJ_H))
+    local aw, ah = math.min(EJ_W, w / s), math.min(EJ_H, h / s) -- (the art's own pixels shown, across and down)
+    local u0, v0 = (EJ_W - aw) / 2 / EJ_W * EJ_U, (EJ_H - ah) / 2 / EJ_H * EJ_V
+    t:SetTexCoord(u0, u0 + aw / EJ_W * EJ_U, v0, v0 + ah / EJ_H * EJ_V)
+    return math.floor(aw * s + 1e-6)
+  end
   local band = d.coverKind == "LOADING" and math.min(LOADING_ART, LOADING_ASPECT * h / w) or 1
   t:SetTexCoord(0, 1, 0.5 - band / 2, 0.5 + band / 2)
+  return w
 end
+DM.SetCover = setCover
 
 ----------------------------------------------------------------------------
 -- the list
 ----------------------------------------------------------------------------
+-- a level as a colour code, the game's colour for it against yours (GetQuestDifficultyColor), white where none
+local function rangeColor(level)
+  if type(GetQuestDifficultyColor) == "function" then
+    local ok, c = pcall(GetQuestDifficultyColor, level)
+    if ok and type(c) == "table" and type(c.r) == "number" then return string.format("|cff%02x%02x%02x", c.r * 255, c.g * 255, c.b * 255) end
+  end
+  return "|cffffffff"
+end
 local function listRow(i)
   local f = frame
   local r = f.rows[i]
@@ -571,7 +592,10 @@ local function listRow(i)
   r.shade = r:CreateTexture(nil, "BORDER")
   r.shade:SetAllPoints()
   r.shade:SetColorTexture(0, 0, 0, 0.35)
-  if r.SetBackdrop then
+  if r.SetBackdrop and QB.Skin and QB.Skin.tiles then
+    r:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+    r:SetBackdropBorderColor(0, 0, 0, 1)
+  elseif r.SetBackdrop then
     r:SetBackdrop({ edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 10, insets = { left = 2, right = 2, top = 2, bottom = 2 } })
     r:SetBackdropBorderColor(0.3, 0.24, 0.14, 0.9)
   end
@@ -580,6 +604,14 @@ local function listRow(i)
   r.hi:SetColorTexture(1, 0.82, 0.3, 0.08)
   r.name = fs(r, "GameFontNormalLarge", 15, GOLD, LIST_W - 32)
   r.name:SetPoint("TOPLEFT", 10, -8)
+  -- (the windows round) a host's tiles (QB.Skin.tiles: Cute's): the range on a 70% black plate, so its colours read on
+  -- the dark art, and a flat 1 px edge, white on the open tile
+  if QB.Skin and QB.Skin.tiles then
+    r.lvPlate = r:CreateTexture(nil, "ARTWORK")
+    r.lvPlate:SetColorTexture(0, 0, 0, 0.7)
+    r.lvPlate:SetPoint("BOTTOMLEFT", 6, 5)
+    r.lvPlate:SetSize(50, 15)
+  end
   r.lv = fs(r, "GameFontHighlightSmall", 10, INK, 80)
   r.lv:SetPoint("BOTTOMLEFT", 10, 7)
   r.quests = fs(r, "GameFontHighlightSmall", 10, INK, 90, "RIGHT")
@@ -605,12 +637,18 @@ function DM.FillList()
       setCover(r.art, d, cat, LIST_W - 12, ROW_H - 4)
       r.name:SetText(cat.name)
       local lv = DM.Levels(cat.key)
-      r.lv:SetText(lv[1] > 0 and string.format("LV %d-%d", lv[1], lv[2]) or "")
       local qn = #DM.Quests(cat.key)
       r.quests:SetText(qn > 0 and (qn .. (qn == 1 and " quest" or " quests")) or "")
-      if r.SetBackdropBorderColor then
-        local on = f.cat == cat
-        r:SetBackdropBorderColor(on and 1 or 0.3, on and 0.82 or 0.24, on and 0.3 or 0.14, 0.9)
+      local on = f.cat == cat
+      if r.lvPlate then
+        -- (each end of the range in the game's colour for it against your level, on its plate)
+        r.lv:SetText(lv[1] > 0 and (rangeColor(lv[1]) .. lv[1] .. "|r|cff949494-|r" .. rangeColor(lv[2]) .. lv[2] .. "|r") or "")
+        r.lvPlate:SetWidth(math.max(20, (r.lv:GetStringWidth() or 30) + 8))
+        r.lvPlate:SetShown(lv[1] > 0)
+        if r.SetBackdropBorderColor then r:SetBackdropBorderColor(on and 1 or 0, on and 1 or 0, on and 1 or 0, 1) end
+      else
+        r.lv:SetText(lv[1] > 0 and string.format("LV %d-%d", lv[1], lv[2]) or "")
+        if r.SetBackdropBorderColor then r:SetBackdropBorderColor(on and 1 or 0.3, on and 0.82 or 0.24, on and 0.3 or 0.14, 0.9) end
       end
       r:Show()
       y = y + ROW_H
@@ -996,7 +1034,12 @@ function DM.Fill(cat, tab)
   local lv = DM.Levels(cat.key)
   f.level:SetText(lv[1] > 0 and string.format("LV %d-%d", lv[1], lv[2]) or "")
   f.where:SetText(cat.where and cat.where ~= "" and cat.where or "")
-  setCover(f.cover, d, cat, W - LIST_W - 8 - 6, COVER_H)
+  -- (the art narrower than the band, at 1.5x: from the band's left, the rest the panel's)
+  local coverW = W - LIST_W - 8 - 6
+  local artW = setCover(f.cover, d, cat, coverW, COVER_H)
+  f.cover:ClearAllPoints()
+  f.cover:SetPoint("TOPLEFT", 3, -3)
+  if artW < coverW then f.cover:SetSize(artW, COVER_H) else f.cover:SetPoint("TOPRIGHT", -3, -3); f.cover:SetHeight(COVER_H) end
   f.tabs[1]:SetShown(#d.floors > 0)
   -- floors
   for i = 1, math.max(#d.floors, #f.floors) do

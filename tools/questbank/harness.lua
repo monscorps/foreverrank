@@ -22,7 +22,7 @@ SetValueStep SetValue GetValue SetTexture SetColorTexture SetTexCoord SetVertexC
 SetFontObject SetFont GetFont SetTextColor GetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetUnboundedStringWidth GetStringHeight
 SetAutoFocus HighlightText SetFocus ClearFocus SetMultiLine SetChecked GetChecked SetMaxLetters HasFocus IsEnabled SetRotation RegisterUnitEvent
 SetAtlas SetPassThroughButtons SetCooldown SetHideCountdownNumbers SetScale GetScale GetLeft GetTop GetChildren GetNumPoints SetUserPlaced GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness GetFrameLevel CreateLine SetTextInsets SetAttribute GetAttribute CreateMaskTexture AddMaskTexture SetGradient
-SetClipsChildren PingLocation SetSnapToPixelGrid SetTexelSnappingBias]])
+SetClipsChildren PingLocation SetSnapToPixelGrid SetTexelSnappingBias SetShadowOffset SetShadowColor]])
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
 -- a PlayerModel's own: the creature it shows, by display id or by NPC id, its camera, and whether it keeps the model
 -- while hidden
@@ -138,7 +138,8 @@ local function newObj(kind, template, parent)
         elseif k == "GetStringWidth" or k == "GetUnboundedStringWidth" then return textWidth(self.__text, self.__size)
         elseif k == "GetStringHeight" then return self.__size + 2
         elseif k == "GetFont" then return "Fonts\\FRIZQT__.TTF", self.__size, ""
-        elseif k == "SetFont" then self.__fontFile = a[1] or self.__fontFile; self.__size = a[2] or self.__size
+        elseif k == "SetFont" then self.__fontFile = a[1] or self.__fontFile; self.__size = a[2] or self.__size; self.__fontFlags = a[3]
+        elseif k == "SetShadowOffset" then self.__shadow = { a[1], a[2] }
         elseif k == "SetFontObject" then self.__size = a[1] and a[1].__fontSize or 12
         elseif k == "SetJustifyH" then self.__justify = a[1]
         elseif k == "SetWordWrap" then self.__wrap = a[1] and true or false
@@ -458,9 +459,21 @@ local function newClient(o)
     otf.Header.MinimizeButton:SetPoint("RIGHT", otf.Header, "RIGHT", -1, 0)
     -- (its left edge as the game lays it out: from UIParent's right edge, wherever the screen's width is now)
     rawset(otf.Header, "GetLeft", function() return env.UIParent.__w + otf.__points[1].x - 260 end)
-    for _, m in ipairs({ "Show", "Hide", "SetShown", "SetPoint", "ClearAllPoints", "SetAllPoints", "SetParent", "SetScale", "EnableMouse" }) do
+    -- (its scale is a C-side property its layout does not hear: the windows round sets it beside the alpha, windows D3)
+    for _, m in ipairs({ "Show", "Hide", "SetShown", "SetPoint", "ClearAllPoints", "SetAllPoints", "SetParent", "EnableMouse" }) do
       rawset(otf, m, function() error("an addon called " .. m .. " on the game's quest tracker (a managed frame: its layout would run as the addon)", 2) end)
     end
+    -- an Edit Mode system frame (Blizzard_ObjectiveTracker.xml:3): its OnSystemLoad keeps the C SetScale as SetScaleBase
+    -- and puts SetScaleOverride in SetScale (EditModeSystemTemplates.lua:9-11), which moves its points, lays the right-hand
+    -- frames out and runs the tracker's Update as whoever called it (:117-145); c.trackerOverride counts its calls. The
+    -- client keeps a frame's scale as a 32-bit float: 0.01 reads back as 0.0099999998
+    local function f32(v)
+      if type(v) ~= "number" or v == 0 then return v end
+      local m, e = math.frexp(v)
+      return math.ldexp(math.floor(m * 2 ^ 24 + 0.5) / 2 ^ 24, e)
+    end
+    rawset(otf, "SetScaleBase", function(self, v) self.__scale = f32(v) end)
+    rawset(otf, "SetScale", function(self, v) c.trackerOverride = (c.trackerOverride or 0) + 1; self:SetScaleBase(v) end)
     env.ObjectiveTrackerFrame = otf
   end
   -- the minimap in its cluster and container, as the client builds it (Blizzard_Minimap/Mainline/Minimap.xml)
@@ -6859,7 +6872,8 @@ do
   local row = {}
   for _, r in ipairs(f.rows) do if r:IsShown() then row[r.cat.key] = r end end
   assert(row.d16544.art.__tex == D.d16544.cover and fits(row.d16544.art), "the list row's cover: its own band")
-  assert(row.d1581.art.__tex == D.d1581.cover and row.d1581.art.__tc[3] == 0 and row.d1581.art.__tc[4] == 1, "the journal's own art whole")
+  -- (the windows round: the Encounter Journal's art as the EJ cuts it, its 174 x 96 inside the file; windows D1)
+  assert(row.d1581.art.__tex == D.d1581.cover and row.d1581.art.__tc[1] == 0 and math.abs(row.d1581.art.__tc[2] - 0.68359375) < 1e-6, "the journal's own art, the EJ's cut")
   -- a face for every boss (the old journal's art, a model or an achievement's icon), never more without one than
   -- gen_data.py's ratchet allows
   local faceless, cap = 0, tonumber(io.open(HERE .. "/gen_data.py"):read("*a"):match("\nFACELESS_BOSS_MAX = (%d+)"))
@@ -11494,6 +11508,9 @@ do
              { text = "Red Burlap Bandana: 2/12", type = "item", finished = false, numFulfilled = 2, numRequired = 12 } },
   }
   login(M)
+  -- (a save from 5.4.4 on, at half size: these cases weigh the pins' art at it; a new install draws the game's own size,
+  -- windows D2)
+  MQ:Settings().mapIconPct = 50
   assert(QMm.provider, "on Forever the icons have their own provider on the world map")
   assert(#MQ.Pins.layers == 2 and MQ.Pins.watcher and MQ.Pins.watcher.__parent == M.map:GetCanvas(),
     "no hook on the world map (the mock's HookScript errors): both layers hear it shut as its providers, and a frame of QuestBank's on its canvas watches the keys")
@@ -14843,9 +14860,9 @@ end)()
   end }
 
   -- 12. QuestBank's quest icons half the game's size on the maps; where a click lands still the game's pin; a size you
-  -- set kept
+  -- set kept. (The windows round: a new install at the game's own size, windows D2; a save from 5.4.4 on at half)
   B3CASES[#B3CASES + 1] = { "quest icons half size", function()
-    local c = mage("Iconic")
+    local c = mage("Iconic", nil, nil, nil, nil, { settings = { mapIconPct = 50 } })
     local P = c.QB.Pins
     local poi = c.env.CreateFrame("Frame", nil, c.env.UIParent, "QuestBankPoiTemplate")
     P.StylePoi(poi, { complete = true })
@@ -14853,6 +14870,10 @@ end)()
     P.StyleOffer(offer, {})
     assert(poi.Disc.__w == 16 and poi.Glyph.__w == 16 and poi.__w == 20 and offer.Texture.__w == 16 and offer.__w == 22,
       "half the game's 32 px art, on the game's 20 and 22 px frames")
+    local new = mage("Newicons")
+    local p1 = new.env.CreateFrame("Frame", nil, new.env.UIParent, "QuestBankPoiTemplate")
+    new.QB.Pins.StylePoi(p1, {})
+    assert(p1.Disc.__w == 32 and p1.__w == 20, "a new install: the game's 32 px art")
     local mine = mage("Bigicons", nil, nil, nil, nil, { settings = { mapIconPct = 75 } })
     local p2 = mine.env.CreateFrame("Frame", nil, mine.env.UIParent, "QuestBankPoiTemplate")
     mine.QB.Pins.StylePoi(p2, {})
@@ -21512,6 +21533,539 @@ do
   c.QB.Arrow:Set(true)
   local a = c.env.QuestBankArrow
   assert(a and a.name.__fontFile == "Fonts\\ARIALN.TTF", "the arrow's name line in the skin's font")
+end
+
+-- [stage: windows] that stage's tests go right below this line
+-- The windows round's engine hooks (Cute's sub-project A). With guild sharing off nothing is taken from GUILD either: a
+-- guild mate's 1L corrected your XP numbers on one voice, and their 1S listed them as a party member. A host's
+-- QB.noRaidSync (Cute's Bridge sets it) keeps the party sync off RAID: in a raid it is silent; QuestBank alone still
+-- shares there, its players' own choice
+do
+  local c = newClient({ name = "Gated", level = 18, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1, race = "Human",
+    log = {}, done = {}, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Goldshire", guild = true, group = true })
+  login(c)
+  local QB, f = c.QB, c.QB.Sync.frame
+  local recorded = 0
+  local record = QB.Live.Record
+  QB.Live.Record = function(...) recorded = recorded + 1; return record(...) end
+  local function hear(msg, channel) f.__scripts.OnEvent(f, "CHAT_MSG_ADDON", "QuestBank", msg, channel, "Mate Steelhand-Forever Normal") end
+  QB:Settings().share.guild = false
+  hear("1L|118:450:18", "GUILD")
+  hear("1S|18|100|A|WARRIOR|0|0|0|-1|0|0|6.1.1|0000000000", "GUILD")
+  assert(recorded == 0 and next(QB.Sync.members) == nil, "guild sharing off: a guild mate's XP reading and status are taken from nothing")
+  hear("1L|118:450:18", "PARTY")
+  assert(recorded == 1, "the party is still heard")
+  QB:Settings().share.guild = true
+  hear("1L|118:450:18", "GUILD")
+  assert(recorded == 2, "guild sharing on: the guild is heard as before")
+  QB.Live.Record = record
+  QB:Settings().share.guild = false
+  -- in a raid: RAID while QuestBank is its own host, nothing with a host's noRaidSync
+  c.raid = true
+  local function raidSends()
+    c.outbox = {}
+    QB.Sync.lastStatus, QB.Sync.lastQuests = nil, nil
+    QB.Sync:Broadcast(false)
+    tick(c, 30)
+    local n = 0
+    for _, m in ipairs(c.outbox) do if m[3] == "RAID" then n = n + 1 end end
+    return n
+  end
+  assert(raidSends() > 0, "QuestBank alone: the party sync goes to RAID in a raid")
+  QB.noRaidSync = true
+  assert(raidSends() == 0, "a host's noRaidSync: nothing on RAID")
+  QB.noRaidSync, c.raid = nil, false
+  print("windows: guild sharing off takes nothing from GUILD (no 1L correction, no 1S member); a host's noRaidSync keeps the party sync off RAID")
+end
+
+-- (the windows round, sub-project D) a character for the look's cases: in Elwynn Forest at level 5, nothing in the log
+local function lookChar(name, o)
+  o = o or {}
+  local c = newClient({ name = name, level = o.level or 5, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1,
+    race = "Human", log = o.log or {}, done = o.done or {}, world = o.world or { 0, -8914, -133 }, map = o.map or 1429, bagSlots = {},
+    bind = "Goldshire", trackerX = o.trackerX })
+  if o.ui then c.env.UIParent:SetSize(o.ui[1], o.ui[2]) end
+  if o.saved then c.env.QuestBankDB = o.saved end
+  if o.skin then c.QB.Skin = o.skin end
+  for k, v in pairs(o.host or {}) do c.QB[k] = v end
+  if o.objectives then c.objectives = o.objectives end
+  login(c)
+  -- (the harness's older blocks log in with the Guide off: on, as a fresh install has it, its welcome answered)
+  if not o.saved then c.QB:Settings().guide.on, c.QB:Settings().welcome = true, nil; c.QB.StepFrame.Apply() end
+  return c
+end
+
+-- D1. The journal's covers as the game's Encounter Journal cuts them: the UI-EJ-DUNGEONBUTTON art is 175 x 95 of its
+-- 256 x 128 file, which the EJ draws at texcoords 0-0.684 by 0-0.742 (Blizzard_EncounterJournal.xml:320-328); the
+-- whole file left an empty strip on the right of every cover. And never past 1.5 times the art's size: the header's
+-- wide band takes the art at 1.5x from its left edge, the art's middle band; a list tile is filled (1.2x)
+do
+  local c = lookChar("Covers")
+  local DM = c.QB.DMap
+  DM.Open(DM.Find("deadmines"), "map")
+  local f = c.env.QuestBankDungeonMap
+  local D = c.QB.Data.DMAP
+  assert(D.d1581.coverKind == "DUNGEONBUTTON" and f.cover.__tex == D.d1581.cover, "the Deadmines' cover is the EJ's art")
+  GEN = GEN + 1
+  local function art(t)
+    local r, tc = rectOf(t), t.__tc
+    local w, h = r.r - r.l, r.t - r.b
+    -- the scale the art is drawn at, across and down: the same (nothing squeezed), and the art's own corners kept
+    local sx, sy = w / ((tc[2] - tc[1]) * 256), h / ((tc[4] - tc[3]) * 128)
+    return tc, w, h, sx, sy
+  end
+  local tc, w, h, sx, sy = art(f.cover)
+  assert(tc[1] == 0 and tc[2] <= 0.68359375 + 1e-9 and tc[3] >= 0 and tc[4] <= 0.7421875 + 1e-9, "the header's cover inside the EJ's 175 x 95: " .. table.concat(tc, ", "))
+  assert(math.abs(sx - sy) < 0.02 and sx <= 1.5 + 1e-6 and w <= 262.5 and h == 70, string.format("the header's cover at the art's own shape, 1.5x at most: %.0f x %.0f at %.2f / %.2f", w, h, sx, sy))
+  assert(math.abs(tc[3] + tc[4] - 0.7421875) < 1e-6, "its middle band: " .. tc[3] .. " to " .. tc[4])
+  local row
+  for _, r in ipairs(f.rows) do if r:IsShown() and r.cat.key == "d1581" then row = r end end
+  tc, w, h, sx, sy = art(row.art)
+  assert(tc[1] == 0 and math.abs(tc[2] - 0.68359375) < 1e-6 and math.abs(sx - sy) < 0.02 and sx <= 1.5, string.format("a list tile: the art across its width, unsqueezed: u %.3f, %.2f / %.2f", tc[2], sx, sy))
+  print(string.format("windows D1: the journal's covers cut as the Encounter Journal cuts them (u to 0.684, v to 0.742), the header's at %.1fx at most, a tile filled", 1.5))
+end
+
+-- D2. A new install draws QuestBank's quest icons on the maps at the game's own size (mapIconPct 100): 5.4.4's half size
+-- drawn beside the game's full-size pins looked soft ("icons on map are scuffed as they are wrong size"). A save keeps
+-- the size it has, the one its player picked included
+do
+  local fresh = lookChar("Freshmaps")
+  assert(fresh.QB:Settings().mapIconPct == 100 and fresh.QB.Pins.IconScale() == 1, "a new install: the game's size")
+  fresh.env.SlashCmdList.QUESTBANK("")
+  fresh.QB.UI:ShowTab(5)
+  local v5 = fresh.QB.UI.views[5]
+  assert(v5.iconSize and v5.iconSize:GetText() == "Game's size", "its Settings button says so: " .. tostring(v5.iconSize and v5.iconSize:GetText()))
+  local kept = lookChar("Keptmaps", { saved = { settings = { v544 = true, v600 = true, mapIconPct = 50, guide = { on = true, frame = true, locked = false, scale = 1 } } } })
+  assert(kept.QB:Settings().mapIconPct == 50 and kept.QB.Pins.IconScale() == 0.5, "a save at half size keeps it")
+  local picked = lookChar("Pickedmaps", { saved = { settings = { v544 = true, v600 = true, mapIconPct = 75, guide = { on = true, frame = true, locked = false, scale = 1 } } } })
+  assert(picked.QB:Settings().mapIconPct == 75, "a size picked stays")
+  print("windows D2: a new install's map icons at the game's size (100), a save's own size kept")
+end
+
+-- D3. The game's quest tracker out of sight takes no click: 6.1.1 left it at alpha 0, where its lines still took a click
+-- where they stand (its own note in StepFrame.lua). Now its scale goes to 0.01 beside the alpha (a C-side property: no
+-- OnSizeChanged, OnShow or OnHide for the right-hand container to lay itself out by), the scale it had kept for the
+-- session and put back with the alpha (the row off, the step frame off); nothing else is called on it; never in a
+-- fight; Edit Mode's enter puts both back so the player can place it, its exit and EDIT_MODE_LAYOUTS_UPDATED set them
+-- again. The step frame's default place stays where the tracker at its own size leaves room.
+-- (the review of the windows round) The scale goes through the frame type's own SetScale (SetScaleBase), never the Edit
+-- Mode override in SetScale, which would run the tracker's layout and Update as QuestBank; and it is read as the client
+-- keeps it, a 32-bit float (0.01 reads 0.0099999998): every SF.Apply while it is out keeps the scale it had, and it
+-- comes back
+do
+  local c = lookChar("Scaled")
+  local s, SF, T = c.QB:Settings(), c.QB.StepFrame, c.env.ObjectiveTrackerFrame
+  local function near(a, b) return type(a) == "number" and math.abs(a - b) < 1e-4 end
+  local f = c.env.QuestBankStep
+  assert(f:IsShown() and T:GetAlpha() == 0 and near(T:GetScale(), 0.01), "out of sight: alpha 0 and scale 0.01: " .. T:GetAlpha() .. ", " .. T:GetScale())
+  local placed = f.__points[1].x
+  -- every method asked of the tracker from here on, by name
+  local calls = {}
+  local mt = getmetatable(T)
+  local idx = mt.__index
+  mt.__index = function(t, k) local v = idx(t, k); if type(v) == "function" then calls[k] = (calls[k] or 0) + 1 end; return v end
+  -- (a redraw while it is out: its scale, read back as the client keeps it, is not the one to keep)
+  SF.Apply(); SF.Apply()
+  s.guide.hideTracker = false; SF.Apply()
+  assert(T:GetAlpha() == 1 and near(T:GetScale(), 1), "the row off: alpha and scale back: " .. T:GetScale())
+  rawset(T, "__scale", 0.9) -- (the scale it has: the session's to keep)
+  s.guide.hideTracker = true; SF.Apply(); SF.Apply()
+  assert(T:GetAlpha() == 0 and near(T:GetScale(), 0.01) and f.__points[1].x == placed, "on again: out of sight, the step frame where it was")
+  s.guide.frame = false; SF.Apply()
+  assert(T:GetAlpha() == 1 and near(T:GetScale(), 0.9), "the step frame off: back at the scale it had: " .. T:GetScale())
+  s.guide.frame = true; SF.Apply()
+  -- in a fight nothing is touched; after it, out of sight again
+  s.guide.hideTracker = false
+  c.combat = true; SF.Apply()
+  assert(T:GetAlpha() == 0 and near(T:GetScale(), 0.01), "in a fight: left as it is")
+  c.combat = false; c.ev(c.QB.eventFrame, "PLAYER_REGEN_ENABLED")
+  assert(T:GetAlpha() == 1 and near(T:GetScale(), 0.9), "the fight over: back")
+  s.guide.hideTracker = true; SF.Apply()
+  -- Edit Mode: back while it is open, out of sight again as it closes or lays the frames out again
+  c.env.EventRegistry:TriggerEvent("EditMode.Enter")
+  assert(T:GetAlpha() == 1 and near(T:GetScale(), 0.9), "Edit Mode open: the tracker back to be placed")
+  c.env.EventRegistry:TriggerEvent("EditMode.Exit")
+  assert(T:GetAlpha() == 0 and near(T:GetScale(), 0.01), "Edit Mode closed: out of sight again")
+  local ev = SF.events
+  assert(ev and ev.__scripts.OnEvent, "the step frame hears EDIT_MODE_LAYOUTS_UPDATED")
+  ev.__scripts.OnEvent(ev, "EDIT_MODE_LAYOUTS_UPDATED")
+  assert(T:GetAlpha() == 0 and near(T:GetScale(), 0.01), "a layout applied while out: out of sight still")
+  rawset(T, "__scale", 1); rawset(T, "__alpha", 1) -- (a layout applied: the system's own place and look)
+  ev.__scripts.OnEvent(ev, "EDIT_MODE_LAYOUTS_UPDATED")
+  assert(T:GetAlpha() == 0 and near(T:GetScale(), 0.01), "a layout applied: out of sight again")
+  s.guide.hideTracker = false; SF.Apply()
+  assert(near(T:GetScale(), 1), "the row off: the scale the layout gave it")
+  mt.__index = idx
+  local other = {}
+  for k in pairs(calls) do if k ~= "SetAlpha" and k ~= "GetAlpha" and k ~= "SetScale" and k ~= "GetScale" then other[#other + 1] = k end end
+  table.sort(other)
+  assert(#other == 0, "nothing but its alpha and its scale asked of the tracker: " .. table.concat(other, ", "))
+  assert((c.trackerOverride or 0) == 0, "the Edit Mode override in its SetScale never called: " .. tostring(c.trackerOverride))
+  print("windows D3: the game's quest tracker out of sight at alpha 0 and scale 0.01 (no click lands on it) through the frame type's own SetScale, never the Edit Mode override; its scale, read as a 32-bit float, kept and put back with the alpha, never in a fight, back for Edit Mode and out again after it; nothing else called on it")
+end
+
+-- D4. The step frame as a stop of the route, in a host's look (Cute's QB.Skin.stop): it stands on the world with no
+-- backdrop until guide.backdrop asks for the host's, its text outlined and shadowed, the step's icon at 24 px and its
+-- words at 15 px with the count apart and its share on a 2 px bar. Under the steps, the quests you hold (guide.quests:
+-- none for QuestBank's own players, as before; Cute's first run 3): the ones the step now and the next two name left
+-- out, the route's first, "+N more quests" for the rest; a quest's usable item a secure button at its left, which in a
+-- fight neither moves nor changes, nor does the list's order. At 0, 3 and 10 quests and the three scales nothing is cut
+-- and nothing overlaps
+do
+  local LOG = { { 7, 0 }, { 33, 1 }, { 18, 0 }, { 15, 0 }, { 21, 0 }, { 47, 0 }, { 60, 0 }, { 62, 0 }, { 85, 0 }, { 106, 0 }, { 86, 0 }, { 88, 0 }, { 109, 0 }, { 11, 0 } }
+  local OBJ = { [7] = { { text = "Kobold Vermin slain: 3/10", finished = false, numFulfilled = 3, numRequired = 10 } },
+    [18] = { { text = "Red Burlap Bandana: 2/12", finished = false, numFulfilled = 2, numRequired = 12 }, { text = "Defias Mask: 12/12", finished = true, numFulfilled = 12, numRequired = 12 } } }
+  local backdrops = 0
+  local skin = { font = "Fonts\\ARIALN.TTF", INK = { 0.86, 0.86, 0.86 }, SOFT = { 0.58, 0.58, 0.58 }, ACCENT = { 0.96, 0.96, 0.96 }, GOOD = { 0.45, 0.83, 0.47 },
+    QUEST = { 1, 0.82, 0 }, stop = true, outline = true, Backdrop = function(f) backdrops = backdrops + 1; f.__flat = true end }
+  local c = lookChar("Stopper", { log = LOG, skin = skin, objectives = OBJ })
+  local QB, SF, G = c.QB, c.QB.StepFrame, c.QB.Guide
+  local g = QB:Settings().guide
+  local f = c.env.QuestBankStep
+  assert(f and f:IsShown() and backdrops == 0 and not f.__flat and f.__inset == nil, "the stop look: on the world, no backdrop")
+  local r1 = f.rows[1]
+  assert(r1.icon.__w == 24 and f.now.__size == 15 and f.now.__fontFlags == "OUTLINE" and f.now.__shadow, "the step now: a 24 px icon, its words at 15 px, outlined and shadowed")
+  assert(f.rows[2].icon.__w == 14 and f.next1.__size == 12 and not f.time:IsShown(), "the next steps at 14 px and 12 px; no time line")
+  -- an objective step: its words without the count, the count at the right, its share on the bar
+  local s1 = G.Steps()[1]
+  if s1 and s1.kind == "objective" then
+    local words, have, need = G.Parts(s1)
+    assert(not words:find("%d+/%d+") and r1.mins:GetText() == have .. "/" .. need and f.fill:IsShown() and f.track:IsShown(), "the count apart: " .. words .. " | " .. tostring(r1.mins:GetText()))
+  end
+  -- QuestBank's own players see no quests under the steps
+  assert(not (f.quests[1] and f.quests[1]:IsShown()), "guide.quests unset: no quests listed")
+  -- three: the ones the steps name left out, in the list's order; the rest counted
+  g.quests = 3
+  SF.Apply()
+  local steps = G.Steps()
+  local named = {}
+  for i = 1, 3 do if steps[i] and steps[i].qid then named[steps[i].qid] = true end end
+  local shown = {}
+  for _, b in ipairs(f.quests) do if b:IsShown() then shown[#shown + 1] = b.id; assert(not named[b.id], "a quest the steps name is left out: " .. b.id) end end
+  local list, total = SF.QuestList(steps, 3)
+  assert(#shown == 3 and shown[1] == list[1] and shown[3] == list[3], "three quests, in the list's order: " .. table.concat(shown, ","))
+  assert(f.more and f.more:IsShown() and f.more.text:GetText() == "+" .. (total - 3) .. " more quests", "the rest counted: " .. tostring(f.more and f.more.text:GetText()))
+  -- the route's first: a quest a later step names comes before one only the log holds
+  local routeFirst
+  for i = 4, #steps do if steps[i].qid and not named[steps[i].qid] then routeFirst = steps[i].qid; break end end
+  if routeFirst then assert(list[1] == routeFirst, "the route's first: " .. tostring(list[1]) .. " for " .. routeFirst) end
+  -- a quest's level, name and its open objectives with their glyphs; "ready" for a finished one
+  local b1 = f.quests[1]
+  assert(b1.lvl:GetText() ~= "" and b1.name:GetText() ~= "" and b1.glyphs[1].__tex, "a quest's level, name and glyph")
+  -- its usable item: a secure button at its left, set out of a fight
+  local id1 = b1.id
+  c.questItems[id1] = { 1307, 133472 }
+  g.quests = 3; SF.Apply()
+  local ib = f.qitems[1]
+  assert(ib and ib:IsShown() and ib:GetAttribute("type") == "item" and ib:GetAttribute("item") == "item:1307" and ib.__template == "SecureActionButtonTemplate" and ib.__parent == c.env.UIParent,
+    "the quest's item: the game's secure button, under UIParent")
+  local p = ib.__points[1]
+  assert(p.point == "TOPRIGHT" and p.rel == f and p.relPoint == "TOPLEFT", "at the quest's left")
+  -- a fight: the words change, nothing moves, the buttons wait
+  local y1, x1 = f.qLayout[1].y, p.y
+  c.combat = true
+  c.objectives[7] = { { text = "Kobold Vermin slain: 10/10", finished = true, numFulfilled = 10, numRequired = 10 } }
+  c.questItems[id1] = nil
+  c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(c, 2)
+  SF.Refresh()
+  assert(f.qLayout[1].y == y1 and f.quests[1].id == id1 and ib:IsShown() and ib.__points[1].y == x1, "in a fight nothing moves and the button stays")
+  c.combat = false
+  c.ev(QB.eventFrame, "PLAYER_REGEN_ENABLED")
+  assert(not ib:IsShown(), "the fight over: the button follows the log")
+  -- 0, 3 and 10 quests at the three scales: nothing cut, nothing overlapping
+  for _, n in ipairs({ 0, 3, 10 }) do
+    for _, sc in ipairs({ 0.8, 1, 1.2 }) do
+      g.quests = n
+      SF.SetScale(sc)
+      SF.Apply()
+      local label = string.format("Step frame, the stop look, %d quests, scale %.1f", n, sc)
+      for _, pr in ipairs(checkLayout(f, label)) do STAGE_PROBLEMS[#STAGE_PROBLEMS + 1] = pr end
+      if sc == 1 then STAGE_LAYOUTS[#STAGE_LAYOUTS + 1] = dumpLayout(f, label) end
+    end
+  end
+  SF.SetScale(1)
+  -- the host's backdrop at its word
+  g.backdrop = true; SF.Apply()
+  assert(backdrops == 1 and f.__flat, "Backdrop behind the step frame: the host's")
+  g.backdrop = nil; SF.Apply()
+  assert(f.__inset == 0, "and off again")
+  -- QuestBank's own look lists them too, at the player's word
+  local q = lookChar("Plainlook", { log = LOG, objectives = OBJ })
+  q.QB:Settings().guide.quests = 3; q.QB.StepFrame.Apply()
+  local qf = q.env.QuestBankStep
+  local n = 0
+  for _, b in ipairs(qf.quests) do if b:IsShown() then n = n + 1 end end
+  assert(n == 3 and qf.__inset == 3, "QuestBank's look: its own backdrop, the quests under the steps")
+  for _, pr in ipairs(checkLayout(qf, "Step frame, QuestBank's look, 3 quests")) do STAGE_PROBLEMS[#STAGE_PROBLEMS + 1] = pr end
+  STAGE_LAYOUTS[#STAGE_LAYOUTS + 1] = dumpLayout(qf, "Step frame, QuestBank's look, 3 quests")
+  print(string.format("windows D4: the step frame as a stop of the route (no backdrop, outlined, a 24 px icon, the count apart); the quests under it, %d shown of %d, the steps' own left out, the route's first; their items secure and still in a fight; 0, 3 and 10 quests at three scales", #shown, total))
+end
+
+-- D5. The default places under a host that asks for them (Cute's QB.cornerPlace), for the pieces never moved: the step
+-- frame stands where the game's quest tracker stands, its top right corner on the tracker's (read at the tracker's own
+-- size, the scale step of D3 left out), 8 px left of the tracker while it is kept; the arrow at the top's middle, TOP
+-- 0 -96; the camp bar and its banner where the engine puts them. At 1920 x 1080 and 1366 x 768 none overlaps another.
+-- A dragged step frame stays where it was put; QuestBank alone keeps its own places (the engine's cases)
+do
+  local cuteSkin = { font = "Fonts\\ARIALN.TTF", INK = { 0.86, 0.86, 0.86 }, SOFT = { 0.58, 0.58, 0.58 }, ACCENT = { 0.96, 0.96, 0.96 }, stop = true, outline = true, Backdrop = function() end }
+  local function boxOf(f)
+    GEN = GEN + 1
+    local p = f.__points[1]
+    local sc = f:GetScale() or 1
+    local rr = rectOf(p.rel or f.__parent)
+    local ax = p.relPoint:find("LEFT") and rr.l or (p.relPoint:find("RIGHT") and rr.r or (rr.l + rr.r) / 2)
+    local ay = p.relPoint:find("TOP") and rr.t or (p.relPoint:find("BOTTOM") and rr.b or (rr.t + rr.b) / 2)
+    ax, ay = ax + (p.x or 0) * sc, ay + (p.y or 0) * sc
+    local w, h = (f:GetWidth() or 0) * sc, (f:GetHeight() or 0) * sc
+    local l = p.point:find("LEFT") and ax or (p.point:find("RIGHT") and ax - w or ax - w / 2)
+    local t = p.point:find("TOP") and ay or (p.point:find("BOTTOM") and ay + h or ay + h / 2)
+    return { l = l, r = l + w, t = t, b = t - h }
+  end
+  local function apart(a, b) return a.r <= b.l or b.r <= a.l or a.b >= b.t or b.b >= a.t end
+  local function say(r) return string.format("%d..%d x %d..%d", r.l, r.r, r.b, r.t) end
+  local LOG = { { 7, 0 }, { 33, 1 }, { 18, 0 }, { 15, 0 }, { 21, 0 } }
+  for _, ui in ipairs({ { 1920, 1080 }, { 1366, 768 } }) do
+    local c = lookChar("Placed" .. ui[1], { log = LOG, ui = ui, skin = cuteSkin, host = { cornerPlace = true } })
+    local env, QB, SF = c.env, c.QB, c.QB.StepFrame
+    local T = env.ObjectiveTrackerFrame
+    rawset(T.Header, "GetTop", function() return env.UIParent.__h + T.__points[1].y end)
+    QB:Settings().guide.quests = 3
+    QB:Settings().guide.hideTracker = false; SF.Apply() -- (the tracker at its own size first: read there)
+    QB:Settings().guide.hideTracker = true; SF.Apply()
+    QB.Arrow:Set(true)
+    local W, H = ui[1], ui[2]
+    local tr = { r = W + T.__points[1].x, t = H + T.__points[1].y }
+    local sf = boxOf(env.QuestBankStep)
+    assert(math.abs(sf.r - tr.r) < 0.5 and math.abs(sf.t - tr.t) < 0.5, string.format("%dx%d: the step frame on the tracker's corner %d, %d: %s", W, H, tr.r, tr.t, say(sf)))
+    local ar = boxOf(env.QuestBankArrow)
+    assert(math.abs((ar.l + ar.r) / 2 - W / 2) < 0.5 and math.abs(ar.t - (H - 96)) < 0.5, string.format("%dx%d: the arrow at TOP 0 -96: %s", W, H, say(ar)))
+    local pieces = { { "step frame", sf }, { "arrow", ar } }
+    -- (the camp bar where the engine puts it, CENTER 0 -190: its top as Camp.BarTop says, a row of icons under it)
+    local ct = H - QB.Camp.BarTop()
+    pieces[#pieces + 1] = { "camp bar", { l = W / 2 - 100, r = W / 2 + 100, t = ct, b = ct - 40 } }
+    for i = 1, #pieces do
+      for j = i + 1, #pieces do
+        assert(apart(pieces[i][2], pieces[j][2]), string.format("%dx%d: the %s and the %s apart: %s, %s", W, H, pieces[i][1], pieces[j][1], say(pieces[i][2]), say(pieces[j][2])))
+      end
+      local b = pieces[i][2]
+      assert(b.l >= 0 and b.r <= W and b.b >= 0 and b.t <= H, string.format("%dx%d: the %s on the screen: %s", W, H, pieces[i][1], say(b)))
+    end
+    -- the tracker kept: the frame 8 px left of it
+    QB:Settings().guide.hideTracker = false; SF.Apply()
+    local kept = boxOf(env.QuestBankStep)
+    local hl = T.Header.GetLeft()
+    assert(math.abs(kept.r - (hl - 8)) < 0.5 and apart(kept, { l = hl, r = hl + 260, t = tr.t, b = tr.t - 32 }), string.format("%dx%d: the tracker kept, the frame 8 px left of it: %s", W, H, say(kept)))
+    -- a dragged frame stays
+    local g = QB:Settings().guide
+    g.x, g.y = 100, 50; SF.Apply()
+    local p = env.QuestBankStep.__points[1]
+    assert(p.point == "CENTER" and p.x == 100 and p.y == 50, "a dragged place kept")
+  end
+  print("windows D5: Cute's default places: the step frame on the hidden tracker's corner (8 px left of it while kept), the arrow at TOP 0 -96, the camp bar the engine's; apart at 1920 x 1080 and 1366 x 768")
+end
+
+-- D6. The journal's list tiles under a host's skin that asks (Cute's QB.Skin.tiles): the level range on a 70% black plate
+-- under the name, each end in the game's colour for it against your level (red and orange read on the dark art), and
+-- the open tile a full 1 px white border; QuestBank's own tiles as they were (the gold edge, "LV 13-18")
+do
+  local c = lookChar("Tiles", { level = 20, skin = { font = "Fonts\\ARIALN.TTF", INK = { 0.86, 0.86, 0.86 }, SOFT = { 0.58, 0.58, 0.58 }, ACCENT = { 0.96, 0.96, 0.96 }, tiles = true } })
+  local DM = c.QB.DMap
+  DM.Open(DM.Find("deadmines"), "map")
+  local f = c.env.QuestBankDungeonMap
+  local open, other
+  for _, r in ipairs(f.rows) do if r:IsShown() then if r.cat.key == "d1581" then open = r elseif not other then other = r end end end
+  assert(open and other, "the Deadmines' tile and another")
+  assert(open.lvPlate and open.lvPlate:IsShown() and open.lvPlate.__color and math.abs(open.lvPlate.__color[4] - 0.7) < 0.01, "the range on a 70% black plate")
+  assert(open.lv:GetText():find("^|cff%x%x%x%x%x%x%d+|r") and not open.lv:GetText():find("LV", 1, true), "each end in its colour, no LV: " .. open.lv:GetText())
+  assert(open.__bdb and open.__bdb[1] == 1 and open.__bdb[2] == 1 and open.__bdb[3] == 1 and other.__bdb[1] == 0, "the open tile's 1 px white border, the others' black")
+  local q = lookChar("Plaintiles", { level = 20 })
+  q.QB.DMap.Open(q.QB.DMap.Find("deadmines"), "map")
+  local qf = q.env.QuestBankDungeonMap
+  local qr
+  for _, r in ipairs(qf.rows) do if r:IsShown() and r.cat.key == "d1581" then qr = r end end
+  assert(qr.lv:GetText():find("^LV %d+%-%d+$") and not (qr.lvPlate and qr.lvPlate:IsShown()) and qr.__bdb[1] == 1 and math.abs(qr.__bdb[2] - 0.82) < 0.01, "QuestBank's own: as before")
+  print("windows D6: the journal's tiles under Cute's skin: the range on a 70% plate in its colours, the open tile white-edged; QuestBank's own as before")
+end
+
+-- D7. The Gear page under a host's skin (Cute's QB.Skin.Quality): item icons with a 1 px edge in the item's quality
+-- colour and the bags' green arrow on an upgrade at 10 px, names in the host's lifted quality colours, a quest's source
+-- as the map draws the quest (one in your log: the in-progress quest POI; one to take: the offer's !); QuestBank's own as
+-- before (the game's icon frame, the quest's icon)
+do
+  local LIFT = { [2] = { 0.12, 1, 0 }, [3] = { 0.25, 0.58, 0.93 }, [4] = { 0.73, 0.41, 0.95 } }
+  local skin = { font = "Fonts\\ARIALN.TTF", INK = { 0.86, 0.86, 0.86 }, SOFT = { 0.58, 0.58, 0.58 }, ACCENT = { 0.96, 0.96, 0.96 },
+    Quality = function(q) return LIFT[q] or { 0.86, 0.86, 0.86 } end }
+  local function gearChar(name, sk, log)
+    local c = newClient({ name = name, level = 20, cap = 60, faction = "Alliance", className = "Paladin", class = "PALADIN", classID = 2, race = "Human",
+      log = log or {}, done = {}, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Goldshire" })
+    if sk then c.QB.Skin = sk end
+    local env = c.env
+    c.equipped = { [5] = 900001 }
+    env.GetInventoryItemID = function(unit, slot) return unit == "player" and c.equipped[slot] or nil end
+    env.GetInventoryItemLink = function(unit, slot) local id = unit == "player" and c.equipped[slot]; return id and ("|cffffffff|Hitem:" .. id .. "::::::::20:::::::|h[Item " .. id .. "]|h|r") or nil end
+    local inst = env.C_Item.GetItemInfoInstant
+    env.C_Item.GetItemInfoInstant = function(id) if id == 900001 then return id, "Armor", "", "INVTYPE_CHEST", 133328, 4, 3 end return inst(id) end
+    c.itemLevel[900001] = 10; c.itemQuality[900001] = 2
+    login(c)
+    env.SlashCmdList.QUESTBANK("")
+    c.QB.UI:ShowTab(9); c.QB.UI:Refresh()
+    local f = c.QB.Gear.Frame()
+    for _, r in ipairs(f.rows) do if r.slot.name == "Chest" then return c, r end end
+  end
+  local c, chest = gearChar("Skinned", skin)
+  local b = chest.best
+  assert(chest.worn and b and chest.up:IsShown(), "a worn chest and its upgrade")
+  local nc = { chest.name:GetTextColor() }
+  assert(math.abs(nc[1] - 0.12) < 0.01 and math.abs(nc[2] - 1) < 0.01, "the worn name in the host's colour for its quality")
+  local rim = chest.button.rim
+  assert(rim.__tex == "color" and math.abs(rim.__color[2] - 1) < 0.01 and rim.__points[1].rel == chest.button.icon and rim.__points[1].x == -1, "a 1 px edge in the quality's colour round the icon")
+  assert(chest.arrow:GetWidth() == 10 and chest.arrow.__points[1].rel == chest.up.icon, "the green arrow at 10 px on the upgrade's icon")
+  if b.q then
+    local inLog = c.QB.state.log[b.q.id]
+    assert(chest.up.face.__atlas == (inLog and "UI-QuestPoi-QuestNumber" or "QuestNormal"), "the quest's source as the map draws it: " .. tostring(chest.up.face.__atlas))
+  end
+  local q, qchest = gearChar("Plaingear", nil)
+  assert(qchest.button.rim.__tex ~= "color" and qchest.arrow:GetWidth() == 12 and (not qchest.best or not qchest.best.q or qchest.up.face.__tex == qchest.best.q.icon), "QuestBank's own: the game's frame, the arrow between, the quest's icon")
+  print("windows D7: the Gear page under Cute's skin: quality edges, the arrow on the upgrade, lifted names, the quest's source as the map draws it; QuestBank's own as before")
+end
+
+-- D8. Fewer pins on the game's own world map: where the game itself draws a pin for a quest (its quest POI for a quest in
+-- your log, C_QuestLog.GetQuestsOnMap; its offer for a quest line's start, C_QuestLine.GetAvailableQuestLines) QuestBank
+-- draws none of its own for that quest; and its pins that would touch at the map's zoom (closer than a pin, 22 px on
+-- screen) merge into one with a count on its corner (the hand-in's glyph first, then in progress, then the offer), its
+-- tooltip naming every one; zoomed in they part. QuestBank's own Map page draws them all
+do
+  local c = newClient({ name = "Thinner", level = 3, cap = 60, faction = "Alliance", className = "Priest", class = "PRIEST", classID = 5, race = "Human",
+    log = { { 7, 0 }, { 18, 0 }, { 33, 1 } }, done = {}, group = false, guild = false, world = { 0, -8914, -133 }, bind = "Northshire Abbey", riding = false,
+    bagSlots = {}, map = 1429 })
+  c.map.id = 1429
+  local QB, env = c.QB, c.env
+  local MD, QMm = QB.Data, QB.QuestMap
+  login(c)
+  QB:Settings().pins = false
+  QB.thinMap = true -- (a host's: Cute's Bridge sets it; QuestBank alone draws every pin, windows D9)
+  -- two of quest 7's spots 10 px apart at the map's zoom (1002 px wide), one of quest 18's far off; both away from the
+  -- hand-in at Eagan Peltskinner (a ? near them would stand for them all, its glyph first)
+  MD.SN = { [1] = "Kobold Vermin", [2] = "Red Burlap Bandana" }
+  MD.SPOT = { [7] = "k,1,1429,700,200,25,c,1;k,1,1429,710,200,25,c,1", [18] = "c,5,1429,200,700,40,w,2" }
+  MD.SREQ = { [7] = "1:10", [18] = "5:12" }
+  c.objectives = { [7] = { { text = "Kobold Vermin slain: 3/10", finished = false, numFulfilled = 3, numRequired = 10 } },
+    [18] = { { text = "Red Burlap Bandana: 2/12", finished = false, numFulfilled = 2, numRequired = 12 } } }
+  local function redraw() QB:Recompute(true); QB.Model.Finish(); QB.Pins:Update(); QMm:Update() end
+  local function pins(kind) local out = {}; for _, f in ipairs(ours(c, "QuestBankQuestPinTemplate")) do if not kind or f.data.kind == kind then out[#out + 1] = f end end return out end
+  redraw()
+  local objs = pins("obj")
+  local merged
+  for _, f in ipairs(objs) do if f.data.count then merged = f end end
+  assert(merged and merged.data.count == 2 and merged.qbCount and merged.qbCount:IsShown() and merged.qbCount:GetText() == "2", "two marks 10 px apart: one pin with a count")
+  lines = {}; merged:OnMouseEnter(); merged:OnMouseLeave()
+  local tipText = table.concat(lines, "\n")
+  assert(tipText:find("Kobold", 1, true), "its tooltip names what is here:\n" .. tipText)
+  -- zoomed in four times: they part
+  c.map.scale = 4
+  for _, p in ipairs(c.map.providers) do if p.OnCanvasScaleChanged then p:OnCanvasScaleChanged() end end
+  tick(c, 1)
+  local parted = 0
+  for _, f in ipairs(pins("obj")) do if f.data.id == 7 and not f.data.count then parted = parted + 1 end end
+  assert(parted == 2, "zoomed in, the two marks part: " .. parted)
+  c.map.scale = 1
+  for _, p in ipairs(c.map.providers) do if p.OnCanvasScaleChanged then p:OnCanvasScaleChanged() end end
+  tick(c, 1)
+  -- the game draws quest 18's POI on this map: none of ours for it
+  local before = 0
+  for _, f in ipairs(pins("obj")) do if f.data.id == 18 then before = before + 1 end end
+  assert(before == 1, "quest 18's mark drawn while the game draws nothing for it")
+  env.C_QuestLog.GetQuestsOnMap = function(m) if m == 1429 then return { { questID = 18, x = 0.2, y = 0.7 } } end return {} end
+  -- (with the game's quest POIs off, the "questPOI" CVar, the game draws none: ours stay)
+  redraw()
+  local off = 0
+  for _, f in ipairs(pins("obj")) do if f.data.id == 18 then off = off + 1 end end
+  assert(off == 1 and QMm.gameDrawn == 0, "the game's quest POIs off: our mark stays")
+  c.cvars = c.cvars or {}; c.cvars.questPOI = "1"
+  redraw()
+  local after = 0
+  for _, f in ipairs(pins("obj")) do if f.data.id == 18 then after = after + 1 end end
+  assert(after == 0 and QMm.gameDrawn == 1, "the game's own POI for quest 18: none of ours")
+  -- the game offers a quest line's start: its ! is the game's
+  local give = pins("give")
+  assert(#give > 0, "a ! of ours to begin with")
+  local offered = give[1].data.quests[1].id
+  -- (a hidden one, the game's trivial offer, it draws only while the minimap tracks hidden quests: ours stays)
+  env.C_QuestLine = { GetAvailableQuestLines = function(m) if m == 1429 then return { { questID = offered, isHidden = true } } end return {} end }
+  redraw()
+  local still = false
+  for _, f in ipairs(pins("give")) do for _, q in ipairs(f.data.quests) do if q.id == offered then still = true end end end
+  assert(still, "the game's hidden offer, not drawn: our ! stays")
+  env.C_QuestLine = { GetAvailableQuestLines = function(m) if m == 1429 then return { { questID = offered } } end return {} end }
+  redraw()
+  for _, f in ipairs(pins("give")) do for _, q in ipairs(f.data.quests) do assert(q.id ~= offered, "the game's offer: no ! of ours for it") end end
+  env.C_QuestLog.GetQuestsOnMap, env.C_QuestLine, c.cvars.questPOI = nil, nil, nil
+  -- marks under the hand-in's ?: one pin, the hand-in's glyph, counting all three
+  MD.SPOT[7] = "k,1,1429,483,397,25,c,1;k,1,1429,493,397,25,c,1"
+  redraw()
+  local turn
+  for _, f in ipairs(pins("turn")) do if f.data.count then turn = f end end
+  local seven = 0
+  for _, f in ipairs(pins("obj")) do if f.data.id == 7 then seven = seven + 1 end end
+  assert(turn and turn.data.count == 3 and seven == 0 and turn.qbCount:GetText() == "3", "the hand-in's glyph first, its count all three")
+  print("windows D8: the game's world map: two pins 10 px apart one with a count, parted zoomed in; none of ours where the game draws its quest POI or its offer")
+end
+
+-- D9. (the review of the windows round) Fewer pins on the game's map is a host's choice (QB.thinMap, which Cute's
+-- Bridge sets): QuestBank alone draws the game's map as 6.1.1 did, two marks 10 px apart two pins and its own mark
+-- where the game draws a POI. Under the flag, a ? whose hand-ins the game draws itself was dropped whole with the
+-- quests its NPC offers, which the game does not draw: it stays as that NPC's ! for them
+do
+  local c = newClient({ name = "Alone", level = 3, cap = 60, faction = "Alliance", className = "Priest", class = "PRIEST", classID = 5, race = "Human",
+    log = { { 7, 0 }, { 18, 0 }, { 33, 1 } }, done = {}, group = false, guild = false, world = { 0, -8914, -133 }, bind = "Northshire Abbey", riding = false,
+    bagSlots = {}, map = 1429 })
+  c.map.id = 1429
+  local QB, env = c.QB, c.env
+  local MD, QMm = QB.Data, QB.QuestMap
+  login(c)
+  QB:Settings().pins = false
+  MD.SN = { [1] = "Kobold Vermin", [2] = "Red Burlap Bandana" }
+  MD.SPOT = { [7] = "k,1,1429,700,200,25,c,1;k,1,1429,710,200,25,c,1", [18] = "c,5,1429,200,700,40,w,2" }
+  MD.SREQ = { [7] = "1:10", [18] = "5:12" }
+  c.objectives = { [7] = { { text = "Kobold Vermin slain: 3/10", finished = false, numFulfilled = 3, numRequired = 10 } },
+    [18] = { { text = "Red Burlap Bandana: 2/12", finished = false, numFulfilled = 2, numRequired = 12 } } }
+  local function redraw() QB:Recompute(true); QB.Model.Finish(); QB.Pins:Update(); QMm:Update() end
+  local function pins(kind) local out = {}; for _, f in ipairs(ours(c, "QuestBankQuestPinTemplate")) do if not kind or f.data.kind == kind then out[#out + 1] = f end end return out end
+  local function marks(id) local n = 0; for _, f in ipairs(pins("obj")) do if f.data.id == id then n = n + 1 end end return n end
+  -- QuestBank alone: every pin, none merged, our mark where the game draws its POI
+  env.C_QuestLog.GetQuestsOnMap = function(m) if m == 1429 then return { { questID = 18, x = 0.2, y = 0.7 } } end return {} end
+  c.cvars = c.cvars or {}; c.cvars.questPOI = "1"
+  redraw()
+  local counted = false
+  for _, f in ipairs(pins()) do if f.data.count then counted = true end end
+  assert(QB.thinMap == nil and marks(7) == 2 and not counted and marks(18) == 1, "QuestBank alone: two marks for quest 7, none merged, quest 18's own mark: " .. marks(7) .. ", " .. marks(18))
+  -- the host's flag: merged, and none of ours where the game draws one
+  QB.thinMap = true
+  redraw()
+  assert(marks(18) == 0 and marks(7) == 1, "under the host's flag: thinned and merged")
+  -- a ? at an NPC who offers a quest too: the game draws the hand-in, the NPC's ! stays for the offer
+  local turn = pins("turn")[1]
+  local give = pins("give")[1]
+  assert(turn and give, "a ? and a ! of ours to begin with")
+  local handin, offer = turn.data.quests[1], give.data.quests[1]
+  local was = offer.give
+  offer.give = handin.turn -- (the offer given by the hand-in's NPC)
+  env.C_QuestLog.GetQuestsOnMap = function(m) if m == 1429 then return { { questID = handin.id } } end return {} end
+  redraw()
+  local found
+  for _, f in ipairs(pins()) do
+    for _, d in ipairs({ f.data, unpack(f.data.merged or {}) }) do
+      if d.kind == "turn" then for _, q in ipairs(d.quests) do assert(q.id ~= handin.id, "no ? of ours for the hand-in the game draws") end end
+      if d.kind == "give" and d.title == handin.turn.n then for _, q in ipairs(d.quests) do if q.id == offer.id then found = d end end end
+    end
+  end
+  assert(found and not found.offers and found.index == nil, "the NPC's ! for its offer, the hand-in left to the game")
+  lines = {}; QMm.TIP.give(env.GameTooltip, found)
+  local tipText = table.concat(lines, "\n")
+  assert(tipText:find(offer.name, 1, true) and not tipText:find(handin.name, 1, true), "its tooltip names the offer alone:\n" .. tipText)
+  offer.give = was
+  env.C_QuestLog.GetQuestsOnMap, c.cvars.questPOI, QB.thinMap = nil, nil, nil
+  print("windows D9: fewer pins on the game's map is the host's: QuestBank alone draws every pin as 6.1.1; under the flag a ? the game draws keeps its NPC's ! for the quests it offers")
 end
 
 local seen = {}

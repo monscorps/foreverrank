@@ -601,10 +601,14 @@ function QM:Build(m, page)
     end
     if d.offers and #d.offers == 0 then d.offers = nil end
     if d.index == 999 then d.index = nil end
-    -- a ! whose quests are all grey: half bright, as the game draws a trivial offer
+    -- a ! whose quests are all grey: half bright, as the game draws a trivial offer (and a ?'s offers, for the ! it
+    -- becomes where the game draws its hand-ins: QM.Thin)
     if d.kind == "give" and low then
       d.trivial = true
       for _, q in ipairs(d.quests) do if not low[q.id] then d.trivial = nil break end end
+    elseif d.offers and low then
+      d.offersTrivial = true
+      for _, q in ipairs(d.offers) do if not low[q.id] then d.offersTrivial = nil break end end
     end
   end
   -- the ! and ? first: the cap below only ever trims marks and areas
@@ -1008,6 +1012,36 @@ function Icon:Setup(d)
   if d.kind == "give" then P.StyleOffer(self, { family = d.family, trivial = d.trivial })
   elseif d.kind == "start" then P.StyleOffer(self, { family = d.family, drop = true })
   else P.StylePoi(self, { complete = d.kind == "turn", family = d.family }) end
+  -- (the windows round) a pin standing for several: their count, 10 px, white, outlined, on its bottom right corner
+  if d.count then
+    if not self.qbCount then
+      self.qbCount = self:CreateFontString(nil, "OVERLAY")
+      local font = GameFontNormal and GameFontNormal:GetFont() or "Fonts\\FRIZQT__.TTF"
+      self.qbCount:SetFont(font, 10, "OUTLINE")
+      self.qbCount:SetTextColor(1, 1, 1)
+      self.qbCount:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", 4, -3)
+    end
+    self.qbCount:SetText(tostring(d.count))
+    self.qbCount:Show()
+  elseif self.qbCount then
+    self.qbCount:Hide()
+  end
+end
+-- a pin's others, under its own tooltip: their quests as the game titles them
+local function others(tip, d)
+  for _, o in ipairs(d.merged or {}) do
+    tip:AddLine(" ")
+    if o.kind == "obj" then
+      local q = Q.Get(o.id)
+      if q then local text, r, g, b = QM.Title(q); tip:AddLine(text, r, g, b) else tip:AddLine(o.qname or "?", 1, 0.82, 0) end
+      local e = QB.state.log[o.id]
+      if e then objectiveLines(tip, e) end
+    else
+      tip:AddLine(o.title or "?", 1, 0.82, 0)
+      tip:AddLine(o.kind == "turn" and READY_WORD() or offersWord(#(o.quests or {})), 1, 1, 1)
+      questLines(tip, o.quests or {})
+    end
+  end
 end
 
 -- a dungeon's entrance: the game's Dungeon (or Raid) pin, and under it how many of its quests you have done ("2/5",
@@ -1032,6 +1066,7 @@ Icon.OnMouseEnter = QB.Safe(function(self)
   if not (d and TIP[d.kind]) then return end
   GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
   TIP[d.kind](GameTooltip, d)
+  if d.merged then others(GameTooltip, d) end
   GameTooltip:Show()
   if d.kind ~= "dungeon" then hoverQuest(self, idsOf(d)[1]) end
 end, "map icon tooltip")
@@ -1057,8 +1092,145 @@ QM.POI = { template = "QuestBankPoiTemplate", level = "PIN_FRAME_LEVEL_ACTIVE_QU
 QM.MARK = { template = "QuestBankMarkTemplate", level = "PIN_FRAME_LEVEL_DUNGEON_ENTRANCE", scale = { 1, 1.0, 1.2 }, mouse = true, methods = Entrance, rightClick = true, size = 32 }
 local KIND = { give = QM.OFFER, start = QM.OFFER, turn = QM.POI, obj = QM.POI, dungeon = QM.MARK }
 
+----------------------------------------------------------------------------
+-- (the windows round) fewer pins on the game's own world map: where the game itself draws a pin for a quest, QuestBank
+-- draws none of its own for that quest (its quest POI for a quest in your log on this map, C_QuestLog.GetQuestsOnMap
+-- as QuestDataProvider.lua:129 reads it; its offer at a quest line's start, C_QuestLine.GetAvailableQuestLines as
+-- QuestOfferDataProvider reads it); and QuestBank's pins that would touch at the map's zoom (closer than a pin, 22 px
+-- on screen) merge into one with a count on its corner, the hand-in's first, then in progress, then the offer, its
+-- tooltip naming every one. Zoomed in they part: the layer is drawn again once the zoom settles. QuestBank's own Map
+-- page draws them all. QM.gameDrawn says how many quests the game drew this time (the diag lines read it).
+-- (the review of the windows round) A host's choice: QB.thinMap, which Cute's Bridge sets; QuestBank alone draws the game's
+-- map as 6.1.1 did. A ? whose hand-ins the game draws stays as its NPC's ! for the quests it offers there
+----------------------------------------------------------------------------
+QM.MERGE_PX = 22
+local gameLog, gameOffer = {}, {}
+-- a CVar the game reads, true only when the client says so (unread, ours stay: two pins rather than none)
+local function cvarOn(name)
+  if not (C_CVar and type(C_CVar.GetCVarBool) == "function") then return false end
+  local ok, v = pcall(C_CVar.GetCVarBool, name)
+  return ok and QB.Plain(v) == true
+end
+local function call(fn, ...)
+  if type(fn) ~= "function" then return nil end
+  local ok, v = pcall(fn, ...)
+  return ok and QB.Plain(v) or nil
+end
+-- the quests the game draws a pin for, as its providers decide: QuestDataProvider:RefreshAllData (nothing with the
+-- "questPOI" CVar off; with a quest focused in its log, that one alone: ShouldShowQuest) and QuestOfferDataProvider's
+-- ShouldAddQuestOffer (no hidden offer unless C_Minimap.IsTrackingHiddenQuests, no local story unless the
+-- "questPOILocalStory" CVar)
+local function questIds(set, list, offers)
+  if type(list) ~= "table" then return end
+  local hidden = offers and C_Minimap and call(C_Minimap.IsTrackingHiddenQuests) == true
+  local stories = offers and cvarOn("questPOILocalStory")
+  local focused = not offers and call(_G.QuestMapFrame_GetFocusedQuestID) or nil
+  for _, e in ipairs(list) do
+    local id = type(e) == "table" and QB.Plain(e.questID) or nil
+    local shown = type(id) == "number"
+    if shown and offers then
+      if QB.Plain(e.isHidden) == true and not hidden then shown = false end
+      if QB.Plain(e.isLocalStory) == true and not stories then shown = false end
+    elseif shown and type(focused) == "number" and focused ~= id then
+      shown = false
+    end
+    if shown then set[id] = true end
+  end
+end
+local function gameDraws(m)
+  for k in pairs(gameLog) do gameLog[k] = nil end
+  for k in pairs(gameOffer) do gameOffer[k] = nil end
+  if type(m) ~= "number" then return end
+  if C_QuestLog and cvarOn("questPOI") then questIds(gameLog, call(C_QuestLog.GetQuestsOnMap, m)) end
+  if C_QuestLine then questIds(gameOffer, call(C_QuestLine.GetAvailableQuestLines, m), true) end
+end
+-- a pin's quests less the ones the game draws (its NPCs' lists too); false when none is left
+local function without(d, field, set, dropped)
+  local keep = {}
+  for _, q in ipairs(d.quests or {}) do if set[q.id] then dropped[q.id] = true else keep[#keep + 1] = q end end
+  if #keep == #(d.quests or {}) then return true end
+  d.quests = keep
+  for _, w in ipairs(d.who or {}) do
+    local k = {}
+    for _, q in ipairs(w[field] or {}) do if not set[q.id] then k[#k + 1] = q end end
+    w[field] = k
+  end
+  return #keep > 0
+end
+-- a ? whose hand-ins the game draws, as the NPC's ! for what it offers (less the game's own offers); false when none
+local function asOffer(d)
+  local quests = {}
+  for _, q in ipairs(d.offers or {}) do if not gameOffer[q.id] then quests[#quests + 1] = q end end
+  if #quests == 0 then return false end
+  d.kind, d.quests, d.offers, d.index, d.trivial, d.family = "give", quests, nil, nil, d.offersTrivial, "basic"
+  for _, q in ipairs(quests) do if QB.Pins.Family(q) == "recurring" then d.family = "recurring" end end
+  for _, w in ipairs(d.who or {}) do
+    local k = {}
+    for _, q in ipairs(w.give or {}) do if not gameOffer[q.id] then k[#k + 1] = q end end
+    w.turn, w.give = {}, k
+  end
+  return true
+end
+local RANK = { turn = 1, obj = 2, give = 3 }
+function QM.Thin(list, layer)
+  gameDraws(layer.drawnFor or (layer.GetMap and layer:GetMap() and QB.Plain(layer:GetMap():GetMapID())))
+  local dropped, out = {}, {}
+  for _, d in ipairs(list) do
+    local keep = true
+    if d.kind == "obj" and gameLog[d.id] then dropped[d.id] = true; keep = false
+    elseif d.kind == "turn" then
+      keep = without(d, "turn", gameLog, dropped)
+      if not keep then keep = asOffer(d) end
+    elseif d.kind == "give" then keep = without(d, "give", gameOffer, dropped) end
+    if keep then out[#out + 1] = d end
+  end
+  local n = 0
+  for _ in pairs(dropped) do n = n + 1 end
+  QM.gameDrawn = n
+  -- the merge, at the canvas's size and zoom: a pin's 22 px in map fractions across and down
+  local map, canvas = layer.GetMap and layer:GetMap(), layer.canvas
+  local w, h = canvas and canvas:GetWidth() or 0, canvas and canvas:GetHeight() or 0
+  local zoom = map and tonumber(QB.Plain(map.GetCanvasScale and map:GetCanvasScale())) or 1
+  layer.qmZoom = math.floor(zoom * 4 + 0.5)
+  local px = QM.MERGE_PX
+  if not (w > 0 and h > 0 and zoom > 0 and px > 0) then QM.mergedAway = 0 return out end
+  local tx, ty = px / (w * zoom), px / (h * zoom)
+  local order = {}
+  for i, d in ipairs(out) do if RANK[d.kind] then d.pos = i; order[#order + 1] = d end end
+  table.sort(order, function(a, b) if RANK[a.kind] ~= RANK[b.kind] then return RANK[a.kind] < RANK[b.kind] end return a.pos < b.pos end)
+  local heads = {}
+  for _, d in ipairs(order) do
+    local head
+    for _, hd in ipairs(heads) do
+      local dx, dy = (hd.x - d.x) / tx, (hd.y - d.y) / ty
+      if dx * dx + dy * dy < 1 then head = hd break end
+    end
+    if head then
+      head.merged = head.merged or {}
+      head.merged[#head.merged + 1] = d
+      head.count = #head.merged + 1
+      d.into = head
+    else
+      heads[#heads + 1] = d
+    end
+  end
+  local kept = {}
+  for _, d in ipairs(out) do if not d.into then kept[#kept + 1] = d end end
+  QM.mergedAway = #out - #kept
+  return kept
+end
+-- /cute diag's words for the game's map (no names): what the game drew of ours, what merged, at which zoom
+function QM.DiagLine()
+  local apis = (C_QuestLog and type(C_QuestLog.GetQuestsOnMap) == "function" and "POIs" or "no POIs") .. ", "
+    .. (C_QuestLine and type(C_QuestLine.GetAvailableQuestLines) == "function" and "offers" or "no offers")
+  return string.format("game's map: the game drew %s of our quests (%s, questPOI %s); %s pins merged into others",
+    tostring(QM.gameDrawn or "none yet"), apis, cvarOn("questPOI") and "on" or "off", tostring(QM.mergedAway or 0))
+end
+
 function QM:Draw(layer, m)
-  for _, d in ipairs(self:Build(m, not layer.world)) do
+  local list = self:Build(m, not layer.world)
+  if layer.world and QB.thinMap then list = QM.Thin(list, layer) end
+  for _, d in ipairs(list) do
     layer:Add(KIND[d.kind] or QM.POI, d, d.x, d.y, nil, d.index)
   end
 end
@@ -1071,6 +1243,18 @@ function QM:Init()
   self.waiting = QB.Pins.WhenMap(function()
     if QM.provider then return end
     QM.provider = QB.Pins.NewLayer(function(layer, m) QM:Draw(layer, m) end, "map icons")
+    -- (the windows round) a zoom step that changes how near two pins may stand: the layer drawn again once it settles,
+    -- so merged pins part zoomed in and join zoomed out (QM.Thin)
+    local placed = QM.provider.OnCanvasScaleChanged
+    QM.provider.OnCanvasScaleChanged = QB.Safe(function(self, ...)
+      placed(self, ...)
+      if not QB.thinMap then return end -- (QuestBank alone merges nothing: nothing to part)
+      local map = self:GetMap()
+      local zoom = map and tonumber(QB.Plain(map.GetCanvasScale and map:GetCanvasScale())) or 1
+      if math.floor(zoom * 4 + 0.5) == self.qmZoom or self.qmSoon then return end
+      self.qmSoon = true
+      C_Timer.After(0.25, QB.Safe(function() self.qmSoon = nil; if QB.Pins.MapOpen() then self:RefreshAllData() end end, "map icons: zoom"))
+    end, "map icons: zoom")
   end, "map icons: waiting for the map")
 end
 

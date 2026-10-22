@@ -45,7 +45,7 @@ ENGINE_KNOWN = {
     "Target.lua", "Sync.lua", "Auto.lua", "Guide.lua", "MapPage.lua", "Gear.lua", "StepFrame.lua", "Tips.lua",
 }
 # Cute_Quest's own files, in the toc's order after the engine
-OWN = ["Bridge.lua", "Band.lua", "PageQuests.lua", "PageRoute.lua", "PageMap.lua", "PageJournal.lua", "PageGear.lua", "PageCamp.lua"]
+OWN = ["Bridge.lua", "Band.lua", "Reader.lua", "PageQuests.lua", "PageRoute.lua", "PageMap.lua", "PageJournal.lua", "PageGear.lua", "PageCamp.lua"]
 
 problems = []
 
@@ -172,7 +172,7 @@ def build_quest(version):
     toc = "\n".join([
         "## Interface: 16001",
         "## Title: |cffe8b24aCute|r Quest",
-        "## Notes: QuestBank's guiding as Cute modules: the step now in the Guide, and Quests, Route, Map, Journal, Gear and Camp, each a switch in Settings, Modules. Loads only while one is on.",
+        "## Notes: Cute's quest window (L): the step now, the route, dungeons and gear, with QuestBank's guiding.",
         "## Author: Mikal",
         "## Version: %s" % version,
         "## X-License: GPL-3.0-or-later",
@@ -181,6 +181,7 @@ def build_quest(version):
         "## LoadOnDemand: 1",
         "## X-Cute-Module: 1",
         "## X-Cute-Title: Quests",
+        "## X-Cute-Base: 1",
         "## SavedVariables: CuteQuestDB",
         "",
         "Shim.lua",

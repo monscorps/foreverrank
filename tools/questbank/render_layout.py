@@ -182,6 +182,28 @@ def tex_style(it):
         return "background:radial-gradient(circle,%s 0%%,%s 30%%,transparent 68%%);" % (rgba(c or (1, 0.82, 0.3), 0.9), rgba(c or (1, 0.82, 0.3), 0.45)), None
     return "background:%s;outline:1px dashed rgba(255,255,255,.12);" % rgba(c or (0.3, 0.3, 0.35), 0.35), label
 
+import re
+def inline_art(txt):
+    """a line's inline art drawn in it: |A atlas:h:w|a and |T file:h:w|t, as the game draws them (an icon from the CDN, an
+    atlas from the local pictures or the drawn marks, else a small grey square)"""
+    def atlas(m):
+        name, h, w = m.group(1).lower(), m.group(2), m.group(3)
+        if os.path.exists(os.path.join(LOCAL_TEX, "atlas_%s.png" % name)): bg = "url(tex/atlas_%s.png) center/contain no-repeat" % name
+        elif name in ATLAS_SVG: bg = "url(data:image/svg+xml;base64,%s) center/contain no-repeat" % ATLAS_SVG[name]
+        else: bg = "rgba(200,200,200,.4)"
+        return '<span style="display:inline-block;width:%spx;height:%spx;vertical-align:middle;background:%s"></span>' % (w, h, bg)
+    def texture(m):
+        ref, h, w = m.group(1), m.group(2), m.group(3)
+        path = BY_ID.get(int(ref)) if ref.isdigit() else ref.replace("\\", "/").lower()
+        leaf = (path or "").split("/")[-1]
+        mark = MARKS.get(leaf if leaf.endswith(".blp") else leaf + ".blp")
+        if path and path.startswith("interface/icons/"): bg = "url(https://wow.zamimg.com/images/wow/icons/large/%s.jpg) center/cover" % path[len("interface/icons/"):-4]
+        elif mark: bg = "url(data:image/svg+xml;base64,%s) center/contain no-repeat" % mark
+        else: bg = "rgba(200,200,200,.4)"
+        return '<span style="display:inline-block;width:%spx;height:%spx;vertical-align:middle;background:%s"></span>' % (w, h, bg)
+    txt = re.sub(r"\|A:([^:|]+):(\d+):(\d+)[^|]*\|a", atlas, txt)
+    return re.sub(r"\|T([^:|]+):(\d+):(\d+)[^|]*\|t", texture, txt)
+
 def render(layout):
     # the minimap's sheets: round, over ground, drawn at four times the size so the markers can be judged, side by side
     mini = layout["label"].startswith("Minimap")
@@ -216,7 +238,7 @@ def render(layout):
             size = it.get("size") or 12
             j = {"LEFT": "left", "RIGHT": "right", "CENTER": "center"}.get(it.get("j"), "left")
             ws = "normal" if it.get("wrap") else "nowrap"
-            out.append('<div class="t" style="%scolor:%s;font-size:%dpx;text-align:%s;white-space:%s">%s</div>' % (base, c, size, j, ws, html.escape(it.get("text") or "").replace("\n", "<br>")))
+            out.append('<div class="t" style="%scolor:%s;font-size:%dpx;text-align:%s;white-space:%s">%s</div>' % (base, c, size, j, ws, inline_art(html.escape(it.get("text") or "").replace("\n", "<br>"))))
         elif it["k"] == "Texture":
             if it.get("layer") == "MASK": continue  # (a mask shapes other textures; it draws nothing itself)
             st, label = tex_style(it)

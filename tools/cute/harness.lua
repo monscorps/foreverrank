@@ -53,7 +53,8 @@ SetAutoFocus SetFocus ClearFocus SetMaxLetters HasFocus SetChecked GetChecked Ge
 SetResizable SetResizeBounds StartSizing CreateMaskTexture AddMaskTexture SetScale GetScale SetHitRectInsets
 IsForbidden SetPushedTexture GetTextColor SetMultiLine HighlightText SetRotation SetAtlas SetPassThroughButtons SetCooldown
 SetHideCountdownNumbers SetUserPlaced GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness CreateLine SetTextInsets
-SetAttribute GetAttribute SetGradient SetClipsChildren PingLocation SetSnapToPixelGrid SetTexelSnappingBias]])
+SetAttribute GetAttribute SetGradient SetClipsChildren PingLocation SetSnapToPixelGrid SetTexelSnappingBias
+EnableKeyboard SetPropagateKeyboardInput IsProtected SetShadowOffset SetShadowColor Raise Click]])
 -- (the last three lines: the quest engine's, for a client made with o.quest = true; QuestBank's harness lists them)
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
 -- a PlayerModel's own and a QuestPOIFrame's own (the quest engine's journal and map files), as QuestBank's harness has them
@@ -71,7 +72,8 @@ for c in ("iljtfr'.,:;|!I ()[]"):gmatch(".") do CHAR[c] = 0.30 end
 for c in ("mwMW"):gmatch(".") do CHAR[c] = 0.86 end
 for c in ("ABCDEFGHJKLNOPQRSTUVXYZ"):gmatch(".") do CHAR[c] = 0.66 end
 for c in ("0123456789"):gmatch(".") do CHAR[c] = 0.56 end
-local function plain(s) return (s or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "") end
+-- (an inline texture or atlas, |T...|t or |A...|a, takes about one wide letter's room: counted as an M)
+local function plain(s) return (s or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T.-|t", "M"):gsub("|A.-|a", "M") end
 local function textWidth(s, size)
   local w = 0
   for c in plain(s):gmatch(".") do w = w + (CHAR[c] or 0.53) end
@@ -103,6 +105,7 @@ local function everything()
   end
 end
 local rectOf, GEN = nil, 0 -- (layout, below: a size asked of an anchored frame is worked out as the game would)
+local RAISED = 0 -- (Raise: the frames raised, in order, every client)
 local OPS = { n = 0 } -- SetPoint and SetText calls, every client
 local function newObj(kind, template, parent)
   local o = { __kind = kind, __scripts = {}, __events = {}, __shown = true, __w = 0, __h = 0, __text = "", __value = 0, __min = 0,
@@ -135,7 +138,7 @@ local function newObj(kind, template, parent)
         elseif k == "SetAtlas" then self.__tex = "atlas:" .. tostring(a[1]); self.__atlas = a[1]; self.__color = nil
         elseif k == "SetCooldown" then self.__cd = { a[1], a[2] }
         elseif k == "SetAttribute" then self.__attr = self.__attr or {}; self.__attr[a[1]] = a[2]
-        elseif k == "GetAttribute" then return self.__attr and self.__attr[a[1]] or nil
+        elseif k == "GetAttribute" then if self.__attr then return self.__attr[a[1]] end return nil -- (false is an answer)
         elseif k == "IsForbidden" then return false
         elseif k == "SetDisplayInfo" then self.__display, self.__creature = a[1], nil
         elseif k == "SetCreature" then self.__creature, self.__display = a[1], nil
@@ -182,9 +185,14 @@ local function newObj(kind, template, parent)
           return self.__label
         elseif k == "GetHighlightTexture" then if not self.__hi then self.__hi = newObj("Texture", nil, self); self.__hi.__layer = "HIGHLIGHT" end return self.__hi
         elseif k == "GetStringWidth" or k == "GetUnboundedStringWidth" then return textWidth(self.__text, self.__size)
-        elseif k == "GetStringHeight" then return self.__size + 2
+        -- (a wrapping string with its width set takes as many lines as its text needs, as the layout below counts them)
+        elseif k == "GetStringHeight" then
+          local w = self.__w or 0
+          if self.__wrap and self.__wset and w > 0 then return math.max(1, math.ceil(textWidth(self.__text, self.__size) / w)) * (self.__size + 2) end
+          return self.__size + 2
         elseif k == "GetFont" then return self.__fontFile or "Fonts\\FRIZQT__.TTF", self.__size, ""
-        elseif k == "SetFont" then self.__fontFile = a[1]; self.__size = a[2] or self.__size; return true
+        elseif k == "SetFont" then self.__fontFile = a[1]; self.__size = a[2] or self.__size; self.__fontFlags = a[3]; return true
+        elseif k == "SetShadowOffset" then self.__shadow = { a[1], a[2] }
         elseif k == "SetFontObject" then self.__size = a[1] and a[1].__fontSize or 12
         elseif k == "SetJustifyH" then self.__justify = a[1]
         elseif k == "SetWordWrap" then self.__wrap = a[1] and true or false
@@ -236,6 +244,18 @@ local function newObj(kind, template, parent)
         elseif k == "GetNumPoints" then return #self.__points
         elseif k == "GetFrameLevel" then return self.__frameLevel or 2
         elseif k == "SetFrameLevel" then self.__frameLevel = a[1]
+        elseif k == "SetFrameStrata" then self.__strata = a[1]
+        -- (the keyboard a frame takes: EnableKeyboard, and whether a key goes on past it)
+        elseif k == "EnableKeyboard" then self.__keyboard = a[1] and true or false
+        elseif k == "SetPropagateKeyboardInput" then self.__propagate = a[1] and true or false
+        -- (a toplevel frame raised to the front of its strata: above every frame raised before it)
+        elseif k == "Raise" then RAISED = RAISED + 1; self.__frameLevel = 1000 + RAISED
+        -- (the clicks a button hears, RegisterForClicks; a mouse click below delivers only those)
+        elseif k == "RegisterForClicks" then self.__clicks = { ... }
+        -- (Button:Click runs its OnClick as a press would, and its PostClick)
+        elseif k == "Click" then
+          if self.__scripts.OnClick then self.__scripts.OnClick(self, a[1] or "LeftButton", a[2] or false) end
+          if self.__scripts.PostClick then self.__scripts.PostClick(self, a[1] or "LeftButton", a[2] or false) end
         elseif k == "EnableMouse" then self.__mouse = a[1] and true or false
         elseif k == "GetChildren" then
           local out = {}
@@ -1045,6 +1065,66 @@ local function newClient(o)
     end,
   }
   env.InCombatLockdown = function() return c.combat == true end
+  -- the game's menus (Blizzard_Menu: MenuUtil.CreateContextMenu, a description's CreateButton, CreateCheckbox,
+  -- CreateDivider, CreateTitle and SetShouldRespondIfSubmenu, 11_0_0_MenuImplementationGuide.lua): every menu made is
+  -- kept in c.contextMenus, its entries as the root got them, a parent's submenu in its entry's sub
+  c.contextMenus = {}
+  local function menuDesc(entries)
+    local d = {}
+    function d:CreateButton(text, fn) local sub = {}; local e = { kind = "button", text = text, set = fn, sub = sub }; entries[#entries + 1] = e; local x = menuDesc(sub); x.entry = e; return x end
+    function d:CreateCheckbox(text, get, set) entries[#entries + 1] = { kind = "check", text = text, get = get, set = set } end
+    function d:CreateDivider() entries[#entries + 1] = { kind = "divider" } end
+    function d:CreateTitle(text) entries[#entries + 1] = { kind = "title", text = text } end
+    function d:SetShouldRespondIfSubmenu(on) if self.entry then self.entry.responds = on end end
+    function d:SetEnabled(on) if self.entry then self.entry.off = not on end end
+    return d
+  end
+  c.menuDesc = menuDesc
+  env.MenuUtil = { CreateContextMenu = function(owner, gen)
+    local entries = {}
+    gen(owner, menuDesc(entries))
+    entries.owner = owner
+    c.contextMenus[#c.contextMenus + 1] = entries
+  end }
+  -- the key bindings (Blizzard_Keybindings.lua reads GetBindingKey and GetBindingAction; the override bindings are the
+  -- gamepad's way, InputButtonBinding.lua:28): c.bindings, action -> keys, the game's; c.overrides, key -> the button an
+  -- override clicks, by owner
+  c.bindings = o.bindings or { TOGGLEGUILDTAB = { "J" }, TOGGLEQUESTLOG = { "L" }, TOGGLEWORLDMAP = { "M" }, ACTIONBUTTON5 = { "5" }, CUTE_SETTINGS = {} }
+  c.overrides, c.overrideCalls = {}, 0
+  env.GetBindingKey = function(action) return unpack(c.bindings[action] or {}) end
+  env.GetBindingAction = function(key) for action, keys in pairs(c.bindings) do for _, k in ipairs(keys) do if k == key then return action end end end return "" end
+  env.BINDING_NAME_ACTIONBUTTON5 = "Action Button 5"
+  env.SetOverrideBindingClick = function(owner, prio, key, button)
+    assert(not c.combat, "an override binding set in combat")
+    c.overrideCalls = c.overrideCalls + 1
+    c.overrides[key] = { owner = owner, button = button, prio = prio }
+  end
+  env.ClearOverrideBindings = function(owner)
+    assert(not c.combat, "override bindings cleared in combat")
+    for k, v in pairs(c.overrides) do if v.owner == owner then c.overrides[k] = nil end end
+  end
+  -- a reload (UIManagerDocumentation.lua: C_UI.Reload): counted; a scenario logs the saved data in again
+  c.reloads = 0
+  env.C_UI = { Reload = function() c.reloads = c.reloads + 1 end }
+  -- the game's popups (Blizzard_StaticPopup): c.popups keeps each shown, by name
+  c.popups = {}
+  env.StaticPopupDialogs = {}
+  env.StaticPopup_Show = function(which) c.popups[#c.popups + 1] = which; return true end
+  -- the micro buttons the header's buttons click (MainMenuBarMicroButtons.xml:196, 229); o.noMicro: a UI addon removed them
+  if not o.noMicro then
+    env.GuildMicroButton = newObj("Button", nil, env.UIParent); env.GuildMicroButton.__name = "GuildMicroButton"
+    env.QuestLogMicroButton = newObj("Button", nil, env.UIParent); env.QuestLogMicroButton.__name = "QuestLogMicroButton"
+    -- their clicks open the game's windows (ToggleGuildFrame: the Communities frame; ToggleQuestLog: the world map's quest
+    -- panel, o.quest clients' map), each a toggle; c.microClicks counts them
+    c.microClicks = 0
+    env.CommunitiesFrame = newObj("Frame", nil, env.UIParent); env.CommunitiesFrame.__name = "CommunitiesFrame"; env.CommunitiesFrame:Hide()
+    env.GuildMicroButton:SetScript("OnClick", function() c.microClicks = c.microClicks + 1; env.CommunitiesFrame:SetShown(not env.CommunitiesFrame:IsShown()) end)
+    env.QuestLogMicroButton:SetScript("OnClick", function()
+      c.microClicks = c.microClicks + 1
+      if not env.OpenWorldMap then return end
+      if c.map and c.map.shown then env.HideUIPanel(env.WorldMapFrame) else env.OpenWorldMap() end
+    end)
+  end
   -- o.quest: the quest engine's mocks (test/quest_mocks.lua), what Cute_Quest's copy of QuestBank reads that Cute's own
   -- mock lacks; after Cute's (the addon list among them), never over them
   if o.quest then dofile(HERE .. "/test/quest_mocks.lua")(env, c, o, newObj, api, secret) end
@@ -1078,6 +1158,8 @@ end
 local function login(c, db, reloading)
   c.env.CuteDB = db or {}
   fire(c, "ADDON_LOADED", "Cute")
+  -- (the setup card shows itself once a character's first loading screen: a scenario that asks for it says o.card)
+  if not c.o.card and c.C.Setup then c.C.Setup.told = true end
   -- the module addons the game loads itself: enabled for this character and no LoadOnDemand ones, after Cute
   for _, a in ipairs(c.addons) do if not a.loaded and not a.lod and c.addonEnabled(a.name) then c.loadAddon(a) end end
   fire(c, "PLAYER_ENTERING_WORLD", not reloading, reloading or false)
@@ -1091,12 +1173,52 @@ local function click(b) assert(b and b.__scripts.OnClick, "a button with OnClick
 local function press(b) assert(b and b.__scripts.OnClick, "a button with OnClick"); hardware(b, function() b.__scripts.OnClick(b, "LeftButton") end) end
 local function hover(o) if o.__scripts.OnEnter then o.__scripts.OnEnter(o) end end
 -- the Guide's page, switched on first where it is off (a fresh install starts without it: scenario 9 and the modules')
-local function openGuide(c) if not c.C.Modules.OnKey("guide") then c.C.Modules.Set("guide", true) end c.C.UI:Open("guide") end
--- the Guide's band, line by line (the next best thing, where the knowledge comes from), and a line's tooltip
-local function bandLine(c, i) local n = 0; for _, l in ipairs(c.C.UI.bandLines.items) do if l:IsShown() then n = n + 1; if n == i then return l end end end end
--- the Guide's head row: the pick's line, the first row of its list (its tooltip holds the reasons, the source and, for
--- an officer, the guild's line and what the guild learned)
-local function guideHead(c) for _, r in ipairs(c.C.UI.lists.guide.items) do if r:IsShown() and r.idx == 1 then return r end end end
+-- (the launch round's windows) the Guide is no page of its own: its band and pick are the quest window's Quests tab
+-- (Cute_Quest's PageQuests.lua draws them through Cute.Guide.Draw). A client without Cute_Quest gets a stand-in Quests
+-- tab that draws the Guide's part alone, so the scenarios that weigh the guild's pick read it where it is drawn
+local function openGuide(c)
+  if not c.C.Modules.byId.quests then
+    -- (redrawn as the Quests tab is: combat and the group move the Invite buttons, quests the pick)
+    local function r() c.C.UI.RefreshAll() end
+    c.C:RegisterModule({ id = "quests", title = "Quests", order = 21, window = "quests", builtin = true, base = true,
+      page = function(ui, scroll) local h, show = c.C.API.Guide.Draw(ui, 0); ui.virtual = show; scroll:SetContentHeight(h + 8) end,
+      events = { PLAYER_REGEN_DISABLED = r, PLAYER_REGEN_ENABLED = r, GROUP_ROSTER_UPDATE = r, QUEST_TURNED_IN = r, QUEST_ACCEPTED = r } })
+  end
+  c.C.UI:Open("quests")
+end
+local function qwin(c) return c.C.UI.Window("quests") end
+-- every built window of a client drawn again (a scenario's redraw: the page it reads may be in any of them)
+-- every built window of a client closed
+local function hideAll(c) for _, key in ipairs({ "guild", "quests", "settings" }) do local win = c.C.UI.Window(key); if rawget(win, "frame") then win.frame:Hide() end end end
+local function redraw(c) for _, key in ipairs({ "guild", "quests", "settings" }) do local win = c.C.UI.Window(key); if rawget(win, "frame") then win:Draw() end end end
+-- every window of a client at one size (a scenario that checks a page at both sizes: the guild window, the quest
+-- window and Settings, each built ones, as the player would size them)
+local function sizeAll(c, w, h)
+  for _, key in ipairs({ "guild", "quests", "settings" }) do
+    local win = c.C.UI.Window(key)
+    if not rawget(win, "frame") then win:Build() end
+    win.frame:SetSize(w, h)
+  end
+end
+-- (the windows round) the guild's pick on the Quests tab: the host it is drawn on (the harness's stand-in tab's "guide";
+-- with Cute_Quest the right column's "questsSide", or "questsUnder" at the narrow size), its widgets (the head, the card or
+-- the note), and its card or note: the one whose tooltip holds the reasons, the source and, for an officer, the guild's
+-- line and what the guild learned (Guide.lua G.DrawPick)
+local function pickHost(c)
+  local hosts = qwin(c).hosts or {}
+  for _, k in ipairs({ "guide", "questsSide", "questsUnder" }) do
+    local h = hosts[k]
+    if h and h:IsShown() and ((h.pickCard and h.pickCard:IsShown()) or (h.pickNote and h.pickNote:IsShown())) then return h end
+  end
+end
+local function glist(c)
+  local h = pickHost(c)
+  if not h then return {} end
+  local out = {}
+  for _, k in ipairs({ "pickHead", "pickCard", "pickNote" }) do if h[k] and h[k]:IsShown() then out[#out + 1] = h[k] end end
+  return out
+end
+local function guideHead(c) local h = pickHost(c); if not h then return nil end; return (h.pickCard and h.pickCard:IsShown()) and h.pickCard or h.pickNote end
 local function tipOf(o) local l0 = #lines; if o.__scripts.OnEnter then o.__scripts.OnEnter(o) end; return table.concat(lines, "\n", l0 + 1) end
 -- a row's tooltip filler read into text, a double line as "left | right"
 local function tipText(fill) local out = {}; fill({ AddLine = function(_, t) out[#out + 1] = t end, AddDoubleLine = function(_, l, r) out[#out + 1] = l .. " | " .. r end }); return table.concat(out, "\n") end
@@ -1116,6 +1238,9 @@ local function tabsShown(c)
   for i, t in ipairs(out) do out[i] = t.id end
   return table.concat(out, " ")
 end
+-- Settings, its own window (CuteSettingsFrame): its frame and a redraw of it
+local function sframe(c) return c.C.UI.Window("settings").frame end
+local function sdraw(c) c.C.UI.Window("settings"):Draw() end
 local function sectionsShown(c)
   local out = {}
   for _, f in ipairs(c.frames) do if f.section and f:IsVisible() and not ASIDE[f.section] then out[#out + 1] = { id = f.section, y = f.__points[1].y } end end
@@ -1240,6 +1365,13 @@ local function interactive(o)
   return k == "Button" or k == "CheckButton" or k == "EditBox" or k == "Slider"
 end
 local function inside(o, root) for _, a in ipairs(ancestors(o)) do if a == root then return true end end return false end
+-- what Settings and the setup card draw is never cut (their frames or widgets carry cuteNoCut): a label FitText cut
+-- there (fs.cuteCut, UI.lua) is a layout problem at any window size
+local function noCut(o)
+  local x = o
+  while x do if x.cuteNoCut then return true end; x = x.__parent or x.__scrollParent end
+  return false
+end
 local EDGE_GAP = 5
 -- what a widget is clipped to: every scrolling ancestor's view, intersected (a scroll frame inside another, as the
 -- quest engine's journal list under Cute's scroll area, shows only what both let through)
@@ -1261,6 +1393,7 @@ local function checkLayout(root, label)
     if o.__kind == "FontString" and o.__text ~= "" and visible(o) and inside(o, root) then
       local bad = undrawable(o.__text)
       if bad then problems[#problems + 1] = string.format("%s: '%s' has %s, which the game's font draws as a box", label, plain(o.__text):sub(1, 40), bad) end
+      if o.cuteCut and noCut(o) then problems[#problems + 1] = string.format("%s: '%s' is cut where nothing may be (it must wrap)", label, plain(o.__text):sub(1, 60)) end
       local r = rectOf(o)
       if r then
         local tw = textWidth(o.__text, o.__size)
@@ -1287,7 +1420,7 @@ local function checkLayout(root, label)
         local inset = root.__inset or 0
         if not clip then
           local gaps = { { "left", r.l - (rootRect.l + inset) }, { "right", (rootRect.r - inset) - r.r }, { "top", (rootRect.t - inset) - r.t }, { "bottom", r.b - (rootRect.b + inset) } }
-          for _, g in ipairs(gaps) do
+          for _, g in ipairs(o.cuteEdge and {} or gaps) do
             if g[2] < EDGE_GAP then problems[#problems + 1] = string.format("%s: [%s '%s'] sits %d px from the window's %s edge", label, o.__kind, plain(o.__text ~= "" and o.__text or (o.__where or "?")):sub(1, 30), math.floor(g[2] + 0.5), g[1]); break end
           end
         elseif r.l < clip.l - 1 or r.r > clip.r + 1 then
@@ -1330,7 +1463,8 @@ local function dumpLayout(root, label)
         local anc = ancestors(o)
         local it = { k = o.__kind, x = r.l - rr.l, y = rr.t - r.t, w = r.r - r.l, h = r.t - r.b, i = idx, a = o.__alpha, depth = #anc, lvl = 0 }
         if o.__kind == "FontString" then
-          it.text, it.size, it.j, it.wrap, it.c = plain(o.__text), o.__size, o.__justify, o.__wrap, o.__color
+          -- (the colour codes out; an inline texture or atlas kept for the page to draw: render_layout.py)
+          it.text, it.size, it.j, it.wrap, it.c = (o.__text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""), o.__size, o.__justify, o.__wrap, o.__color
         elseif o.__kind == "Texture" then
           if o.__layer == "HIGHLIGHT" or o.__layer == "MASK" then it = nil
           else
@@ -1616,10 +1750,10 @@ do
   for _, l in ipairs(bare.C.UI.labels.items) do if l:IsShown() and l:GetText():find("Durability: GetInventoryItemDurability is missing", 1, true) then said = true end end
   assert(said, "the Me page lists what could not be read, with the reason")
   check(bare.C.UI.frame, "member me, a function missing")
-  bare.C.UI.frame:SetSize(760, 420)
+  sizeAll(bare, 760, 420)
   bare.C.UI:Open("me")
   check(bare.C.UI.frame, "member me, a function missing, small window")
-  bare.C.UI.frame:SetSize(1040, 640)
+  sizeAll(bare, 1040, 640)
   bare.env.SlashCmdList.CUTE("api")
   local line = bare.chat[#bare.chat]
   local present, missing = line:match("present ([^|]*)|"), line:match("missing (.*)$")
@@ -1878,78 +2012,43 @@ do
   print("roster: you first, online and class from the guild through C_Club, no-addon members listed, prune after two misses")
 end
 
--- 9: the window, every page, for the officer and the member; the look. A fresh install is the dashboard alone: the
--- Guide is a module, off until its box in Settings > Modules is ticked, which brings its tab and its section at once
+-- 9: the guild window (J), every page, for the officer and the member; the look. Its tabs are the guild's pages alone:
+-- Settings is a window of its own (CuteSettingsFrame) and the quests' pages are the quest window's (they come with
+-- Cute_Quest, scenarios 36b and on). The Guide is no module any more: its band and pick are the Quests tab's
 do
   for _, c in ipairs({ yezin, kaka }) do c.C.UI:Open("race") end
-  assert(tabsShown(yezin) == "race prog shame game officers me settings", "the officer's fresh install, the dashboard alone: " .. tabsShown(yezin))
-  assert(tabsShown(kaka) == "race prog shame game me settings", "the member's: " .. tabsShown(kaka))
+  assert(tabsShown(yezin) == "race prog shame game officers me", "the officer's guild window: " .. tabsShown(yezin))
+  assert(tabsShown(kaka) == "race prog shame game me", "the member's: " .. tabsShown(kaka))
   yezin.C.UI:Open("guide")
-  assert(yezin.C.UI.page == "race", "the Guide off: asking for its page opens Race")
-  -- /cute guide while it is off switches it on for this character, as its box would, says so and opens its page
-  -- (0.6.1: a second way to the box); /cute modules lists each module, on or off, and opens Settings there
+  assert(yezin.C.UI.page == "race" and not yezin.C.Modules.byId.guide, "no Guide page: asking for it opens Race")
+  -- /cute guide (the quests' Quests tab now) without the quest window's addon: said, and the guild window stays
   local c0 = #yezin.chat
   yezin.env.SlashCmdList.CUTE("guide")
-  assert(yezin.C.UI.page == "guide" and yezin.C.Char().modules.guide == true and yezin.C.Modules.byId.guide.active
-    and table.concat(yezin.chat, "\n", c0 + 1):find("Guide is on for this character; untick it in Settings, Modules to switch it off.", 1, true),
-    "/cute guide while it is off: " .. table.concat(yezin.chat, "\n", c0 + 1))
-  assert(tabsShown(yezin):find("^race guide prog"), "its tab after Race: " .. tabsShown(yezin))
-  -- the page as 0.7.0 draws it: the band says the quest module is off (one line; a click opens Settings > Modules), the
-  -- list is the pick's line and the picked dungeon alone, the rest in the head's tooltip
+  assert(table.concat(yezin.chat, "\n", c0 + 1):find("the quest window comes with Cute_Quest, which this client does not have.", 1, true) and yezin.C.UI.page == "race",
+    "/cute guide without Cute_Quest: " .. table.concat(yezin.chat, "\n", c0 + 1))
+  -- the guild's pick is the core's still, read through Cute.Guide (the Quests tab draws it): G.Items works out the
+  -- pick's card's rows alone
   do
-    local t = texts(yezin)
-    local _, plan = yezin.C.Guide.Items(true)
-    assert(t:find("Tick Quests in Settings, Modules for the step now.", 1, true), "the band says the quest module is off:\n" .. t)
-    -- (with the seed the pick is a dungeon and its card follows; with none nothing is known at 42 and the head stands alone)
-    assert(t:find(plan.next.line, 1, true) and (not plan.next.card or (t:find("Bosses", 1, true) and t:find("Online", 1, true))), "the pick's line, then its card: name, bosses, mates:\n" .. t)
-    assert(not t:find("Missing enchants", 1, true) and not t:find("Next up", 1, true) and not t:find("Pace", 1, true) and not t:find("Learned in play", 1, true)
-      and not t:find("In range at level", 1, true) and not t:find("The guild, per dungeon", 1, true), "nothing else on the page:\n" .. t)
-    local n = 0
-    for _, r in ipairs(yezin.C.UI.lists.guide.items) do if r:IsShown() and r.bar:IsShown() then n = n + 1 end end
-    assert(n == (plan.next.card and 1 or 0), "one card, marked, or none: " .. n)
-    -- G.Items works out what the page draws alone: the pick's card's rows (none where nothing fits), nothing of
-    -- 0.6.0's page (the other cards' rows, the gear and pace strips, Next up, the officers' lines)
-    local items = yezin.C.Guide.Items(true)
+    local items, plan = yezin.C.Guide.Items(true)
     assert(#items == (plan.next.card and #yezin.C.Guide.CardRows(plan.next.card, plan) or 0), "the items are the pick's card's rows alone: " .. #items)
     for _, it in ipairs(items) do assert(it.kind == "card" or it.kind == "bosses" or it.kind == "quests" or it.kind == "mate" or it.kind == "more", "no row of another kind: " .. tostring(it.kind)) end
     assert(type(plan.learned) == "table" and plan.learned[1] and (plan.cards[1] == nil or plan.cards[1].known ~= nil), "the plan: the learned lines for the officer, every dungeon in range with its counts")
-    -- the module's notes say what this page is (its box's tooltip in Settings, Modules; the page's mock says the same),
-    -- not 0.6.0's page of every dungeon, the gear and pace strips and Next up
-    local notes = "The step now from Quests, then the one dungeon to run: its bosses, quests and guild mates to invite; officers see the guild per dungeon in its tooltip."
-    assert(yezin.C.Modules.byId.guide.notes == notes, "the Guide's notes: " .. tostring(yezin.C.Modules.byId.guide.notes))
-    yezin.C.UI:Open("settings", "modules")
-    local box = checkBox(yezin, function(cb) return cb.label and cb.label:GetText() == "Guide" end)
-    assert(tipOf(box):find(notes, 1, true), "its box's tooltip says so:\n" .. tipOf(box))
-    local mock = assert(io.open(HERE .. "/../../addons/cute/index.html")):read("*a")
-    assert(mock:find('GUIDE_NOTES = "' .. notes .. '"', 1, true), "the page's mock says the same")
-    yezin.C.UI:Open("guide")
-    local head = guideHead(yezin)
-    -- (the guild's line at the right where the column holds it whole; else, never cut, on a line of its own under the
-    -- head, the head's right empty)
-    local who = head and head.who:IsShown() and head.who:GetText() or ""
-    local under
-    for _, r in ipairs(yezin.C.UI.lists.guide.items) do if r:IsShown() and r.idx == 2 then under = r.name:GetText() end end
-    assert(head and head.name:GetText() == plan.next.line and (who == plan.guild.line or (who == "" and under == plan.guild.line)),
-      "the officer's head: the pick's line, the guild's line whole at its right or on the line under it: " .. who .. " / " .. tostring(under))
-    assert(not t:find("%.%.%.\n") or not t:find(plan.guild.line:sub(1, 12), 1, true) or t:find(plan.guild.line, 1, true), "the guild's line never cut")
-    local ht = tipOf(head)
-    assert(ht:find("Learned in play", 1, true) and ht:find(SEEDED and "From research" or "Nothing shipped with this copy", 1, true) and ht:find(plan.guild.line, 1, true),
-      "the head's tooltip: the reasons, the source, the guild's line, what the guild learned:\n" .. ht)
-    press(bandLine(yezin, 1))
-    assert(yezin.C.UI.page == "settings" and yezin.C.UI.section == "modules", "a click on the band's line opens Settings > Modules")
-    yezin.C.UI:Open("guide")
+    assert(yezin.env.Cute.Guide and yezin.env.Cute.Guide.Draw and yezin.env.Cute.Guide.Items, "the door module addons read it through")
   end
+  -- /cute modules lists the modules and opens Settings there, its own window
   c0 = #yezin.chat
   yezin.env.SlashCmdList.CUTE("modules")
-  assert(yezin.C.UI.page == "settings" and yezin.C.UI.section == "modules" and yezin.chat[#yezin.chat]:find("modules: Guide on; Runs on. The dashboard's pages are always on.", 1, true),
-    "/cute modules lists the Guide on and opens Settings there: " .. table.concat(yezin.chat, "\n", c0 + 1))
-  yezin.C.Modules.Set("guide", false)
-  assert(yezin.chat[#yezin.chat] == yezin.chat[c0 + 1], "switched off by the box, nothing said")
-  yezin.env.SlashCmdList.CUTE("modules")
-  assert(yezin.chat[#yezin.chat]:find("modules: Guide off; Runs on. The dashboard's pages are always on.", 1, true), "/cute modules lists it off: " .. yezin.chat[#yezin.chat])
-  yezin.C.UI:Open("settings", "modules")
-  assert(sectionsShown(yezin) == "general vis rules modules race prog shame officers", "the officer's sections: " .. sectionsShown(yezin))
-  check(yezin.C.UI.frame, "officer settings, modules, a fresh install")
+  local sw = yezin.C.UI.Window("settings")
+  assert(sw.frame and sw.frame:IsShown() and sw.section == "modules" and yezin.chat[#yezin.chat]:find("The dashboard's pages are always on.", 1, true),
+    "/cute modules opens Settings at Modules: " .. table.concat(yezin.chat, "\n", c0 + 1))
+  -- (the run report's module, built in and on by default, is listed with it)
+  assert(yezin.chat[#yezin.chat]:find("Runs on", 1, true), "/cute modules lists Runs on: " .. yezin.chat[#yezin.chat])
+  assert(yezin.env.CuteSettingsFrame == sw.frame, "Settings is its own frame")
+  assert(yezin.C.UI.frame:IsShown(), "the guild window stays open: " .. tostring(yezin.C.UI.page))
+  assert(sectionsShown(yezin) == "general keys modules columns vis rules", "the officer's sections: " .. sectionsShown(yezin))
+  check(sw.frame, "officer settings, modules, a fresh install")
+  kaka.C.UI:Open("settings", "modules")
+  assert(sectionsShown(kaka) == "general keys modules columns vis", "the member's: no Rules: " .. sectionsShown(kaka))
   -- /cute <page>: a page by its module's id or title; an officer's page asked for by a member, and a word that is no
   -- page or command, say so and open nothing
   for _, d in ipairs({ { "statistics", "game" }, { "Hall of Shame", "shame" }, { "shame", "shame" }, { "me", "me" }, { "race", "race" } }) do
@@ -1962,24 +2061,18 @@ do
   local said = table.concat(kaka.chat, "\n", k0 + 1)
   assert(kaka.C.UI.page == "race" and kaka.C.UI.frame:IsShown() and said:find("the Officers page is for officer ranks.", 1, true) and said:find('no page or command "banana". /cute help lists them.', 1, true),
     "the member's /cute officers and /cute banana:\n" .. said)
+  -- the dungeon pick's two thresholds are Rules' "Dungeons and gear" now (the officers'; a member has no Rules)
+  yezin.C.UI:Open("settings", "rules")
+  assert(texts(yezin):find("Members near your level", 1, true) and texts(yezin):find("Dungeons ahead", 1, true) and texts(yezin):find("Dungeons and gear", 1, true), "the pick's rules in Rules:\n" .. texts(yezin))
+  check(sw.frame, "officer settings, rules with the pick's")
+  -- every section for both, nothing cut
   for _, c in ipairs({ yezin, kaka }) do
-    c.C.UI:Open("settings", "modules")
-    local box = checkBox(c, function(cb) return cb.label and cb.label:GetText() == "Guide" end)
-    assert(box and not box:GetChecked() and not box.__disabled, "the Guide's box, unticked on a fresh install")
-    click(box)
-    assert(c.C.UI.page == "settings" and tabsShown(c):find("^race guide prog") and c.C.Char().modules.guide == true, "ticked: its tab after Race at once, kept for this character: " .. tabsShown(c))
-    assert(sectionsShown(c):find("modules race guide prog shame", 1, true), "and its section: " .. sectionsShown(c))
+    for _, sec in ipairs(c.C.SettingsPage.Sections(c.C.Roster:MeOfficer())) do
+      c.C.UI:Open("settings", sec.id)
+      check(c.C.UI.Window("settings").frame, (c == yezin and "officer" or "member") .. " settings, " .. sec.id)
+    end
+    c.C.UI.Window("settings").frame:Hide()
   end
-  assert(tabsShown(kaka) == "race guide prog shame game me settings", "the member's tabs with the Guide: " .. tabsShown(kaka))
-  -- the Guide's section: the two thresholds only it reads, greyed for the member
-  yezin.C.UI:Open("settings", "guide")
-  assert(texts(yezin):find("Members near your level", 1, true) and texts(yezin):find("Dungeons ahead", 1, true), "the Guide's section:\n" .. texts(yezin))
-  check(yezin.C.UI.frame, "officer settings, the Guide's section")
-  kaka.C.UI:Open("settings", "guide")
-  local steps = 0
-  for _, b in ipairs(kaka.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and (b.label:GetText() == "-" or b.label:GetText() == "+") then steps = steps + 1; assert(b.__disabled, "a member's step is greyed") end end
-  assert(steps == 4, "two thresholds, a step down and up each: " .. steps)
-  check(kaka.C.UI.frame, "member settings, the Guide's section")
   local function pages(c, who, list)
     c.C.UI:Open("race")
     local f = c.C.UI.frame
@@ -1993,21 +2086,24 @@ do
     end
     return f
   end
-  local f = pages(yezin, "officer", { "race", "guide", "prog", "shame", "game", "officers", "me", "settings" })
+  local f = pages(yezin, "officer", { "race", "prog", "shame", "game", "officers", "me" })
   assert(yezin.C.UI.tabs.officers:IsShown(), "the officer sees the Officers tab")
-  pages(kaka, "member", { "race", "guide", "prog", "shame", "game", "me", "settings" })
+  pages(kaka, "member", { "race", "prog", "shame", "game", "me" })
   assert(not kaka.C.UI.tabs.officers:IsShown(), "the member has no Officers tab")
   kaka.C.UI:Open("officers")
   assert(kaka.C.UI.page == "race", "a member asking for the officers' page lands on Race")
   -- the look: status and footer, aligned numbers, grey headers with the sorted one white, class bars, row heights
   yezin.C.UI:Open("race")
-  assert(yezin.C.UI.status:GetText():match("^%d+ online with the addon  |  officer view$"), "the status line: " .. yezin.C.UI.status:GetText())
-  assert(kaka.C.UI.status:GetText():match("member view$"), "the member's status line")
+  -- (the status at the footer's right: who is online with Cute and which Cute this is, so a screenshot names its build)
+  assert(yezin.C.UI.status:GetText():match("^%d+ online with Cute  \194\183  Cute " .. yezin.C.version:gsub("%.", "%%.") .. "$"), "the status line: " .. yezin.C.UI.status:GetText())
+  assert(kaka.C.UI.status:GetText():find("Cute " .. kaka.C.version, 1, true), "the member's status line names the version")
   assert(yezin.C.UI.footer:GetText():match("^Updated "), "the footer says when the roster last changed: " .. yezin.C.UI.footer:GetText())
   local me, kakaRow, garristan, mutu = rowOf(yezin, "Yezin"), rowOf(yezin, "Kaka"), rowOf(yezin, "Garristan"), rowOf(yezin, "Mutu")
   assert(me and kakaRow and garristan and mutu, "the rows")
   assert(cellOf(me, "level").label.__justify == "RIGHT" and cellOf(me, "zone").label.__justify == "LEFT", "numbers right, text left")
-  assert(sameColor(me.bar.__color, { 0.96, 0.96, 0.96 }), "your bar is white")
+  -- (the windows round: you by your row's 0.06 background and your class's bar; white is the priest's colour)
+  local wc = yezin.env.RAID_CLASS_COLORS.WARRIOR
+  assert(sameColor(me.bar.__color, { wc.r, wc.g, wc.b }) and math.abs(me.bg.__color[4] - 0.06) < 0.001, "your bar your class's, your row lighter")
   assert(sameColor(mutu.bar.__color, { 0.78, 0.61, 0.43 }), "a warrior's bar is the warrior colour")
   assert(cellOf(garristan, "level").label:GetText() == "1" and cellOf(garristan, "zone").label:GetText() == "Elwynn Forest", "a member without the addon shows the guild's level and zone")
   assert(cellOf(garristan, "xp").label:GetText() == "", "and nothing else")
@@ -2016,7 +2112,8 @@ do
   for _, h in ipairs(yezin.C.UI.headerCells.items) do
     if h:IsShown() and h.def then
       if sameColor(h.label.__color, { 0.96, 0.96, 0.96 }) then whiteHeaders = whiteHeaders + 1; assert(h.id == "level", "the sorted column is the white one") else greyHeaders = greyHeaders + 1 end
-      assert(h.label.__justify == ((h.def.kind == "text" or h.def.kind == "pips") and "LEFT" or "RIGHT"), "headers align like their column")
+      -- (the windows round: the XP column's track and percent start at its left, its header with them)
+      assert(h.label.__justify == ((h.def.kind == "text" or h.def.kind == "pips" or h.def.id == "xp") and "LEFT" or "RIGHT"), "headers align like their column")
     end
   end
   assert(whiteHeaders == 1 and greyHeaders >= 5, "one white header, the rest grey")
@@ -2070,17 +2167,17 @@ do
   -- the scroll place survives a redraw and resets on a page change
   yezin.C.UI.scroll.bar:SetMinMaxValues(0, 100)
   yezin.C.UI.scroll.bar:SetValue(40)
-  yezin.C.UI:Draw()
+  redraw(yezin)
   assert(yezin.C.UI.scroll.bar:GetValue() == math.min(40, select(2, yezin.C.UI.scroll.bar:GetMinMaxValues())), "a redraw keeps the scroll place")
   yezin.C.UI:Open("prog")
   assert(yezin.C.UI.scroll.bar:GetValue() == 0, "a page change starts at the top")
   -- resized small: still no problems, on every page
-  yezin.C.UI.frame:SetSize(760, 420)
-  for _, page in ipairs({ "race", "guide", "prog", "shame", "game", "officers", "me", "settings" }) do
+  sizeAll(yezin, 760, 420)
+  for _, page in ipairs({ "race", "prog", "shame", "game", "officers", "me" }) do
     yezin.C.UI:Open(page)
     check(yezin.C.UI.frame, "officer " .. page .. ", small window")
   end
-  yezin.C.UI.frame:SetSize(1040, 640)
+  sizeAll(yezin, 1040, 640)
   -- a saved position off this screen comes back on it
   yezin.env.CuteDB.pos = { w = 1040, h = 640, left = 5000, top = -300 }
   yezin.C.UI:RestorePos()
@@ -2101,15 +2198,11 @@ do
   print("window: every page opens for both views at both sizes, the look holds, self-only cells hidden from the member, sorting, scrolling and resizing hold; at 1040 wide " .. table.concat(fit, ", "))
 end
 
--- 10: settings: a member cannot flip visibility; an officer's click plus Broadcast reaches the member; boxes follow clicks
+-- 10: settings: a member reads one line of who sees what (no boxes to flip); an officer's click plus Broadcast reaches
+-- the member; boxes follow clicks
 do
   kaka.C.UI:Open("settings", "vis")
-  local flipped = checkBox(kaka, function(cb) return cb.__disabled and cb.statId ~= nil end)
-  assert(flipped, "the member's visibility boxes are disabled")
-  local before = kaka.C.Policy:Vis("level")
-  -- even a click on a disabled box (a macro could) changes nothing
-  click(flipped)
-  assert(kaka.C.Policy:Vis("level") == before, "a member's click changes no policy")
+  assert(not checkBox(kaka, function(cb) return cb.statId ~= nil end) and texts(kaka):find("The officers decide who sees what", 1, true), "the member's Who sees what: one line, no boxes:\n" .. texts(kaka))
   -- the officer clicks Level to only-you in Settings and broadcasts
   yezin.C.UI:Open("settings", "vis")
   local onlyYou = checkBox(yezin, function(cb) return cb.statId == "level" and cb.vis == "self" end)
@@ -2135,15 +2228,15 @@ do
   assert(said:find("Kept to the officers while Missing enchants is: a member could work it out from this.", 1, true), "its tooltip says why:\n" .. said)
   click(checkBox(yezin, function(cb) return cb.statId == "enchanted" and cb.vis == "all" end))
   assert(yezin.C.Policy:Vis("enchanted") == "all" and yezin.C.Policy:Route("enchanted") == "self", "a click on a kept pair changes nothing")
-  check(yezin.C.UI.frame, "officer settings, a stat kept with another")
+  check(sframe(yezin), "officer settings, a stat kept with another")
   local vis = yezin.env.CuteDB.policy.vis
   local keep = { unenchanted = vis.unenchanted, empty_slots = vis.empty_slots }
   vis.unenchanted, vis.empty_slots = "all", "all"
-  yezin.C.UI:Draw()
+  sdraw(yezin)
   local open = checkBox(yezin, function(cb) return cb.statId == "enchanted" and cb.vis == "all" end)
   assert(open and open:GetChecked() and not open.__disabled and not texts(yezin):find("with Missing enchants", 1, true), "the gaps opened: Enchanted slots is the officers' to set, Everyone")
   vis.unenchanted, vis.empty_slots = keep.unenchanted, keep.empty_slots
-  yezin.C.UI:Draw()
+  sdraw(yezin)
   -- the Minimap button box: its fill follows the click and the button goes with it
   yezin.C.UI:Open("settings", "general")
   local mini = checkBox(yezin, function(cb) return cb.label and cb.label:GetText() == "Minimap button" end)
@@ -2157,7 +2250,7 @@ do
   for _, fr in ipairs(yezin.frames) do if fr.__kind == "EditBox" and fr:IsVisible() then edit = fr end end
   assert(edit, "the Main character box")
   edit:SetFocus(); edit:SetText("Yez")
-  yezin.C.UI:Draw()
+  sdraw(yezin)
   assert(edit:GetText() == "Yez", "a redraw while typing keeps the text")
   edit.__scripts.OnEnterPressed(edit)
   assert(yezin.env.CuteDB.settings.main == "Yez" and yezin.C.Sample:Value("main") == "Yez", "Enter saves the main")
@@ -2197,13 +2290,13 @@ do
   for _ in pairs(yezin.env.CuteDB.roster) do n = n + 1 end
   assert(n >= 15, "Yezin's roster filled from the storm: " .. n)
   for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
-    yezin.C.UI.frame:SetSize(size[1], size[2])
+    sizeAll(yezin, size[1], size[2])
     for _, page in ipairs({ "race", "guide", "prog", "shame", "game", "officers" }) do
       yezin.C.UI:Open(page)
       check(yezin.C.UI.frame, string.format("officer %s, twenty members, %dx%d", page, size[1], size[2]))
     end
   end
-  yezin.C.UI.frame:SetSize(1040, 640)
+  sizeAll(yezin, 1040, 640)
   print(string.format("storm: %d clients, one message a second each, %d records on Yezin's roster", #clients, n))
 end
 
@@ -2561,9 +2654,9 @@ do
   assert(perCat == 4 and perStat == 0, "four category pairs, no per-statistic pair: " .. perCat .. " " .. perStat)
   local onlyKills = checkBox(yezin, function(cb) return cb.statId == "gc130" and cb.vis == "self" end)
   assert(onlyKills and onlyKills:GetChecked(), "the Kills pair shows only-you")
-  check(yezin.C.UI.frame, "officer settings, statistics categories")
+  check(sframe(yezin), "officer settings, statistics categories")
   kaka.C.UI:Open("settings", "vis")
-  check(kaka.C.UI.frame, "member settings, statistics categories")
+  check(sframe(kaka), "member settings, statistics categories")
   -- the page: categories left, the open one's statistics right with your value and the leader; a click ranks everyone
   -- (the page's two columns are two virtual lists: the categories, and the statistics with their rankings)
   local function lineOf(c, test)
@@ -2606,10 +2699,10 @@ do
   assert(cre and cre.who:GetText():find("1100", 1, true), "Creatures is everyone's again: " .. cre.who:GetText())
   check(kaka.C.UI.frame, "member statistics, a child category")
   for _, c in ipairs({ yezin, kaka }) do
-    c.C.UI.frame:SetSize(760, 420)
+    sizeAll(c, 760, 420)
     c.C.UI:Open("game")
     check(c.C.UI.frame, (c == yezin and "officer" or "member") .. " statistics, small window")
-    c.C.UI.frame:SetSize(1040, 640)
+    sizeAll(c, 1040, 640)
   end
   -- a client without the statistics API still shows what it discovered (its factions), the reason for the rest in a
   -- note under the categories
@@ -2617,10 +2710,10 @@ do
   local note = plain.C.UI.gameNoteLabel
   assert(plain.C.UI.gameCat == "rep" and note and note:IsShown() and note:GetText():find("GetStatisticsCategoryList is missing", 1, true), "the discovered shown, the note says why the game's are not")
   check(plain.C.UI.frame, "member statistics, discovered only")
-  plain.C.UI.frame:SetSize(760, 420)
+  sizeAll(plain, 760, 420)
   plain.C.UI:Open("game")
   check(plain.C.UI.frame, "member statistics, discovered only, small window")
-  plain.C.UI.frame:SetSize(1040, 640)
+  sizeAll(plain, 1040, 640)
   plain.C.UI:Open("me")
   check(plain.C.UI.frame, "member me, no statistics")
   assert(not note:IsShown(), "the note goes with the page")
@@ -3003,13 +3096,13 @@ do
   local mid = opsOf(function() bar:SetValue(math.floor(max / 2)) end)
   check(UI.frame, "officer statistics, 151 ranked, the middle")
   bar:SetValue(max)
-  -- the end: the last of the ranking, then Kills' second statistic (closed)
-  local lastRanked, lastLine
-  for _, l in ipairs(UI.lines.items) do
-    if l:IsShown() and l.idx == UI.lines.n then lastLine = l end
-    if l:IsShown() and l.idx == UI.lines.n - 1 then lastRanked = l end
-  end
-  assert(lastLine and lastLine.def.id == "g2002" and not lastLine.member and lastRanked and lastRanked.member, "the ranking scrolls to its end")
+  -- the end: the last of the ranking, then Kills' second statistic (closed), then its child Creatures' statistics under
+  -- the child's name (a parent lists its children's: the tree folded)
+  local byIdx = {}
+  for _, l in ipairs(UI.lines.items) do if l:IsShown() then byIdx[l.idx] = l end end
+  local lastLine, after = byIdx[UI.lines.n], nil
+  for idx, l in pairs(byIdx) do if l.def and l.def.id == "g2002" and not l.member then after = idx end end
+  assert(lastLine and lastLine.def and not lastLine.member and after and byIdx[after - 1] and byIdx[after - 1].member, "the ranking scrolls to its end: its last member, Kills' second statistic, Creatures' after")
   assert(rowsCalls == calls and mid <= lines * 6 + 20, "the ranking's scroll fills the lines in view, the rows not built again: " .. mid)
   check(UI.frame, "officer statistics, 151 ranked, the end")
   report[#report + 1] = string.format("statistics %d ops opened, %d mid (%d of %d lines have widgets)", opened, mid, lines, UI.lines.n)
@@ -3192,7 +3285,7 @@ do
     check(odda.C.UI.frame, "officer prog, a learned enchant slot")
     -- an older client's list (0.3.x named head and shoulder): this client shows only the slots it knows the guild enchants
     odda.C.Roster:Apply("Cecil-Forever", { unenchanted = { [1] = true, [2] = true, [3] = true } })
-    odda.C.UI:Draw()
+    redraw(odda)
     assert(cellOf(rowOf(odda, "Cecil"), "unenchanted").label:GetText() == "1", "head and shoulder from an older client left out")
     -- counted once each, by GUID, however many messages carry it
     bjorn.C.Comm:Full()
@@ -3343,10 +3436,11 @@ do
     local inDeadmines = {}
     for _, def in ipairs(board.byCat.b36) do inDeadmines[#inDeadmines + 1] = def.label end
     assert(table.concat(inDeadmines, ", ") == "Edwin VanCleef, Morladimx, Thorvald Bj\195\182rnsson", "the bosses under their instance: " .. table.concat(inDeadmines, ", "))
-    -- the page: Rona opens on Bosses' first instance; Xavi leads, Rona's own value a dash
+    -- the page: Rona opens on Bosses, every instance's bosses under its name (the tree folded, a parent listing its
+    -- children's); Xavi leads, Rona's own value a dash
     local function lineOf(c, test) for _, lst in ipairs({ c.C.UI.catLines, c.C.UI.lines }) do for _, l in ipairs(lst.items) do if l:IsShown() and test(l) then return l end end end end
     rona.C.UI:Open("game")
-    assert(rona.C.UI.gameCat == "b36", "the page opens on the first instance's bosses: " .. tostring(rona.C.UI.gameCat))
+    assert(rona.C.UI.gameCat == "bosses" and lineOf(rona, function(l) return not l.def and not l.cat and l.name:GetText() == "The Deadmines" end), "the page opens on Bosses, The Deadmines' under its name: " .. tostring(rona.C.UI.gameCat))
     local edwin = lineOf(rona, function(l) return l.def and l.def.id == "e1234" and not l.member end)
     assert(edwin and edwin.who:GetText():find("Xavi", 1, true) and edwin.val:GetText() == "-", "Xavi leads, Rona has not met it: " .. tostring(edwin and edwin.who:GetText()))
     check(rona.C.UI.frame, "member statistics, discovered bosses")
@@ -3359,25 +3453,29 @@ do
     check(rona.C.UI.frame, "member statistics, reputation")
     press(lineOf(rona, function(l) return l.cat and l.cat.id == "raids" end))
     check(rona.C.UI.frame, "member statistics, raids")
-    -- the officer: the same at both sizes; the parent row opens its first child
+    -- the officer: the same at both sizes; the parent row opens itself, its children listed under their names, and a
+    -- child row (shown while its parent's family is open) opens the child alone
     wynn.C.UI:Build()
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
-      wynn.C.UI.frame:SetSize(size[1], size[2])
+      sizeAll(wynn, size[1], size[2])
       wynn.C.UI:Open("game")
       press(lineOf(wynn, function(l) return l.cat and l.cat.id == "bosses" end))
-      assert(wynn.C.UI.gameCat == "b36", "Bosses opens its first instance")
+      assert(wynn.C.UI.gameCat == "bosses", "Bosses opens itself")
+      press(lineOf(wynn, function(l) return l.cat and l.cat.id == "b36" end))
+      assert(wynn.C.UI.gameCat == "b36", "its child, The Deadmines, opens alone")
       check(wynn.C.UI.frame, string.format("officer statistics, discovered, %dx%d", size[1], size[2]))
-      rona.C.UI.frame:SetSize(size[1], size[2])
+      sizeAll(rona, size[1], size[2])
       rona.C.UI:Open("game")
       check(rona.C.UI.frame, string.format("member statistics, discovered, %dx%d", size[1], size[2]))
     end
-    wynn.C.UI.frame:SetSize(1040, 640); rona.C.UI.frame:SetSize(1040, 640)
+    sizeAll(wynn, 1040, 640); sizeAll(rona, 1040, 640)
     -- the policy per discovered category: Bosses only-you; Settings has the four pairs
     wynn.C.Policy:Set("gc_bosses", "self")
     wynn.C.Comm:SendPolicy()
     tickAll(3)
     assert(rona.C.Policy:Vis("e1234") == "self" and rona.C.Policy:Vis("i36") == "all" and rona.C.Policy:Vis("f72") == "all", "Bosses only-you covers every instance's bosses")
     rona.C.UI:Open("game")
+    press(lineOf(rona, function(l) return l.cat and l.cat.id == "bosses" end))
     press(lineOf(rona, function(l) return l.cat and l.cat.id == "b36" end))
     edwin = lineOf(rona, function(l) return l.def and l.def.id == "e1234" and not l.member end)
     assert(edwin.who:GetText() == "-", "the member sees no leader under only-you")
@@ -3385,7 +3483,7 @@ do
     local pairs4 = 0
     for _, fr in ipairs(wynn.frames) do if fr.__kind == "CheckButton" and fr:IsVisible() and fr.vis == "self" and type(fr.statId) == "string" and fr.statId:match("^gc_%l+$") then pairs4 = pairs4 + 1 end end
     assert(pairs4 == 4, "four discovered pairs in Settings: " .. pairs4)
-    check(wynn.C.UI.frame, "officer settings, discovered categories")
+    check(sframe(wynn), "officer settings, discovered categories")
     -- the Me page counts what you discovered; the Officers page what the guild learned
     xavi.C.UI:Open("me")
     assert(texts(xavi):find("Discovered: 3 bosses in 1 instance, 2 dungeons, 1 raid, 5 factions, on the Statistics page.", 1, true), "the Me page counts:\n" .. texts(xavi))
@@ -3690,10 +3788,10 @@ do
     assert(slow.C.Rules.SeedState() == "checking" and slow.C.Rules.check.i == 50 and not slow.C.Stats.EnchantKnown(9), "fifty asked in the first frame, still checking: " .. slow.C.Rules.check.i)
     openGuide(slow)
     assert(texts(slow):find("Checking what we knew against this client, 50 of 50.", 1, true), "the Guide says it is checking, and how far it got:\n" .. texts(slow))
-    check(slow.C.UI.frame, "member guide, checking")
+    check(qwin(slow).frame, "member guide, checking")
     tick(slow, 1)
     assert(slow.C.Rules.SeedState() == "fresh" and slow.C.Stats.EnchantKnown(9, "4.1") and slow.C.Sample:Value("unenchanted")[9], "done a frame on: the seed's wrist now asks for an enchant")
-    slow.C.UI:Draw()
+    redraw(slow)
     assert(tipOf(guideHead(slow)):find("From research and the beta, checked against this client", 1, true), "and the Guide's head says where its knowledge comes from")
     leave(slow)
     -- a partial seed: a dungeon without a range, one without a name, one whose range is upside down, a boss without an id,
@@ -3725,7 +3823,7 @@ C.Known = { build = "1.60.1.70338", dungeons = { [36] = { name = "The Deadmines"
       "a seeded boss without an id met by name, seen by the one who killed it, the dungeon named as the game names it: " .. tostring(pm.bosses[900] and pm.bosses[900].state))
     for _, ch in ipairs(partial.C.Rules.Changes()) do assert(not ch.what:find("Nameless", 1, true) and not ch.what:find("Odd Hold", 1, true), "nothing new: " .. ch.what) end
     openGuide(partial)
-    check(partial.C.UI.frame, "member guide, a partial seed")
+    check(qwin(partial).frame, "member guide, a partial seed")
     leave(partial)
     local blank = newClient(charOf(NAMES[13], { seed = "local _, C = ...\nC.Known = { v = 1, dungeons = {} }" }))
     login(blank)
@@ -3779,11 +3877,11 @@ C.Known = { build = "1.60.1.70338", dungeons = { [36] = { name = "The Deadmines"
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
       for _, c in ipairs({ real, boss }) do
         c.C.UI:Build()
-        c.C.UI.frame:SetSize(size[1], size[2])
+        sizeAll(c, size[1], size[2])
         openGuide(c)
-        check(c.C.UI.frame, string.format("%s guide, the real seed, %dx%d", c == boss and "officer" or "member", size[1], size[2]))
-        for _, l in ipairs(c.C.UI.lists.guide.items) do if l:IsShown() then hover(l) end end
-        c.C.UI.frame:SetSize(1040, 640)
+        check(qwin(c).frame, string.format("%s guide, the real seed, %dx%d", c == boss and "officer" or "member", size[1], size[2]))
+        for _, l in ipairs(glist(c)) do if l:IsShown() then hover(l) end end
+        sizeAll(c, 1040, 640)
       end
     end
     realNote = string.format("%d dungeons, %d bosses, %d items, fresh; a dagger and a shield offered only what takes them; its wrist advice at 20, missing at 30; the Guide drawn with it at both sizes", nd, nb, ni)
@@ -3829,11 +3927,11 @@ if SEEDED then isolated({ { name = "Rulo-Forever", guid = guidOf("Rulo"), rank =
   openGuide(forty)
   assert(tipOf(guideHead(forty)):find("The game differs from what we knew; learning from the guild.", 1, true), "the Guide's head says so:\n" .. tipOf(guideHead(forty)))
   for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
-    forty.C.UI.frame:SetSize(size[1], size[2])
+    sizeAll(forty, size[1], size[2])
     openGuide(forty)
-    check(forty.C.UI.frame, string.format("member guide, a stale seed, %dx%d", size[1], size[2]))
+    check(qwin(forty).frame, string.format("member guide, a stale seed, %dx%d", size[1], size[2]))
   end
-  forty.C.UI.frame:SetSize(1040, 640)
+  sizeAll(forty, 1040, 640)
   -- a stale seed's bosses are neither left nor counted: the Deadmines met through one boss (Rhahk'Zor, killed by two
   -- members at 35 in one group, each naming the other: rule 9), For you names that boss alone, the officers' line
   -- counts one of one and its tooltip names no other (the first 0.5.0 build listed the seed's other three as left and
@@ -3854,10 +3952,10 @@ if SEEDED then isolated({ { name = "Rulo-Forever", guid = guidOf("Rulo"), rank =
   assert(dmCard.known == 1 and (F.Model().bosses[1230].n or 0) > 0, "the guild's count: one boss known, killed by the guild: " .. tostring(dmCard.known))
   local said = tipText(rows[1].tip)
   assert(said:find("Rhahk'Zor", 1, true) and not said:find("Glubtok", 1, true) and not said:find("Edwin VanCleef", 1, true), "its tooltip names the met boss alone:\n" .. said)
-  forty.C.UI.frame:SetSize(760, 420)
+  sizeAll(forty, 760, 420)
   openGuide(forty)
-  check(forty.C.UI.frame, "member guide, a stale seed, the Deadmines met, 760x420")
-  forty.C.UI.frame:SetSize(1040, 640)
+  check(qwin(forty).frame, "member guide, a stale seed, the Deadmines met, 760x420")
+  sizeAll(forty, 1040, 640)
   -- an officer's staleShare of 45 %: fresh again, and the bracer is asked for once more
   local at = math.floor(EPOCH + forty.clock) + 30
   assert(forty.C.Policy:Receive("Rulo-Forever", at, 1, "r_staleshare=0.45:" .. guidOf("Rulo")), "the officer's rule applied")
@@ -3871,7 +3969,7 @@ if SEEDED then isolated({ { name = "Rulo-Forever", guid = guidOf("Rulo"), rank =
     "another build: the beta's facts read as research")
   openGuide(later)
   assert(tipOf(guideHead(later)):find("This client is 1.60.1.70450: what the beta showed counts as research until the guild sees it.", 1, true), "the head's source says so in its tooltip")
-  check(later.C.UI.frame, "member guide, another build")
+  check(qwin(later).frame, "member guide, another build")
   local minor = client({ build = "1.61.0.71000" })
   assert(minor.C.Rules.SeedState() == "fresh" and minor.C.Rules.BetaAsData() and minor.C.Rules.Model().dungeons[36].state == "data",
     "a new minor version with nothing absent: fresh, the beta's facts as research")
@@ -4082,34 +4180,31 @@ do
     assert(R.Get("rangeMembers") == R.RULES.rangeMembers and R.SetBy("rangeMembers") == nil, "back at the default, the setting is cleared")
     press(minus)
     assert(R.Get("rangeMembers") == 4 and R.SetBy("rangeMembers") == ruler.o.guid, "set again")
-    check(ruler.C.UI.frame, "officer settings, a rule retuned")
+    check(sframe(ruler), "officer settings, a rule retuned")
     -- at the narrowest window every rule's value shows whole beside its buttons (a label may be cut, never the number)
     local function ruleValues()
       GEN = GEN + 1
       local out = {}
       for _, o in everything() do
-        if o.__kind == "FontString" and o.__shown and visible(o) and o.__parent and o.__parent.__client == ruler and o.__justify == "RIGHT" and o.__w == 44 then out[#out + 1] = o end
+        if o.__kind == "FontString" and o.__shown and visible(o) and o.__parent and o.__parent.__client == ruler and o.cuteStepValue then out[#out + 1] = o end
       end
       table.sort(out, function(a, b) return rectOf(a).t > rectOf(b).t end)
       local texts = {}
       for _, o in ipairs(out) do texts[#texts + 1] = o.__text end
       return table.concat(texts, ",")
     end
-    -- (the Guide's two in its own section, the rest under Rules)
+    -- (the rules, then the dungeon pick's two under "Dungeons and gear", all in Rules: the Guide has no section now)
     local want, wantGuide = {}, {}
     for _, t in ipairs(R.TUNE) do if t[8] then wantGuide[#wantGuide + 1] = R.Show(t[1]) else want[#want + 1] = R.Show(t[1]) end end
-    assert(#wantGuide == 2, "the Guide's two thresholds")
-    ruler.C.Modules.Set("guide", true)
+    assert(#wantGuide == 2, "the pick's two thresholds")
+    for _, v in ipairs(wantGuide) do want[#want + 1] = v end
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
-      ruler.C.UI.frame:SetSize(size[1], size[2])
+      sizeAll(ruler, size[1], size[2])
       ruler.C.UI:Open("settings", "rules")
       assert(ruleValues() == table.concat(want, ","), string.format("every rule's value whole at %dx%d: %s", size[1], size[2], ruleValues()))
-      check(ruler.C.UI.frame, string.format("officer settings, the rules, %dx%d", size[1], size[2]))
-      ruler.C.UI:Open("settings", "guide")
-      assert(ruleValues() == table.concat(wantGuide, ","), string.format("the Guide's values whole at %dx%d: %s", size[1], size[2], ruleValues()))
-      check(ruler.C.UI.frame, string.format("officer settings, the Guide's rules, %dx%d", size[1], size[2]))
+      check(sframe(ruler), string.format("officer settings, the rules, %dx%d", size[1], size[2]))
     end
-    ruler.C.UI.frame:SetSize(1040, 640)
+    sizeAll(ruler, 1040, 640)
     ruler.C.Comm:SendPolicy()
     settle()
     for _, c in ipairs({ ada, bo, cy }) do assert(c.C.Rules.Get("rangeMembers") == 4, c.o.name .. " applied the officer's rule") end
@@ -4209,23 +4304,26 @@ do
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
       for _, c in ipairs({ cy, ruler }) do
         c.C.UI:Build()
-        c.C.UI.frame:SetSize(size[1], size[2])
+        sizeAll(c, size[1], size[2])
         openGuide(c)
-        check(c.C.UI.frame, string.format("%s guide, %dx%d", c == ruler and "officer" or "member", size[1], size[2]))
-        for _, l in ipairs(c.C.UI.lists.guide.items) do if l:IsShown() then hover(l) end end
+        check(qwin(c).frame, string.format("%s guide, %dx%d", c == ruler and "officer" or "member", size[1], size[2]))
+        for _, l in ipairs(glist(c)) do if l:IsShown() then hover(l) end end
         -- the end of the list, scrolled
-        local bar = c.C.UI.scroll.bar
+        local bar = qwin(c).scroll.bar
         local _, max = bar:GetMinMaxValues()
         bar:SetValue(max)
-        check(c.C.UI.frame, string.format("%s guide, %dx%d, the end", c == ruler and "officer" or "member", size[1], size[2]))
-        c.C.UI.frame:SetSize(1040, 640)
+        check(qwin(c).frame, string.format("%s guide, %dx%d, the end", c == ruler and "officer" or "member", size[1], size[2]))
+        sizeAll(c, 1040, 640)
       end
     end
     openGuide(cy)
     local first = texts(cy)
     local _, cyPlan = cy.C.Guide.Items(false)
-    assert(first:find(cyPlan.next.line, 1, true) and tipOf(guideHead(cy)):find(SEEDED and "From research and the beta, checked against this client" or "Nothing shipped with this copy", 1, true),
-      "the page opens on the pick, where it comes from in the head's tooltip")
+    -- (the windows round: the pick a card, its name on it and the whole line in its tooltip; no pick, the line itself)
+    local shown = cyPlan.next.card and cyPlan.next.card.d.name or cyPlan.next.line
+    local headTip = tipOf(guideHead(cy))
+    assert(first:find(shown, 1, true) and headTip:find(cyPlan.next.line, 1, true) and headTip:find(SEEDED and "From research and the beta, checked against this client" or "Nothing shipped with this copy", 1, true),
+      "the page opens on the pick, where it comes from in the head's tooltip:\n" .. headTip)
     -- /cute diag on the officer: the seed's state, with what was learned
     local d0 = #ruler.chat
     ruler.env.SlashCmdList.CUTE("diag")
@@ -4388,11 +4486,11 @@ do
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
       for _, c in ipairs({ clo, kit }) do
         openGuide(c)
-        c.C.UI.frame:SetSize(size[1], size[2])
+        sizeAll(c, size[1], size[2])
         openGuide(c)
-        check(c.C.UI.frame, string.format("member guide, %s, two kinds in the wrist, %dx%d", c.o.name, size[1], size[2]))
-        for _, l in ipairs(c.C.UI.lists.guide.items) do if l:IsShown() then hover(l) end end
-        c.C.UI.frame:SetSize(1040, 640)
+        check(qwin(c).frame, string.format("member guide, %s, two kinds in the wrist, %dx%d", c.o.name, size[1], size[2]))
+        for _, l in ipairs(glist(c)) do if l:IsShown() then hover(l) end end
+        sizeAll(c, 1040, 640)
       end
     end
     for _, c in ipairs({ lea, clo, lia, kit, lex }) do leave(c) end
@@ -4420,10 +4518,10 @@ do
     assert(not known(), "no slot known to take an enchant yet")
     -- (0.7.0: the gear strips left the page; the page is one card at 760 wide)
     openGuide(c)
-    c.C.UI.frame:SetSize(760, 420)
+    sizeAll(c, 760, 420)
     openGuide(c)
-    check(c.C.UI.frame, "officer guide, nothing known to take an enchant, 760x420")
-    c.C.UI.frame:SetSize(1040, 640)
+    check(qwin(c).frame, "officer guide, nothing known to take an enchant, 760x420")
+    sizeAll(c, 1040, 640)
     -- the chest enchanted: one voice, nothing known yet; a guild mate's record with an enchanted chest: a slot known,
     -- nothing missing
     c.o.items[5] = "item:1235:2"
@@ -4439,7 +4537,7 @@ do
     assert(it["Enchant slot: Chest"] and it["Enchant slot: Chest"].detail == "seen on 2 members" and not it["New enchant slot: Chest"]
       and plan.learned[1] and table.concat(plan.learned, "\n"):find("Enchant slot: Chest: seen on 2 members", 1, true), "Learned in play: the slot learned, not new to research, in the head's tooltip")
     openGuide(c)
-    check(c.C.UI.frame, "officer guide, a slot learned with no research to weigh it, 1040x640")
+    check(qwin(c).frame, "officer guide, a slot learned with no research to weigh it, 1040x640")
     leave(c)
   end)
   print("guide: nothing known to take an enchant (no seed or a stale one), the page one card at 760 wide; a slot learned with no research named as learned in the head's tooltip")
@@ -4494,11 +4592,11 @@ do
     assert(told(vera, "is out") == 1 and V.newer == newer2, "one line a session, the newest kept: " .. tostring(V.newer))
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
       vera.C.UI:Open("race")
-      vera.C.UI.frame:SetSize(size[1], size[2])
+      sizeAll(vera, size[1], size[2])
       vera.C.UI:Open("race")
       assert(vera.C.UI.status:GetText():find("update available", 1, true), "the status line says an update is available: " .. vera.C.UI.status:GetText())
       check(vera.C.UI.frame, string.format("member race, an update available, %dx%d", size[1], size[2]))
-      vera.C.UI.frame:SetSize(1040, 640)
+      sizeAll(vera, 1040, 640)
     end
     neo.C.UI:Open("race")
     assert(not neo.C.UI.status:GetText():find("update", 1, true), "Neo's status line says none")
@@ -4566,18 +4664,26 @@ end
 -- was a fixed tab (What's new says so at that login), a character new to that account and one from 0.4.0, and they
 -- stay without it at the later logins on those saved variables. A module addon
 -- (tools/cute/test/Cute_Example: "## LoadOnDemand: 1", "## Dependencies: Cute", "## X-Cute-Module: 1") is listed in
--- Settings > Modules from the client's addon list, by its toc's title, and not loaded; ticked, it loads at once, no
--- reload, and its tab, its section, its event and its stat come with it; ticked in combat, it waits for combat to end
--- and says so. Unticked, its tab, section and event go at once, its page asked for opens Race, and the game's AddOns
--- list has it off for this character: the next login does not load it, and ticked there it is on in the list again
--- and loads. One that is no LoadOnDemand addon is loaded by the game while it is on in the list, shows nothing while it
--- is off in Cute, and once unticked the game does not load it at the next login. Every Settings section and every page
--- at both sizes, for an officer and a member, with the Guide and the module on
+-- Settings > Modules from the client's addon list, by its toc's title, and not loaded. Switched on (Modules.Set: the path
+-- a reload's login takes; Settings > Modules stages the change for it, scenario W4), it loads, and its tab, its section,
+-- its event and its stat come with it; switched on in combat, it waits for combat to end and says so. Switched off, its
+-- tab, section and event go, its page asked for opens Race, and the game's AddOns list has it off for this character:
+-- the next login does not load it, and switched on there it is on in the list again and loads. One that is no
+-- LoadOnDemand addon is loaded by the game while it is on in the list, shows nothing while it is off in Cute, and once
+-- off the game does not load it at the next login. Every Settings section and every page at both sizes, for an officer
+-- and a member, with the module on
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "MAGE", level = 30, online = true } end
   isolated({ member("Moda", 1), member("Pim", 3) }, function()
     local function char(name, extra) return charOf({ name, name == "Moda" and 1 or 3, "", "MAGE", 30 }, extra) end
     local function boxOf(c, title) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == title end) end
+    -- a module switched by its key as a reload's login switches it, Settings drawn again
+    local KEYS = { ["Cute Example"] = "Cute_Example", Example = "Cute_Example", ["Example two"] = "Cute_Example:example_two" }
+    local function flip(c, title)
+      local key = KEYS[title]
+      c.C.Modules.Set(key, not c.C.Modules.OnKey(key))
+      sdraw(c)
+    end
     -- 0.5.x's saved variables: every character in them starts with the dashboard alone too, as What's new says at that
     -- login (0.6.0's first builds kept the Guide on for them, under a line saying the opposite); a character new to the
     -- account, or saved variables from 0.4.0 (no Guide then), start without it
@@ -4585,7 +4691,7 @@ do
     local db = { version = "0.5.0", toldChanges = "0.5.0", chars = { [old.name] = { counters = { falls = 3 } }, ["Alt-Forever"] = { counters = {} } } }
     login(old, db)
     old.C.UI:Open("race")
-    assert(not old.C.Modules.OnKey("guide") and tabsShown(old) == "race prog shame game officers me settings", "a character that ran 0.5.0 starts with the dashboard alone: " .. tabsShown(old))
+    assert(not old.C.Modules.OnKey("guide") and tabsShown(old) == "race prog shame game officers me", "a character that ran 0.5.0 starts with the dashboard alone: " .. tabsShown(old))
     assert(not (db.chars["Alt-Forever"].modules or {}).guide and db.chars[old.name].counters.falls == 3, "every character 0.5.0 saved, its counters kept")
     tick(old, 11)
     local told = false
@@ -4597,7 +4703,7 @@ do
     local alt = newClient(char("Pim"))
     login(alt, db)
     alt.C.UI:Open("race")
-    assert(not alt.C.Modules.OnKey("guide") and tabsShown(alt) == "race prog shame game me settings", "a character new to the account: the dashboard alone")
+    assert(not alt.C.Modules.OnKey("guide") and tabsShown(alt) == "race prog shame game me", "a character new to the account: the dashboard alone")
     leave(alt)
     local db4 = { version = "0.4.0", chars = { ["Moda-Forever"] = { counters = {} }, ["Pim-Forever"] = { counters = {} } } }
     local older = newClient(char("Moda"))
@@ -4624,11 +4730,13 @@ do
     moda.C.UI:Open("settings", "modules")
     local box = boxOf(moda, "Cute Example")
     assert(box and not box:GetChecked(), "its box, by the toc's title, unticked")
-    check(moda.C.UI.frame, "officer settings, modules, a module addon found")
-    click(box)
-    assert(ex.loaded and M.byId.example and M.byId.example.active, "ticked: loaded at once, no reload")
-    assert(tabsShown(moda) == "race prog shame game officers me example settings", "its tab, in its order: " .. tabsShown(moda))
-    assert(sectionsShown(moda) == "general vis rules modules race prog shame officers example", "its section: " .. sectionsShown(moda))
+    check(sframe(moda), "officer settings, modules, a module addon found")
+    flip(moda, "Cute Example")
+    assert(ex.loaded and M.byId.example and M.byId.example.active, "on: loaded")
+    moda.C.UI:Open("race")
+    assert(tabsShown(moda) == "race prog shame game officers me example", "its tab, in its order: " .. tabsShown(moda))
+    moda.C.UI:Open("settings", "modules")
+    assert(sectionsShown(moda) == "general keys modules columns vis rules example", "its section: " .. sectionsShown(moda))
     assert(boxOf(moda, "Example") and boxOf(moda, "Example"):GetChecked(), "its box ticked, named as it registered")
     assert(moda.C.Stats.byId.ex_heard and moda.C.Sample:Value("ex_heard") == 0, "its stat in the registry, read")
     fire(moda, "PLAYER_LEVEL_UP", 31)
@@ -4638,7 +4746,7 @@ do
     moda.C.UI:Open("settings", "example")
     click(boxOf(moda, "Count wide"))
     assert(ex.private.wide == true, "its own section's box")
-    check(moda.C.UI.frame, "officer settings, a module addon's section")
+    check(sframe(moda), "officer settings, a module addon's section")
     tick(moda, 70)
     assert(moda.C.Sample:Value("ex_heard") == 1, "its stat read on the heartbeat")
 
@@ -4648,13 +4756,13 @@ do
     moda.C.UI:Open("settings", "modules")
     assert(M2.byId.example_two and M2.byId.example_two.key == "Cute_Example:example_two" and M2.byId.example.primary == true and not M2.byId.example_two.primary, "the second module keyed under the folder")
     assert(boxOf(moda, "Example two") and not boxOf(moda, "Example two"):GetChecked() and not tabsShown(moda):find("example_two"), "listed off, no tab")
-    click(boxOf(moda, "Example two"))
+    flip(moda, "Example two")
     assert(M2.byId.example_two.active and tabsShown(moda):find("example_two") and moda.addons[2].private.toggled == 1 and moda.addons[2].private.lastOn == true, "ticked: its tab, onToggle(true) once: " .. tabsShown(moda))
-    click(boxOf(moda, "Example")) -- (the primary's row, named as it registered)
+    flip(moda, "Example") -- (the primary's row, named as it registered)
     assert(not M2.byId.example.active and M2.byId.example_two.active and not (state.Cute_Example and state.Cute_Example[moda.o.guid] == false) and M2.AddonOn("Cute_Example"), "the first off alone: the folder stays on in the AddOns list")
-    click(boxOf(moda, "Example two"))
+    flip(moda, "Example two")
     assert(moda.addons[2].private.toggled == 2 and moda.addons[2].private.lastOn == false and state.Cute_Example[moda.o.guid] == false, "both off: onToggle(false), off in the AddOns list")
-    click(boxOf(moda, "Example")) -- (back where the scenario's next lines expect it: the first on)
+    flip(moda, "Example") -- (back where the scenario's next lines expect it: the first on)
     moda.C.UI:Open("example")
     local host = moda.C.UI:Host("example_host")
     assert(host:IsShown() and host:GetParent() == moda.C.UI.scroll.child, "a host frame under the scroll child")
@@ -4667,30 +4775,31 @@ do
     tickAll(5)
     pim.combat = true
     pim.C.UI:Open("settings", "modules")
-    click(boxOf(pim, "Cute Example"))
-    assert(not pim.addons[2].loaded and texts(pim):find("loads after combat", 1, true), "ticked in combat: it waits, and says so")
-    check(pim.C.UI.frame, "member settings, modules, a module waiting for combat to end")
+    flip(pim, "Cute Example")
+    assert(not pim.addons[2].loaded and texts(pim):find("loads after combat", 1, true), "on in combat: it waits, and says so")
+    check(sframe(pim), "member settings, modules, a module waiting for combat to end")
     pim.combat = false
     fire(pim, "PLAYER_REGEN_ENABLED")
-    assert(pim.addons[2].loaded and pim.C.Modules.byId.example.active and tabsShown(pim) == "race prog shame game me example settings" and not texts(pim):find("after combat", 1, true),
+    pim.C.UI:Open("race")
+    sdraw(pim)
+    assert(pim.addons[2].loaded and pim.C.Modules.byId.example.active and tabsShown(pim) == "race prog shame game me example" and not texts(pim):find("after combat", 1, true),
       "loaded as combat ends: " .. tabsShown(pim))
 
-    -- every Settings section and every page, at both sizes, for the officer and the member, the Guide on too
-    for _, c in ipairs({ moda, pim }) do boxOf(c, "Guide") end
-    moda.C.UI:Open("settings", "modules"); click(boxOf(moda, "Guide"))
-    pim.C.UI:Open("settings", "modules"); click(boxOf(pim, "Guide"))
-    assert(sectionsShown(moda) == "general vis rules modules race guide prog shame officers example", "the officer's sections: " .. sectionsShown(moda))
-    assert(sectionsShown(pim) == "general vis rules modules race guide prog shame example", "the member's: " .. sectionsShown(pim))
+    -- every Settings section and every page, at both sizes, for the officer and the member
+    moda.C.UI:Open("settings", "modules")
+    pim.C.UI:Open("settings", "modules")
+    assert(sectionsShown(moda) == "general keys modules columns vis rules example", "the officer's sections: " .. sectionsShown(moda))
+    assert(sectionsShown(pim) == "general keys modules columns vis example", "the member's: " .. sectionsShown(pim))
     local seen = 0
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
       for _, c in ipairs({ moda, pim }) do
         local who = c == moda and "officer" or "member"
         local officer = c.C.Roster:MeOfficer()
         assert(officer == (c == moda), "the officer and the member")
-        c.C.UI.frame:SetSize(size[1], size[2])
+        sizeAll(c, size[1], size[2])
         for _, sec in ipairs(c.C.SettingsPage.Sections(officer)) do
           c.C.UI:Open("settings", sec.id)
-          assert(c.C.UI.section == sec.id, "Settings opens at " .. sec.id)
+          assert(c.C.UI.Window("settings").section == sec.id, "Settings opens at " .. sec.id)
           -- the officers' sections greyed for the member: every step, button and pair
           if sec.officers and not officer then
             local n = 0
@@ -4703,27 +4812,31 @@ do
             end
             assert(n > 4, "the member's " .. sec.title .. " has its controls: " .. n)
           end
-          check(c.C.UI.frame, string.format("%s settings, %s, %dx%d", who, sec.title, size[1], size[2]))
+          check(sframe(c), string.format("%s settings, %s, %dx%d", who, sec.title, size[1], size[2]))
           seen = seen + 1
         end
         for _, m in ipairs(c.C.Modules.Pages(officer)) do
           c.C.UI:Open(m.id)
-          assert(c.C.UI.page == m.id, who .. " could open " .. m.id)
-          check(c.C.UI.frame, string.format("%s %s, the modules on, %dx%d", who, m.id, size[1], size[2]))
+          local win = c.C.UI.WindowOf(m.id)
+          assert(win.page == m.id, who .. " could open " .. m.id)
+          check(win.frame, string.format("%s %s, the modules on, %dx%d", who, m.id, size[1], size[2]))
         end
       end
     end
-    for _, c in ipairs({ moda, pim }) do c.C.UI.frame:SetSize(1040, 640) end
+    for _, c in ipairs({ moda, pim }) do sizeAll(c, 1040, 640) end
 
     -- unticked: its tab, section and event go at once; off in the game's AddOns list for this character
     moda.C.UI:Open("settings", "modules")
-    click(boxOf(moda, "Example"))
-    assert(tabsShown(moda) == "race guide prog shame game officers me settings" and not sectionsShown(moda):find("example", 1, true), "unticked: its tab and section gone at once")
+    flip(moda, "Example")
+    assert(not sectionsShown(moda):find("example", 1, true), "off: its section gone")
+    moda.C.UI:Open("race")
+    assert(tabsShown(moda) == "race prog shame game officers me", "off: its tab gone: " .. tabsShown(moda))
+    moda.C.UI:Open("settings", "modules")
     fire(moda, "PLAYER_LEVEL_UP", 32)
     assert(ex.private.heard == 1, "its event no longer heard")
     assert(state.Cute_Example and state.Cute_Example[moda.o.guid] == false, "off in the game's AddOns list for this character")
     assert(texts(moda):find("its stats leave at the next login", 1, true), "its stat stays until the next login, and its box says so")
-    check(moda.C.UI.frame, "officer settings, modules, a module unticked")
+    check(sframe(moda), "officer settings, modules, a module unticked")
     moda.C.UI:Open("example")
     assert(moda.C.UI.page == "race", "its page asked for opens Race")
     local saved = moda.env.CuteDB
@@ -4737,10 +4850,11 @@ do
     local box2 = boxOf(again, "Cute Example")
     assert(box2 and not box2:GetChecked(), "its box unticked")
     local n0 = #again.addonCalls
-    click(box2)
+    flip(again, "Cute Example")
     local calls = table.concat(again.addonCalls, ", ", n0 + 1)
-    assert(again.addons[2].loaded and state.Cute_Example[again.o.guid] == true and calls == "enable Cute_Example, save, load Cute_Example", "ticked again: on in the list for this character, then loaded: " .. calls)
-    assert(tabsShown(again) == "race guide prog shame game officers me example settings", "its tab back: " .. tabsShown(again))
+    assert(again.addons[2].loaded and state.Cute_Example[again.o.guid] == true and calls == "enable Cute_Example, save, load Cute_Example", "on again: on in the list for this character, then loaded: " .. calls)
+    again.C.UI:Open("race")
+    assert(tabsShown(again) == "race prog shame game officers me example", "its tab back: " .. tabsShown(again))
     leave(again)
 
     -- no LoadOnDemand addon: the game loads it while it is on in the list; off in Cute it shows nothing; unticked in
@@ -4749,13 +4863,15 @@ do
     local nl = newClient(char("Pim", { modules = { "Cute_Example" }, lod = { Cute_Example = false }, addonState = st2 }))
     login(nl)
     nl.C.UI:Open("race")
-    assert(nl.addons[2].loaded and nl.C.Modules.byId.example and not nl.C.Modules.byId.example.active and tabsShown(nl) == "race prog shame game me settings",
+    assert(nl.addons[2].loaded and nl.C.Modules.byId.example and not nl.C.Modules.byId.example.active and tabsShown(nl) == "race prog shame game me",
       "loaded by the game, off in Cute: no tab")
     nl.C.UI:Open("settings", "modules")
-    click(boxOf(nl, "Example"))
-    assert(nl.C.Modules.byId.example.active and tabsShown(nl) == "race prog shame game me example settings", "ticked: its tab")
-    click(boxOf(nl, "Example"))
-    assert(st2.Cute_Example[nl.o.guid] == false and tabsShown(nl) == "race prog shame game me settings", "unticked: off in the list")
+    flip(nl, "Example")
+    nl.C.UI:Open("race")
+    assert(nl.C.Modules.byId.example.active and tabsShown(nl) == "race prog shame game me example", "on: its tab")
+    flip(nl, "Example")
+    nl.C.UI:Open("race")
+    assert(st2.Cute_Example[nl.o.guid] == false and tabsShown(nl) == "race prog shame game me", "off: off in the list")
     local nlDb = nl.env.CuteDB
     leave(nl)
     local nl2 = newClient(char("Pim", { modules = { "Cute_Example" }, lod = { Cute_Example = false }, addonState = st2 }))
@@ -4763,157 +4879,163 @@ do
     assert(not nl2.addons[2].loaded, "the next login: the game does not load it")
     leave(nl2)
     leave(pim)
-    print(string.format("modules: a fresh install the dashboard alone, 0.5.0's characters too (What's new says so), a new one and 0.4.0's start without and stay without at the later logins; a module addon found by its toc, loaded at once when ticked (after combat when ticked in combat) with its tab, section, event and stat, gone at once when unticked and off in the game's AddOns list, so the next login does not load it, on again when ticked there; a module the game loads itself shows nothing while off in Cute; %d Settings sections and every page at both sizes for both views", seen))
+    print(string.format("modules: a fresh install the dashboard alone, 0.5.0's characters too (What's new says so), a new one and 0.4.0's start without and stay without at the later logins; a module addon found by its toc, loaded when switched on (after combat when switched in combat) with its tab, section, event and stat, gone when off and off in the game's AddOns list, so the next login does not load it, on again when switched there; a module the game loads itself shows nothing while off in Cute; %d Settings sections and every page at both sizes for both views", seen))
   end)
 end
 
--- 36b: Cute_Quest, the quest engine as a module addon (tools/cute/Cute_Quest, written by build.py from QuestBank): listed
--- by its toc's title and not loaded; its folder's row ticked, it loads, the saved variables are one table under two
--- names, the engine logs in from the bridge (never from PLAYER_LOGIN, which is past), the catalog is built, the step
--- frame is up and flat; Data.lua is never loaded for a character that keeps every quest module off
+-- 36b: Cute_Quest, the quest engine as Cute's quest window (tools/cute/Cute_Quest, written by build.py from QuestBank).
+-- Its toc says it is the base (X-Cute-Base): found by its toc's title, loaded at every login with no box to tick, the
+-- saved variables one table under two names, the engine logged in from the bridge (never from PLAYER_LOGIN, which is
+-- past), the catalog built, the step frame up and flat. Its pages are the quest window's tabs (L): Quests and Route
+-- always, Dungeons and Gear switched; Map and Camp have no tab, a section each in Settings' Quests group
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
   isolated({ member("Rone", 1), member("Pim", 3) }, function()
     local state = {}
     local rone = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true }))
     login(rone)
-    tickAll(5)
+    tickAll(6) -- (the bridge's login, the engine's first plan four seconds on)
     local M = rone.C.Modules
-    assert(#M.found == 1 and M.found[1].name == "Cute_Quest" and M.found[1].lod and M.found[1].title == "Quests", "found by its toc, its row titled Quests from the start (X-Cute-Title): " .. tostring(M.found[1] and M.found[1].title))
-    assert(not rone.addons[2].loaded and rone.addons[2].private.Data == nil, "not loaded: no catalog in memory")
-    rone.C.UI:Open("settings", "modules")
-    local box = checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Quests" end)
-    assert(box, "its row in Settings > Modules, Quests before it loads")
-    click(box)
-    tick(rone, 6) -- (the bridge's login, the engine's first plan four seconds on)
+    assert(#M.found == 1 and M.found[1].name == "Cute_Quest" and M.found[1].lod and M.found[1].title == "Quests" and M.found[1].base, "found by its toc, titled Quests (X-Cute-Title), the base (X-Cute-Base): " .. tostring(M.found[1] and M.found[1].title))
     local a = rone.addons[2]
     local QB = a.private
-    assert(a.loaded and QB.Data and QB.Data.Q and QB.Engine == QB and not QB.dormant, "loaded: the catalog built, this copy the engine")
+    assert(a.loaded and QB.Data and QB.Data.Q and QB.Engine == QB and not QB.dormant, "the base: loaded at the login with no box ticked, the catalog built, this copy the engine")
     assert(rone.env.CuteQuestDB and rone.env.QuestBankDB == rone.env.CuteQuestDB and rone.env.CuteQuestDB.settings, "one saved table under both names, the settings in it")
     assert(QB.loginDone and QB.state and QB.state.level == 5, "the engine logged in from the bridge: level " .. tostring(QB.state and QB.state.level))
     assert(rone.env.CuteQuestDB.settings.mapPage == false and rone.env.CuteQuestDB.settings.post.auto == false and rone.env.CuteQuestDB.settings.welcome == nil, "the module's defaults set once")
+    assert(rone.env.CuteQuestDB.settings.cuteDefaults == 2 and rone.env.CuteQuestDB.settings.mapIconPct == 100, "the second pass: the game's icon size")
     assert(rone.env.SlashCmdList.QUESTBANK, "/qb is routed")
     assert(#(rone.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
     for _, l in ipairs(rone.chat) do assert(not l:find("QuestBank", 1, true) and not l:find("/qb", 1, true), "the engine said nothing at login: " .. l) end
-    -- the Quests module registered as the folder's primary: its tab after the Guide, its section; the Guide's band
-    -- shows the step now (the engine's first step for a level-5 warrior in Northshire with quest 7 in the log)
     local function boxOf(c, title) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == title end) end
-    assert(M.byId.quests and M.byId.quests.primary and M.byId.quests.active, "Quests on, the folder's primary")
-    if not rone.C.Modules.OnKey("guide") then rone.C.Modules.Set("guide", true) end
-    assert(tabsShown(rone):find(" guide quests ", 1, true), "the Quests tab after the Guide: " .. tabsShown(rone))
-    rone.C.UI:Open("guide")
-    local t = texts(rone)
-    assert(not t:find("Tick Quests in Settings", 1, true), "the band no longer says to switch Quests on:\n" .. t)
-    local steps = QB.Guide.Steps()
-    assert(steps[1] and t:find(QB.Guide.Text(steps[1]), 1, true), "the step now in the band: " .. tostring(steps[1] and QB.Guide.Text(steps[1])) .. "\n" .. t)
-    local sf = rone.env.QuestBankStep
-    assert(sf and sf:IsShown() and sf.__flat, "the step frame up, in Cute's skin")
-    check(rone.C.UI.frame, "guide with the quest band")
-    -- the officer's guild line whole: at the head's right where it fits, else on a line of its own under the head
-    local _, gp = rone.C.Guide.Items(true)
-    assert(gp.guild and gp.guild.line and texts(rone):find(gp.guild.line, 1, true), "the guild's line whole on the Guide, nothing cut: " .. tostring(gp.guild and gp.guild.line) .. "\n" .. texts(rone))
+    -- Quests and Route: the base, always on, a greyed row in Settings > Modules; the folder's primary
+    assert(M.byId.quests and M.byId.quests.primary and M.byId.quests.active and M.byId.route and M.byId.route.key == "Cute_Quest:route" and M.byId.route.active, "Quests and Route on, the base")
+    rone.C.UI:Open("settings", "modules")
+    local base = boxOf(rone, "Quests and Route")
+    assert(base and base:GetChecked() and base.__disabled, "Settings > Modules: Quests and Route, ticked and greyed:\n" .. texts(rone))
+    assert(boxOf(rone, "Dungeons tab") and boxOf(rone, "Gear tab") and boxOf(rone, "Map") and boxOf(rone, "Camp"), "the switchable ones: Dungeons and Gear tabs, Map, Camp:\n" .. texts(rone))
+    -- the quest window (L, CuteQuestFrame): Quests and Route; the guild window keeps the guild's pages alone
+    rone.C.UI:Open("race")
+    assert(tabsShown(rone) == "race prog shame game officers me", "the guild window's tabs: " .. tabsShown(rone))
     rone.C.UI:Open("quests")
+    local L = qwin(rone)
+    assert(rone.env.CuteQuestFrame == L.frame and L.frame:IsShown() and L.page == "quests", "the quest window opened on Quests")
+    local function ltabs() local out = {}; for id, b in pairs(L.tabs) do if b:IsShown() then out[#out + 1] = { id = id, x = b.__points[1].x } end end; table.sort(out, function(p, q) return p.x < q.x end); for i, t in ipairs(out) do out[i] = t.id end; return table.concat(out, " ") end
+    assert(ltabs() == "quests route", "the quest window's tabs: " .. ltabs())
+    -- its band: the step now (the engine's first step for a level-5 warrior in Northshire with quest 7 in the log)
+    -- (the windows round: its words with the count apart, Guide.lua G.Parts)
+    local t = texts(rone)
+    local steps = QB.Guide.Steps()
+    local words = steps[1] and QB.Guide.Parts(steps[1])
+    assert(words and t:find(words, 1, true), "the step now in the band: " .. tostring(words) .. "\n" .. t)
+    local sf = rone.env.QuestBankStep
+    -- (the windows round: Cute's look is the stop of the route, on the world with no backdrop, its text outlined: W11)
+    assert(sf and sf:IsShown() and not sf.__flat and sf.now.__fontFlags == "OUTLINE", "the step frame up, in Cute's look")
+    check(L.frame, "the quest window, Quests with its band")
+    -- (the windows round) the left column: Questing, its places in the engine's Now order, the other places and the best
+    -- XP anywhere folded; the guild's line in the pick's tooltip (the Dungeons tab off here: no pick drawn, the Items
+    -- still say it)
+    local _, gp = rone.C.Guide.Items(true)
+    assert(gp.guild and gp.guild.line, "the guild's line for the officer")
     local tq = texts(rone)
-    assert(tq:find("Now", 1, true) and tq:find("Available", 1, true) and tq:find("Most XP a minute", 1, true), "the Quests page's three heads:\n" .. tq)
-    -- (xpm) the page's first place is the engine's Now order[1], by XP a minute, its set's XP and minutes on the row
+    assert(tq:find("Questing", 1, true) and tq:find("Best XP anywhere", 1, true), "the Quests tab's heads:\n" .. tq)
+    -- (xpm) the page's first place is the engine's Now order[1], by XP a minute, its set's XP on the row
     do
       local order = QB.UI.PlaceGroups(nil, true)
-      local rows = rone.C.UI.lists.quests.items
+      local rows = {}
+      for _, r in ipairs(L.hosts.quests.pool.items) do if r:IsShown() then rows[#rows + 1] = r end end
+      table.sort(rows, function(p, q) return p.__points[1].y > q.__points[1].y end)
       local g1 = order[1]
-      assert(g1 and rows[1].name:GetText() == "Now" and rows[2].name:GetText() == g1.cat.name,
+      assert(g1 and rows[1].name:GetText() == "Questing" and rows[2].name:GetText() == g1.cat.name,
         "the first place is the engine's: " .. tostring(rows[2] and rows[2].name:GetText()) .. " against " .. tostring(g1 and g1.cat.name))
       if #g1.set > 0 then
-        assert(rows[2].who:GetText():find("^%d+ quests?, %d+ min$") and rows[2].val:GetText() == QB.Short(g1.setXP) .. " XP",
-          "its set's quests, minutes and XP: " .. tostring(rows[2].who:GetText()) .. " / " .. tostring(rows[2].val:GetText()))
+        assert(rows[2].val:GetText() == QB.Comma(math.floor(g1.setXP / 10 + 0.5) * 10) .. " XP" and rows[2].line2:GetText():find("^%d+ quests?"),
+          "its set's XP and its quests: " .. tostring(rows[2].val:GetText()) .. " / " .. tostring(rows[2].line2:GetText()))
       end
     end
-    check(rone.C.UI.frame, "quests page")
-    -- the right column (quests and minutes) keeps clear of the scroll view's edge and the window's
-    local view, win = rectOf(rone.C.UI.scroll), rectOf(rone.C.UI.frame)
-    for _, row in ipairs(rone.C.UI.lists.quests.items) do
-      if row:IsShown() and row.who:IsShown() then
-        local rr = rectOf(row.who)
-        assert(rr and rr.r <= view.r - 4 and rr.r <= win.r - 24, string.format("the Quests page's right column at the edge: '%s' ends %d px from the view's edge, %d from the window's", tostring(row.who:GetText()), view.r - rr.r, win.r - rr.r))
+    -- the right-hand values keep clear of the scroll view's edge and the window's
+    local view, win = rectOf(L.scroll), rectOf(L.frame)
+    for _, row in ipairs(L.hosts.quests.pool.items) do
+      for _, fs in ipairs({ row.who, row.val }) do
+        if row:IsShown() and fs:IsShown() then
+          local rr = rectOf(fs)
+          assert(rr and rr.r <= view.r - 4 and rr.r <= win.r - 24, string.format("the Quests tab's right column at the edge: '%s' ends %d px from the view's edge, %d from the window's", tostring(fs:GetText()), view.r - rr.r, win.r - rr.r))
+        end
       end
     end
+    -- Settings: the Quests group's sections, and Data you share in Cute's
     rone.C.UI:Open("settings", "quests")
+    assert(sectionsShown(rone) == "general keys modules share columns vis rules quests route", "the sections with the base alone: " .. sectionsShown(rone))
     local ts = texts(rone)
     assert(ts:find("Accept for me", 1, true) and ts:find("Progress in mob tooltips", 1, true), "the Quests section's rows:\n" .. ts)
     assert(ts:find("Step frame", 1, true) and ts:find("Direction arrow", 1, true), "the step frame's and the arrow's rows are the Quests section's:\n" .. ts)
     -- 6.1.1: the game's quest tracker out of sight while the step frame shows (QuestBank's Guide section has the same)
-    local trk = checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Hide the game's quest tracker with the step frame" end)
+    local trk = boxOf(rone, "Hide the game's quest tracker with the step frame")
     assert(trk and trk:GetChecked() and rone.env.CuteQuestDB.settings.guide.hideTracker == true, "the tracker's row, on:\n" .. ts)
     click(trk)
     assert(rone.env.CuteQuestDB.settings.guide.hideTracker == false, "unticked: the engine's setting off")
-    click(checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Hide the game's quest tracker with the step frame" end))
+    click(boxOf(rone, "Hide the game's quest tracker with the step frame"))
     assert(rone.env.CuteQuestDB.settings.guide.hideTracker == true, "ticked again")
-    rone.C.UI:Open("settings", "guide")
-    assert(not texts(rone):find("Step frame", 1, true) and not texts(rone):find("Direction arrow", 1, true), "and not the Guide's")
     -- the arrow's row writes the engine's setting and shows or hides the arrow
-    rone.C.UI:Open("settings", "quests")
-    click(checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Direction arrow" end))
+    click(boxOf(rone, "Direction arrow"))
     assert(rone.env.CuteQuestDB.settings.arrow == false and rone.env.QuestBankArrow and not rone.env.QuestBankArrow:IsShown(), "the arrow's row: off")
-    click(checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Direction arrow" end))
+    click(boxOf(rone, "Direction arrow"))
     assert(rone.env.CuteQuestDB.settings.arrow == true and rone.env.QuestBankArrow:IsShown(), "and on again")
-    -- Route, ticked: keyed under the folder, its tab; the band's summary and run button, the legs numbered
-    rone.C.UI:Open("settings", "modules")
-    click(boxOf(rone, "Route"))
-    assert(M.byId.route and M.byId.route.key == "Cute_Quest:route" and M.byId.route.active and tabsShown(rone):find("route", 1, true), "Route on, keyed under the folder: " .. tabsShown(rone))
+    assert(not texts(rone):find("Lock the step frame", 1, true) and not texts(rone):find("Share your quests with your party", 1, true), "Quests: no lock row, the party's share in Data you share")
+    rone.C.UI:Open("settings", "share")
+    assert(texts(rone):find("Share your quests with your party", 1, true) and texts(rone):find("foreverrank.com", 1, true), "Data you share: the party's share, the notes for the site:\n" .. texts(rone))
+    -- the Route tab: the band's summary and run button, the legs numbered; its section with the minimap's rows
     rone.C.UI:Open("route")
+    assert(L.page == "route", "the Route tab")
     local tr = texts(rone)
-    assert(tr:find(" XP, level ", 1, true) and (tr:find("Start run", 1, true) or tr:find("End run", 1, true)), "the route's band: the summary and the run button:\n" .. tr)
-    assert(tr:find("^1%. ") or tr:find("\n1%. ") or tr:find("Nothing to hand in yet.", 1, true), "the legs numbered, or the empty line:\n" .. tr)
-    check(rone.C.UI.frame, "route page")
+    -- (the windows round: where the route takes you, the stops as a timeline; W14)
+    assert((tr:find("Level %d+%.%d to ") or tr:find("Nothing on the route yet", 1, true)) and (tr:find("Start run", 1, true) or tr:find("End run", 1, true)), "the route's band: the summary and the run button:\n" .. tr)
+    check(L.frame, "the quest window, Route")
     rone.C.UI:Open("settings", "route")
-    assert(texts(rone):find("Follow", 1, true) and texts(rone):find("hearthstone", 1, true), "the Route section's rows")
-    -- Journal and Gear: the engine's pages on hosts under the scroll area, one shown at a time
-    rone.C.UI:Open("settings", "modules")
-    for _, name in ipairs({ "Journal", "Gear" }) do click(boxOf(rone, name)) end
+    local tro = texts(rone)
+    assert(tro:find("Follow", 1, true) and tro:find("hearthstone", 1, true) and tro:find("Route on the minimap", 1, true) and tro:find("Minimap far view", 1, true) and tro:find("Show the whole route", 1, true),
+      "the Route section's rows, the minimap's with them:\n" .. tro)
+    -- Dungeons (journal) and Gear switched on: their tabs, the engine's pages on hosts under the scroll area, one shown at
+    -- a time; their one section
+    M.Set("Cute_Quest:journal", true); M.Set("Cute_Quest:gear", true)
     rone.C.UI:Open("journal")
-    local host = rone.C.UI.hosts.journal
+    assert(ltabs() == "quests route journal gear" and L.tabs.journal.label:GetText() == "Dungeons", "the Dungeons and Gear tabs: " .. ltabs())
+    local host = L.hosts.journal
     assert(host and host:IsShown() and #(host.__kids or {}) > 0, "the journal attached to its host")
-    check(rone.C.UI.frame, "journal page")
+    check(L.frame, "the quest window, Dungeons")
     rone.C.UI:Open("gear")
-    assert(not host:IsShown() and rone.C.UI.hosts.gear and rone.C.UI.hosts.gear:IsShown(), "the gear host shown, the journal's hidden")
-    check(rone.C.UI.frame, "gear page")
-    -- the Journal's four kinds are its band's chips, no section: a click flips one and the journal draws again
+    assert(not host:IsShown() and L.hosts.gear and L.hosts.gear:IsShown(), "the gear host shown, the journal's hidden")
+    check(L.frame, "the quest window, Gear")
+    -- the journal's four kinds are its band's chips and the Dungeons and gear section's row
     rone.C.UI:Open("journal")
-    local function chip(label) for _, b in ipairs(rone.C.UI.bandButtons.items) do if b:IsShown() and b.label:GetText() == label then return b end end end
+    local function chip(label) for _, b in ipairs(L.bandButtons.items) do if b:IsShown() and b.label:GetText() == label then return b end end end
     assert(chip("Bosses") and chip("Rares") and chip("Trash") and chip("Chests and events"), "the four kinds as chips:\n" .. texts(rone))
-    assert(rone.env.CuteQuestDB.settings.djShow.trash == false and not sectionsShown(rone):find("journal", 1, true), "trash off by the engine's default; no Journal section: " .. sectionsShown(rone))
+    assert(rone.env.CuteQuestDB.settings.djShow.trash == false, "trash off by the engine's default")
     press(chip("Trash"))
     assert(rone.env.CuteQuestDB.settings.djShow.trash == true, "a chip clicked: the kind shown")
     press(chip("Trash"))
     assert(rone.env.CuteQuestDB.settings.djShow.trash == false, "and hidden again")
-    rone.C.UI:Open("settings", "gear")
-    assert(texts(rone):find("2 levels ahead", 1, true) and not texts(rone):find("An upgrade is", 1, true), "the Gear section: its one row, no note")
-    -- Map and Camp: no page, a section each; their switches set the engine's flags, on and off with the module
-    rone.C.UI:Open("settings", "modules")
-    for _, name in ipairs({ "Map", "Camp" }) do click(boxOf(rone, name)) end
-    assert(not tabsShown(rone):find("map", 1, true) and not tabsShown(rone):find("camp", 1, true), "no tab for a module without a page: " .. tabsShown(rone))
-    assert(sectionsShown(rone):find("map", 1, true) and sectionsShown(rone):find("camp", 1, true), "their sections: " .. sectionsShown(rone))
-    -- the rows that went: the frame's lock (its own menu has it), the engine's note of what the game shows (dead in
-    -- Cute), the minimap's far view, the sleeping bag and the sellers
-    rone.C.UI:Open("settings", "quests")
-    assert(not texts(rone):find("Lock the step frame", 1, true) and not texts(rone):find("foreverrank.com", 1, true) and texts(rone):find("Step frame", 1, true), "Quests: no lock row, no note row")
+    rone.C.UI:Open("settings", "dungeons")
+    assert(texts(rone):find("2 levels ahead", 1, true) and texts(rone):find("Journal shows", 1, true), "Dungeons and gear: the kinds and the gear's row:\n" .. texts(rone))
+    click(boxOf(rone, "Trash"))
+    assert(rone.env.CuteQuestDB.settings.djShow.trash == true, "the kinds' row writes the engine's setting")
+    click(boxOf(rone, "Trash"))
+    -- Map and Camp: no tab, a section each; their switches set the engine's flags, on and off with the module (the Map
+    -- module's are the world map's two: the minimap's are the Route tab's)
+    for _, key in ipairs({ "Cute_Quest:map", "Cute_Quest:camp" }) do M.Set(key, true) end
+    rone.C.UI:Open("quests")
+    assert(not ltabs():find("map", 1, true) and not ltabs():find("camp", 1, true), "no tab for a module without a page: " .. ltabs())
     rone.C.UI:Open("settings", "map")
-    assert(not texts(rone):find("far view", 1, true) and texts(rone):find("Route pins on the world map", 1, true), "Map: no far view row")
+    assert(sectionsShown(rone) == "general keys modules share columns vis rules quests route map dungeons camp", "every Quests section: " .. sectionsShown(rone))
     -- 6.1.1: low-level (grey) quests' ! off unless asked (QuestBank's map section has the same row)
-    local low = checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Low-level quests" end)
-    assert(low and not low:GetChecked() and rone.env.CuteQuestDB.settings.mapLowLevel == false, "Map: the Low-level quests row, off:\n" .. texts(rone))
+    local low = boxOf(rone, "Show low-level quests")
+    assert(low and not low:GetChecked() and rone.env.CuteQuestDB.settings.mapLowLevel == false, "Map: the low-level row, off:\n" .. texts(rone))
     click(low)
     assert(rone.env.CuteQuestDB.settings.mapLowLevel == true, "ticked: the engine's setting on")
-    click(checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Low-level quests" end))
+    click(boxOf(rone, "Show low-level quests"))
     assert(rone.env.CuteQuestDB.settings.mapLowLevel == false, "and off again")
-    -- 6.1.1: one stroke, you to where the arrow leads; the whole route when asked (QuestBank's map section has it too)
-    local whole = checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Show the whole route" end)
-    assert(whole and not whole:GetChecked() and rone.env.CuteQuestDB.settings.wholeRoute == false, "Map: the whole route's row, off:\n" .. texts(rone))
-    click(whole)
-    assert(rone.env.CuteQuestDB.settings.wholeRoute == true, "ticked: the engine's setting on")
-    click(checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Show the whole route" end))
     rone.C.UI:Open("settings", "camp")
     assert(not texts(rone):find("Sleeping bag", 1, true) and not texts(rone):find("Sellers", 1, true) and texts(rone):find("Camp bar", 1, true), "Camp: the bar, the banner and the light alone:\n" .. texts(rone))
-    -- 6.1.1: the party's buffs (QuestBank's camp section has the same row); six rows at most in Camp and in Map
     assert(texts(rone):find("Party members' buffs", 1, true) and texts(rone):find("Missing buffs", 1, true), "Camp: the missing-buffs and party rows:\n" .. texts(rone))
     local function rowsOf(id)
       local n = 0
@@ -4924,48 +5046,34 @@ do
     assert(rowsOf("camp") <= 6 and rowsOf("map") <= 6, string.format("Camp and Map keep six rows at most: %d, %d", rowsOf("camp"), rowsOf("map")))
     local s = rone.env.CuteQuestDB.settings
     assert(s.mapIcons == true and s.pins == true and s.minimapGivers == true and s.campBar == true and s.glow.on == true, "on: the switches on")
-    rone.C.UI:Open("settings", "map")
-    click(checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "A ! on the minimap for quests you can take" end))
-    assert(s.minimapGivers == false, "a row writes the engine's setting")
-    rone.C.UI:Open("settings", "modules")
-    click(boxOf(rone, "Map")); click(boxOf(rone, "Camp"))
-    assert(s.mapIcons == false and s.pins == false and s.minimapPins == false and s.campBar == false and s.glow.on == false, "off: the switches off")
-    for _, name in ipairs({ "Map", "Camp" }) do click(boxOf(rone, name)) end
-    -- every page at both sizes for an officer with every quest module on
+    M.Set("Cute_Quest:map", false); M.Set("Cute_Quest:camp", false)
+    assert(s.mapIcons == false and s.pins == false and s.minimapPins ~= false and s.campBar == false and s.glow.on == false, "off: the world map's and the camp's off, the minimap's route kept (the Route tab's)")
+    for _, key in ipairs({ "Cute_Quest:map", "Cute_Quest:camp" }) do M.Set(key, true) end
+    -- every tab and every Quests section at both sizes for an officer with every quest module on
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
-      rone.C.UI.frame:SetSize(size[1], size[2])
-      for _, page in ipairs({ "guide", "quests", "route", "journal", "gear", "settings" }) do
+      sizeAll(rone, size[1], size[2])
+      for _, page in ipairs({ "quests", "route", "journal", "gear" }) do
         rone.C.UI:Open(page)
-        check(rone.C.UI.frame, string.format("officer, every quest module on: %s, %dx%d", page, size[1], size[2]))
+        check(L.frame, string.format("officer, every quest module on: %s, %dx%d", page, size[1], size[2]))
       end
-      for _, section in ipairs({ "quests", "route", "map", "gear", "camp", "guide" }) do
+      for _, section in ipairs({ "quests", "route", "map", "dungeons", "camp", "share" }) do
         rone.C.UI:Open("settings", section)
-        check(rone.C.UI.frame, string.format("officer, every quest module on: settings %s, %dx%d", section, size[1], size[2]))
+        check(sframe(rone), string.format("officer, every quest module on: settings %s, %dx%d", section, size[1], size[2]))
       end
     end
-    rone.C.UI.frame:SetSize(1040, 640)
-    -- unticked: the engine's guide off, the frame hidden, the band says so again
-    rone.C.UI:Open("settings", "modules")
-    click(boxOf(rone, "Quests"))
-    assert(not M.byId.quests.active and rone.env.CuteQuestDB.settings.guide.on == false and not sf:IsShown(), "off: the engine's guide off, the frame hidden")
-    rone.C.UI:Open("guide")
-    assert(texts(rone):find("Tick Quests in Settings, Modules", 1, true), "the band says so again")
-    rone.C.UI:Open("settings", "modules")
-    click(boxOf(rone, "Quests"))
-    assert(M.byId.quests.active and sf:IsShown(), "on again: the frame back")
+    sizeAll(rone, 1040, 640)
     assert(#(rone.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
     leave(rone)
-    print("cute quest: listed by its toc and not loaded; ticked, the engine's copy loads, logs in from the bridge, builds its catalog; one saved table under both names; /qb routed")
+    print("cute quest: the base, found by its toc and loaded at every login; the engine logs in from the bridge with its catalog; one saved table under both names; /qb routed; the quest window's tabs Quests and Route, Dungeons and Gear switched; the Quests group's sections, Data you share in Cute's")
   end)
 end
 
 -- 36b (ii): the switches follow the boxes, on the saved table. The module's files register as they load, before the
 -- saved variables arrive (ADDON_LOADED), and 0.7.0's first build ran each switch then, on a table thrown away a moment
--- later: Quests ticked alone left the engine's defaults on (map icons, route pins, the minimap route, the camp bar and
--- the light, with Map and Camp unticked), Map ticked alone set nothing, at the next login with Quests alone the guide
--- stayed off, and the once-a-session prune of the runs ran on the thrown-away table. Now the Bridge runs each switch
--- again once the table is in; a switch off keeps what its flags were for the switch on, so a row's choice survives
--- off and on and a login; Quests off puts the arrow away and on brings it back
+-- later. Now the Bridge runs each switch again once the table is in; a switch off keeps what its flags were for the
+-- switch on, so a row's choice survives off and on and a login. Quests is the base (on at every login, the guide with
+-- it); Map's flags are the game's world map's two (mapIcons, pins), the minimap's being the Route tab's rows; a 0.7 save
+-- whose Map was off has the minimap's flags given back once (the second defaults pass)
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
   local function copy(t) if type(t) ~= "table" then return t end local o = {} for k, v in pairs(t) do o[k] = copy(v) end return o end
@@ -4981,83 +5089,65 @@ do
     for i = 1, 25 do runs[i] = { started = i, ended = i + 1, done = {} } end
     local c = client()
     c.env.CuteQuestDB = { runs = runs }
-    login(c); tickAll(5)
-    c.C.Modules.Set("Cute_Quest", true); tick(c, 6)
+    login(c); tickAll(6)
     local QB, s = c.addons[2].private, c.env.CuteQuestDB.settings
     assert(QB.ready and c.env.QuestBankDB == c.env.CuteQuestDB and #c.env.CuteQuestDB.runs == QB.MAX_RUNS, "the prune ran on the saved table: " .. #c.env.CuteQuestDB.runs .. " runs kept")
-    assert(s.guide.on == true and s.guide.frame == true and stepShown(c), "Quests ticked alone: the guide on, the frame up: " .. flags(s))
-    assert(s.mapIcons == false and s.pins == false and s.minimapPins == false and s.minimapLines == false and s.minimapGivers == false and s.mmExtended == false,
-      "Map unticked: no quest icons, no route pins, no route on the minimap, no far view: " .. flags(s))
-    assert(s.campBar == false and s.remind.buffs == false and s.remind.party == false and s.glow.on == false, "Camp unticked: no camp bar, no buffs banner, no party's buffs, no light: " .. flags(s))
-    assert(s.cuteOff.map.mapIcons == true and s.cuteOff.camp.campBar == true, "what the flags were is kept for the switch on")
-    -- Map ticked: its flags back as they were (the engine's defaults); a row's choice survives off and on
+    assert(s.guide.on == true and s.guide.frame == true and stepShown(c), "the base alone: the guide on, the frame up: " .. flags(s))
+    assert(s.mapIcons == false and s.pins == false, "Map off: no quest icons, no route pins on the world map: " .. flags(s))
+    assert(s.minimapPins ~= false and s.minimapLines ~= false, "the minimap's route is the Route tab's: left on: " .. flags(s))
+    assert(s.campBar == false and s.remind.buffs == false and s.remind.party == false and s.glow.on == false, "Camp off: no camp bar, no buffs banner, no party's buffs, no light: " .. flags(s))
+    assert(s.cuteOff.map.mapIcons == true and s.cuteOff.camp.campBar == true and s.cuteOff.map.minimapPins == nil, "what the flags were is kept for the switch on, the world map's alone")
+    -- Map on: its flags back as they were (the engine's defaults); a row's choice survives off and on
     c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
-    assert(s.mapIcons == true and s.pins == true and s.minimapPins == true and s.minimapLines == true and s.minimapGivers == true and s.mmExtended == true and s.cuteOff.map == nil, "Map ticked: every flag back on: " .. flags(s))
-    s.minimapGivers = false -- (the row "A ! on the minimap for quests you can take")
+    assert(s.mapIcons == true and s.pins == true and s.cuteOff.map == nil, "Map on: both back on: " .. flags(s))
+    s.pins = false -- (a row's own choice: icons on, pins off)
     c.C.Modules.Set("Cute_Quest:map", false); tick(c, 1)
-    assert(s.mapIcons == false and s.minimapGivers == false, "Map unticked again: off")
+    assert(s.mapIcons == false and s.pins == false, "Map off again: off")
     c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
-    assert(s.mapIcons == true and s.pins == true and s.minimapGivers == false, "Map ticked again: the row's choice kept: " .. flags(s))
-    -- Camp ticked: the bar and the light; the light's switch goes through Glow.Set, which puts the game's settings back
+    assert(s.mapIcons == true and s.pins == false, "Map on again: the row's choice kept: " .. flags(s))
+    s.pins = true
+    -- Camp on: the bar and the light; the light's switch goes through Glow.Set, which puts the game's settings back
     c.C.Modules.Set("Cute_Quest:camp", true); tick(c, 1)
-    assert(s.campBar == true and s.remind.buffs == true and s.remind.party == true and s.glow.on == true, "Camp ticked: the bar, the banner, the party's buffs, the light: " .. flags(s))
+    assert(s.campBar == true and s.remind.buffs == true and s.remind.party == true and s.glow.on == true, "Camp on: the bar, the banner, the party's buffs, the light: " .. flags(s))
     c.C.Modules.Set("Cute_Quest:camp", false); tick(c, 1)
-    assert(s.campBar == false and s.glow.on == false, "Camp unticked: off again: " .. flags(s))
-    -- Quests off: the guide off, the arrow put away; on: the arrow back
-    assert(s.arrow == true, "the engine's arrow on (its default)")
-    c.C.Modules.Set("Cute_Quest", false); tick(c, 1)
-    assert(s.guide.on == false and s.arrow == false and s.cuteArrow == true and not stepShown(c), "Quests unticked: the guide off, the arrow put away: " .. flags(s))
-    c.C.Modules.Set("Cute_Quest", true); tick(c, 1)
-    assert(s.guide.on == true and s.arrow == true and s.cuteArrow == nil and stepShown(c) and c.env.QuestBankArrow and c.env.QuestBankArrow:IsShown(), "Quests ticked again: the arrow back: " .. flags(s))
-    -- the step frame hidden by its row stays hidden over the switch and a login (0.7.0's switch set it shown again)
+    assert(s.campBar == false and s.glow.on == false, "Camp off: off again: " .. flags(s))
+    -- the step frame hidden by its row stays hidden over the switches and a login (0.7.0's switch set it shown again)
     s.guide.frame = false; QB.StepFrame.Apply()
     assert(not stepShown(c), "the frame hidden by its row")
     c.C.Modules.Set("Cute_Quest:map", false); tick(c, 1)
-    c.C.Modules.Set("Cute_Quest", false); tick(c, 1)
     assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
     local db, qdb = c.env.CuteDB, copy(c.env.CuteQuestDB)
     leave(c)
-    -- the next login, nothing on: Map ticked alone loads the addon and sets its flags alone (its row's choice kept)
+    -- the next login: the base loaded again, Map and Camp off, the frame as its row left it
     local c2 = client()
     c2.env.CuteQuestDB = qdb
-    login(c2, db); tickAll(5)
-    assert(not c2.addons[2].loaded, "nothing on: not loaded")
-    c2.C.Modules.Set("Cute_Quest:map", true); tick(c2, 6)
+    login(c2, db); tickAll(6)
     local s2 = c2.env.CuteQuestDB.settings
-    assert(c2.addons[2].loaded and s2.mapIcons == true and s2.pins == true and s2.minimapPins == true and s2.mmExtended == true and s2.minimapGivers == false,
-      "Map ticked alone at a login: its flags on, the row's choice kept: " .. flags(s2))
-    assert(s2.guide.on == false and s2.arrow == false and s2.campBar == false and s2.glow.on == false and not stepShown(c2), "Quests and Camp unticked: the guide, the arrow, the bar and the light off: " .. flags(s2))
-    c2.C.Modules.Set("Cute_Quest:map", false); tick(c2, 1)
-    assert(#(c2.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    assert(c2.addons[2].loaded and c2.C.Modules.byId.quests.active and s2.guide.on == true and s2.guide.frame == false and not stepShown(c2), "the next login: the base on, the frame as its row left it: " .. flags(s2))
+    assert(s2.mapIcons == false and s2.campBar == false and s2.glow.on == false, "Map and Camp still off: " .. flags(s2))
+    -- the frame's row ticked again: up at this login and the next
+    s2.guide.frame = true; c2.addons[2].private.StepFrame.Apply()
+    assert(stepShown(c2), "the frame back by its row")
     local db2, qdb2 = c2.env.CuteDB, copy(c2.env.CuteQuestDB)
     leave(c2)
-    -- the next login, Quests ticked alone: the guide on, the arrow back, the frame still hidden as its row left it; the
-    -- Guide's band shows the step
     local c3 = client()
     c3.env.CuteQuestDB = qdb2
-    login(c3, db2); tickAll(5)
-    c3.C.Modules.Set("Cute_Quest", true); tick(c3, 6)
-    local s3, QB3 = c3.env.CuteQuestDB.settings, c3.addons[2].private
-    assert(s3.guide.on == true and s3.arrow == true and s3.cuteArrow == nil and s3.guide.frame == false and not stepShown(c3), "Quests ticked alone at a login: the guide on, the arrow back, the frame as its row left it: " .. flags(s3))
-    assert(s3.mapIcons == false and s3.campBar == false and s3.glow.on == false, "Map and Camp still off: " .. flags(s3))
-    if not c3.C.Modules.OnKey("guide") then c3.C.Modules.Set("guide", true) end
-    c3.C.UI:Open("guide")
-    local steps = QB3.Guide.Steps()
-    assert(steps[1] and texts(c3):find(QB3.Guide.Text(steps[1]), 1, true) and not texts(c3):find("Tick Quests", 1, true), "the band shows the step now:\n" .. texts(c3))
-    -- the frame's row ticked again: up at this login and the next, where Cute loads the module itself (Quests still on)
-    s3.guide.frame = true; QB3.StepFrame.Apply()
-    assert(stepShown(c3), "the frame back by its row")
-    local db3, qdb3 = c3.env.CuteDB, copy(c3.env.CuteQuestDB)
+    login(c3, db2); tickAll(6)
+    assert(stepShown(c3) and c3.env.CuteQuestDB.settings.arrow == true, "loaded by Cute at the login: the frame up, the arrow on")
+    assert(#(c3.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
     leave(c3)
+    -- a 0.7 save whose Map was off: the minimap's flags were kept with the world map's; the second pass gives them back
+    local old = { settings = { cuteDefaults = true, cuteOff = { map = { mapIcons = true, pins = true, minimapPins = true, minimapLines = true, minimapGivers = true, mmExtended = false } },
+      mapIcons = false, pins = false, minimapPins = false, minimapLines = false, minimapGivers = false, mmExtended = false } }
     local c4 = client()
-    c4.env.CuteQuestDB = qdb3
-    login(c4, db3); tickAll(6)
+    c4.env.CuteQuestDB = old
+    login(c4); tickAll(6)
     local s4 = c4.env.CuteQuestDB.settings
-    assert(c4.addons[2].loaded and c4.C.Modules.byId.quests.active and s4.guide.on == true and s4.arrow == true and stepShown(c4), "loaded by Cute at the login with Quests on: the guide on, the frame up: " .. flags(s4))
-    assert(s4.mapIcons == false and s4.minimapGivers == false and s4.campBar == false, "Map and Camp still off: " .. flags(s4))
-    assert(#(c4.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    assert(s4.cuteDefaults == 2 and s4.minimapPins == true and s4.minimapLines == true and s4.minimapGivers == true and s4.mmExtended == false and s4.mapIcons == false and s4.cuteOff.map.minimapPins == nil and s4.cuteOff.map.mapIcons == true,
+      "a 0.7 save: the minimap's flags back, the world map's kept for Map on: " .. flags(s4))
+    assert(s4.mapIconPct == 100, "and the game's icon size")
     leave(c4)
-    print("cute quest: the switches run on the saved table, each flag following its box; a row's choice and the frame's survive off, on and a login; Quests off puts the arrow away, on brings it back")
+    print("cute quest: the switches run on the saved table, each flag following its box; Map's are the world map's two, the minimap's the Route tab's (a 0.7 save given them back once); a row's choice and the frame's survive off, on and a login")
   end)
 end
 
@@ -5103,68 +5193,66 @@ do
     local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
     login(c); tickAll(5)
     c.C.Modules.Set("Cute_Quest", true); tick(c, 6)
-    if not c.C.Modules.OnKey("guide") then c.C.Modules.Set("guide", true) end
     local QB = c.addons[2].private
     local party = {}
     for i, n in ipairs({ "Ada", "Bo", "Cy", "Di", "Ed" }) do party[i] = { name = n, class = "MAGE", text = "Kill Kobold Vermin " .. i .. "/8" } end
     local real = QB.Guide.MemberSteps
     QB.Guide.MemberSteps = function() return party end
-    c.C.UI:Open("guide")
+    -- (the windows round: the party is the Quests tab's Party section, four at most, a row each: name and step)
+    openGuide(c)
     local t = texts(c)
-    assert(t:find("Ada: Kill Kobold Vermin 1/8", 1, true) and t:find("Cy: Kill Kobold Vermin 3/8", 1, true) and not t:find("Di: Kill", 1, true) and not t:find("Ed: Kill", 1, true),
-      "three of the five in the band:\n" .. t)
-    assert(t:find("and 2 more in your group", 1, true), "the rest folded into one line:\n" .. t)
+    assert(t:find("Kill Kobold Vermin 1/8", 1, true) and t:find("Kill Kobold Vermin 4/8", 1, true) and not t:find("Kill Kobold Vermin 5/8", 1, true),
+      "four of the five in the Party section:\n" .. t)
+    assert(t:find("and 1 more in your group", 1, true), "the rest folded into one line:\n" .. t)
     local more
-    for _, l in ipairs(c.C.UI.bandLines.items) do if l:IsShown() and l.name:GetText() == "and 2 more in your group" then more = l end end
-    assert(more and tipOf(more):find("Di: Kill Kobold Vermin 4/8", 1, true) and tipOf(more):find("Ed: Kill Kobold Vermin 5/8", 1, true), "its tooltip names them: " .. tostring(more and tipOf(more)))
-    check(c.C.UI.frame, "guide, a party of five in the band")
-    party[4], party[5] = nil, nil
-    c.C.UI:Draw()
-    assert(not texts(c):find("more in your group", 1, true) and texts(c):find("Cy: Kill", 1, true), "three: no fold")
+    for _, k in ipairs({ "questsSide", "questsUnder" }) do
+      local h = qwin(c).hosts[k]
+      if h and h:IsShown() and h.pool then for _, r in ipairs(h.pool.items) do if r:IsShown() and r.name:GetText() == "and 1 more in your group" then more = r end end end
+    end
+    assert(more and tipOf(more):find("Ed: Kill Kobold Vermin 5/8", 1, true), "its tooltip names them: " .. tostring(more and tipOf(more)))
+    check(qwin(c).frame, "guide, a party of five on the Quests tab")
+    party[5] = nil
+    redraw(c)
+    assert(not texts(c):find("more in your group", 1, true) and texts(c):find("Kill Kobold Vermin 4/8", 1, true), "four: no fold")
     QB.Guide.MemberSteps = real
     leave(c)
-    print("cute quest: the band shows three of the party's steps, the rest in one line's tooltip")
+    print("cute quest: the Quests tab's Party section shows four of the party's steps, the rest in one line's tooltip")
   end)
 end
 
--- 36b (v): the band's line while Quests is ticked without a step. "Tick Quests in Settings, Modules" is for Quests off
--- alone (0.7.0's first build said it with Quests ticked while the engine had not read the log, and while the addon
--- waited for combat to end); ticked, the band says what it waits for: "Quests loads after combat." until the addon
--- loads, "Reading your quest log." until the engine has read it
+-- 36b (v): the band's line while the quest window waits. The base loads at the login; a login in a fight waits for its
+-- end (nothing loads in combat), and there is no quest window until it has loaded; then the band says what it waits for:
+-- "Reading your quest log." until the engine has read it, the step after
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
   isolated({ member("Rone", 1) }, function()
     local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
-    login(c); tickAll(5)
-    if not c.C.Modules.OnKey("guide") then c.C.Modules.Set("guide", true) end
-    c.C.UI:Open("guide")
-    assert(texts(c):find("Tick Quests in Settings, Modules for the step now.", 1, true), "off: where to switch it on")
     c.combat = true
-    c.C.Modules.Set("Cute_Quest", true)
-    assert(not c.addons[2].loaded and c.C.Modules.pending.Cute_Quest and c.C.Modules.Waiting(), "ticked in combat: waiting")
-    c.C.UI:Open("guide")
-    local t = texts(c)
-    assert(t:find("Quests loads after combat.", 1, true) and not t:find("Tick Quests", 1, true), "the band says it loads after combat:\n" .. t)
-    check(c.C.UI.frame, "guide, Quests waiting for combat to end")
+    login(c); tickAll(5)
+    assert(not c.addons[2].loaded and c.C.Modules.pending.Cute_Quest and c.C.Modules.Waiting(), "a login in a fight: the base waits for its end")
+    local n0 = #c.chat
+    c.env.SlashCmdList.CUTE("quests")
+    assert(not rawget(qwin(c), "frame") and #c.chat == n0 + 1, "no quest window yet: /cute quests says so: " .. tostring(c.chat[#c.chat]))
     c.combat = false
     fire(c, "PLAYER_REGEN_ENABLED")
     tick(c, 6)
     local QB = c.addons[2].private
     assert(c.addons[2].loaded and QB.logReady and not c.C.Modules.Waiting(), "loaded as combat ends, the log read")
-    c.C.UI:Open("guide")
-    t = texts(c)
+    c.C.UI:Open("quests")
+    local t = texts(c)
     local steps = QB.Guide.Steps()
-    assert(steps[1] and t:find(QB.Guide.Text(steps[1]), 1, true) and not t:find("after combat", 1, true), "the step now:\n" .. t)
-    -- the log not read yet (the game's QUEST_LOG_UPDATE still to come): the band says so, never to tick Quests
+    assert(steps[1] and t:find(QB.Guide.Text(steps[1]), 1, true), "the step now:\n" .. t)
+    -- the log not read yet (the game's QUEST_LOG_UPDATE still to come): the band says so
     QB.logReady = nil
-    c.C.UI:Draw()
+    redraw(c)
     t = texts(c)
-    assert(t:find("Reading your quest log.", 1, true) and not t:find("Tick Quests", 1, true), "the log unread: the band says so:\n" .. t)
+    assert(t:find("Reading your quest log.", 1, true), "the log unread: the band says so:\n" .. t)
+    check(qwin(c).frame, "the quest window, the log unread")
     QB.logReady = true
-    c.C.UI:Draw()
+    redraw(c)
     assert(texts(c):find(QB.Guide.Text(steps[1]), 1, true), "read: the step again")
     leave(c)
-    print("cute quest: the band says what Quests waits for while ticked (combat's end, the log); Tick Quests is for off alone")
+    print("cute quest: a login in a fight loads the base as it ends; the band says it reads the log until it has")
   end)
 end
 
@@ -5181,10 +5269,13 @@ do
   local function copy(t) if type(t) ~= "table" then return t end local o = {} for k, v in pairs(t) do o[k] = copy(v) end return o end
   isolated({ member("Rone", 1), member("Pim", 3) }, function()
     local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    -- (a login in a fight: the base loads in play as it ends, the path a module loaded in play takes)
+    c.combat = true
     login(c); tickAll(5)
-    c.C.Modules.Set("Cute_Quest", true)
+    c.combat = false
+    fire(c, "PLAYER_REGEN_ENABLED")
     local QB = c.addons[2].private
-    -- PLAYER_ENTERING_WORLD, ticked in play: every frame of the engine's that waits on it hears it once, a frame later
+    -- PLAYER_ENTERING_WORLD, loaded in play: every frame of the engine's that waits on it hears it once, a frame later
     local heardPEW = {}
     for _, key in ipairs({ "Travel", "Glow", "Timer", "Target", "Mini" }) do
       local m = QB[key]
@@ -5252,12 +5343,13 @@ do
     assert(c.tracking[2].active == true and math.abs((cont:GetScale() or 1) - 1.5) < 0.01, "Map on again: Target and the engine's size back")
     c.C.Modules.Set("Cute_Quest:map", false); tick(c, 1); frameTick()
     assert(c.tracking[2].active == false and math.abs((cont:GetScale() or 1) - s0) < 0.01, "and off: the game's again")
-    -- a step without a quest (travel, train, grind, corpse) clicked: the Quests page, never Race; Route on: Route
+    -- a step without a quest (travel, train, grind, corpse) clicked: the quest window's Route tab (the base, always
+    -- there), never the guild's Race
     QB.UI:Open(3)
-    assert(c.C.UI.page == "quests", "Route off: a travel step opens Quests: " .. tostring(c.C.UI.page))
+    assert(qwin(c).page == "route" and qwin(c).frame:IsShown() and c.C.UI.page ~= "route", "a travel step opens the Route tab: " .. tostring(qwin(c).page))
     QB.Arrow:Set(true)
     local arrowTip = tipOf(c.env.QuestBankArrow)
-    assert(arrowTip:find("Click: the Quests page.", 1, true) and not arrowTip:find("Route page", 1, true), "the arrow's click, as it is: " .. arrowTip)
+    assert(arrowTip:find("Click: the Route page.", 1, true), "the arrow's click, as it is (the Route tab is always there): " .. arrowTip)
     -- (the review round) and a step with no quest in the step frame: its tooltip names the page its click opens
     do
       local G0, SF0 = QB.Guide, QB.StepFrame
@@ -5267,12 +5359,10 @@ do
       local row = c.env.QuestBankStep.rows[1]
       local rowTip = tipOf(row)
       if row.__scripts.OnLeave then row.__scripts.OnLeave(row) end
-      assert(rowTip:find("Click: the Quests page.", 1, true) and not rowTip:find("the way there", 1, true), "a travel step's click, as it is: " .. rowTip)
+      assert(rowTip:find("Click: the Route page.", 1, true) and not rowTip:find("the way there", 1, true), "a travel step's click, as it is: " .. rowTip)
       G0.steps = keep0; G0.ver = G0.ver + 1; SF0.Refresh()
     end
-    c.C.Modules.Set("Cute_Quest:route", true); tick(c, 1)
-    QB.UI:Open(3)
-    assert(c.C.UI.page == "route", "Route on: the Route page: " .. tostring(c.C.UI.page))
+
     -- (the review round) a stop out of a town on the Route page: its place in words, as the map's pins, the step frame
     -- and the arrow name it, not Model.lua's zone and spot (kept for matching)
     do
@@ -5285,10 +5375,10 @@ do
                        xp = 0, level = 5, t = 51, byQuest = {} }
       c.C.UI:Open("route")
       local shown = texts(c)
-      assert(shown:find("1. Goldshire", 1, true) and not shown:find("Elwynn Forest (", 1, true), "the Route page's stop: its place:\n" .. shown)
+      -- (the windows round: its NPC and its place, "Smith Argus, Goldshire", on the timeline's stop)
+      assert(shown:find("Smith Argus, Goldshire", 1, true) and not shown:find("Elwynn Forest (", 1, true), "the Route page's stop: its place:\n" .. shown)
       QB.routePlan, QB.Target.Mode = keepPlan, keepMode
     end
-    c.C.Modules.Set("Cute_Quest:route", false); tick(c, 1)
     -- the engine's words: Cute's name, no /qb
     local G, SF, A = QB.Guide, QB.StepFrame, QB.Arrow
     assert(G.Text({ kind = "reward", name = "Talbar Mantle" }) == "Choose a reward: Talbar Mantle is Cute's pick", "the reward step names Cute")
@@ -5392,9 +5482,12 @@ do
       Target = { Route = function() return { legs = {}, xp = 0, level = 5, t = 0 } end }, Run = { Get = function() return nil end },
       DMap = { Attach = function() end, Refresh = function() end }, Gear = { Attach = function() end, Refresh = function() end, RefreshSoon = function() end },
     }
+    -- (the base loads at the login: the frames made from there on are the copy's)
+    local framesBefore
+    local realLoad = pim.loadAddon
+    pim.loadAddon = function(x) if x.name == "Cute_Quest" then framesBefore = #pim.frames end realLoad(x) end
     login(pim)
     tickAll(5)
-    local framesBefore = #pim.frames
     pim.C.Modules.Set("Cute_Quest", true)
     tick(pim, 6)
     local a = pim.addons[2]
@@ -5405,13 +5498,17 @@ do
     -- (the registry's own frame per module, redrawing a page while it is on, is Cute's, not the copy's)
     local registry = {}
     for _, def in pairs(pim.C.Modules.byId) do if def.frame then registry[def.frame] = true end end
+    -- (frames Cute's own files make at the login, Sample's among them, are Cute's: by the file that made each)
+    local coreFile = {}
+    for file in io.open(HERE .. "/Cute/Cute.toc"):read("*a"):gmatch("([%w_]+%.lua)") do coreFile[file] = true end
     for i = framesBefore + 1, #pim.frames do
       local f = pim.frames[i]
-      assert(registry[f] or not (f.__events and f.__events.QUEST_TURNED_IN), "no frame of the copy hears QUEST_TURNED_IN")
+      local mine = false
+      for file in (f.__where or ""):gmatch("([%w_]+%.lua):%d+") do if coreFile[file] then mine = true end end
+      assert(registry[f] or mine or not (f.__events and f.__events.QUEST_TURNED_IN), "no frame of the copy hears QUEST_TURNED_IN: " .. tostring(f.__where))
     end
     assert(pim.env.CuteQuestDB == nil, "no saved table of the copy's own while it sleeps")
-    if not pim.C.Modules.OnKey("guide") then pim.C.Modules.Set("guide", true) end
-    pim.C.UI:Open("guide")
+    openGuide(pim)
     assert(texts(pim):find("Kill Kobold Vermin 3/8", 1, true) and texts(pim):find("about 9 min to level 6", 1, true), "the band draws QuestBank's step:\n" .. texts(pim))
     pim.C.Modules.Set("Cute_Quest", false)
     assert(settings.guide.on == true and settings.arrow == true, "the toggle set none of QuestBank's settings")
@@ -5435,7 +5532,6 @@ do
     login(pim)
     tickAll(5)
     for _, key in ipairs({ "Cute_Quest", "Cute_Quest:route", "Cute_Quest:map", "Cute_Quest:journal", "Cute_Quest:gear", "Cute_Quest:camp" }) do pim.C.Modules.Set(key, true) end
-    if not pim.C.Modules.OnKey("guide") then pim.C.Modules.Set("guide", true) end
     tick(pim, 6)
     local QB = pim.addons[2].private
     local LINE = "QuestBank 6.1.0 or newer is needed; yours is 6.0.1."
@@ -5443,16 +5539,16 @@ do
     assert(pim.env.Cute.QuestBand and pim.env.Cute.QuestBand.On() == false and pim.env.Cute.QuestBand.Why() == LINE, "the band registered, off, with the line")
     local function errors() return #((pim.env.CuteDB and pim.env.CuteDB.errors) or {}) + #((pim.env.CuteQuestDB and pim.env.CuteQuestDB.errors) or {}) end
     local n0 = errors()
-    pim.C.UI:Open("guide")
+    openGuide(pim)
     local t = texts(pim)
     assert(t:find(LINE, 1, true) and not t:find("Tick Quests", 1, true), "the Guide's band says what is needed, not to tick Quests:\n" .. t)
     for _, page in ipairs({ "quests", "route", "journal", "gear" }) do
       pim.C.UI:Open(page)
       local tp = texts(pim)
       assert(tp:find(LINE, 1, true), page .. " page: the one line:\n" .. tp)
-      check(pim.C.UI.frame, "QuestBank 6.0.1 beside Cute: " .. page)
+      check(qwin(pim).frame, "QuestBank 6.0.1 beside Cute: " .. page)
     end
-    for _, section in ipairs({ "quests", "route", "map", "gear", "camp" }) do
+    for _, section in ipairs({ "quests", "route", "map", "camp" }) do
       pim.C.UI:Open("settings", section)
       local ts = texts(pim)
       assert(ts:find(LINE, 1, true), section .. " section: the one line:\n" .. ts)
@@ -5543,12 +5639,11 @@ if SEEDED then
     login(mc)
     tickAll(5)
     for _, key in ipairs({ "Cute_Quest", "Cute_Quest:route", "Cute_Quest:map", "Cute_Quest:journal", "Cute_Quest:gear", "Cute_Quest:camp" }) do mc.C.Modules.Set(key, true) end
-    if not mc.C.Modules.OnKey("guide") then mc.C.Modules.Set("guide", true) end
     tick(mc, 6)
     local QB = mc.addons[2].private
     QB.Model.Finish()
     for _, page in ipairs({ "guide", "quests", "route", "journal", "gear" }) do mc.C.UI:Open(page) end
-    mc.C.UI.frame:Hide()
+    hideAll(mc)
     local KEEP_BUDGET = 11 * 1024
     local keptKB = kept(mc, { QB, mc.env.QuestBankDB })
     print(string.format("cute quest memory: kept after login and every page %.0f KB (budget %d KB)", keptKB, KEEP_BUDGET))
@@ -5901,13 +5996,13 @@ do
     press(mark)
     assert(tru.C.Policy:Untrusted(mod.o.guid) and bandButton(tru, "Trust again"), "marked, the button says Trust again")
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
-      tru.C.UI.frame:SetSize(size[1], size[2])
+      sizeAll(tru, size[1], size[2])
       tru.C.UI:Open("officers")
       check(tru.C.UI.frame, string.format("officer officers, a member untrusted, %dx%d", size[1], size[2]))
     end
-    tru.C.UI.frame:SetSize(1040, 640)
+    sizeAll(tru, 1040, 640)
     assert(rowOf(tru, "Mod").name:GetText() == "Mod  (untrusted)", "the officer's row says so")
-    press(bandButton(tru, "Broadcast policy now"))
+    press(bandButton(tru, "Broadcast now"))
     tickAll(4)
     assert(ann.C.Policy:Untrusted(mod.o.guid) and not ann.C.Stats.EnchantLearned(2), "Ann's client applied it: the neck is Cat's alone again, unlearned")
     ann.C.Sample:Read("unenchanted")
@@ -5969,23 +6064,26 @@ do
       end
       return out
     end
-    local function rowOfMate(c, name) for _, r in ipairs(c.C.UI.lists.guide.items) do if r:IsShown() and r.invite.mate and r.invite.mate.name == name then return r end end end
+    -- (the windows round) the pick is a card (Look.lua's pattern C): its mates' names in their class colours, four at
+    -- most, and one Invite for the ones it shows; the rest of the mates in its tooltip
+    local function pickCard(c) local h = guideHead(c); return h and h.invite and h or nil end
+    local function mateText(c, name) local cw = pickCard(c); for _, t in ipairs(cw and cw.mates or {}) do if t:IsShown() and t:GetText() == name then return t end end end
     local function views(label)
       for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
         for _, c in ipairs({ vee, gil }) do
           c.C.UI:Build()
-          c.C.UI.frame:SetSize(size[1], size[2])
-          c.C.UI:Open("guide")
+          sizeAll(c, size[1], size[2])
+          openGuide(c)
           local who = string.format("%s guide, %s, %dx%d", c == gil and "officer" or "member", label, size[1], size[2])
-          check(c.C.UI.frame, who)
-          for _, l in ipairs(c.C.UI.bandLines.items) do if l:IsShown() then hover(l) end end
-          for _, l in ipairs(c.C.UI.lists.guide.items) do if l:IsShown() then hover(l); if l.invite:IsShown() then hover(l.invite) end end end
-          local bar = c.C.UI.scroll.bar
+          check(qwin(c).frame, who)
+          if qwin(c).bandKit then hover(qwin(c).bandKit.step) end
+          for _, l in ipairs(glist(c)) do if l:IsShown() then hover(l); if l.invite and l.invite:IsShown() then hover(l.invite) end end end
+          local bar = qwin(c).scroll.bar
           local _, max = bar:GetMinMaxValues()
           bar:SetValue(max)
-          check(c.C.UI.frame, who .. ", the end")
-          for _, l in ipairs(c.C.UI.lists.guide.items) do if l:IsShown() then hover(l) end end
-          c.C.UI.frame:SetSize(1040, 640)
+          check(qwin(c).frame, who .. ", the end")
+          for _, l in ipairs(glist(c)) do if l:IsShown() then hover(l) end end
+          sizeAll(c, 1040, 640)
         end
       end
     end
@@ -5995,11 +6093,11 @@ do
       local at, dm = card(list, "The Deadmines")
       assert(dm and dm.val == "18-23" and dm.who == "beta" and dm.pick and plan.next.card and plan.next.card.d.id == 36, "the Deadmines' card, its range, its word, marked the pick")
       assert(plan.next.line == "Run The Deadmines: 6 guild mates online in range, 4 bosses you have not killed, 1 quest", "the next best thing: " .. plan.next.line)
-      vee.C.UI:Open("guide")
+      openGuide(vee)
       local band = guideHead(vee)
-      assert(band.name:GetText() == plan.next.line, "the list's head: " .. tostring(band.name:GetText()))
+      assert(band and band.name:GetText() == "The Deadmines" and band.why:GetText() == "6 mates online", "the card: its name and the reason: " .. tostring(band and band.why:GetText()))
       local why = tipOf(band)
-      assert(why:find("guild mates online in range first, then what is left for you there", 1, true) and why:find("The Deadmines | 6 mates, 4 bosses, 1 quest", 1, true), "its reason in the tooltip:\n" .. why)
+      assert(why:find(plan.next.line, 1, true) and why:find("guild mates online in range first, then what is left for you there", 1, true) and why:find("The Deadmines | 6 mates, 4 bosses, 1 quest", 1, true), "its reason in the tooltip:\n" .. why)
       -- the card's parts: four pips not killed; the quests for an Alliance priest at 20; six mates, four shown
       local u = under(list, at)
       local pips = {}
@@ -6012,47 +6110,44 @@ do
         and not qt:find("Horde", 1, true), "the quests' tooltip:\n" .. qt)
       assert(table.concat(u.mates, ", ") == "Bo 19, Lu 21, Ra 19, Mo 18" and u.more and u.more.name == "and 2 more online in range", "the mates nearest first, four shown: " .. table.concat(u.mates, ", "))
       assert(tipText(u.more.tip):find("Nox 22", 1, true) and not table.concat(u.mates, ","):find("Zed", 1, true) and not table.concat(u.mates, ","):find("Kay", 1, true), "the rest in its tooltip; Zed offline and Kay past the range left out")
-      -- the level bar: the range on the track, green, and Vee's tick; the mates class-coloured
-      local cr
-      for _, r in ipairs(vee.C.UI.lists.guide.items) do if r:IsShown() and r.name:GetText() == "The Deadmines" then cr = r end end
-      assert(cr and cr.track:IsShown() and cr.seg:IsShown() and cr.mark:IsShown() and cr.bar:IsShown(), "the card's level bar and its mark as the pick")
-      local br = rowOfMate(vee, "Bo")
+      -- drawn: the range on its track and Vee's tick, the faces and "4 left", the quests, four mates class-coloured, the
+      -- rest of the six in the tooltip
+      local cw = pickCard(vee)
+      local faces = 0
+      for _, f in ipairs(cw.faces) do if f:IsShown() then faces = faces + 1 end end
+      assert(cw.track:IsShown() and cw.you:IsShown() and cw.bar:IsShown() and faces == 4 and cw.left:GetText() == "4 left" and cw.quests:GetText() == "1 quest", "the card's range, its tick, four faces, 4 left, its quest")
+      assert(mateText(vee, "Bo") and mateText(vee, "Mo") and not mateText(vee, "Nox") and why:find("Nox 22", 1, true) and why:find("Pi 23", 1, true), "four mates on the card, all six in its tooltip")
       local mc = vee.env.RAID_CLASS_COLORS.MAGE
-      assert(br and sameColor(br.name.__color, { mc.r, mc.g, mc.b }), "Bo's name in the mage's colour")
-      -- invites: Bo by the sender string his Cute speaks under, Lu by the roster's name; each says so for a minute
-      press(br.invite)
-      press(rowOfMate(vee, "Lu").invite)
-      assert(vee.invites[1] == "Bo-Forever" and vee.invites[2] == "Lu-Forever" and #vee.invites == 2, "the invites: " .. table.concat(vee.invites, ", "))
+      assert(sameColor(mateText(vee, "Bo").__color, { mc.r, mc.g, mc.b }), "Bo's name in the mage's colour")
+      -- Invite: the four shown, Bo by the sender string his Cute speaks under, Lu by the roster's name; then "Invited"
+      press(cw.invite)
+      assert(vee.invites[1] == "Bo-Forever" and vee.invites[2] == "Lu-Forever" and #vee.invites == 4, "the invites: " .. table.concat(vee.invites, ", "))
       tick(vee, 1)
-      assert(rowOfMate(vee, "Bo").invite.label:GetText() == "Invited" and rowOfMate(vee, "Bo").invite.__disabled, "Bo's button says invited")
-      -- never in combat: the buttons greyed as combat starts, a press inviting nobody; back after it
+      cw = pickCard(vee)
+      assert(cw.invite.label:GetText() == "Invited" and cw.invite.__disabled, "the button says invited")
+      vee.C.Guide.invited = {}
+      redraw(vee)
+      -- never in combat: greyed as combat starts, a press inviting nobody; back after it
       vee.combat = true
       fire(vee, "PLAYER_REGEN_DISABLED")
       tick(vee, 1)
-      local ra = rowOfMate(vee, "Ra")
-      assert(ra.invite.__disabled and tipOf(ra.invite):find("Not in combat", 1, true), "in combat the buttons are greyed")
-      press(ra.invite)
-      assert(#vee.invites == 2, "a press in combat invites nobody")
+      cw = pickCard(vee)
+      assert(cw.invite.__disabled and tipOf(cw.invite):find("Not in combat", 1, true), "in combat the button is greyed")
+      press(cw.invite)
+      assert(#vee.invites == 4, "a press in combat invites nobody")
       vee.combat = false
       fire(vee, "PLAYER_REGEN_ENABLED")
       tick(vee, 1)
-      assert(not rowOfMate(vee, "Ra").invite.__disabled, "after combat they are back")
-      -- in a group led by another the client says you cannot invite; Bo in your group says so, no button
+      assert(not pickCard(vee).invite.__disabled, "after combat it is back")
+      -- in a group led by another the client says you cannot invite; Bo in your group says so in the tooltip
       vee.o.cantInvite = true
-      vee.C.UI:Draw()
-      assert(rowOfMate(vee, "Ra").invite.__disabled and tipOf(rowOfMate(vee, "Ra").invite):find("leader or an assistant", 1, true), "where the client says you cannot invite")
+      redraw(vee)
+      assert(pickCard(vee).invite.__disabled and tipOf(pickCard(vee).invite):find("leader or an assistant", 1, true), "where the client says you cannot invite")
       vee.o.cantInvite = nil
       vee.o.party = { "Bo" }
       fire(vee, "GROUP_ROSTER_UPDATE")
       tick(vee, 1)
-      local inGroup
-      for _, r in ipairs(vee.C.UI.lists.guide.items) do if r:IsShown() and r.name:GetText() == "Bo" then inGroup = r end end
-      assert(inGroup and not inGroup.invite:IsShown() and inGroup.who:GetText() == "in your group", "Bo in your group: no button")
-      -- the rest shown at a click, and fewer again
-      local moreRow
-      for _, r in ipairs(vee.C.UI.lists.guide.items) do if r:IsShown() and r.name:GetText() == "and 2 more online in range" then moreRow = r end end
-      press(moreRow)
-      assert(rowOfMate(vee, "Pi") and rowOfMate(vee, "Nox"), "a click shows them all")
+      assert(tipOf(guideHead(vee)):find("Bo 19 | in your group", 1, true) and not tipOf(pickCard(vee).invite):find("Bo,", 1, true), "Bo in your group: said so, not invited")
       views("six mates shown")
       vee.C.Guide.open[36] = nil
       -- next to open (plan.soon, the pick's tooltip names the first): Blackfathom at 24 for Vee; Krol'dok and The Drowned
@@ -6064,8 +6159,8 @@ do
       assert(dc and dc.awaited and dc.id == nil and dc.min == 35 and #dc.bosses == 0 and gil.C.Guide.Word(dc) == "research", "seeded by name and range, no id, no bosses")
       -- the guild's version, for the officer
       local _, gp = gil.C.Guide.Items(true)
-      gil.C.UI:Open("guide")
-      assert(gp.guild.line == "Most members are 18-23: The Deadmines" and guideHead(gil).who:GetText() == gp.guild.line, "the officer's head, the guild's line at its right: " .. tostring(gp.guild.line))
+      openGuide(gil)
+      assert(gp.guild.line == "Most members are 18-23: The Deadmines" and tipOf(guideHead(gil)):find(gp.guild.line, 1, true), "the officer's card: the guild's line in its tooltip: " .. tostring(gp.guild.line))
       assert(tipOf(guideHead(gil)):find("8 of 10 members are between 18 and 23", 1, true), "its counts in the tooltip")
       -- the awaited dungeon found. Its tooltip says what places it; one member's entry does not (one edited copy's
       -- label and entry would): Gil alone in "the Drowned City", instance 9100, and Vee alone in "Drowned City" (9200)
@@ -6115,7 +6210,8 @@ do
     local n0 = #gil.chat
     gil.env.SlashCmdList.CUTE("diag")
     local diag = table.concat(gil.chat, "\n", n0 + 1)
-    assert(diag:find("diag modules: on Guide", 1, true) and diag:find("diag trust: suspect 0 | untrusted 0", 1, true), "/cute diag:\n" .. diag)
+    -- (the Quests tab here is the harness's stand-in for Cute_Quest's: the modules line names it)
+    assert(diag:find("diag modules: on Quests", 1, true) and diag:find("diag trust: suspect 0 | untrusted 0", 1, true), "/cute diag:\n" .. diag)
     for _, c in ipairs({ gil, vee, bo }) do leave(c) end
     print(SEEDED and "guide: the next best thing the rules' pick with its reason, its card marked; a card's range on a level bar, its word, pips, quests for your side and level, the mates online in range class-coloured with Invite (by the sender string or the roster's name; never in combat, nor where the client says no; a group mate says so; the rest at a click); Next up as a timeline with the research's dungeon by name until two members' entries place it, one placing nothing; the officers' guild version; nothing fitting said plainly; /cute diag's modules and trust; every view at both sizes"
       or "guide, no seed: no dungeon known said plainly, the officers' version too; every view at both sizes")
@@ -6317,16 +6413,16 @@ do
     for _, x in ipairs(leakedTo(mo, m0 + 1)) do assert(x == "Ofb-Forever gold", "only her own gold, by her own choice: " .. x) end
     ofb.C.UI:Open("settings", "vis")
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
-      ofb.C.UI.frame:SetSize(size[1], size[2])
+      sizeAll(ofb, size[1], size[2])
       ofb.C.UI:Open("settings", "vis")
       assert(texts(ofb):find("Saving needs a rank allowed to edit Guild Info.", 1, true), "her Settings say who may save it")
-      check(ofb.C.UI.frame, "officer settings, a change she may not save, " .. size[1])
+      check(sframe(ofb), "officer settings, a change she may not save, " .. size[1])
     end
     local saveBtn
-    for _, b in ipairs(ofb.C.UI.bandButtons.items) do if b:IsShown() and b.label and b.label:GetText() == "Save to Guild Info" then saveBtn = b end end
+    for _, b in ipairs(ofb.C.UI.Window("settings").bandButtons.items) do if b:IsShown() and b.label and b.label:GetText() == "Save to Guild Info" then saveBtn = b end end
     assert(saveBtn and saveBtn.__disabled, "and her Save to Guild Info is greyed")
-    ofb.C.UI.frame:SetSize(1040, 640)
-    ofb.C.UI.frame:Hide()
+    sizeAll(ofb, 1040, 640)
+    hideAll(ofb)
     leave(ofb)
     -- (e) the guild shortens its text in the game's own editor; Ofa closes the zone and saves from her Settings: the line
     -- carries the policy now, the guild's text kept and Cute's line replaced; the clients online follow
@@ -6338,11 +6434,11 @@ do
     ofa2.C.Policy:Set("zone", "self")
     ofa2.C.UI:Open("settings", "vis")
     assert(texts(ofa2):find("Unsaved. Cute's line: ", 1, true), "her Settings show the line's length")
-    for _, b in ipairs(ofa2.C.UI.bandButtons.items) do if b:IsShown() and b.label and b.label:GetText() == "Save to Guild Info" then saveBtn = b end end
+    for _, b in ipairs(ofa2.C.UI.Window("settings").bandButtons.items) do if b:IsShown() and b.label and b.label:GetText() == "Save to Guild Info" then saveBtn = b end end
     assert(not saveBtn.__disabled and tipOf(saveBtn):find("Cute 1 ", 1, true), "the button, its tooltip the line")
-    check(ofa2.C.UI.frame, "officer settings, a change to save")
+    check(sframe(ofa2), "officer settings, a change to save")
     press(saveBtn)
-    ofa2.C.UI.frame:Hide()
+    hideAll(ofa2)
     local info = INFO[7]
     assert(info:match("^Welcome to <Cute>!\nCute 1 %w+ 1 %x+ [%+%-]") and lines(info) == 1 and ofa2.C.Policy.line.diff, "the guild's text kept, one line, the policy in it: " .. info)
     tickAll(5)
@@ -7263,7 +7359,7 @@ do
     local realPurge, realRows = P.Purge, R.Rows
     P.Purge = function(...) purges = purges + 1; return realPurge(...) end
     R.Rows = function(...) rows = rows + 1; return realRows(...) end
-    if mia.C.UI.frame then mia.C.UI.frame:Hide() end
+    hideAll(mia)
     for _ = 1, 3 do mia.C.Comm:Ask(); tickAll(10) end
     assert(purges == 0, "three echoes of the policy Mia holds: no purge: " .. purges)
     ofa.C.Comm:Full({})
@@ -7315,10 +7411,11 @@ do
       for _, c in ipairs({ gil, vee, bo }) do login(c) end
       tickAll(60)
       openGuide(vee)
-      local row
-      for _, r in ipairs(vee.C.UI.lists.guide.items) do if r:IsShown() and r.invite.mate and r.invite.mate.name == "Bo" then row = r end end
-      assert(row and row.invite.mate.invite == "Bo-Forever", "a Kstring sender string is no name to invite: the roster's name: " .. tostring(row and row.invite.mate.invite))
-      press(row.invite)
+      -- (the windows round: the card's one Invite, for the mates it shows: Bo alone here)
+      local head = guideHead(vee)
+      local list = (pickHost(vee) and pickHost(vee).pickShown and pickHost(vee).pickShown.invitable) or {}
+      assert(list[1] and list[1].name == "Bo" and list[1].invite == "Bo-Forever", "a Kstring sender string is no name to invite: the roster's name: " .. tostring(list[1] and list[1].invite))
+      press(head.invite)
       assert(#vee.invites == 1 and vee.invites[1] == "Bo-Forever", "the invite went to the roster's name")
       for _, c in ipairs({ gil, vee, bo }) do leave(c) end
     end)
@@ -7435,11 +7532,11 @@ do
     mia.C.UI:Open("settings", "modules")
     -- (0.6.1: the row is the button, the box a visual inside it, so a click anywhere on the row ticks it; nothing
     -- leans on a hit rect widened over the label, which the live client's Modules boxes never took)
-    local box = checkBox(mia, function(fr) return fr.label and fr.label:GetText() == "Guide" end)
-    assert(box and box.checkRow and box.__kind == "Button" and not box.__hit and box.box.__kind == "Frame" and not box.box.__mouse, "the Guide's row is a button, its box a frame inside it, no hit-rect insets")
+    local box = checkBox(mia, function(fr) return fr.label and fr.label:GetText() == "Guild" end)
+    assert(box and box.checkRow and box.__kind == "Button" and not box.__hit and box.box.__kind == "Frame" and not box.box.__mouse, "the Guild's row is a button, its box a frame inside it, no hit-rect insets")
     GEN = GEN + 1
     local rr, lr, br = rectOf(box), rectOf(box.label), rectOf(box.box)
-    assert(rr and lr and br and rr.l <= br.l and br.r <= lr.l and lr.r <= rr.r and rr.r - rr.l >= 300 and rr.t - rr.b == 20 and rr.t >= br.t and br.b >= rr.b,
+    assert(rr and lr and br and rr.l <= br.l and br.r <= lr.l and lr.r <= rr.r and rr.r - rr.l >= 300 and rr.t - rr.b == 22 and rr.t >= br.t and br.b >= rr.b,
       string.format("the row spans its box and its label: row %d-%d, box %d-%d, label %d-%d", rr.l, rr.r, br.l, br.r, lr.l, lr.r))
     -- every check in Settings is such a row: none left with a hit rect
     for _, fr in ipairs(mia.frames) do assert(not fr.__hit, "a widget with hit-rect insets: " .. tostring(fr.__kind) .. " '" .. tostring(fr.label and fr.label:GetText()) .. "'") end
@@ -8376,16 +8473,15 @@ do
     said[#said + 1] = "an officer away undoes nothing another set meanwhile"
   end)
 
-  -- (i) the Guide's section, (j) a run of clicks
+  -- (i) the Rules section (where the Guide's two are now), (j) a run of clicks
   isolated({ member("Ofa", 0), member("Mia", 3) }, function()
     local ofa, mia = char("Ofa", 0), char("Mia", 3)
     login(ofa, pol(true)); login(mia, pol())
     tickAll(30)
-    ofa.C.Modules.Set("guide", true)
-    ofa.C.UI:Open("settings", "guide")
+    ofa.C.UI:Open("settings", "rules")
     local t = texts(ofa)
-    assert(t:find("A change goes to the guild on its own.", 1, true) and not t:find("Broadcast now sends them", 1, true), "the Guide's section says what happens")
-    ofa.C.UI.frame:Hide()
+    assert(t:find("A change goes to the guild on its own.", 1, true) and not t:find("Broadcast now sends them", 1, true), "the Rules section says what happens")
+    hideAll(ofa)
     for _, c in ipairs({ ofa, mia }) do leave(c) end
   end)
   isolated({ member("Ofa", 0), member("Mia", 3) }, function()
@@ -8936,7 +9032,7 @@ do
     ofa.C.UI:Open("me")
     assert(not ofa.C.UI.meView and texts(ofa):find("members go by Guild Info, save your change first", 1, true), "the members' view waits for the save")
     check(ofa.C.UI.frame, "officer me, a change not saved")
-    ofa.C.UI.frame:Hide()
+    hideAll(ofa)
     for _, c in ipairs({ ofa, ofb, mia, mal }) do leave(c) end
   end)
   isolated({ member("Moda", 1) }, function()
@@ -9183,8 +9279,8 @@ do
     ofa.C.UI:Open("settings", "vis")
     assert(texts(ofa):find("Saving waits for Guild Info to be read.", 1, true) and checkBox(ofa, function(cb) return cb.statId == "gold" end)
       and not checkBox(ofa, function(cb) return cb.statId == "gold" and not cb.__disabled end), "Settings shows the pairs greyed, and why")
-    check(ofa.C.UI.frame, "officer settings, Guild Info not read yet")
-    ofa.C.UI.frame:Hide()
+    check(sframe(ofa), "officer settings, Guild Info not read yet")
+    hideAll(ofa)
     ofa.o.instance = nil
     ofa.env.C_GuildInfo.GetInfoText = real
     fire(ofa, "GUILD_ROSTER_UPDATE")
@@ -9708,7 +9804,7 @@ do
     tickAll(20)
     cell, tip = tipOf()
     assert(tip:find("3 empty slots", 1, true) and tip:find("Counted before the officers' last change", 1, true), "saved: the gaps it counts now, and the verdict said to be from before: " .. tip)
-    ofa.C.UI.frame:Hide()
+    hideAll(ofa)
     leave(ofa)
   end)
   said[#said + 1] = "a member's Ready tooltip counts what their client counted"
@@ -10074,7 +10170,7 @@ do
     assert(gold:find("^Only you and the officers see this.") and gold:find("not saved yet, would show it to everyone", 1, true), "Gold: the members whisper it still: " .. gold)
     assert(zone:find("^Everyone sees this.") and zone:find("not saved yet, would keep it", 1, true), "Zone: the members send it still: " .. zone)
     assert(kaka.C.Policy:Route("gold") == "self" and kaka.C.Policy:Route("zone") == "all" and kaka.C.UI.WhoSees("gold") == "Only you and the officers see this.", "Kaka's say the line")
-    ofa.C.UI.frame:Hide()
+    hideAll(ofa)
     for _, c in ipairs({ ofa, kaka }) do leave(c) end
   end)
   said[#said + 1] = "headers say what the members go by"
@@ -10320,51 +10416,54 @@ do
   local said = {}
 
   -- (a) the error in the draw: Roster:MeOfficer throws on its second call of the click (Settings_Draw's), as a secret
-  -- rank compared with <= would on the live client; then an error before the draw, in Modules.Set
+  -- rank compared with <= would on the live client; then an error before the draw, in the choice itself. (0.6.1 met it
+  -- ticking the Guide; module boxes wait for a reload now, so the click is an officer's Who sees what pair, which
+  -- applies at once and draws Settings again)
   isolated({ member("Helga", 1), member("Pim", 3) }, function()
     local c = char("Helga", 1, { surname = "Bluntforce", fullNameSurname = true, sender = "Helga Bluntforce" })
     login(c)
-    c.env.SlashCmdList.CUTE("modules")
-    local box = guideBox(c)
-    assert(box and not box:GetChecked(), "the Guide's row, unticked")
+    tickAll(30)
+    c.C.UI:Open("settings", "vis")
+    local function pair(vis) return checkBox(c, function(cb) return cb.statId == "zone" and cb.vis == vis end) end
+    local box = pair("self")
+    assert(box and not box:GetChecked() and not box.__disabled, "Zone's Only-you box, the officer's to click")
     local n0 = #(c.env.CuteDB.errors or {}) -- (a quiet note or two from login: a client function this mock lacks)
-    local R = c.C.Roster
-    local real, calls = R.MeOfficer, 0
-    R.MeOfficer = function(self) calls = calls + 1; if calls == 2 then error("attempt to compare a secret number value") end return real(self) end
+    -- (the draw's own work throws once: Settings' list of sections, as a secret rank compared in it would)
+    local ST = c.C.SettingsPage
+    local real, calls = ST.Sections, 0
+    ST.Sections = function(...) calls = calls + 1; if calls == 1 then error("attempt to compare a secret number value") end return real(...) end
     c.env.CUTE_DEV = false
     click(box)
     c.env.CUTE_DEV = true
-    R.MeOfficer = real
-    local me = c.C.Me()
-    assert(c.env.CuteDB.chars[me].modules.guide == true and c.C.Modules.byId.guide.active, "the tick took: the choice saved, the module on")
+    ST.Sections = real
+    assert(c.C.Policy:Vis("zone") == "self", "the click took: the choice made")
     local e = c.env.CuteDB.errors[1]
     assert(e and e.where == "draw" and e.msg:find("secret number", 1, true) and #c.env.CuteDB.errors == n0 + 1, "the error recorded under its path: " .. errorsWhere(c))
     assert(chatHas(c, "ran into a problem and carried on. /cute errors shows the details.") == 1, "and said once")
-    assert(c.C.UI.drawing == false, "drawing reset after the failed draw")
+    assert(c.C.UI.Window("settings").drawing == false, "drawing reset after the failed draw")
     local l0 = #c.chat
     c.env.SlashCmdList.CUTE("errors")
     local listed = false
     for i = l0 + 1, #c.chat do if c.chat[i]:find("secret number", 1, true) and c.chat[i]:find("(x1, last ", 1, true) and c.chat[i]:find(") draw", 1, true) then listed = true end end
     assert(listed, "/cute errors lists it with its path: " .. table.concat(c.chat, "\n", l0 + 1))
-    -- the next refresh draws the window whole: the Guide's tab and section there
-    c.C.UI:Refresh()
+    -- the next refresh draws the window whole: the pair ticked as chosen
+    c.C.UI.Window("settings"):Refresh()
     tick(c, 1)
-    assert(tabsShown(c):find("^race guide prog") and sectionsShown(c):find("modules race guide", 1, true) and guideBox(c):GetChecked(),
-      "the window keeps refreshing: the tab, the section, the row ticked: " .. tabsShown(c) .. " / " .. sectionsShown(c))
-    check(c.C.UI.frame, "officer settings, modules, after a swallowed error in the draw")
+    assert(pair("self") and pair("self"):GetChecked() and sectionsShown(c):find("vis", 1, true), "the window keeps refreshing: the pair ticked: " .. sectionsShown(c))
+    check(sframe(c), "officer settings, who sees what, after a swallowed error in the draw")
     -- an error before the draw, in the choice itself: recorded under the check, the window drawn again all the same
-    local M = c.C.Modules
-    local realSet = M.Set
-    M.Set = function(key, on) error("boom in Set " .. key) end
+    local P = c.C.Policy
+    local realSet = P.Set
+    P.Set = function(_, id) error("boom in Set " .. id) end
     c.env.CUTE_DEV = false
-    click(guideBox(c))
+    click(pair("all"))
     c.env.CUTE_DEV = true
-    M.Set = realSet
-    assert(c.env.CuteDB.errors[1].where == "check" and c.env.CuteDB.errors[1].msg:find("boom in Set guide", 1, true), "the error in the choice recorded under the check: " .. errorsWhere(c))
-    assert(c.env.CuteDB.chars[me].modules.guide == true and not c.C.UI.drawing, "the choice as it was; drawing clear")
-    c.C.UI:Refresh()
+    P.Set = realSet
+    assert(c.env.CuteDB.errors[1].where == "check" and c.env.CuteDB.errors[1].msg:find("boom in Set zone", 1, true), "the error in the choice recorded under the check: " .. errorsWhere(c))
+    assert(c.C.Policy:Vis("zone") == "self" and not c.C.UI.Window("settings").drawing, "the choice as it was; drawing clear")
+    c.C.UI.Window("settings"):Refresh()
     tick(c, 1)
-    assert(guideBox(c):GetChecked() and tabsShown(c):find("^race guide prog"), "drawn again from the choice kept: " .. tabsShown(c))
+    assert(pair("self"):GetChecked(), "drawn again from the choice kept")
     leave(c)
   end)
   said[#said + 1] = "an error in a click's path is recorded with its path, the choice kept, the window drawing again"
@@ -10394,9 +10493,9 @@ do
     c.C.Ask = realAsk
     assert(R.SeedState() == "fresh" and R.check.total == 49 and R.check.absent == 0, "the verdict a frame on, on the forty-nine answered: " .. R.SeedState() .. " " .. tostring(R.check.total))
     assert(not errorOf(c, "rules: rule 0 watchdog"), "no watchdog needed")
-    c.C.UI:Draw()
+    redraw(c)
     assert(not texts(c):find("Checking what we knew", 1, true) and tipOf(guideHead(c)):find("From research and the beta, checked against this client", 1, true), "the Guide filled in")
-    check(c.C.UI.frame, "officer guide, after an ask that threw")
+    check(qwin(c).frame, "officer guide, after an ask that threw")
     leave(c)
     -- the stalled chain
     local d = char("Helga", 1)
@@ -10415,7 +10514,7 @@ do
     assert(RD.SeedState() == "fresh" and RD.check.state == "done" and RD.check.total == 50, "the watchdog closed it at thirty seconds, on what was asked: " .. RD.SeedState())
     local w = errorOf(d, "rules: rule 0 watchdog")
     assert(w and w.msg == "rule 0 did not finish: 50 of 50 asked in 30 s; judged on those", "and said so under /cute errors: " .. tostring(w and w.msg))
-    d.C.UI:Draw()
+    redraw(d)
     assert(tipOf(guideHead(d)):find("From research and the beta, checked against this client", 1, true) and not texts(d):find("Checking what we knew", 1, true), "the Guide filled in:\n" .. texts(d))
     tick(d, 30)
     assert(RD.check.total == 50 and errorOf(d, "rules: rule 0 watchdog").count == 1, "nothing counted twice")
@@ -10424,7 +10523,8 @@ do
   said[#said + 1] = "Rule 0 skips an ask that throws, the watchdog closes a stalled chain, the band says how far it got"
 
   -- (c) the key flips call by call: UnitFullName's second return the surname one call, nothing the next (so 0.6.0's
-  -- C.Me gave Helga-Bluntforce and Helga-Forever by turns, and a choice saved under one was read under the other)
+  -- C.Me gave Helga-Bluntforce and Helga-Forever by turns, and a choice saved under one was read under the other). The
+  -- choice: this character's role, Settings > General
   isolated({ member("Helga", 1), member("Pim", 3) }, function()
     local c = char("Helga", 1, { surname = "Bluntforce", fullNameSurname = true, sender = "Helga Bluntforce" })
     local n = 0
@@ -10432,19 +10532,19 @@ do
     login(c)
     local me = c.C.Me()
     assert(me == "Helga-Bluntforce" and c.C.Me() == me and c.C.Me() == me, "the first read is the session's key: " .. tostring(me))
-    c.env.SlashCmdList.CUTE("modules")
-    click(guideBox(c))
+    c.C.UI:Open("settings", "general")
+    click(checkBox(c, function(cb) return cb.label and cb.label:GetText() == "Tank" end))
     local keys = {}
     for k in pairs(c.env.CuteDB.chars) do keys[#keys + 1] = k end
-    assert(#keys == 1 and keys[1] == me and c.env.CuteDB.chars[me].modules.guide == true, "saved under that key alone: " .. table.concat(keys, ", "))
-    assert(c.C.Modules.byId.guide.active and tabsShown(c):find("^race guide prog") and guideBox(c):GetChecked(), "and read back under it: the tab, the row ticked: " .. tabsShown(c))
+    assert(#keys == 1 and keys[1] == me and c.env.CuteDB.chars[me].role == "Tank", "saved under that key alone: " .. table.concat(keys, ", "))
+    assert(checkBox(c, function(cb) return cb.label and cb.label:GetText() == "Tank" end):GetChecked(), "and read back under it: the row ticked")
     assert(c.C.Char() == c.env.CuteDB.chars[me], "C.Char is that record, every call")
     -- a /reload reads the same file under the same key, whichever way the call reads first
     local db = c.env.CuteDB
     leave(c)
     local d = char("Helga", 1, { surname = "Bluntforce", fullNameSurname = true, sender = "Helga Bluntforce" })
     login(d, db, true)
-    assert(d.C.Me() == me and d.C.Modules.byId.guide.active, "after a /reload: the Guide on for this character")
+    assert(d.C.Me() == me and d.C.Char().role == "Tank", "after a /reload: the role kept for this character")
     leave(d)
   end)
   said[#said + 1] = "a key that flips call by call saves and reads under one"
@@ -10920,6 +11020,7 @@ do
     local n0 = #off.chat
     off.env.SlashCmdList.CUTE("help")
     assert(#off.chat == n0 + 2 and off.chat[n0 + 2]:find("/cute help more", 1, true), "two lines of help")
+    assert(off.chat[n0 + 1]:find("/cute quests", 1, true) and off.chat[n0 + 1]:find("guild window", 1, true), "the help names both windows: " .. off.chat[n0 + 1])
     off.env.SlashCmdList.CUTE("help more")
     assert(#off.chat == n0 + 3 and off.chat[n0 + 3]:find("/cute diag", 1, true), "the paste tools under help more")
     local old = db.roster["Old-Forever"]
@@ -11345,7 +11446,7 @@ end
 -- (the merge round) the Quests section has the engine's two switches QuestBank's Guide section has: "Say XP after each
 -- hand-in" (sayXP, off: the line in chat as a quest is handed in, complete or dropped) and "Hide the game's quest tracker
 -- with the step frame" (guide.hideTracker, on); each writes the engine's setting, both labels whole at either window
--- size, and the section keeps eight rows at most
+-- size, and the section keeps nine rows at most
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
   isolated({ member("Rone", 1), member("Pim", 3) }, function()
@@ -11373,14 +11474,15 @@ do
     assert(s.guide.hideTracker == false, "the tracker's row unticked: the engine's setting off")
     click(row(TRACKER))
     assert(s.guide.hideTracker == true, "and on again")
-    -- eight rows at most (a Check, a Choice, a Step or an Edit is a row)
+    -- nine rows at most (a Check, a Choice, a Step or an Edit is a row): the design's eight (section 7, with "Backdrop
+    -- behind the step frame", windows W21) and this round's Say XP
     local n = 0
     local col = setmetatable({}, { __index = function(_, k) return function() if k == "Check" or k == "Choice" or k == "Step" or k == "Edit" then n = n + 1 end end end })
     c.C.Modules.byId.quests.settings(c.C.Modules.byId.quests, col)
-    assert(n <= 8, "the Quests section keeps eight rows at most: " .. n)
+    assert(n <= 9, "the Quests section keeps nine rows at most: " .. n)
     -- both labels whole at either size (Cute's FitText would cut a label too long with "...")
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
-      c.C.UI.frame:SetSize(size[1], size[2])
+      sizeAll(c, size[1], size[2])
       c.C.UI:Open("settings", "quests")
       assert(row(SAY) and row(TRACKER), "both labels whole at " .. size[1] .. " x " .. size[2] .. ":\n" .. texts(c))
     end
@@ -13190,6 +13292,1462 @@ do local function runsStage()
 
   print("runs: " .. table.concat(said, "; "))
 end runsStage() end
+
+-- [stage: windows] that stage's tests go right below this line
+-- W1 (the windows round, sub-project A). The leaks Cute_Quest's copy of Sync had: guild sharing is off at every load
+-- (a hand-set true is off again), so nothing goes to GUILD and nothing is taken from it (a guild mate's 1L corrected
+-- XP numbers on one voice); in a raid the party sync says nothing (the Bridge's noRaidSync: a guild raid reached members
+-- the officers routed those values away from). And the game's map opens by QuestBank's tested path, OpenWorldMap and
+-- HideUIPanel, never ToggleWorldMap, and never in a fight
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1), member("Pim", 3) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(5)
+    c.C.Modules.Set("Cute_Quest", true); tick(c, 6)
+    local QB, s = c.addons[2].private, c.env.CuteQuestDB.settings
+    assert(QB.noRaidSync == true and s.share.guild == false, "the copy: no RAID sync, no guild sharing")
+    -- a guild mate's XP reading on GUILD: taken from nothing; the party's still heard
+    local recorded, record = 0, QB.Live.Record
+    QB.Live.Record = function(...) recorded = recorded + 1; return record(...) end
+    local f = QB.Sync.frame
+    f.__scripts.OnEvent(f, "CHAT_MSG_ADDON", "QuestBank", "1L|33:450:5", "GUILD", "Pim-Forever")
+    f.__scripts.OnEvent(f, "CHAT_MSG_ADDON", "QuestBank", "1S|5|100|A|WARRIOR|0|0|0|-1|0|0|6.1.1|0000000000", "GUILD", "Pim-Forever")
+    assert(recorded == 0 and next(QB.Sync.members) == nil, "a guild 1L and 1S change nothing")
+    f.__scripts.OnEvent(f, "CHAT_MSG_ADDON", "QuestBank", "1L|33:450:5", "PARTY", "Pim-Forever")
+    assert(recorded == 1, "the party's 1L is still heard")
+    QB.Live.Record = record
+    -- a guild raid: no 1S, 1Q or 1R on RAID, from a broadcast or a roster change
+    c.o.group = true
+    local inRaid = c.env.IsInRaid
+    c.env.IsInRaid = function() return true end
+    for k = #c.outbox, 1, -1 do c.outbox[k] = nil end
+    QB.Sync.lastStatus, QB.Sync.lastQuests = nil, nil
+    QB.Sync:Broadcast(false)
+    fire(c, "GROUP_ROSTER_UPDATE"); tick(c, 30)
+    for _, m in ipairs(c.outbox) do assert(m[3] ~= "RAID" and m[3] ~= "GUILD", "nothing of the engine's on RAID or GUILD: " .. tostring(m[3]) .. " " .. tostring(m[2]):sub(1, 30)) end
+    c.env.IsInRaid = function() return false end
+    QB.Sync.lastStatus, QB.Sync.lastQuests = nil, nil
+    QB.Sync:Broadcast(false); tick(c, 10)
+    local party = 0
+    for _, m in ipairs(c.outbox) do if m[3] == "PARTY" then party = party + 1 end end
+    assert(party > 0, "a party still hears the sync: " .. party)
+    c.env.IsInRaid, c.o.group = inRaid, nil
+    -- the game's map: OpenWorldMap, never ToggleWorldMap; a second ask on your own map keeps it; not in a fight
+    local toggled = 0
+    local toggle = c.env.ToggleWorldMap
+    c.env.ToggleWorldMap = function(...) toggled = toggled + 1; return toggle(...) end
+    for k = #c.panelCalls, 1, -1 do c.panelCalls[k] = nil end
+    assert(QB.UI.OpenMap() == true and c.map.shown and c.panelCalls[1] == "open", "opened by OpenWorldMap: " .. table.concat(c.panelCalls, ","))
+    assert(QB.UI.OpenMap(true) == false and not c.map.shown and c.panelCalls[2] == "hide", "shut by HideUIPanel when asked to toggle")
+    c.combat = true
+    local n0 = #c.chat
+    assert(QB.UI.OpenMap() == false and #c.panelCalls == 2 and #c.chat == n0 + 1, "in a fight: nothing called, one line said")
+    c.combat = false
+    assert(toggled == 0, "ToggleWorldMap never called")
+    c.env.ToggleWorldMap = toggle
+    -- a 0.7 save whose guild sharing was turned on by hand after the first run: off again at the next load
+    s.share.guild = true
+    local db, qdb = c.env.CuteDB, c.env.CuteQuestDB
+    leave(c)
+    local d = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    d.env.CuteQuestDB = qdb
+    login(d, db); tickAll(6)
+    if not d.addons[2].loaded then d.C.Modules.Set("Cute_Quest", true); tick(d, 6) end
+    assert(d.env.CuteQuestDB.settings.share.guild == false, "guild sharing off again at the next load")
+    leave(d)
+    print("windows W1: nothing to or from GUILD under Cute (a hand-set true off again), no RAID sync in a raid, the party still heard; the game's map by OpenWorldMap and HideUIPanel, never in a fight")
+  end)
+end
+
+-- W2 (sub-project A): Settings never cuts. 0.7 gave a choice's options 42 px ("On my route" showed "On my..."), notes one
+-- line and rows 20 px. Now a choice measures each option and wraps them under its label, labels and notes wrap and their
+-- row grows, rows are 22 px, and a cut label anywhere in Settings is a layout problem (the gate) for both views, every
+-- section, at both sizes; a choice's ticked option clicked again stays ticked (Role, which may be none, clears)
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1), member("Pim", 3) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(5)
+    c.C.Modules.Set("Cute_Quest", true); tick(c, 6)
+    for _, key in ipairs({ "Cute_Quest:route", "Cute_Quest:map", "Cute_Quest:journal", "Cute_Quest:gear", "Cute_Quest:camp" }) do c.C.Modules.Set(key, true) end
+    tick(c, 1)
+    local s = c.env.CuteQuestDB.settings
+    local function row(label) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == label end) end
+    local cuts0 = #problems
+    c.C.UI:Open("settings", "quests")
+    for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+      sizeAll(c, size[1], size[2])
+      c.C.UI:Open("settings", "quests")
+      for _, opt in ipairs({ "Off", "On my route", "Worth taking" }) do
+        local r = row(opt)
+        assert(r and not r.label.cuteCut and r:GetWidth() >= textWidth(opt, 13) + 20, "Accept for me's '" .. opt .. "' whole at " .. size[1] .. ": " .. tostring(r and r.label:GetText()))
+      end
+      local step = row("Step frame")
+      assert(step and step:GetHeight() == 22, "a check row is 22 px: " .. tostring(step and step:GetHeight()))
+      for _, sec in ipairs(c.C.SettingsPage.Sections(true)) do
+        c.C.UI:Open("settings", sec.id)
+        check(sframe(c), string.format("W2 settings %s at %dx%d", sec.id, size[1], size[2]))
+      end
+    end
+    -- a long note wraps and its row grows: Who sees what's line about Guild Info at the small size
+    c.C.UI:Open("settings", "vis")
+    local wrapped
+    for _, o in everything() do
+      if o.__kind == "FontString" and visible(o) and o.__wrap and o.__text:find("Only you: whispered to the officers online", 1, true) and o.__parent and o.__parent.__client == c then wrapped = o end
+    end
+    assert(wrapped and not wrapped.cuteCut, "the visibility note shown whole, wrapping")
+    -- a choice's ticked option clicked again stays ticked; Role clears
+    c.C.UI:Open("settings", "quests")
+    assert(s.autoAccept == "off" and row("Off"):GetChecked(), "Accept for me: Off")
+    click(row("Off"))
+    assert(s.autoAccept == "off" and row("Off"):GetChecked(), "the ticked option clicked again: still Off, still ticked")
+    click(row("On my route"))
+    assert(s.autoAccept == "route" and row("On my route"):GetChecked() and not row("Off"):GetChecked(), "On my route chosen, the section drawn again")
+    click(row("On my route")); click(row("Off"))
+    c.C.UI:Open("settings", "general")
+    click(row("Tank"))
+    assert(c.C.Char().role == "Tank", "a role")
+    click(row("Tank"))
+    assert(c.C.Char().role == "" and not row("Tank"):GetChecked(), "Role, which may be none: cleared")
+    sizeAll(c, 1040, 640)
+    assert(#problems == cuts0, "no cut label in Settings: " .. tostring(problems[cuts0 + 1]))
+    leave(c)
+    print("windows W2: Settings never cuts: options measured and wrapped, labels and notes wrap, rows 22 px, the cut gate on every section at both sizes; a ticked option stays ticked, Role clears")
+  end)
+end
+
+-- W3 (sub-project C): the windows. J (CuteFrame, the guild's pages and a module addon's that says no window), L
+-- (CuteQuestFrame, Cute_Quest's tabs) and Settings (CuteSettingsFrame) from one builder: a 30 px header that drags the
+-- window, its title, the cog opening the window's group in Settings, the close, the game's size grabber in the corner,
+-- Esc closing each; a place and size kept per window. Settings' section list: rows 22 px and heads 20 px at any size,
+-- every section of an officer with every module on fitting unscrolled at 760 x 420. The Statistics page's categories in
+-- a column of their own; no leader at 0
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1), member("Pim", 3) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest", "Cute_Example" }, addonState = {}, quest = true, withStats = true }))
+    login(c); tickAll(6)
+    local M, UI = c.C.Modules, c.C.UI
+    for _, key in ipairs({ "Cute_Quest:map", "Cute_Quest:journal", "Cute_Quest:gear", "Cute_Quest:camp", "Cute_Example" }) do M.Set(key, true) end
+    tick(c, 1)
+    -- J, with a module addon's page among the guild's tabs (the registration API as it was)
+    UI:Open("race")
+    assert(c.env.CuteFrame == UI.frame and UI.head:GetHeight() == 30 and UI.title:GetText() == "Guild", "J: CuteFrame, a 30 px header titled Guild")
+    assert(tabsShown(c) == "race prog shame game officers me example", "J's tabs, the module addon's after the guild's: " .. tabsShown(c))
+    c.env.Cute.Open("example")
+    assert(UI.page == "example" and UI.frame:IsShown(), "Cute.Open opens a module addon's page in J")
+    -- L
+    UI:Open("quests")
+    local L = qwin(c)
+    assert(c.env.CuteQuestFrame == L.frame and L.head:GetHeight() == 30 and L.title:GetText() == "Quests", "L: CuteQuestFrame titled Quests")
+    -- the cogs: J's opens Settings at General, L's at Quests; each window's close; Esc closes each
+    press(UI.cog)
+    local S = UI.Window("settings")
+    assert(S.frame:IsShown() and S.section == "general", "J's cog: Settings at General")
+    press(L.cog)
+    assert(S.section == "quests", "L's cog: Settings at Quests")
+    for _, name in ipairs({ "CuteFrame", "CuteQuestFrame", "CuteSettingsFrame" }) do
+      local found = false
+      for _, n in ipairs(c.env.UISpecialFrames) do if n == name then found = true end end
+      assert(found, name .. ": Esc closes it")
+    end
+    assert(S.frame:GetWidth() == 800 and S.frame:GetHeight() == 560 and not S.cog, "Settings 800 x 560, no cog of its own")
+    for _, win in ipairs({ UI, L, S }) do
+      assert(win.grip.__normalTex == "Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up", "the game's size grabber in " .. win.key)
+      press(win.close)
+      assert(not win.frame:IsShown(), win.key .. ": the close closes it")
+    end
+    -- a place kept per window: L dragged by its header, J's own place untouched
+    UI:Open("race"); UI:Open("quests")
+    local jpos = c.env.CuteDB.pos
+    L.frame.__left, L.frame.__top = 200, 700
+    L.head.__scripts.OnDragStart(L.head); L.head.__scripts.OnDragStop(L.head)
+    assert(c.env.CuteDB.winPos and c.env.CuteDB.winPos.quests and c.env.CuteDB.winPos.quests.left == 200 and c.env.CuteDB.pos == jpos, "L's place kept apart from J's")
+    -- Settings' list at the smallest size: every section of an officer with every module on, rows 22 px and heads 20 px,
+    -- none scrolled out
+    sizeAll(c, 760, 420)
+    UI.OpenSettings("general")
+    local heights, n = {}, 0
+    for _, f in ipairs(c.frames) do if f.section and f:IsVisible() then n = n + 1; heights[f:GetHeight()] = true end end
+    local sections = c.C.SettingsPage.Sections(true)
+    assert(n == #sections and heights[22] and not heights[16] and not heights[20], "every section listed, each row 22 px: " .. n .. " of " .. #sections)
+    assert(sectionsShown(c) == "general keys modules share columns vis rules example quests route map dungeons camp", "the sections by group: " .. sectionsShown(c))
+    local navList
+    for _, f in ipairs(c.frames) do if f.section and f:IsVisible() then navList = f.__parent.__scrollParent end end
+    assert(navList and not navList.bar:IsShown(), "the list fits unscrolled at 760 x 420")
+    check(S.frame, "W3 settings at 760x420, every section listed")
+    sizeAll(c, 1040, 640)
+    -- the Statistics page: its categories in a column of their own (shown on that page alone); a leader only above 0
+    UI:Open("game")
+    assert(UI.catBox:IsShown() and UI.insetX and UI.insetX > 0, "the categories' column, the list beside it")
+    for _, l in ipairs(UI.catLines.items) do if l:IsShown() and l.cat and l.cat.id == 133 then press(l) end end
+    local daily
+    for _, l in ipairs(UI.lines.items) do if l:IsShown() and l.def and l.def.id == "g2011" and not l.member then daily = l end end
+    assert(daily and daily.who:GetText() == "-", "Daily quests completed, 0 for everyone: no leader: " .. tostring(daily and daily.who:GetText()))
+    check(UI.frame, "W3 statistics, a statistic nobody has done")
+    UI:Open("race")
+    assert(not UI.catBox:IsShown() and (UI.insetX or 0) == 0, "the column goes with the page")
+    -- (a quiet note from login, a client function this mock lacks, is no error of the windows')
+    local errs = {}
+    for _, e in ipairs(c.env.CuteDB.errors or {}) do if e.stack ~= "" then errs[#errs + 1] = tostring(e.where) .. ": " .. tostring(e.msg) end end
+    assert(#(c.env.CuteQuestDB.errors or {}) == 0 and #errs == 0, "no error recorded: " .. table.concat(errs, "; "))
+    leave(c)
+    print("windows W3: J, L and Settings from one builder (30 px header, cog to the window's group, close, Esc, the game's size grabber, a place each); a module addon's page in J; Settings' list 22 px rows unscrolled at 760 x 420; the Statistics categories their own column; no leader at 0")
+  end)
+end
+
+-- W4 (sub-project C): the reload rule. A box in Settings > Modules stages its change: nothing loads or goes, the box
+-- shows it, the section says "Applies on reload." with Reload now and Undo. Reload now writes the choice and the game's
+-- AddOns list and reloads; the login after it applies it. Closing Settings with a change staged asks the game's popup:
+-- Reload, or Undo (Esc is Undo); in a fight Reload now is greyed and the question waits for the fight's end. The menu
+-- offers "Reload to apply" meanwhile
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local state = {}
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true }))
+    login(c); tickAll(6)
+    local M = c.C.Modules
+    local function row(label) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == label end) end
+    local function button(label) for _, b in ipairs(c.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == label then return b end end end
+    c.C.UI:Open("settings", "modules")
+    click(row("Gear tab"))
+    assert(M.Staged() and M.staged["Cute_Quest:gear"] == true and not M.byId.gear.active and row("Gear tab"):GetChecked(), "staged: the box ticked, nothing on")
+    assert(texts(c):find("Applies on reload.", 1, true) and button("Reload now") and button("Undo"), "the band line, Reload now and Undo:\n" .. texts(c))
+    check(sframe(c), "W4 settings, modules, a change staged")
+    press(button("Undo"))
+    assert(not M.Staged() and not row("Gear tab"):GetChecked() and not texts(c):find("Applies on reload.", 1, true), "Undo: as it was")
+    click(row("Gear tab"))
+    press(button("Reload now"))
+    local me = c.C.Me()
+    assert(c.reloads == 1 and c.env.CuteDB.chars[me].modules["Cute_Quest:gear"] == true and not M.Staged(), "Reload now: the choice written, the interface reloaded")
+    local db, qdb = c.env.CuteDB, c.env.CuteQuestDB
+    leave(c)
+    -- the reload's login applies it
+    local d = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true }))
+    d.env.CuteQuestDB = qdb
+    login(d, db, true); tickAll(6)
+    local M2 = d.C.Modules
+    assert(M2.byId.gear and M2.byId.gear.active, "after the reload: the Gear tab on")
+    -- closing Settings with a change staged: the game's popup, Reload or Undo; Esc (its OnCancel) undoes
+    d.C.UI:Open("settings", "modules")
+    click(checkBox(d, function(cb) return cb.label and cb.label:GetText() == "Gear tab" end))
+    assert(M2.Staged(), "staged off")
+    -- (the menu offers it meanwhile)
+    d.C.Windows.Menu()
+    local menu = d.contextMenus[#d.contextMenus]
+    local offered = false
+    for _, e in ipairs(menu) do if e.text == "Reload to apply" then offered = true end end
+    assert(offered, "the menu: Reload to apply")
+    sframe(d):Hide()
+    assert(d.popups[#d.popups] == "CUTE_RELOAD" and d.env.StaticPopupDialogs.CUTE_RELOAD.text == "Cute reloads to apply your changes.", "closing asks: " .. tostring(d.popups[#d.popups]))
+    local dlg = d.env.StaticPopupDialogs.CUTE_RELOAD
+    assert(dlg.button1 == "Reload" and dlg.button2 == "Undo" and dlg.hideOnEscape and not dlg.button3, "Reload or Undo, no Later; Esc closes it as Undo")
+    dlg.OnCancel()
+    assert(not M2.Staged() and M2.byId.gear.active and d.reloads == 0, "Undo (Esc): nothing changed")
+    -- in a fight: Reload now greyed, the question waits for its end
+    d.C.UI:Open("settings", "modules")
+    click(checkBox(d, function(cb) return cb.label and cb.label:GetText() == "Gear tab" end))
+    d.combat = true
+    sdraw(d)
+    local rl
+    for _, b in ipairs(d.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == "Reload now" then rl = b end end
+    assert(rl and rl.__disabled, "in a fight Reload now is greyed")
+    local p0 = #d.popups
+    sframe(d):Hide()
+    assert(#d.popups == p0, "closed in a fight: the question waits")
+    d.combat = false
+    fire(d, "PLAYER_REGEN_ENABLED")
+    assert(d.popups[#d.popups] == "CUTE_RELOAD" and #d.popups == p0 + 1, "asked as the fight ends")
+    dlg.OnAccept()
+    assert(d.reloads == 1 and d.env.CuteDB.chars[me].modules["Cute_Quest:gear"] == false, "Reload: the change written, reloaded")
+    leave(d)
+    print("windows W4: a module box stages its change (the band line, Reload now, Undo); Reload now writes it and reloads, the login applies it; closing Settings asks Reload or Undo (Esc Undo), in a fight after it; the menu offers Reload to apply")
+  end)
+end
+
+-- W5 (sub-project C): keys by override bindings that follow the game's own. Nothing taken before the character says so
+-- (the setup card's Start, Settings > Keys); "follow" takes the game's key for its window (J for Guild & Communities, L
+-- for the quest log) and moves with it when the player rebinds the game's; a hand-picked key says what it replaces;
+-- Clear gives the game its key back; the Guild key waits for a guild; in a fight nothing is set until it ends. The key
+-- box takes a key with its modifiers; Esc keeps the old one, Backspace clears it. The key clicks the window's button
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    local K = c.C.Keys
+    assert(next(c.overrides) == nil, "nothing taken before the character says so")
+    K.Set("guild", "follow"); K.Set("quests", "follow")
+    assert(c.overrides.J and c.overrides.J.button == "CuteGuildKey" and c.overrides.L and c.overrides.L.button == "CuteQuestsKey" and c.overrides.J.owner == c.env.CuteKeyOwner, "follow: J and L clicked Cute's buttons, held by CuteKeyOwner")
+    assert(c.env.CuteDB.chars[c.C.Me()].keys.guild == "follow", "kept per character")
+    -- the key clicks the window's button: L opens and shuts
+    press(c.env.CuteQuestsKey)
+    assert(qwin(c).frame:IsShown(), "L's key opens the quest window")
+    press(c.env.CuteQuestsKey)
+    assert(not qwin(c).frame:IsShown(), "and shuts it")
+    -- the player rebinds the game's quest log to K: Cute's key moves with it
+    c.bindings.TOGGLEQUESTLOG = { "K" }
+    fire(c, "UPDATE_BINDINGS")
+    assert(c.overrides.K and c.overrides.K.button == "CuteQuestsKey" and not c.overrides.L, "following the game's key: K now")
+    -- a hand-picked key that does something else in the game says so (Settings > Keys)
+    K.Set("quests", "5")
+    c.C.UI:Open("settings", "keys")
+    assert(c.overrides["5"] and texts(c):find("replaces Action Button 5", 1, true), "a hand-picked key, and what it replaces:\n" .. texts(c))
+    check(sframe(c), "W5 settings, keys, a hand-picked key")
+    -- the key box: a click, then a key with its modifiers; Esc keeps it; Backspace clears it
+    local box
+    for _, b in ipairs(c.frames) do if b.id == "quests" and b:IsVisible() and rawget(b, "Bind") then box = b end end
+    assert(box and box.label:GetText() == "5", "the box shows the key: " .. tostring(box and box.label:GetText()))
+    press(box)
+    assert(box.waiting and box.label:GetText() == "Press a key", "a click: Press a key")
+    box.__scripts.OnKeyDown(box, "LSHIFT")
+    assert(box.waiting, "a modifier alone is no key")
+    c.ctrl = true
+    box.__scripts.OnKeyDown(box, "Q")
+    c.ctrl = false
+    assert(K.Get("quests") == "CTRL-Q" and c.overrides["CTRL-Q"] and not c.overrides["5"], "Ctrl-Q taken, 5 given back")
+    for _, b in ipairs(c.frames) do if b.id == "quests" and b:IsVisible() and rawget(b, "Bind") then box = b end end
+    press(box)
+    box.__scripts.OnKeyDown(box, "ESCAPE")
+    assert(not box.waiting and K.Get("quests") == "CTRL-Q", "Esc keeps the old key")
+    press(box)
+    box.__scripts.OnKeyDown(box, "BACKSPACE")
+    assert(K.Get("quests") == false and not c.overrides["CTRL-Q"], "Backspace clears it: the game's L is the game's again")
+    -- Follow ticked again goes back to the game's key
+    click(checkBox(c, function(cb) return cb.label and cb.label:GetText() == "Follow the game's Quest log key" end))
+    assert(K.Get("quests") == "follow" and c.overrides.K, "Follow ticked: the game's key again")
+    -- in a fight: nothing set until it ends
+    c.combat = true
+    c.bindings.TOGGLEQUESTLOG = { "L" }
+    fire(c, "UPDATE_BINDINGS")
+    assert(c.overrides.K and not c.overrides.L, "in a fight the overrides wait")
+    c.combat = false
+    fire(c, "PLAYER_REGEN_ENABLED")
+    assert(c.overrides.L and not c.overrides.K, "as it ends: L")
+    -- no guild: no Guild key; joining one takes it
+    c.inGuild = false
+    fire(c, "PLAYER_GUILD_UPDATE")
+    assert(not c.overrides.J and c.overrides.L, "out of a guild: J left to the game")
+    c.inGuild = true
+    fire(c, "PLAYER_GUILD_UPDATE")
+    assert(c.overrides.J, "in a guild again: J taken")
+    -- Clear: none taken, the game's key opens the game's window
+    K.Set("guild", false)
+    assert(not c.overrides.J, "cleared: J the game's")
+    leave(c)
+    print("windows W5: keys by override bindings: nothing before asked, follow the game's key (and its rebinding), a hand-picked key named with what it replaces, Clear, the box's capture (modifiers, Esc, Backspace), the Guild key in a guild alone, nothing set in a fight")
+  end)
+end
+
+-- W6 (sub-project C): the right-click menu (MenuUtil) on the minimap button and the addon compartment: every window's
+-- tabs (a parent opens its window when clicked), the on-screen switches, every Settings section; the officers' entries
+-- for officers alone; a click on an entry opens that tab or section
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1), member("Pim", 3) }, function()
+    local rone = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    local pim = newClient(charOf({ "Pim", 3, "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(rone); login(pim); tickAll(6)
+    rone.C.Keys.Set("guild", "follow"); rone.C.Keys.Set("quests", "follow")
+    local function menuOf(c, how)
+      local n0 = #c.contextMenus
+      if how == "compartment" then c.env.Cute_OnCompartment("Cute", "RightButton") else c.C.UI.mini.__scripts.OnClick(c.C.UI.mini, "RightButton") end
+      assert(#c.contextMenus == n0 + 1, "a menu opened")
+      return c.contextMenus[#c.contextMenus]
+    end
+    local function entry(list, text) for _, e in ipairs(list) do if e.text == text then return e end end end
+    local function names(list) local out = {}; for _, e in ipairs(list) do out[#out + 1] = e.kind == "divider" and "---" or tostring(e.text) end; return table.concat(out, ", ") end
+    local m = menuOf(rone)
+    assert(m[1].kind == "title" and m[1].text == "Cute", "titled Cute")
+    local g, q, s = entry(m, "Guild (J)"), entry(m, "Quests (L)"), entry(m, "Settings")
+    assert(g and q and s and g.responds and q.responds and s.responds, "Guild (J), Quests (L) and Settings, each opening its window when clicked: " .. names(m))
+    assert(names(g.sub) == "Race, Prog, Hall of Shame, Statistics, Officers, Me", "the guild's tabs: " .. names(g.sub))
+    assert(names(q.sub) == "Quests, Route, ---, Step frame, Direction arrow", "the quests' tabs and the on-screen switches: " .. names(q.sub))
+    assert(names(s.sub) == "General, Keys, Modules, Data you share, Columns, Who sees what, Rules, Quests, Route", "every section: " .. names(s.sub))
+    assert(entry(m, "Set up Cute...") and not entry(m, "Reload to apply"), "Set up Cute... before Start; no reload to apply")
+    -- a click opens: a tab, the window, a section; a switch flips the engine's setting
+    entry(g.sub, "Statistics").set()
+    assert(rone.C.UI.page == "game" and rone.C.UI.frame:IsShown(), "Guild > Statistics")
+    entry(q.sub, "Route").set()
+    assert(qwin(rone).page == "route" and qwin(rone).frame:IsShown(), "Quests > Route")
+    q.set()
+    assert(qwin(rone).frame:IsShown(), "Quests (L) clicked: its window")
+    entry(s.sub, "Keys").set()
+    assert(rone.C.UI.Window("settings").section == "keys", "Settings > Keys")
+    local sw = entry(q.sub, "Direction arrow")
+    assert(sw.kind == "check" and sw.get() == true, "the arrow's switch, on")
+    sw.set()
+    assert(rone.env.CuteQuestDB.settings.arrow == false, "flipped off")
+    sw.set()
+    -- the member: no Officers, no Rules
+    local pm = menuOf(pim, "compartment")
+    assert(names(entry(pm, "Guild").sub) == "Race, Prog, Hall of Shame, Statistics, Me" and not names(entry(pm, "Settings").sub):find("Rules", 1, true), "the member's menu: no officers' entries: " .. names(entry(pm, "Guild").sub))
+    -- the compartment's click: the guild window
+    pim.env.Cute_OnCompartment("Cute", "LeftButton")
+    assert(pim.C.UI.frame:IsShown(), "the compartment's click: J")
+    -- the minimap button's tooltip
+    local tip = tipOf(rone.C.UI.mini)
+    assert(tip:find("Click: guild. Right-click: menu. Drag: move.", 1, true), "its tooltip: " .. tip)
+    -- the toc names the compartment's function
+    local toc = assert(io.open(HERE .. "/Cute/Cute.toc")):read("*a")
+    assert(toc:find("## AddonCompartmentFunc: Cute_OnCompartment", 1, true), "the toc names it")
+    leave(rone); leave(pim)
+    print("windows W6: the menu on the minimap button and the compartment: Guild (J), Quests (L) and Settings with every tab, switch and section, parents opening their windows; the officers' entries for officers; a click opens its part")
+  end)
+end
+
+-- W7 (sub-project C): the first-run card, once per character, from its own saved choices. A 0.7 character with Gear off
+-- and Accept for me "On my route": the rows start there, the keys from the game's (J, L), a hand-picked key says what
+-- it replaces; in a fight Start is greyed; Start writes what it showed and nothing else, marks the rows answered, keeps
+-- the keys and reloads, and the quest window opens once after; the card never comes back. Not now changes nothing, the
+-- card does not come back by itself, the menu keeps "Set up Cute..."
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1), member("Pim", 3) }, function()
+    local state = {}
+    local function client(name, rank) return newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true, card = true })) end
+    local c = client("Rone", 1)
+    -- a 0.7 save: Gear off, Journal and Map on, Camp off; the engine's Accept for me on the route
+    local db = { version = "0.7.1", chars = { ["Rone-Forever"] = { counters = {}, modules = { ["Cute_Quest:gear"] = false, ["Cute_Quest:journal"] = true, ["Cute_Quest:map"] = true, ["Cute_Quest:camp"] = false } } } }
+    c.env.CuteQuestDB = { settings = { autoAccept = "route", autoTurnIn = false, guide = { on = true, frame = true }, cuteDefaults = true } }
+    login(c, db)
+    local card = c.env.CuteSetupFrame
+    assert(not (card and card:IsShown()), "not before 3 s")
+    tick(c, 3)
+    card = c.env.CuteSetupFrame
+    assert(card and card:IsShown(), "the card, 3 s after the loading screen")
+    local function row(label) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == label end) end
+    assert(row("Dungeons tab"):GetChecked() and not row("Gear tab"):GetChecked() and row("Quest icons on the game's map"):GetChecked(), "the tabs as 0.7 left them: Gear off")
+    assert(not row("Camp bar and missing buffs"):GetChecked() and not row("Interact light"):GetChecked() and row("Step frame and arrow"):GetChecked(), "Camp off, the step frame on")
+    assert(row("On my route"):GetChecked() and not row("Off"):GetChecked() and not row("Hand finished quests in for me"):GetChecked(), "Accept for me: On my route")
+    local keys = {}
+    for _, b in ipairs(c.frames) do if rawget(b, "Bind") and b:IsVisible() and b.id then keys[b.id] = b end end
+    assert(keys.guild and keys.guild.label:GetText() == "J" and keys.quests and keys.quests.label:GetText() == "L", "the keys from the game's: J and L")
+    assert(texts(c):find("for Rone", 1, true) and texts(c):find("Window and tab changes reload; the rest applies at once.", 1, true), "the card's words:\n" .. texts(c))
+    check(card, "W7 the setup card")
+    -- a hand-picked key for the quests: what it replaces, under its row
+    press(keys.quests)
+    keys.quests.__scripts.OnKeyDown(keys.quests, "5")
+    assert(texts(c):find("replaces Action Button 5", 1, true), "a hand-picked key says what it replaces:\n" .. texts(c))
+    check(card, "W7 the setup card, a hand-picked key")
+    -- in a fight Start is greyed
+    c.combat = true
+    fire(c, "PLAYER_REGEN_DISABLED")
+    local start
+    for _, b in ipairs(c.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == "After combat" then start = b end end
+    assert(start and start.__disabled, "Start greyed in a fight, After combat")
+    c.combat = false
+    fire(c, "PLAYER_REGEN_ENABLED")
+    -- Start: what it showed, nothing else
+    local menuBefore
+    c.C.Windows.Menu()
+    for _, e in ipairs(c.contextMenus[#c.contextMenus]) do if e.text == "Set up Cute..." then menuBefore = true end end
+    assert(menuBefore, "the menu has Set up Cute... until Start")
+    for _, b in ipairs(c.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == "Start" then start = b end end
+    press(start)
+    local ch, s = c.env.CuteDB.chars["Rone-Forever"], c.env.CuteQuestDB.settings
+    assert(c.reloads == 1 and not card:IsShown(), "Start reloads")
+    assert(ch.modules["Cute_Quest:gear"] == false and ch.modules["Cute_Quest:journal"] == true and ch.modules["Cute_Quest:map"] == true and ch.modules["Cute_Quest:camp"] == false, "the modules as shown")
+    assert(s.autoAccept == "route" and s.autoTurnIn == false and s.guide.frame == true, "the engine's choices as shown")
+    assert(ch.keys.guild == "follow" and ch.keys.quests == "5", "the keys: J follows the game's, the quests' 5")
+    for _, id in ipairs({ "guild", "quests", "dungeons", "gear", "mapicons", "step", "camp", "light", "accept", "handin" }) do assert(ch.setup[id] == true, "answered: " .. id) end
+    assert(ch.openAfter == "quests", "the quest window to open after the reload")
+    local db2, qdb = c.env.CuteDB, c.env.CuteQuestDB
+    leave(c)
+    -- the reload: the quest window opens once, the card never again, the keys taken
+    local d = client("Rone", 1)
+    d.env.CuteQuestDB = qdb
+    login(d, db2, true); tickAll(6)
+    assert(qwin(d).frame and qwin(d).frame:IsShown() and d.env.CuteDB.chars["Rone-Forever"].openAfter == nil, "the quest window opened once after Start")
+    assert(not (d.env.CuteSetupFrame and d.env.CuteSetupFrame:IsShown()) and d.overrides["5"] and d.overrides.J, "no card again; the keys taken")
+    assert(not d.C.Setup.Pending(), "nothing left to answer")
+    leave(d)
+    -- Not now: nothing changes, the card waits for the menu
+    local p = client("Pim", 3)
+    login(p); tickAll(5)
+    assert(p.env.CuteSetupFrame and p.env.CuteSetupFrame:IsShown(), "a fresh character's card")
+    local later
+    for _, b in ipairs(p.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == "Not now" then later = b end end
+    local before = p.env.CuteDB.chars["Pim-Forever"].modules and next(p.env.CuteDB.chars["Pim-Forever"].modules)
+    press(later)
+    assert(not p.env.CuteSetupFrame:IsShown() and p.reloads == 0 and next(p.overrides) == nil and (p.env.CuteDB.chars["Pim-Forever"].modules and next(p.env.CuteDB.chars["Pim-Forever"].modules)) == before, "Not now: nothing changed, no key taken")
+    assert(p.C.Setup.Pending(), "the menu keeps Set up Cute...")
+    local pdb, pqdb = p.env.CuteDB, p.env.CuteQuestDB
+    leave(p)
+    local p2 = client("Pim", 3)
+    p2.env.CuteQuestDB = pqdb
+    login(p2, pdb); tickAll(6)
+    assert(not (p2.env.CuteSetupFrame and p2.env.CuteSetupFrame:IsShown()), "the card does not come back by itself")
+    p2.env.SlashCmdList.CUTE("setup")
+    assert(p2.env.CuteSetupFrame and p2.env.CuteSetupFrame:IsShown(), "/cute setup brings it")
+    leave(p2)
+    print("windows W7: the setup card from each character's own choices (a 0.7 save's Gear off and Accept on the route), the game's keys, a hand-picked key's 'replaces', Start greyed in a fight, Start writing what it showed, reloading and the quest window opening once; Not now changing nothing, the card not coming back by itself")
+  end)
+end
+
+-- W8 (sub-project C): the quest to read. A quest row's click in the quest window gives way to the quest (its name, the
+-- game's text for a quest in the log, its objectives, the hand-in, its buttons); Back returns to the list where it was.
+-- Ctrl-click shows it on the arrow instead. Share only in a group and for a quest the game lets you share (the game's
+-- QuestLogPushQuest of its log index); Abandon asks the game's question (the engine's ConfirmAbandon); a quest not taken
+-- has the pick-up list. The band's step reads its quest
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, log = { [7] = 2 } }))
+    login(c); tickAll(6)
+    local QB = c.addons[2].private
+    local L = qwin(c)
+    c.C.UI:Open("quests")
+    -- the band's step reads its quest
+    local steps = QB.Guide.Steps()
+    local s1 = steps[1]
+    assert(s1 and s1.qid, "a step with a quest")
+    local band = L.bandKit and L.bandKit.step
+    assert(band and band:IsShown() and band.fn, "the band's step")
+    band.__scripts.OnClick(band, "LeftButton")
+    local q = QB.Quest.Get(s1.qid)
+    assert(L.reading and L.reading.id == s1.qid and texts(c):find(q.name, 1, true) and texts(c):find("Back", 1, true), "the step's click reads its quest:\n" .. texts(c))
+    check(L.frame, "W8 the quest to read, from the band")
+    local back
+    for _, b in ipairs(L.bandButtons.items) do if b:IsShown() and b.label:GetText() == "Back" then back = b end end
+    press(back)
+    assert(not L.reading, "Back: the list again")
+    -- a quest in the log: its text, objectives, Share only in a group and when pushable, Abandon through the engine
+    local id = next(c.o.log)
+    local held = QB.Quest.Get(id)
+    assert(held and QB.state.log[id], "a quest of the catalog in the log: " .. tostring(id))
+    do
+      QB.Reader.Read(L, held)
+      local t = texts(c)
+      assert(t:find("The words of quest " .. id .. ".", 1, true) and t:find("Objectives", 1, true) and t:find("Abandon", 1, true) and not t:find("Share", 1, true), "a held quest: its text, objectives, Abandon, no Share alone:\n" .. t)
+      c.party = { { "Bo", "MAGE", 5 } }
+      c.pushable = { [id] = true }
+      redraw(c)
+      local share, abandon
+      for _, b in ipairs(L.buttons.items) do if b:IsShown() then if b.label:GetText() == "Share" then share = b elseif b.label:GetText() == "Abandon" then abandon = b end end end
+      assert(share, "in a group and shareable: Share")
+      press(share)
+      assert(c.pushed[#c.pushed] == QB.state.log[id].index, "Share pushes its log index: " .. tostring(c.pushed[#c.pushed]))
+      local m0 = #c.contextMenus
+      press(abandon)
+      assert(#c.contextMenus == m0 + 1 and (c.contextMenus[#c.contextMenus][1].text or ""):find("Abandon", 1, true), "Abandon asks the game's question first")
+      check(L.frame, "W8 a held quest to read, in a group")
+      c.party, c.pushable = nil, nil
+      press((function() for _, b in ipairs(L.bandButtons.items) do if b:IsShown() and b.label:GetText() == "Back" then return b end end end)())
+    end
+    -- a list row: click reads; Ctrl-click shows it on the arrow and reads nothing
+    -- (the windows round: a quest's row is the one with a level, pattern A)
+    local row
+    for _, r in ipairs(L.hosts.quests.pool.items) do if r:IsShown() and r.fn and r.tip and r.lvl:IsShown() then row = row or r end end
+    assert(row, "a quest's row on the Quests tab")
+    if row then
+      L.scroll.bar:SetMinMaxValues(0, 100); L.scroll.bar:SetValue(20)
+      local at = L.scroll.bar:GetValue()
+      press(row)
+      assert(L.reading, "a quest row's click reads it")
+      local back2
+      for _, b in ipairs(L.bandButtons.items) do if b:IsShown() and b.label:GetText() == "Back" then back2 = b end end
+      press(back2)
+      assert(not L.reading and L.scroll.bar:GetValue() == math.min(at, select(2, L.scroll.bar:GetMinMaxValues())), "and Back, to the list where it was")
+      c.ctrl = true
+      press(row)
+      c.ctrl = false
+      assert(not L.reading, "Ctrl-click: on the arrow, nothing read")
+    end
+    assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    leave(c)
+    print("windows W8: the quest to read from the band and the list, Back, Ctrl-click to the arrow; a held quest's text and objectives, Share in a group when shareable (its log index), Abandon through the game's question")
+  end)
+end
+
+-- W9 (sub-project C): the header's buttons to the game's own windows: secure click buttons on the game's micro buttons
+-- (SecureActionButtonTemplate, type click), no child of the window (Cute's windows open in a fight), placed over their
+-- stand-in while the window shows and out of combat, hidden as a fight begins and placed again after; none where a UI
+-- addon removed the micro button
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1), member("Pim", 3) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    c.C.UI:Open("race"); c.C.UI:Open("quests")
+    local W = c.C.Windows
+    local g, q = W.secure.guild, W.secure.quests
+    -- (J and L apart, so neither header stands under the other window: W19 weighs a window in front)
+    c.C.UI.frame.__left, c.C.UI.frame.__top, c.C.UI.gameStand.__left, c.C.UI.gameStand.__top = 0, 1000, 800, 994
+    qwin(c).frame.__left, qwin(c).frame.__top, qwin(c).gameStand.__left, qwin(c).gameStand.__top = 0, 300, 860, 294
+    if W.PlaceAll then W.PlaceAll() end
+    assert(g and q and g.__template:find("SecureActionButtonTemplate", 1, true), "secure buttons for both")
+    assert(g:GetAttribute("type") == "click" and g:GetAttribute("clickbutton") == c.env.GuildMicroButton and q:GetAttribute("clickbutton") == c.env.QuestLogMicroButton, "a click on the game's micro buttons")
+    assert(g.__parent == c.env.UIParent and g:IsShown() and q:IsShown(), "parented to UIParent, shown with their windows")
+    local said = {}
+    for _, l in ipairs(c.C.Diag()) do said[#said + 1] = l end
+    assert(said[#said]:find("^diag windows: game buttons guild shown, quests shown") and said[#said]:find("menus yes", 1, true), "/cute diag's last line, the game buttons: " .. said[#said])
+    assert(c.C.UI.gameStand.label:GetText() == "Guild & Communities" and qwin(c).gameStand.label:GetText() == "Quest log", "named as the game's windows")
+    c.combat = true
+    fire(c, "PLAYER_REGEN_DISABLED")
+    assert(not g:IsShown() and not q:IsShown(), "hidden as a fight begins")
+    local d = c.C.Windows.DiagLine()
+    assert(d:find("game buttons guild hidden, quests hidden", 1, true) and d:find("in combat yes", 1, true) and not d:find("Rone", 1, true), "/cute diag says the buttons' state, no name: " .. d)
+    c.C.UI.frame:Hide(); c.C.UI:Toggle()
+    assert(c.C.UI.frame:IsShown() and not g:IsShown(), "J opens in a fight, the secure button waits")
+    c.combat = false
+    fire(c, "PLAYER_REGEN_ENABLED")
+    assert(g:IsShown(), "placed again after the fight")
+    hideAll(c)
+    assert(not g:IsShown() and not q:IsShown(), "hidden with their windows")
+    leave(c)
+    local p = newClient(charOf({ "Pim", 3, "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, noMicro = true }))
+    login(p); tickAll(6)
+    p.C.UI:Open("race")
+    assert(not p.C.UI.gameStand and not p.C.Windows.secure.guild, "no micro button: no header button")
+    check(p.C.UI.frame, "W9 J without the game's micro buttons")
+    leave(p)
+    print("windows W9: the header's game buttons are secure clicks on the micro buttons, outside the windows, shown with them out of combat, hidden in a fight and back after; none without the micro button")
+  end)
+end
+
+-- W10 (sub-project C): the step frame's click on a quest reads it in the quest window (the engine names the quest,
+-- UI.scrollToQuest, and opens tab 1; the Bridge reads it), Ctrl-click puts it on the arrow without opening anything; the
+-- tracker's row greyed while the step frame is off; a guild window's redraw with nothing new sorts nothing (the sorted
+-- members kept until the roster, the sort or the offline switch changes), and a module's refresh leaves the guild's own
+-- pages alone
+do
+  local function member(name, rank, level) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = level or 5, online = true } end
+  isolated({ member("Rone", 1), member("Pim", 3, 9), member("Tova", 3, 3) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    local QB = c.addons[2].private
+    local L = qwin(c)
+    local step = c.env.QuestBankStep
+    local s1 = QB.Guide.Steps()[1]
+    assert(step and step.rows and s1 and s1.qid, "the step frame and a quest step")
+    assert(not (L.frame and L.frame:IsShown()), "the quest window closed")
+    press(step.rows[1])
+    assert(L.frame:IsShown() and L.page == "quests" and L.reading and L.reading.id == s1.qid, "the step frame's click reads its quest in the quest window")
+    assert(QB.UI.scrollToQuest == nil, "the quest named once")
+    check(L.frame, "W10 the step frame's quest, read")
+    L.frame:Hide()
+    L.reading = nil
+    c.ctrl = true
+    press(step.rows[1])
+    c.ctrl = false
+    assert(not L.frame:IsShown() and not L.reading, "Ctrl-click: on the arrow, no window")
+    -- the tracker's row follows the step frame's
+    c.C.UI.OpenSettings("quests")
+    local function trackerRow()
+      for _, f in ipairs(c.frames) do
+        if f:IsVisible() and f.label and f.label.GetText and (f.label:GetText() or ""):find("^Hide the game's quest tracker") and f.Set then return f end
+      end
+    end
+    local s = c.env.CuteQuestDB.settings
+    assert(s.guide.frame == true and trackerRow() and trackerRow():IsEnabled(), "the frame on: the tracker's row to tick")
+    s.guide.frame = false
+    sdraw(c)
+    assert(trackerRow() and not trackerRow():IsEnabled(), "the frame off: the tracker's row greyed")
+    s.guide.frame = true
+    hideAll(c)
+    -- J's Race: a redraw with nothing new sorts nothing; a roster change, a sort, the offline switch sort again
+    local UI = c.C.UI
+    UI:Open("race")
+    local sorts, realSort = 0, table.sort
+    local function counted(fn)
+      sorts = 0
+      table.sort = function(t, f) if type(t[1]) == "table" and t[1].tier ~= nil then sorts = sorts + 1 end; return realSort(t, f) end
+      local ok, err = pcall(fn)
+      table.sort = realSort
+      assert(ok, err)
+      return sorts
+    end
+    local function order()
+      local out = {}
+      for _, w in ipairs(UI.rows.items) do if w:IsShown() and w.row then out[w.idx] = w.row.name end end
+      return table.concat(out, " ")
+    end
+    assert(counted(function() UI:Draw() end) == 0, "a redraw with nothing new sorts nothing")
+    local before = order()
+    assert(counted(function() c.C.Roster:Changed(); UI:Draw() end) == 1, "a roster change sorts again")
+    local header
+    for _, h in ipairs(UI.headerCells.items) do if h:IsShown() and h.id == "level" then header = h end end
+    assert(counted(function() press(header) end) == 1, "a new sort sorts again")
+    assert(order() ~= before, "and the order follows it: " .. before .. " / " .. order())
+    assert(counted(function() UI:Draw() end) == 0, "and keeps it")
+    -- a module's refresh: the quest window draws again, the guild's own page waits for the guild's news
+    UI:Open("quests")
+    UI.refreshing, L.refreshing = false, false
+    c.env.Cute.Refresh()
+    assert(L.refreshing and not UI.refreshing, "Cute.Refresh: the quest window again, not Race")
+    tick(c, 2)
+    assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    leave(c)
+    print("windows W10: the step frame's quest read in the quest window (Ctrl: the arrow, no window); the tracker's row greyed with the frame off; a guild redraw with nothing new sorts nothing; a module's refresh leaves the guild's own pages alone")
+  end)
+end
+
+-- W11 (sub-project D): the step frame in Cute's look, in place of the game's tracker: a stop of the route standing on the
+-- world with no backdrop (its menu brings Cute's flat one back), its text outlined and shadowed, the step's words at
+-- 15 px; the first run lists three of the quests you hold under it, and Settings > Quests' "Quests under the step" sets
+-- how many (0 to 10), at once
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true,
+      log = { [7] = 2, [33] = 1, [18] = 1, [15] = 1, [21] = 1, [47] = 1, [60] = 1 } }))
+    login(c); tickAll(6)
+    local s = c.env.CuteQuestDB.settings
+    local f = c.env.QuestBankStep
+    assert(s.guide.quests == 3, "the first run: three quests under the step: " .. tostring(s.guide.quests))
+    assert(f and f:IsShown() and not f.__flat and f.__inset == nil, "on the world: no backdrop")
+    assert(f.now.__size == 15 and f.now.__fontFlags == "OUTLINE" and f.now.__shadow and f.rows[1].icon.__w == 24, "the step now: 15 px, outlined and shadowed, its icon 24 px")
+    local function shown() local n = 0; for _, b in ipairs(f.quests) do if b:IsShown() then n = n + 1 end end return n end
+    local n3 = shown()
+    assert(n3 >= 1 and n3 <= 3, "up to three quests under it: " .. n3)
+    check(f, "W11 the step frame, Cute's look, 3 quests")
+    -- Settings > Quests: the stepper, at once
+    c.C.UI:Open("settings", "quests")
+    local plus, value
+    for _, b in ipairs(c.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == "+" then plus = b end end
+    for _, o in everything() do if o.cuteStepValue and visible(o) and o.__parent and o.__parent.__client == c then value = o end end
+    assert(plus and value and value:GetText() == "3" and texts(c):find("Quests under the step", 1, true), "the row: Quests under the step, 3:\n" .. texts(c))
+    press(plus)
+    assert(s.guide.quests == 4, "one more: " .. tostring(s.guide.quests))
+    assert(shown() >= n3, "the frame lists them at once")
+    -- the frame's menu: a backdrop behind it, Cute's flat one
+    local m0 = #c.contextMenus
+    c.addons[2].private.StepFrame:Menu(c.addons[2].private.Guide.Steps()[1])
+    local menu = c.contextMenus[#c.contextMenus]
+    local bd
+    for _, e in ipairs(menu or {}) do if e.text == "Backdrop behind this frame" then bd = e end end
+    assert(#c.contextMenus == m0 + 1 and bd, "the frame's menu offers its backdrop")
+    bd.set()
+    assert(s.guide.backdrop == true and f.__flat, "Cute's flat backdrop behind it")
+    assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    leave(c)
+    print(string.format("windows W11: the step frame in Cute's look (no backdrop, outlined, 15 px, a 24 px icon); %d quests under it from the first run, the Settings row's stepper at once; the frame's menu brings the backdrop", n3))
+  end)
+end
+
+-- W12 (sub-project D): the default places of the windows: each opens centred; Settings, opened by a window's cog, opens
+-- beside that window where the screen has room (its right, else its left), until it is moved; no room, centred. Under
+-- Cute the engine's on-screen pieces take Cute's places (the step frame where the game's tracker stands, the arrow at
+-- the top's middle: QuestBank's harness weighs them, windows D5)
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    assert(c.addons[2].private.cornerPlace == true, "the engine's pieces in Cute's places")
+    local UI = c.C.UI
+    UI:Open("quests")
+    local L, S = qwin(c), UI.Window("settings")
+    assert(L.frame.__points[1].point == "CENTER", "L opens centred")
+    -- L at the screen's left, small: Settings on its right
+    sizeAll(c, 760, 420)
+    L.frame.__left, L.frame.__top = 20, 900
+    S.frame:Hide()
+    press(L.cog)
+    local p = S.frame.__points[1]
+    assert(S.frame:IsShown() and p.point == "TOPLEFT" and p.rel == c.env.UIParent and p.relPoint == "BOTTOMLEFT" and p.x == 20 + 760 + 8 and p.y == 900, "Settings beside L, on its right: " .. tostring(p.point) .. " " .. tostring(p.x))
+    -- at the screen's right: on its left
+    S.frame:Hide()
+    L.frame.__left = 1600 - 760 - 20
+    press(L.cog)
+    p = S.frame.__points[1]
+    assert(p.point == "TOPLEFT" and p.x == 1600 - 760 - 20 - 8 - 760, "on its left: " .. tostring(p.x))
+    -- moved, Settings keeps its own place
+    S.frame.__left, S.frame.__top = 300, 800
+    S.head.__scripts.OnDragStart(S.head); S.head.__scripts.OnDragStop(S.head)
+    S.frame:Hide()
+    L.frame.__left = 20
+    press(L.cog)
+    p = S.frame.__points[1]
+    assert(p.x == 300 and p.y == 800, "its own place once moved: " .. tostring(p.x))
+    leave(c)
+    print("windows W12: windows open centred; Settings beside the window whose cog opened it, where the screen has room, until moved; the engine's pieces in Cute's places")
+  end)
+end
+
+-- W13 (sub-project D): the Quests tab in the windows' look. The band over the whole width: the step's icon at 24 px, its
+-- words at 15 px with the count apart and its share on a 2 px bar, the next two at 14 px, the level line over the XP
+-- bar. Under it at 1000 px and more two columns, the right one 396 px with its own scroll bar: the questing on the left
+-- (Questing, its places with their picture or icon, the open place's quests as two-line rows: the quest POI or the
+-- offer's !, the level in its colour, line 2 the objectives with their cursors or whom it goes to or comes from); on
+-- the right the guild's pick as a card (its art the Encounter Journal's as the EJ cuts it, at 174 x 96), the gear
+-- upgrade, the party. At 760 one column, the right's sections after the questing. Every row an icon and its bar
+do
+  local function member(name, rank, level) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "MAGE", level = level or 20, online = true } end
+  isolated({ member("Rone", 1, 20), member("Pim", 3, 19), member("Ada", 3, 21) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 20 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, log = { [7] = 2, [33] = 1 } }))
+    login(c); tickAll(6)
+    for _, key in ipairs({ "Cute_Quest:journal", "Cute_Quest:gear" }) do c.C.Modules.Set(key, true) end
+    tick(c, 2)
+    local QB = c.addons[2].private
+    local UI = c.C.UI
+    sizeAll(c, 1040, 640)
+    UI:Open("quests")
+    local L = qwin(c)
+    -- the band
+    local kit = L.bandKit
+    local s1 = QB.Guide.Steps()[1]
+    assert(kit and kit:IsShown() and s1, "the band and a step")
+    local words, have, need = QB.Guide.Parts(s1)
+    assert(kit.step.icon:IsShown() and kit.step.icon:GetWidth() == 24 and kit.step.text.__size == 15 and kit.step.text:GetText():sub(1, 8) == words:sub(1, 8),
+      "the step: its icon at 24 px, its words at 15 px: " .. tostring(kit.step.text:GetText()))
+    if have then assert(kit.step.count:GetText() == have .. "/" .. need and kit.track:IsShown(), "the count apart and its bar") end
+    assert(kit.level:IsShown() and kit.level.text:GetText():find("^Level 20") and kit.xp:IsShown(), "the level line over the XP bar: " .. tostring(kit.level.text:GetText()))
+    -- two columns
+    assert(L.side and L.side:IsShown() and L.side:GetWidth() == 396 and L.hosts.questsSide:IsShown(), "the right column, 396 px")
+    local left = L.hosts.quests
+    local quests, places = 0, 0
+    for _, r in ipairs(left.pool.items) do
+      if r:IsShown() and (r.lvl:IsShown() or r.pic:IsShown() or r.slot:IsShown()) then
+        assert(r.slot:IsShown() or r.pic:IsShown(), "every row its icon: " .. tostring(r.name:GetText()))
+        assert(r.bar:IsShown(), "every row its category's bar: " .. tostring(r.name:GetText()))
+        if r.lvl:IsShown() then
+          quests = quests + 1
+          local q
+          for id, x in pairs(QB.Data.QN) do if x == r.name:GetText() then q = QB.Quest.Get(id) end end
+          if q then
+            local held = QB.state.log[q.id]
+            local want = held and (held.complete and "turnin" or "progress") or (q.repeatable and "repeatable" or "accept")
+            local art = c.C.UI.Look.ART[want]
+            assert(r.slot.tex.cuteArt == art, "a quest's icon by where it stands: " .. q.name .. " " .. want)
+            assert(r.lvl:GetText():find("^" .. q.lvl) and r.line2:GetText() ~= "", "its level and line 2: " .. q.name)
+          end
+        elseif r:GetHeight() == 40 then places = places + 1 end
+      end
+    end
+    assert(quests >= 1 and places >= 1, "places and their quests drawn: " .. places .. ", " .. quests)
+    -- the right column: the pick (the Deadmines for a member at 20 with mates at 19 and 21 when the seed is there)
+    local side = L.hosts.questsSide
+    assert(side.pickHead and side.pickHead:IsShown() and side.pickHead.name:GetText() == "Dungeon", "the Dungeon head")
+    if SEEDED then
+      local cw = side.pickCard
+      assert(cw and cw:IsShown() and cw.name:GetText() == "The Deadmines", "the guild's pick as a card")
+      local tc = cw.art.__tc
+      assert(cw.art:GetWidth() == 174 and tc and tc[1] < 0.01 and tc[2] <= 0.68359375 + 1e-6 and tc[2] > 0.67, "its art the Encounter Journal's at 174 x 96, as the EJ cuts it: " .. tostring(tc and tc[2]))
+    end
+    check(L.frame, "W13 the Quests tab, 1040x640")
+    -- 760: one column, the right's sections after the questing
+    sizeAll(c, 760, 420)
+    UI:Open("quests")
+    assert(not L.side:IsShown() and L.hosts.questsUnder:IsShown() and not L.hosts.questsSide:IsShown(), "one column at 760")
+    check(L.frame, "W13 the Quests tab, 760x420")
+    sizeAll(c, 1040, 640)
+    assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    leave(c)
+    print(string.format("windows W13: the Quests tab in the look: the band (24 px icon, 15 px words, the count apart, the level over the XP bar), two columns at 1040 (the pick a card with the EJ's art), one at 760; %d places and %d quests drawn, each its icon and bar", places, quests))
+  end)
+end
+
+-- W14 (sub-project D): the Route tab: the band says where the route takes you over the XP bar, a green segment a stop
+-- that pays; the map on the left (340 x 226, the zone's art tiles as the game lays them, the stops' pins at the game's
+-- size, merged with a count where they would touch, the one stroke from you to the target, you as the game's arrow);
+-- the stops as a timeline (pattern B), the first the target with its ring, the level-up rule where the route crosses a
+-- level; a stop's hover lights its pin, its click shows it on the arrow, a quest's reads it. None: one dim row
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 20, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 20 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, log = { [7] = 2, [33] = 1, [18] = 1, [15] = 1 } }))
+    login(c); tickAll(6)
+    local QB = c.addons[2].private
+    local UI = c.C.UI
+    sizeAll(c, 1040, 640)
+    UI:Open("route")
+    local L = qwin(c)
+    local r = QB.Target.Route()
+    local legs = r and r.legs or {}
+    local kit = L.kits.route
+    assert(kit and kit:IsShown(), "the route's band")
+    local host = L.hosts.route
+    local shown = 0
+    for _, st in ipairs(host.stops.items) do if st:IsShown() then shown = shown + 1 end end
+    if #legs > 0 then
+      assert(kit.line:GetText():find("^Level %d+%.%d to %d+%.%d"), "where the route takes you: " .. tostring(kit.line:GetText()))
+      local pay = 0
+      for _, leg in ipairs(legs) do local g = 0; for _, row in ipairs(leg.rows or {}) do g = g + (row.xp or 0) end; if g > 0 then pay = pay + 1 end end
+      local segs = 0
+      for _, sg in ipairs(kit.xp.segs) do if sg:IsShown() then segs = segs + 1 end end
+      assert(segs == pay, "a green segment a stop that pays: " .. segs .. " of " .. pay)
+      assert(shown == #legs, "a stop a leg: " .. shown .. " of " .. #legs)
+      local first
+      for _, st in ipairs(host.stops.items) do if st:IsShown() and st.ring:IsShown() then first = st end end
+      assert(first and first.node:IsShown() and first.node:GetWidth() == 24, "the target: its ring and its 24 px node")
+      -- the map: the box at 340 x 226, tiles, pins (merged where they would touch), the stroke, you
+      local box = L.leftBox
+      local m = box and box.map
+      assert(box:IsShown() and m and m:GetWidth() == 340 and m:GetHeight() == 226, "the map, 340 x 226")
+      local tiles, pins, merged = 0, 0, 0
+      for _, t in ipairs(m.tiles) do if t:IsShown() then tiles = tiles + 1 end end
+      for _, p in ipairs(m.pins) do if p:IsShown() then pins = pins + 1; assert(p:GetWidth() == 22, "a pin at the game's size"); if p.slot.badge:IsShown() then merged = merged + 1 end end end
+      assert(tiles > 0 and pins >= 1 and pins <= #legs and m.me:IsShown(), "the zone's tiles, the stops' pins, you: " .. tiles .. ", " .. pins)
+      -- a stop's hover lights its pin
+      first.__scripts.OnEnter(first)
+      local lit = 0
+      for _, p in ipairs(m.pins) do if p:IsShown() and p.glow:IsShown() then lit = lit + 1 end end
+      first.__scripts.OnLeave(first)
+      assert(lit == 1, "the target's hover lights its pin")
+      -- the level-up rule, where a stop's level after crosses a whole level
+      local crossings, prev = 0, (QB.state.level or 1) + (QB.state.xp or 0) / math.max(1, QB.state.xpMax or 1)
+      for _, leg in ipairs(legs) do if type(leg.leave) == "number" then if math.floor(leg.leave) > math.floor(prev) then crossings = crossings + 1 end; prev = leg.leave end end
+      local rules = 0
+      for _, rl in ipairs(host.rules.items) do if rl:IsShown() then rules = rules + 1; assert(rl.text:GetText():find("^Level %d+$"), "the rule's words") end end
+      assert(rules == crossings, "a rule a level crossed: " .. rules .. " of " .. crossings)
+      -- a quest's line reads it
+      for _, q in ipairs(first.qs) do if q:IsShown() then q.__scripts.OnClick(q, "LeftButton"); break end end
+      assert(L.reading, "a quest's line reads it")
+      QB.Reader.Back(L)
+    else
+      assert(texts(c):find("Nothing on the route yet: take a quest from Quests.", 1, true), "no route: one row says so")
+    end
+    check(L.frame, "W14 the Route tab, 1040x640")
+    sizeAll(c, 760, 420)
+    UI:Open("route")
+    check(L.frame, "W14 the Route tab, 760x420")
+    -- the map goes with the tab
+    UI:Open("quests")
+    assert(not L.leftBox:IsShown(), "the map's box gone with the Route tab")
+    sizeAll(c, 1040, 640)
+    assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    leave(c)
+    print(string.format("windows W14: the Route tab: the band over the XP bar (a segment a paying stop), the map (tiles, pins at 22 px merged where they touch, the stroke, you), %d stops as a timeline with the target's ring and the level-up rules; a stop's hover lights its pin", #legs))
+  end)
+end
+
+-- W15 (sub-project D): the Dungeons and Gear tabs in the look. Dungeons: the guild's pick as a card across the top
+-- (the Quests tab's own), then the journal, opened on the pick the first time; its tiles carry their range on a 70%
+-- plate and the open one a white edge (QuestBank's DungeonMap.lua under Cute's skin). Gear: the item icons in a 1 px
+-- edge of their quality's colour, the names in Cute's lifted colours (Gear.lua under Cute's skin)
+do
+  local function member(name, rank, level) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "MAGE", level = level or 20, online = true } end
+  isolated({ member("Rone", 1, 20), member("Pim", 3, 19), member("Ada", 3, 21) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 20 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, log = { [7] = 2 } }))
+    login(c); tickAll(6)
+    for _, key in ipairs({ "Cute_Quest:journal", "Cute_Quest:gear" }) do c.C.Modules.Set(key, true) end
+    tick(c, 2)
+    local QB = c.addons[2].private
+    local UI = c.C.UI
+    sizeAll(c, 1040, 640)
+    UI:Open("journal")
+    local L = qwin(c)
+    local pick = L.hosts.journalPick
+    assert(pick and pick:IsShown() and pick.pickHead:IsShown(), "the pick across the top")
+    local f = c.env.QuestBankDungeonMap
+    if SEEDED then
+      assert(pick.pickCard:IsShown() and pick.pickCard:GetWidth() == L.scroll:Width(), "the card at the full width")
+      assert(f and f.cat and f.cat.name == "The Deadmines", "the journal opened on the pick: " .. tostring(f and f.cat and f.cat.name))
+    end
+    local open
+    for _, r in ipairs(f.rows) do if r:IsShown() and r.cat == f.cat then open = r end end
+    assert(open and open.lvPlate and open.lvPlate:IsShown() and open.__bdb[1] == 1, "the open tile: its range on a plate, its white edge")
+    check(L.frame, "W15 the Dungeons tab, 1040x640")
+    sizeAll(c, 760, 420); UI:Open("journal")
+    check(L.frame, "W15 the Dungeons tab, 760x420")
+    sizeAll(c, 1040, 640)
+    -- Gear: the skin's edges and names
+    UI:Open("gear")
+    local gf = QB.Gear.Frame()
+    assert(gf and gf:IsShown(), "the Gear page")
+    local rim = gf.rows[1].button.rim
+    assert(rim.__tex == "color" and rim.__points[1].x == -1, "an item's icon in its 1 px edge, not the game's frame")
+    check(L.frame, "W15 the Gear tab, 1040x640")
+    sizeAll(c, 760, 420); UI:Open("gear")
+    check(L.frame, "W15 the Gear tab, 760x420")
+    sizeAll(c, 1040, 640)
+    assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    leave(c)
+    print("windows W15: the Dungeons tab with the pick's card across the top and the journal opened on it, its tiles plated and the open one white-edged; the Gear tab's items in their quality's edge")
+  end)
+end
+
+-- W16 (sub-project D): J's tables in the look: the guild master's and the officers' rank icons (12 px) before their
+-- class-coloured names; your row by its 0.06 background and your class's bar, never a white bar (white is the priest's);
+-- the XP column a 40 px track, 3 px tall, and the percent; for an officer, a member's Only-you value in the muted grey
+-- with the chat's lock icon at 10 px (a member sees what they saw)
+do
+  local function member(name, rank, class, level) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank == 0 and "Guild Master" or (rank <= 1 and "Officer" or "Raider"), class = class, level = level, online = true } end
+  isolated({ member("Bo", 0, "PRIEST", 30), member("Rone", 1, "WARRIOR", 20), member("Pim", 3, "MAGE", 19) }, function()
+    local bo = newClient(charOf({ "Bo", 0, "Guild Master", "PRIEST", 30 }))
+    local rone = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 20 }))
+    local pim = newClient(charOf({ "Pim", 3, "Raider", "MAGE", 19 }))
+    for _, c in ipairs({ bo, rone, pim }) do login(c) end
+    tickAll(40)
+    local UI = rone.C.UI
+    sizeAll(rone, 1040, 640)
+    UI:Open("race")
+    local function row(short) for _, r in ipairs(UI.rows.items) do if r:IsShown() and r.row and r.row.short == short then return r end end end
+    local rb, rr, rp = row("Bo"), row("Rone"), row("Pim")
+    assert(rb and rr and rp, "the three rows")
+    assert(rb.rank:IsShown() and rb.rank.__tex == 132062 and rb.rank:GetWidth() == 12, "the guild master's mark: UI-Group-LeaderIcon at 12 px")
+    assert(rr.rank:IsShown() and rr.rank.__tex == 132061, "an officer's mark: UI-GROUP-ASSISTANTICON")
+    assert(not (rp.rank and rp.rank:IsShown()), "a member: none")
+    local wc = rone.env.RAID_CLASS_COLORS.WARRIOR
+    assert(sameColor(rr.bar.__color, { wc.r, wc.g, wc.b }) and math.abs(rr.bg.__color[4] - 0.06) < 0.001, "you: your class's bar and the 0.06 background, no white bar")
+    -- the XP column: the track and the percent
+    local xc
+    for _, cell in ipairs(rp.cells) do if cell:IsShown() and cell.def and cell.def.id == "xp" then xc = cell end end
+    assert(xc and xc.track:IsShown() and xc.track:GetWidth() == 40 and xc.track:GetHeight() == 3 and xc.label:GetText():find("^%d+%%$"), "the XP column: a 40 px track and the percent: " .. tostring(xc and xc.label:GetText()))
+    check(UI.frame, "W16 race, the look, 1040x640")
+    -- the officers' page: a member's Only-you gold muted, with the lock
+    UI:Open("officers")
+    local op = row("Pim")
+    local gold
+    for _, cell in ipairs(op.cells) do if cell:IsShown() and cell.def and cell.def.id == "gold" then gold = cell end end
+    assert(gold and gold.label:GetText():find("|T130944:10:10|t", 1, true) and sameColor(gold.label.__color, rone.C.UI.COLORS.MUTE), "an Only-you value, for an officer: muted, the lock: " .. tostring(gold and gold.label:GetText()))
+    check(UI.frame, "W16 officers, the look, 1040x640")
+    sizeAll(rone, 760, 420)
+    UI:Open("race"); check(UI.frame, "W16 race, the look, 760x420")
+    UI:Open("officers"); check(UI.frame, "W16 officers, the look, 760x420")
+    sizeAll(rone, 1040, 640)
+    -- a member sees what they saw: no lock, no value
+    pim.C.UI:Open("race")
+    for _, c in ipairs({ bo, rone, pim }) do leave(c) end
+    print("windows W16: J's tables: the rank marks, you by your background and your class's bar, the XP track and its percent, an officer's Only-you values muted with the lock")
+  end)
+end
+
+-- W17 (sub-project D): nothing a black box. Every head and row of the Quests tab carries its icon (the folded Other
+-- places and Best XP anywhere included); the quest to read shows its objectives with their cursors (a finished one the
+-- ready check) and the hand-in's glyph, its rewards in their quality's edge; the Hall of Shame names its leaders in
+-- their class's colours
+do
+  local function member(name, rank, class, level) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = class or "WARRIOR", level = level or 20, online = true } end
+  isolated({ member("Rone", 1, "WARRIOR", 20), member("Pim", 3, "MAGE", 19) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 20 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, log = { [7] = 2, [33] = 1 } }))
+    local pim = newClient(charOf({ "Pim", 3, "Raider", "MAGE", 19 }))
+    login(c); login(pim); tickAll(30)
+    local QB = c.addons[2].private
+    local UI = c.C.UI
+    sizeAll(c, 1040, 640)
+    UI:Open("quests")
+    local L = qwin(c)
+    local heads = 0
+    for _, r in ipairs(L.hosts.quests.pool.items) do
+      if r:IsShown() and r:GetHeight() == 24 then heads = heads + 1; assert(r.slot:IsShown(), "a head with its icon: " .. tostring(r.name:GetText())) end
+    end
+    assert(heads >= 2, "the Questing head and the folded ones: " .. heads)
+    -- the quest to read
+    local q = QB.Quest.Get(7)
+    QB.Reader.Read(L, q)
+    local t = texts(c)
+    assert(t:find("Objectives", 1, true) and (t:find("|T131013", 1, true) or t:find("|T131023", 1, true) or t:find("|T131021", 1, true) or t:find("|A:Crosshair", 1, true)), "the objectives with their cursors:\n" .. t)
+    assert(t:find("|T132048", 1, true) or t:find("|A:UI%-QuestIcon%-TurnIn") or t:find("|A:QuestNormal", 1, true) or t:find("|T132049", 1, true), "the hand-in's or the giver's glyph")
+    check(L.frame, "W17 the quest to read, the look")
+    QB.Reader.Back(L)
+    -- the Hall of Shame's leaders in their class colours
+    UI:Open("shame")
+    local found
+    for _, card in ipairs(UI.cards.items) do if card:IsShown() and card.leader:GetText():find("|cff%x%x%x%x%x%x%a") then found = card end end
+    assert(found, "a leader named in a class colour")
+    leave(c); leave(pim)
+    print(string.format("windows W17: nothing a black box: %d heads each with its icon, the quest to read with its glyphs, the Hall of Shame's leaders in their class colours", heads))
+  end)
+end
+
+-- W18 (sub-project D): what only the live client can show of the look, in /cute diag (no names): the game's tracker
+-- (out of sight or not, its alpha and scale now, the scale kept to put back) and the game's map (how many of our
+-- quests the game drew itself, how many pins merged). The windows line stays the last
+do
+  isolated({ { name = "Rone-Forever", guid = guidOf("Rone"), rank = 1, rankName = "Officer", class = "WARRIOR", level = 20, online = true } }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 20 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, log = { [7] = 2 } }))
+    login(c); tickAll(30)
+    local said = c.C.Diag()
+    local look
+    for _, l in ipairs(said) do if l:find("^diag look: ") then look = l end end
+    assert(look and look:find("tracker: ", 1, true) and look:find("game's map: ", 1, true) and not look:find("Rone", 1, true), "/cute diag's look line: " .. tostring(look))
+    assert(said[#said]:find("^diag windows: "), "the windows line last: " .. said[#said])
+    leave(c)
+    print("windows W18: /cute diag's look line: the game's tracker and the game's map, no names")
+  end)
+end
+
+-- the review of the windows round. A mouse click on a button as the client delivers it: OnClick for each transition the
+-- button is registered for (RegisterForClicks: the down, then the up), each followed by PostClick. A button made from
+-- SecureActionButtonTemplate with no OnClick of its own runs the template's, SecureActionButton_OnClick
+-- (SecureTemplates.xml:8, SecureTemplates.lua:802-813): with no "useOnKeyDown" attribute it reads the
+-- ActionButtonUseKeyDown CVar (keyDown here; on in a new client, "Cast action keybinds on key down") and acts on the
+-- down when it is on, on the up when off; a type "click" runs its clickbutton's Click (:557-563)
+local function mouseClick(b, keyDown)
+  local clicks = b.__clicks or { "LeftButtonUp" }
+  local function hears(down)
+    for _, r in ipairs(clicks) do
+      if (r == "AnyDown" and down) or (r == "AnyUp" and not down) or r == (down and "LeftButtonDown" or "LeftButtonUp") then return true end
+    end
+    return false
+  end
+  local c = b.__client
+  if c then c.hardware = true end
+  for _, down in ipairs({ true, false }) do
+    if b:IsShown() and hears(down) then
+      if b.__template and b.__template:find("SecureActionButtonTemplate", 1, true) and not b.__scripts.OnClick then
+        local use = b:GetAttribute("useOnKeyDown")
+        if use == nil then use = keyDown ~= false end
+        if (down and use) or (not down and not use) then
+          local d = b:GetAttribute("type") == "click" and b:GetAttribute("clickbutton")
+          if d then d:Click("LeftButton") end
+        end
+      elseif b.__scripts.OnClick then
+        b.__scripts.OnClick(b, "LeftButton", down)
+      end
+      if b.__scripts.PostClick then b.__scripts.PostClick(b, "LeftButton", down) end
+    end
+  end
+  if c then c.hardware = false end
+end
+
+-- W19 (the review of sub-project C): the header's buttons to the game's windows, as the client delivers a click. A
+-- press opens the game's window whatever the ActionButtonUseKeyDown CVar says (the template acts on the down with it
+-- on, the default, and a button that heard only the release never pressed); the game's window stands under Cute's, so
+-- Cute's steps aside as it opens, and stays where the press shut the game's. Each button in its window's strata at a
+-- level over its header, and none over a Cute window in front of its own: J and L open at the same place, and J's
+-- button stood over L's header, so a click on L's "Quest log" opened the guild's. A click raising a window in the
+-- back puts its button back (the watch), a drag puts it away until it is let go. A window first opened in a fight
+-- gets its button once the fight ends (it waited for the window's next opening). Route's "Open the map" puts L away
+-- for the game's map, which stands under it
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1), member("Pim", 3) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    local UI, W, CF = c.C.UI, c.C.Windows, c.env.CommunitiesFrame
+    UI:Open("race")
+    local g = W.secure.guild
+    assert(g and g:IsShown(), "J's button shown with J")
+    assert(g.__strata == "HIGH" and (g.__frameLevel or 0) > UI.gameStand:GetFrameLevel(), "in J's strata, over its header: " .. tostring(g.__strata) .. " " .. tostring(g.__frameLevel))
+    -- the press, with the CVar on and off: the game's window, and J steps aside with its button
+    for _, keyDown in ipairs({ true, false }) do
+      CF:Hide()
+      UI:Open("race")
+      local n = c.microClicks
+      mouseClick(g, keyDown)
+      assert(c.microClicks == n + 1 and CF:IsShown(), "a click opens the game's Guild & Communities (key down " .. tostring(keyDown) .. "): " .. (c.microClicks - n) .. " presses")
+      assert(not UI.frame:IsShown() and not g:IsShown(), "and J steps aside, its button with it")
+    end
+    -- the press that shuts the game's window leaves J open
+    UI:Open("race")
+    mouseClick(g)
+    assert(not CF:IsShown() and UI.frame:IsShown() and g:IsShown(), "the game's window shut by the press: J stays")
+    -- L opened over J at the same place: L's button over its header, J's not shown over L
+    UI:Open("quests")
+    local L = qwin(c)
+    local q = W.secure.quests
+    assert(q and q:IsShown() and not g:IsShown(), "L in front: its button shown, J's away")
+    assert(W.DiagLine():find("game buttons guild covered, quests shown", 1, true), "/cute diag says J's is covered: " .. W.DiagLine())
+    -- a click on J raises it (no script hears that): the watch puts J's button back and L's away
+    UI.frame:Raise()
+    W.watch.__scripts.OnUpdate(W.watch, 0.3)
+    assert(g:IsShown() and not q:IsShown(), "J raised: J's button back, L's away")
+    -- apart, both shown; L dragged: its button away until it is let go
+    UI.frame.__left, UI.frame.__top, UI.gameStand.__left, UI.gameStand.__top = 0, 1000, 800, 994
+    L.frame.__left, L.frame.__top, L.gameStand.__left, L.gameStand.__top = 0, 300, 860, 294
+    W.watch.__scripts.OnUpdate(W.watch, 0.3)
+    assert(g:IsShown() and q:IsShown(), "apart: both shown")
+    L.head.__scripts.OnDragStart(L.head)
+    assert(not q:IsShown() and g:IsShown(), "L dragged: its button away")
+    L.head.__scripts.OnDragStop(L.head)
+    assert(q:IsShown(), "let go: placed again")
+    -- "Quest log": the game's map with its quest panel, and L steps aside
+    mouseClick(q)
+    assert(c.map.shown and not L.frame:IsShown() and not q:IsShown(), "a click opens the game's quest log on its map, L steps aside")
+    c.env.HideUIPanel(c.env.WorldMapFrame)
+    -- Route's "Open the map": the game's map, L away
+    UI:Open("route")
+    local open
+    for _, b in ipairs(c.frames) do if b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == "Open the map" then open = b end end
+    assert(open, "Route's Open the map:\n" .. texts(c))
+    press(open)
+    assert(c.map.shown and not L.frame:IsShown(), "Open the map: the game's map, L away")
+    c.env.HideUIPanel(c.env.WorldMapFrame)
+    hideAll(c)
+    leave(c)
+    -- a window first opened in a fight: its button once the fight ends
+    local p = newClient(charOf({ "Pim", 3, "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(p); tickAll(6)
+    p.combat = true
+    fire(p, "PLAYER_REGEN_DISABLED")
+    p.C.UI:Toggle()
+    assert(p.C.UI.frame:IsShown() and p.C.UI.gameStand and not p.C.Windows.secure.guild, "J opened in a fight: the stand-in, no secure button yet")
+    p.combat = false
+    fire(p, "PLAYER_REGEN_ENABLED")
+    local pg = p.C.Windows.secure.guild
+    assert(pg and pg:IsShown(), "the fight over: J's button made and shown")
+    local n = p.microClicks
+    mouseClick(pg)
+    assert(p.microClicks == n + 1 and p.env.CommunitiesFrame:IsShown(), "and it opens the game's window")
+    leave(p)
+    print("windows W19: the header's game buttons press on the release whatever the key-down CVar, Cute's window steps aside for the game's, none over a Cute window in front (the watch follows a raise), away while dragged; a window opened in a fight gets its button after it; Open the map puts L away")
+  end)
+end
+
+-- W20 (the review of sub-project C): a 0.7 character whose quest modules were all off had Cute_Quest switched off in
+-- the game's AddOns list by 0.7 itself (its M.Set), never by the player. Cute_Quest is the base now, with no box to
+-- tick again: it is switched on there and loaded at the login, so the card's rows are the engine's (the "QuestBank is
+-- loaded" line only while QuestBank serves the engine) and the keys count the quest window. A base that waits for a
+-- fight's end is counted, and its keys follow once it loads; one that does not load is no window: no rows for it on
+-- the card and no key held for it (L stayed the game's)
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local guid = guidOf("Rone")
+    local state = {}
+    local function client() return newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true })) end
+    local function ids(list) local out = {}; for _, r in ipairs(list) do out[#out + 1] = r.id end; return table.concat(out, " ") end
+    local function windows(c) local out = {}; for _, w in ipairs(c.C.Keys.Windows()) do out[#out + 1] = w.id end; return table.concat(out, " ") end
+    local c = client()
+    login(c); tickAll(6)
+    -- 0.7's own word: every quest module off, and Cute_Quest off for this character in the game's AddOns list
+    local ch = c.C.Char()
+    for _, key in ipairs({ "Cute_Quest", "Cute_Quest:journal", "Cute_Quest:gear", "Cute_Quest:map", "Cute_Quest:camp" }) do ch.modules[key] = false end
+    ch.setup, ch.keys = nil, nil
+    state.Cute_Quest = { [guid] = false }
+    local db = c.env.CuteDB
+    leave(c)
+    local d = client()
+    login(d, db); tickAll(6)
+    assert(d.addons[2].loaded and d.C.Modules.byId.quests and state.Cute_Quest[guid] == true, "the base switched on in the AddOns list and loaded: " .. table.concat(d.addonCalls, ", "))
+    local rows = ids(d.C.Setup.Rows())
+    assert(rows:find("quests", 1, true) and rows:find("step", 1, true) and not rows:find("dormant", 1, true), "the card's rows are the engine's, no QuestBank line: " .. rows)
+    assert(windows(d) == "guild quests", "the keys count the quest window: " .. windows(d))
+    leave(d)
+    -- a login in a fight: the base loads after it, counted meanwhile, and its keys follow once it has loaded
+    local e = client()
+    e.combat = true
+    login(e, db); tick(e, 1)
+    assert(not e.addons[2].loaded and e.C.Modules.pending.Cute_Quest and windows(e) == "guild quests", "loading after the fight: the quest window counted: " .. windows(e))
+    e.C.Char().keys = { guild = "follow", quests = "follow" }
+    e.combat = false
+    fire(e, "PLAYER_REGEN_ENABLED"); tick(e, 1)
+    assert(e.addons[2].loaded and e.C.Keys.held.L == "quests", "loaded after the fight, L held for the quest window: " .. tostring(e.C.Keys.held.L))
+    leave(e)
+    -- a base the client will not load: no window, no rows, no key
+    local f = client()
+    local load = f.env.C_AddOns.LoadAddOn
+    f.env.C_AddOns.LoadAddOn = function(x) if x == "Cute_Quest" then return false, "INCOMPATIBLE" end return load(x) end
+    login(f, db); tickAll(6)
+    assert(not f.addons[2].loaded and not f.C.Modules.byId.quests, "the client would not load it")
+    local frows = ids(f.C.Setup.Rows())
+    assert(not frows:find("quests", 1, true) and not frows:find("dormant", 1, true) and not frows:find("dungeons", 1, true), "no quest rows on the card: " .. frows)
+    f.C.Char().keys = { guild = "follow", quests = "follow" }
+    f.C.Keys.Apply()
+    assert(windows(f) == "guild" and f.C.Keys.held.L == nil, "no key held for a window that is not there: " .. windows(f))
+    leave(f)
+    print("windows W20: a 0.7 character's Cute_Quest, off in the AddOns list by 0.7, switched on and loaded as the base: the card's rows the engine's, the keys counting L; after a fight's end when the login was in one; none of it for a base that does not load")
+  end)
+end
+
+-- W21 (the review of sub-project C): Settings as section 7 draws it. Quests has "Backdrop behind the step frame" (off;
+-- greyed while the step frame is off), the row the step frame's own menu had alone; it brings Cute's flat backdrop
+-- behind the frame at once and takes it away again. The open section's 2 px bar is in its category's colour: QUEST
+-- for the quest sections, GROUP for Dungeons and gear, NEW for Data you share, WHITE for the rest
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    c.C.Modules.Set("Cute_Quest:journal", true); tick(c, 1)
+    local s, f = c.env.CuteQuestDB.settings, c.env.QuestBankStep
+    local BD = "Backdrop behind the step frame"
+    local function row(label) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == label end) end
+    c.C.UI:Open("settings", "quests")
+    local r = row(BD)
+    assert(r and not r:GetChecked() and not r.__disabled and s.guide.backdrop ~= true and not f.__flat, "Settings > Quests: the backdrop row, off:\n" .. texts(c))
+    click(r)
+    assert(s.guide.backdrop == true and f.__flat, "ticked: Cute's flat backdrop behind the step frame")
+    click(row(BD))
+    assert(s.guide.backdrop == nil and not f.__flat, "unticked: none again")
+    s.guide.frame = false; c.addons[2].private.StepFrame.Apply()
+    c.C.UI:Open("settings", "quests")
+    assert(row(BD) and row(BD).__disabled, "greyed while the step frame is off")
+    s.guide.frame = true; c.addons[2].private.StepFrame.Apply()
+    c.C.UI:Open("settings", "quests")
+    check(c.C.UI.Window("settings").frame, "W21 Settings > Quests with the backdrop row")
+    -- the open section's bar
+    local K = c.C.UI.COLORS
+    local function bar(id)
+      c.C.UI:Open("settings", id)
+      for _, fr in ipairs(c.frames) do if fr.section == id and fr:IsVisible() then return fr.bar:IsShown() and fr.bar.__color end end
+    end
+    for _, want in ipairs({ { "quests", K.QUEST }, { "route", K.QUEST }, { "dungeons", K.GROUP }, { "share", K.NEW }, { "general", K.WHITE }, { "rules", K.WHITE } }) do
+      local col = bar(want[1])
+      assert(col and sameColor(col, want[2]), "the open section's bar in its category's colour: " .. want[1] .. " " .. (col and table.concat(col, ",") or "none"))
+    end
+    hideAll(c)
+    leave(c)
+    print("windows W21: Settings > Quests has the backdrop row (off, greyed with the frame off, Cute's flat one at once); the open section's bar in its category's colour")
+  end)
+end
+
+-- W22 (the review of sub-project C): the quest to read says only what is so for this character, and keeps the rewards
+-- apart as the engine's tooltip does (Lists.lua UI.RewardLines). "Leads to" names the next steps this character can
+-- take (Q.ForMe: a warrior's Kobold Camp Cleanup leads on to Investigate Echo Ridge and the warrior's letter, never the
+-- five other classes' letters); "You get" heads what comes with the quest, "Choose one" a choice ("Reward" for one
+-- alone), "Rewards include" a list that does not say which; the Classic database's rewards say so, DIM
+do
+  isolated({ { name = "Rone-Forever", guid = guidOf("Rone"), rank = 1, rankName = "Officer", class = "WARRIOR", level = 5, online = true } }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, log = { [7] = 2 } }))
+    login(c); tickAll(6)
+    local QB = c.addons[2].private
+    local UI = c.C.UI
+    UI:Open("quests")
+    local L = qwin(c)
+    local function read(id) QB.Reader.Read(L, QB.Quest.Get(id)); return texts(c) end
+    local function names(ids) local out = {}; for _, id in ipairs(ids) do local q = QB.Quest.Get(id); if q then out[#out + 1] = q.name end end; return out end
+    -- Kobold Camp Cleanup's next steps: the warrior's own, and the other classes' left out
+    local q7 = QB.Quest.Get(7)
+    local mine, others = {}, {}
+    for _, id in ipairs(q7.nextSteps or {}) do local nq = QB.Quest.Get(id); if nq then if QB.Quest.ForMe(nq) then mine[#mine + 1] = id else others[#others + 1] = id end end end
+    assert(#mine >= 1 and #others >= 1, "quest 7 leads on to quests for this character and for others: " .. #mine .. " and " .. #others)
+    local t = read(7)
+    assert(t:find("Leads to " .. table.concat(names(mine), ", "), 1, true), "Leads to: this character's next steps:\n" .. t)
+    for _, n in ipairs(names(others)) do assert(not t:find(n, 1, true), "another class's next step left out: " .. n .. "\n" .. t) end
+    check(L.frame, "W22 the quest to read, its next steps")
+    -- the rewards in their groups
+    t = read(103)
+    local rw = QB.Quest.Rewards(QB.Quest.Get(103))
+    assert(rw and #(rw.r or {}) > 0 and #(rw.c or {}) > 1, "quest 103: rewards that come with it and a choice")
+    local get, choose = t:find("You get", 1, true), t:find("Choose one", 1, true)
+    assert(get and choose and get < choose and not t:find("Rewards: choose one", 1, true), "You get, then Choose one:\n" .. t)
+    t = read(704)
+    assert(t:find("Rewards include", 1, true) and not t:find("Choose one", 1, true), "a list that does not say which: Rewards include:\n" .. t)
+    local _, how = QB.Quest.Rewards(QB.Quest.Get(17))
+    assert(how == "catalog" and QB.Data.RCLASSIC and QB.Data.RCLASSIC[17], "quest 17's rewards are the Classic database's")
+    t = read(17)
+    assert(t:find("Reward", 1, true) and t:find("Rewards from Classic data (may differ in Forever)", 1, true), "the Classic database's rewards say so:\n" .. t)
+    local dimLine
+    for _, l in ipairs(L.labels.items) do if l:IsShown() and l:GetText() == "Rewards from Classic data (may differ in Forever)." then dimLine = l end end
+    assert(dimLine and sameColor(dimLine.__color, UI.COLORS.DIM), "and DIM")
+    check(L.frame, "W22 the quest to read, its rewards")
+    QB.Reader.Back(L)
+    assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    leave(c)
+    print(string.format("windows W22: the quest to read: Leads to names this character's %d next steps (%d others' left out); You get, Choose one and Rewards include apart; the Classic database's rewards said so, DIM", #mine, #others))
+  end)
+end
+
+-- W23 (the review of sub-project C): a key box waiting for a key never takes the keyboard unseen. A redraw of Settings
+-- (a quest event's Cute.Refresh draws an open Settings again, once a second while questing) showed the box idle while
+-- it still took every key, so the next key pressed (W, to walk) became the window's key. The same window's box keeps
+-- waiting and says so now, and a box drawn for another window stops first. A fight starting while one waits stops it
+-- before the lockdown (PLAYER_REGEN_DISABLED), so the fight's first key casts and is never Cute's; a key that reaches
+-- a box in a fight binds nothing
+do
+  isolated({ { name = "Rone-Forever", guid = guidOf("Rone"), rank = 1, rankName = "Officer", class = "WARRIOR", level = 5, online = true } }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    local K = c.C.Keys
+    K.Set("guild", "follow")
+    c.C.UI:Open("settings", "keys")
+    local function box(id) for _, f in ipairs(c.frames) do if rawget(f, "Bind") and f.id == id and f:IsVisible() then return f end end end
+    local b = box("guild")
+    assert(b and b.label:GetText() == "J" and not b.waiting, "the Guild window's box: J")
+    press(b)
+    assert(b.waiting and b.label:GetText() == "Press a key" and b.__keyboard == true, "clicked: waiting for a key")
+    -- a redraw while it waits, Settings' own and a module's refresh
+    c.C.SettingsPage.Redraw()
+    b = box("guild")
+    assert(b and b.waiting and b.label:GetText() == "Press a key" and b.__keyboard == true, "a redraw: still waiting, and it says so: " .. tostring(b and b.label:GetText()))
+    c.C.UI.RefreshAll(); tick(c, 2)
+    b = box("guild")
+    assert(b and b.waiting and b.label:GetText() == "Press a key" and b.__keyboard == true, "a module's refresh: still waiting, and it says so")
+    b.__scripts.OnKeyDown(b, "K")
+    assert(K.Get("guild") == "K" and c.overrides.K and not b.waiting and b.__keyboard == false, "the key pressed is the one taken")
+    -- drawn for another window while it waits: it stops first
+    press(b)
+    assert(b.waiting)
+    b:Bind("quests")
+    assert(not b.waiting and b.__keyboard == false and b.__scripts.OnKeyDown == nil and b.label:GetText() == K.Text("quests"), "drawn for another window: stopped, that window's key shown")
+    -- a fight while it waits: stopped before the lockdown, the old key shown again
+    K.Set("guild", "follow")
+    c.C.UI:Open("settings", "keys")
+    b = box("guild")
+    press(b)
+    local handler = b.__scripts.OnKeyDown
+    assert(b.waiting and handler)
+    fire(c, "PLAYER_REGEN_DISABLED")
+    c.combat = true
+    assert(not b.waiting and b.__keyboard == false and b.__scripts.OnKeyDown == nil and b.label:GetText() == "J", "a fight: the box stops before the lockdown: " .. tostring(b.label:GetText()))
+    -- a key reaching a box in a fight binds nothing
+    b.waiting = true
+    handler(b, "2")
+    c.combat = false
+    fire(c, "PLAYER_REGEN_ENABLED"); tick(c, 1)
+    assert(K.Get("guild") == "follow" and c.overrides["2"] == nil and c.overrides.J, "after the fight: 2 is the game's, J Cute's")
+    hideAll(c)
+    leave(c)
+    print("windows W23: a waiting key box keeps waiting through a redraw and says so, stops when drawn for another window, stops as a fight begins; a key in a fight binds nothing")
+  end)
+end
+
+-- W24 (the review of sub-project C): the menu names a window with the key Cute holds for it, and no other: a character
+-- in no guild has no Guild key (the game's J opens the game's guild window: Keys.lua takes it once in a guild), so the
+-- entry is "Guild"; in a guild, "Guild (J)"; and "Quests (L)" while L is Cute's
+do
+  isolated({ { name = "Rone-Forever", guid = guidOf("Rone"), rank = 1, rankName = "Officer", class = "WARRIOR", level = 5, online = true } }, function()
+    local function entry(list, text) for _, e in ipairs(list) do if e.text == text then return e end end end
+    local function names(list) local out = {}; for _, e in ipairs(list) do out[#out + 1] = tostring(e.text) end; return table.concat(out, ", ") end
+    local function menuOf(c)
+      local n0 = #c.contextMenus
+      c.C.UI.mini.__scripts.OnClick(c.C.UI.mini, "RightButton")
+      assert(#c.contextMenus == n0 + 1, "a menu opened")
+      return c.contextMenus[#c.contextMenus]
+    end
+    local eve = newClient(charOf({ "Eve", 3, "Raider", "ROGUE", 5 }, { inGuild = false, modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(eve); tickAll(6)
+    eve.C.Keys.Set("guild", "follow"); eve.C.Keys.Set("quests", "follow")
+    assert(eve.C.Keys.held.J == nil and eve.C.Keys.held.L == "quests", "no guild: J is not taken, L is")
+    local m = menuOf(eve)
+    assert(entry(m, "Guild") and not entry(m, "Guild (J)") and entry(m, "Quests (L)"), "no guild: Guild with no key, Quests (L): " .. names(m))
+    leave(eve)
+    local rone = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(rone); tickAll(6)
+    rone.C.Keys.Set("guild", "follow"); rone.C.Keys.Set("quests", false)
+    m = menuOf(rone)
+    assert(entry(m, "Guild (J)") and entry(m, "Quests") and not entry(m, "Quests (L)"), "in a guild: Guild (J); L cleared: Quests: " .. names(m))
+    leave(rone)
+    print("windows W24: the menu names each window with the key Cute holds for it: no Guild key outside a guild, none for a cleared one")
+  end)
+end
+
+-- W25 (the review of sub-project C): Settings > Rules names the dungeon pick's two rules in its own words, labels and
+-- tooltips alike ("The dungeon pick names...", never the retired Guide's "Next up"), from Settings itself: the rules'
+-- registry (Rules.lua, the core's, and the page's stats.js written from it) is left as the core has it
+do
+  isolated({ { name = "Rone-Forever", guid = guidOf("Rone"), rank = 1, rankName = "Officer", class = "WARRIOR", level = 5, online = true } }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    c.C.UI:Open("settings", "rules")
+    local function tipFor(label)
+      for _, b in ipairs(c.frames) do
+        if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == "+" then
+          local t = tipOf(b)
+          if t:find(label, 1, true) then return t end
+        end
+      end
+    end
+    for _, r in ipairs({ { "Members near your level (levels)", "The dungeon pick names the guild mates online in a dungeon's range" },
+      { "Dungeons ahead (levels)", "The dungeon pick names the next dungeon to open" } }) do
+      local t = tipFor(r[1])
+      assert(t and t:find(r[2], 1, true) and not t:find("Guide", 1, true) and not t:find("Next up", 1, true), "Settings > Rules: " .. r[1] .. " in the pick's words:\n" .. tostring(t))
+    end
+    hideAll(c)
+    leave(c)
+    print("windows W25: Settings > Rules names the dungeon pick's two rules in its own words, label and tooltip, the rules' registry as the core has it")
+  end)
+end
+
+-- W26 (the review of sub-project D): fewer pins on the game's world map is Cute's, through the host's flag the Bridge
+-- sets (QB.thinMap: QuestMap.lua thins the game's map layer by it; QuestBank alone draws every pin, its windows D9)
+do
+  isolated({ { name = "Rone-Forever", guid = guidOf("Rone"), rank = 1, rankName = "Officer", class = "WARRIOR", level = 5, online = true } }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    local QB = c.addons[2].private
+    assert(QB.thinMap == true and QB.noRaidSync == true and QB.cornerPlace == true, "the Bridge's host flags: thinMap " .. tostring(QB.thinMap))
+    leave(c)
+    print("windows W26: the game's world map thinned under Cute by the Bridge's host flag")
+  end)
+end
 
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end

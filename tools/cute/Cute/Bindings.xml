@@ -1,4 +1,5 @@
 <Bindings>
   <Binding name="CUTE_TOGGLE" category="BINDING_HEADER_CUTE">Cute_Toggle()</Binding>
+  <Binding name="CUTE_QUESTS" category="BINDING_HEADER_CUTE">Cute.Open("quests")</Binding>
   <Binding name="CUTE_SETTINGS" category="BINDING_HEADER_CUTE">Cute_Settings()</Binding>
 </Bindings>

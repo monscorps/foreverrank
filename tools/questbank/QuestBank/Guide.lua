@@ -103,6 +103,17 @@ function G.Text(s)
   return s.text or ""
 end
 
+-- (the windows round) an objective step's words and its count apart, for a host that draws the count on the right (Cute's
+-- step frame and band): "Collect Iron Rivet", 3, 5; a step of another kind, or one with no count: its words alone
+function G.Parts(s)
+  if not (s and s.kind == "objective" and s.obj ~= "d") then return G.Text(s), nil, nil end
+  local e = QB.state.log[s.qid]
+  local o = e and e.objectives and e.objectives[s.slot or 1]
+  local name, have, need = parseLine(o and o.text)
+  if not (have and need) then return G.Text(s), nil, nil end
+  return (VERB[s.obj] or "Do") .. " " .. (name or questName(s.qid)), have, need
+end
+
 -- the shorter words, when the frame's row cannot hold the whole line: "Accept X" without the giver (the row's
 -- tooltip names them); nil for the other kinds, which are cut with "..." as before
 function G.Short(s)
