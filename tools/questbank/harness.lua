@@ -22897,6 +22897,7 @@ do
     c.combat = true; ev(c, "PLAYER_REGEN_DISABLED")
     ev(c, "BAG_UPDATE_DELAYED"); tick(c, 1)
     local cf = c.QB.Remind.castFrame
+    bagReads = 0
     cf.__scripts.OnEvent(cf, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-13", 1978)
     assert(bagReads == 0, "in a fight: a cast reads no bag: " .. bagReads)
     c.combat = false; ev(c, "PLAYER_REGEN_ENABLED"); tick(c, 3)
