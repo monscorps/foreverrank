@@ -328,6 +328,14 @@ f:SetScript("OnEvent", E.Safe(function(self, _, name)
   firstRun()
   -- the modules' switches, now on the saved table (before the engine's login: its files read the flags as they start)
   for id, fn in pairs(QB.Toggles) do fn(Cute.ModuleOn(id)) end
+  -- (the layout round) the on-screen pieces under Cute's layout (Cute/Layout.lua): one lock for them all, which the
+  -- pieces' own drags and the step frame's menu ask and set (QB.LayoutLocked, QB.SetLayoutLocked), and their movers
+  -- (QB.Movers); this character's layout into the engine's settings before the login places them
+  local layout = Cute.Layout
+  if type(layout) == "table" then
+    E.LayoutLocked, E.SetLayoutLocked = layout.Locked, layout.SetLocked
+    layout.Attach(E.Movers)
+  end
   E:Login()
   enteringWorld()
   -- the engine takes the log as read at the game's next QUEST_LOG_UPDATE, which after PLAYER_LOGIN comes at once;

@@ -311,6 +311,8 @@ function W.Menu(owner)
     end
     local s = parent("Settings", function() UI.OpenSettings() end)
     for _, sec in ipairs(C.SettingsPage.Sections(officer)) do item(s, sec.title, function() UI.OpenSettings(sec.id) end) end
+    -- (the layout round) Lock frames and Move frames, the on-screen pieces' (Layout.lua)
+    if C.Layout then C.Layout.Menu(root) end
     local staged, setup = M.Staged(), C.Setup and C.Setup.Pending()
     if staged or setup then root:CreateDivider() end
     if staged then root:CreateButton("Reload to apply", C.Safe(function() if not M.Commit() then UI.OpenSettings("modules") end end, "menu: reload")) end
@@ -354,7 +356,7 @@ do
     if word == "menu" and rest == "" then W.Menu() return end
     -- (help in two lines, as the core's, naming both windows: the core's first line knew one)
     if m == "help" then
-      C.Print("/cute opens the guild window, /cute quests your quests" .. (C.Modules.byId.quests and "" or " (with Cute_Quest)") .. "; /cute settings, keys, setup or menu; /cute race, prog, shame, statistics, officers, me, route, dungeons, gear or a module's name opens that tab.")
+      C.Print("/cute opens the guild window, /cute quests your quests" .. (C.Modules.byId.quests and "" or " (with Cute_Quest)") .. "; /cute settings, keys, layout, setup or menu; /cute race, prog, shame, statistics, officers, me, route, dungeons, gear or a module's name opens that tab.")
       C.Print("/cute modules lists the modules; /cute resend asks the guild for their records again; /cute help more: what to paste in a bug report.")
       return
     end

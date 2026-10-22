@@ -1229,8 +1229,9 @@ local function cardOf(c, name, officer)
   for _, card in ipairs(plan.cards) do if card.d.name == name then return c.C.Guide.CardRows(card, plan), card, plan end end
 end
 -- the tabs shown, left to right, and Settings' sections listed, top to bottom, by id. (The Runs module, on by default,
--- is left out of both lists: the runs stage's scenarios check its tab and its section)
-local ASIDE = { runs = true }
+-- is left out of both lists: the runs stage's scenarios check its tab and its section; Settings > Layout too, the hud
+-- stage's)
+local ASIDE = { runs = true, layout = true }
 local function tabsShown(c)
   local out = {}
   for id, b in pairs(c.C.UI.tabs) do if b:IsShown() and not ASIDE[id] then out[#out + 1] = { id = id, x = b.__points[1].x } end end
@@ -13497,11 +13498,17 @@ do
     assert(table.concat(ids, " "):find("vis rules runs example quests", 1, true), "Settings > Runs under Guild: " .. table.concat(ids, " "))
     M.Set("Cute_Example", false); tick(c, 1)
     UI.OpenSettings("general")
-    assert(#c.C.SettingsPage.Sections(true) == 13, "every section a player can have: " .. #c.C.SettingsPage.Sections(true))
+    -- (the hud round) Settings > Layout makes fourteen: at 760 x 420 the list scrolls, its rows still 22 px, as the design
+    -- allows past thirteen; at Settings' own 800 x 560 every section fits unscrolled
+    assert(#c.C.SettingsPage.Sections(true) == 14, "every section a player can have: " .. #c.C.SettingsPage.Sections(true))
     local navList
     for _, f in ipairs(c.frames) do if f.section and f:IsVisible() then navList = f.__parent.__scrollParent end end
-    assert(navList and not navList.bar:IsShown(), "the list fits unscrolled at 760 x 420")
+    assert(navList and navList.bar:IsShown(), "fourteen at 760 x 420: the list scrolls")
     check(S.frame, "W3 settings at 760x420, every section listed")
+    sizeAll(c, 800, 560)
+    UI.OpenSettings("general")
+    assert(not navList.bar:IsShown(), "the list fits unscrolled at 800 x 560")
+    check(S.frame, "W3 settings at 800x560, every section listed")
     sizeAll(c, 1040, 640)
     -- the Statistics page: its categories in a column of their own (shown on that page alone); a leader only above 0
     UI:Open("game")
@@ -13691,7 +13698,7 @@ do
     -- (merge2: the run report's Runs tab and its section among them)
     assert(names(g.sub) == "Race, Prog, Hall of Shame, Runs, Statistics, Officers, Me", "the guild's tabs: " .. names(g.sub))
     assert(names(q.sub) == "Quests, Route, ---, Step frame, Direction arrow", "the quests' tabs and the on-screen switches: " .. names(q.sub))
-    assert(names(s.sub) == "General, Keys, Modules, Data you share, Columns, Who sees what, Rules, Runs, Quests, Route", "every section: " .. names(s.sub))
+    assert(names(s.sub) == "General, Keys, Layout, Modules, Data you share, Columns, Who sees what, Rules, Runs, Quests, Route", "every section: " .. names(s.sub))
     assert(entry(m, "Set up Cute...") and not entry(m, "Reload to apply"), "Set up Cute... before Start; no reload to apply")
     -- a click opens: a tab, the window, a section; a switch flips the engine's setting
     entry(g.sub, "Statistics").set()
@@ -14947,6 +14954,308 @@ do
     said[#said + 1] = "the engine's five files byte for byte; Reminders eight rows at both sizes"
     leave(r)
     print("hud: " .. table.concat(said, "; "))
+  end)
+end
+
+-- The hud round, part 2: layout mode (the windows design's section 6, its testing's E): the on-screen pieces moved,
+-- scaled, shown and locked from Cute (Layout.lua) over the engine's movers (QB.Movers), each character its own layout.
+-- E1 /cute layout: a mover for every piece that is on (the step frame, the arrow, Reminders, Buffs), none for a window
+--    nor for a piece that is off; each its name and its scale; the bar at the top's middle (Move frames, Snap, Reset
+--    all, Done); the layout checks of the bar and the movers
+-- E2 a drag: the 8 px grid from the screen's middle; another mover's edge within 6 px wins; Shift moves freely; the drop
+--    writes the engine's place and this character's layout
+-- E3 the wheel: 5 % a notch, 50 to 200 %; the arrow's frame in QuestBank's look, its dial (compassSize) in the compass
+-- E4 the arrow keys nudge the mover under the mouse by 1 px and take the key; any other key goes on to the game; Esc is
+--    Done: hidden, saved, locked, and the account's starting layout written
+-- E5 a mover's right-click: Reset, 80 / 100 / 120 / 150 %, Hide and Show (the piece's own switch)
+-- E6 a fight: Move frames refused and greyed in the menu; a fight's start ends layout mode, saved
+-- E7 the lock: locked by default; the engine's drags ask Cute's lock (the step frame stays); the menu's Lock frames and
+--    Settings > Layout's row unlock it (the step frame drags); the minimap always the game's (QB.LayoutLocked)
+-- E8 per character: a new character takes the account's starting layout; another's places never written over its
+--    own; Copy from takes another's; logout writes back a place the engine moved itself
+-- E9 Reset windows: every window at its default size, centred, their kept places gone
+-- E10 the game's Edit Mode opens and closes it, taking no key of the game's
+-- E11 QuestBank loaded: no mover, nothing of QuestBank's settings written, the menu entry and the rows greyed with
+--    "QuestBank is loaded"
+-- E12 Settings > Layout at both sizes; Settings > Keys names the Move frames key (the game's Key Bindings)
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1), member("Pim", 3), member("Quill", 3) }, function()
+    local said = {}
+    local state = {}
+    local function client(name, rank) return newClient(charOf({ name, rank or 1, (rank or 1) <= 1 and "Officer" or "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true })) end
+    local function near(a, b) return a and b and math.abs(a - b) < 0.01 end
+    local function lastMenu(c) return c.contextMenus[#c.contextMenus] end
+    local function entry(list, text) for _, e in ipairs(list or {}) do if e.text == text then return e end end end
+    local function cursorAt(c, x, y) c.env.GetCursorPosition = function() return x, y end end
+    -- a drag of a mover from a point inside it to a point on the screen
+    local function drag(c, mv, toX, toY)
+      cursorAt(c, mv.l + 10, mv.t - 10)
+      mv.__scripts.OnDragStart(mv)
+      cursorAt(c, toX + 10, toY - 10)
+      mv.__scripts.OnUpdate(mv, 0.016)
+      mv.__scripts.OnDragStop(mv)
+    end
+    local function up(c)
+      login(c); tickAll(6)
+      c.C.Modules.Set("Cute_Quest:camp", true); tick(c, 1)
+      local QB = c.addons[2].private
+      QB.Arrow:Set(true)
+      QB.Remind.Refresh()
+      return QB
+    end
+    -- E1
+    local c = client("Rone")
+    local QB = up(c)
+    local L, s = c.C.Layout, c.env.CuteQuestDB.settings
+    assert(QB.LayoutLocked == c.env.Cute.Layout.Locked and QB.SetLayoutLocked == c.env.Cute.Layout.SetLocked and L.pieces == QB.Movers, "the engine's lock and movers are Cute's (Bridge.lua)")
+    c.env.SlashCmdList.CUTE("layout")
+    assert(L.on, "/cute layout: layout mode")
+    local shown = {}
+    for key, mv in pairs(L.movers) do if mv:IsShown() then shown[#shown + 1] = key .. "=" .. mv.name:GetText() end end
+    table.sort(shown)
+    assert(table.concat(shown, ", ") == "arrow=Arrow, buffs=Buffs, camp=Reminders, step=Step frame", "a mover for each piece on, none for a window: " .. table.concat(shown, ", "))
+    for key, mv in pairs(L.movers) do
+      local l, t, w, h = QB.Movers[key].rect()
+      assert(near(mv.l, l) and near(mv.t, t) and near(mv:GetWidth(), w) and mv.scaleText:GetText() == "100%", key .. ": over its piece at 100%")
+      assert(mv.__bdc and near(mv.__bdc[4], 0.88) and mv.__bdb and near(mv.__bdb[1], 0.42), key .. ": PANEL at 0.88, a 1 px EDGE")
+      check(mv, "E1 the " .. key .. " mover")
+    end
+    local bar = c.env.CuteLayoutBar
+    assert(bar and bar:IsShown() and bar.__points[1].point == "TOP" and bar.__points[1].relPoint == "TOP", "the bar at the top's middle")
+    local bt = texts(c)
+    for _, w in ipairs({ "Move frames", "Snap", "Reset all", "Done" }) do assert(bt:find(w, 1, true), "the bar says " .. w) end
+    check(bar, "E1 the layout mode bar")
+    -- (the render pass: the whole screen in layout mode, the movers over their pieces)
+    if LAYOUT_OUT then GEN = GEN + 1; layouts[#layouts + 1] = dumpLayout(c.env.UIParent, "E1 layout mode: the movers over the step frame, the arrow, Reminders and Buffs") end
+    said[#said + 1] = "a mover for each of the four pieces on, none for a window; the bar"
+    -- E2
+    local mv, arrowMv = L.movers.camp, L.movers.arrow
+    -- (a spot no other mover's edge is within 6 px of, off the grid: x across, y up)
+    local function clear(lo, size, axis)
+      for v = lo, lo + 400 do
+        local ok = (v - (axis == "x" and 800 or 500)) % 8 ~= 0
+        for _, o in pairs(L.movers) do
+          if o ~= mv and o:IsShown() then
+            local e1, e2 = axis == "x" and o.l or o.t - o.h, axis == "x" and o.l + o.w or o.t
+            for _, mine in ipairs({ v, v + size }) do if math.abs(mine - e1) <= 6 or math.abs(mine - e2) <= 6 then ok = false end end
+          end
+        end
+        if ok then return v end
+      end
+    end
+    local gx, gb = clear(300, mv.w, "x"), clear(150, mv.h, "y")
+    drag(c, mv, gx, gb + mv.h)
+    assert((mv.l - 800) % 8 == 0 and (mv.t - mv.h - 500) % 8 == 0 and math.abs(mv.l - gx) <= 4 and math.abs(mv.t - mv.h - gb) <= 4,
+      "snapped to the 8 px grid from the middle: " .. mv.l .. ", " .. mv.t .. " from " .. gx .. ", " .. (gb + mv.h))
+    local rp = s.remind.pos
+    local l, t, w, h = QB.Movers.camp.rect()
+    assert(rp and near(l, mv.l) and near(t, mv.t), "dropped: Reminders moved there")
+    local ch = c.env.CuteDB.chars["Rone-Forever"]
+    assert(ch.layout and ch.layout.pieces.camp and ch.layout.pieces.camp.point == "CENTER" and near(ch.layout.pieces.camp.x, rp.x - 800), "the drop in this character's layout")
+    drag(c, mv, arrowMv.l + 4, 300)
+    assert(mv.l == arrowMv.l, "an edge within 6 px of the arrow's: on it: " .. mv.l .. " vs " .. arrowMv.l)
+    c.shift = true
+    drag(c, mv, gx, gb + mv.h)
+    c.shift = false
+    assert(mv.l == gx and mv.t == gb + mv.h, "Shift: free: " .. mv.l .. ", " .. mv.t)
+    said[#said + 1] = "a drag snaps to the grid and to an edge within 6 px, Shift frees it; the drop writes the place and the layout"
+    -- E3
+    for _ = 1, 4 do mv.__scripts.OnMouseWheel(mv, 1) end
+    assert(near(s.remind.scale, 1.2) and mv.scaleText:GetText() == "120%" and near(ch.layout.pieces.camp.scale, 1.2), "four notches up: 120%")
+    for _ = 1, 40 do mv.__scripts.OnMouseWheel(mv, 1) end
+    assert(near(s.remind.scale, 2) and mv.scaleText:GetText() == "200%", "200% at most")
+    for _ = 1, 60 do mv.__scripts.OnMouseWheel(mv, -1) end
+    assert(near(s.remind.scale, 0.5) and mv.scaleText:GetText() == "50%", "50% at least")
+    for _ = 1, 10 do mv.__scripts.OnMouseWheel(mv, 1) end
+    assert(s.remind.scale == nil and mv.scaleText:GetText() == "100%", "back at 100%")
+    for _ = 1, 10 do arrowMv.__scripts.OnMouseWheel(arrowMv, 1) end
+    assert(near(s.arrowScale, 1.5) and near(c.env.QuestBankArrow:GetScale(), 1.5) and arrowMv.scaleText:GetText() == "150%", "the arrow at 150%: its frame, in QuestBank's look")
+    s.arrowStyle = "compass"; QB.Arrow:Restyle()
+    for _ = 1, 10 do arrowMv.__scripts.OnMouseWheel(arrowMv, -1) end
+    assert(s.compassSize == 48 and near(c.env.QuestBankArrow:GetScale(), 1), "the compass: its dial by compassSize, its frame at 100%")
+    for _ = 1, 10 do arrowMv.__scripts.OnMouseWheel(arrowMv, 1) end
+    assert(s.compassSize == 72 and arrowMv.scaleText:GetText() == "150%", "the compass at 150%: a 72 px dial")
+    for _ = 1, 10 do arrowMv.__scripts.OnMouseWheel(arrowMv, -1) end
+    s.arrowStyle = "questbank"; QB.Arrow:Restyle()
+    said[#said + 1] = "the wheel 5% a notch from 50 to 200%, the arrow's frame or its compass's dial"
+    -- E4
+    mv.__scripts.OnEnter(mv)
+    local l0, t0 = mv.l, mv.t
+    bar.__scripts.OnKeyDown(bar, "LEFT")
+    assert(mv.l == l0 - 1 and mv.t == t0 and bar.__propagate == false, "LEFT over a mover: 1 px left, the key taken")
+    bar.__scripts.OnKeyDown(bar, "UP")
+    assert(mv.t == t0 + 1 and near(QB.Movers.camp.rect(), l0 - 1), "UP: 1 px up, the piece with it")
+    bar.__scripts.OnKeyDown(bar, "W")
+    assert(bar.__propagate == true, "W goes on to the game")
+    mv.__scripts.OnLeave(mv)
+    bar.__scripts.OnKeyDown(bar, "LEFT")
+    assert(mv.l == l0 - 1 and bar.__propagate == true, "no mover under the mouse: the arrow keys are the game's")
+    L.SetLocked(false)
+    bar.__scripts.OnKeyDown(bar, "ESCAPE")
+    assert(not L.on and not mv:IsShown() and not bar:IsShown() and ch.layout.locked == true, "Esc: Done, hidden, locked")
+    local def = c.env.CuteDB.layoutDefault
+    assert(def and def.pieces.camp and near(def.pieces.camp.x, ch.layout.pieces.camp.x), "Done: the account's starting layout")
+    said[#said + 1] = "the arrow keys nudge the mover under the mouse and the rest go on; Esc is Done, locked, the starting layout written"
+    -- E5
+    L.Enter()
+    local step = L.movers.step
+    step.__scripts.OnClick(step, "RightButton")
+    local m = lastMenu(c)
+    assert(m[1].kind == "title" and m[1].text == "Step frame" and entry(m, "Reset") and entry(m, "80%") and entry(m, "100%  (now)") and entry(m, "120%") and entry(m, "150%") and entry(m, "Hide"),
+      "the mover's menu: Reset, 80/100/120/150%, Hide")
+    entry(m, "120%").set()
+    assert(near(s.guide.scale, 1.2) and step.scaleText:GetText() == "120%", "120%: the step frame's scale")
+    entry(m, "Reset").set()
+    assert(s.guide.x == nil and near(s.guide.scale or 1, 1) and step.scaleText:GetText() == "100%", "Reset: its default place at 100%")
+    entry(m, "Hide").set()
+    assert(s.guide.frame == false and not c.env.QuestBankStep:IsShown() and step:IsShown() and near(step.__alpha, 0.5) and step.scaleText:GetText():find("Hidden", 1, true), "Hide: the piece's own switch off, its mover dimmed")
+    step.__scripts.OnClick(step, "RightButton")
+    entry(lastMenu(c), "Show").set()
+    assert(s.guide.frame == true and c.env.QuestBankStep:IsShown() and near(step.__alpha, 1), "Show: back")
+    said[#said + 1] = "a mover's menu: Reset, four sizes, Hide and Show"
+    -- E6
+    c.combat = true
+    fire(c, "PLAYER_REGEN_DISABLED")
+    assert(not L.on and not step:IsShown(), "a fight's start ends it")
+    local n0 = #c.chat
+    assert(L.Enter() == false and table.concat(c.chat, "\n", n0 + 1):find("after combat", 1, true), "in a fight: refused, said")
+    c.C.UI.mini.__scripts.OnClick(c.C.UI.mini, "RightButton")
+    local mm = lastMenu(c)
+    local move = entry(mm, "Move frames...")
+    assert(move and move.off and entry(mm, "Lock frames"), "the menu: Lock frames, and Move frames... greyed in a fight")
+    c.combat = false
+    said[#said + 1] = "a fight ends it saved; in one it is refused and greyed"
+    -- E7
+    local sf = c.env.QuestBankStep
+    local starts = 0
+    rawset(sf, "StartMoving", function() starts = starts + 1 end)
+    assert(L.Locked("step") and QB.LayoutLocked("step") and QB.LayoutLocked("minimap"), "locked by default; the minimap always the game's")
+    sf.__scripts.OnDragStart(sf)
+    assert(starts == 0, "locked: the step frame stays")
+    c.C.UI.mini.__scripts.OnClick(c.C.UI.mini, "RightButton")
+    local lock = entry(lastMenu(c), "Lock frames")
+    assert(lock.kind == "check" and lock.get() == true, "the menu's Lock frames, ticked")
+    lock.set()
+    assert(not L.Locked("step") and ch.layout.locked == false, "unticked: unlocked")
+    sf.__scripts.OnDragStart(sf); sf.__scripts.OnDragStop(sf)
+    assert(starts == 1, "unlocked: the step frame drags where it stands")
+    s.guide.x, s.guide.y = nil, nil; QB.StepFrame.Apply()
+    c.C.UI:Open("settings", "layout")
+    local row = checkBox(c, function(cb) return cb.label and cb.label:GetText() == "Lock frames" end)
+    assert(row and not row:GetChecked(), "Settings > Layout: Lock frames, unticked")
+    click(row)
+    assert(L.Locked("step"), "ticked in Settings: locked")
+    said[#said + 1] = "locked by default; the engine's drag asks it; the menu and Settings unlock it; the minimap the game's"
+    -- E8
+    local db, qdb = c.env.CuteDB, c.env.CuteQuestDB
+    local ronePos = { x = s.remind.pos.x, y = s.remind.pos.y }
+    leave(c)
+    local p = client("Pim", 3)
+    p.env.CuteQuestDB = qdb
+    login(p, db, true); tickAll(6)
+    local pch = p.env.CuteDB.chars["Pim-Forever"]
+    local ps = p.env.CuteQuestDB.settings
+    assert(pch.layout and pch.layout.locked == true and near(pch.layout.pieces.camp.x, def.pieces.camp.x) and near(ps.remind.pos.x, ronePos.x), "a new character: the account's starting layout, locked")
+    local PL = p.C.Layout
+    p.C.Modules.Set("Cute_Quest:camp", true); tick(p, 1)
+    assert(PL.Enter() and PL.movers.camp:IsShown(), "Pim's layout mode, Reminders on")
+    drag(p, PL.movers.camp, 200, 200)
+    PL.Done()
+    local pimPos = { x = ps.remind.pos.x, y = ps.remind.pos.y }
+    assert(not near(pimPos.x, ronePos.x), "Pim moved Reminders")
+    leave(p)
+    local r2 = client("Rone")
+    r2.env.CuteQuestDB = qdb
+    login(r2, db, true); tickAll(6)
+    local rs = r2.env.CuteQuestDB.settings
+    assert(near(rs.remind.pos.x, ronePos.x) and near(rs.remind.pos.y, ronePos.y), "Rone again: Rone's own places, never Pim's")
+    local others = r2.C.Layout.Others()
+    assert(#others == 1 and others[1][1] == "Pim-Forever", "Copy from: the other characters with a layout")
+    r2.C.Layout.CopyFrom("Pim-Forever")
+    assert(near(rs.remind.pos.x, pimPos.x) and near(r2.env.CuteDB.chars["Rone-Forever"].layout.pieces.camp.x, pimPos.x - 800), "Copy from: Pim's places, kept as Rone's")
+    rs.arrowPos = { "TOP", -333, -444 }
+    fire(r2, "PLAYER_LOGOUT")
+    local ap = r2.env.CuteDB.chars["Rone-Forever"].layout.pieces.arrow
+    assert(ap.point == "TOP" and ap.x == -333 and ap.y == -444, "logout: a place the engine moved itself written back")
+    said[#said + 1] = "a new character takes the starting layout; each keeps its own; Copy from; logout writes back"
+    -- E9
+    r2.C.UI:Open("quests")
+    local Lw = qwin(r2)
+    Lw.frame.__left, Lw.frame.__top = 200, 700
+    Lw.head.__scripts.OnDragStart(Lw.head); Lw.head.__scripts.OnDragStop(Lw.head)
+    Lw.frame:SetSize(900, 500)
+    assert(r2.env.CuteDB.winPos and r2.env.CuteDB.winPos.quests, "L's place kept")
+    r2.C.UI:Open("settings", "layout")
+    local reset
+    for _, b in ipairs(r2.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == "Reset windows" then reset = b end end
+    press(reset)
+    local sp = r2.C.UI.SPEC.quests
+    assert(r2.env.CuteDB.winPos == nil and r2.env.CuteDB.pos == nil and Lw.frame.__w == sp.w and Lw.frame.__h == sp.h and Lw.frame.__points[1].point == "CENTER", "Reset windows: default size, centred, no kept place")
+    said[#said + 1] = "Reset windows: every window at its default size, centred"
+    -- E10
+    r2.env.EventRegistry:TriggerEvent("EditMode.Enter")
+    local RL = r2.C.Layout
+    assert(RL.on and RL.from == "edit" and RL.movers.step:IsShown() and r2.env.CuteLayoutBar.__keyboard == false, "the game's Edit Mode: the movers, no key taken")
+    r2.env.EventRegistry:TriggerEvent("EditMode.Exit")
+    assert(not RL.on and not RL.movers.step:IsShown(), "its exit: done")
+    said[#said + 1] = "the game's Edit Mode opens and closes it"
+    -- E12
+    for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+      sizeAll(r2, size[1], size[2])
+      r2.C.UI:Open("settings", "layout")
+      local t = texts(r2)
+      assert(t:find("The step frame, the arrow, Reminders and Buffs. Windows always move by their header.", 1, true) and t:find("Snap to the grid", 1, true), "Settings > Layout's rows:\n" .. t)
+      check(sframe(r2), string.format("Settings > Layout, %dx%d", size[1], size[2]))
+      r2.C.UI:Open("settings", "keys")
+      assert(texts(r2):find("Move frames", 1, true), "Settings > Keys: the Move frames key")
+      check(sframe(r2), string.format("Settings > Keys, %dx%d", size[1], size[2]))
+    end
+    sizeAll(r2, 1040, 640)
+    assert(#(r2.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    said[#said + 1] = "Settings > Layout and Keys at both sizes"
+    leave(r2)
+    -- E11
+    local q = client("Quill", 3)
+    local isLoaded = q.env.C_AddOns.IsAddOnLoaded
+    q.env.C_AddOns.IsAddOnLoaded = function(x) if x == "QuestBank" then return true, true end return isLoaded(x) end
+    local settings = { guide = { on = true, frame = true, scale = 1 }, arrow = true, remind = { on = true }, share = { party = true } }
+    local snapshot = {}
+    local function keysOf(t, pre) for k, v in pairs(t) do snapshot[pre .. tostring(k)] = type(v) == "table" and "table" or v; if type(v) == "table" then keysOf(v, pre .. tostring(k) .. ".") end end end
+    keysOf(settings, "")
+    q.env.QuestBankAPI = {
+      version = "6.2.0", logReady = true, state = { level = 5, log = {} }, routeNow = { legs = {}, xp = 0, level = 5, t = 0 },
+      Settings = function() return settings end, MarkDirty = function() end, Comma = tostring, Short = tostring,
+      Model = { Busy = function() return false end }, Data = { CAT = {} }, Quest = { Get = function() return nil end },
+      Guide = { Steps = function() return {} end, Text = function(st) return st.text end, TimeToLevel = function() return nil end, MemberSteps = function() return {} end },
+      StepFrame = { Menu = function() end, Apply = function() end }, Arrow = { Set = function() end },
+      UI = { PlaceGroups = function() return {}, {}, nil, nil, nil end, Candidates = function() return {} end, QuestClick = function() end, QuestTooltip = function() end },
+      Target = { Route = function() return { legs = {}, xp = 0, level = 5, t = 0 } end }, Run = { Get = function() return nil end },
+      DMap = { Attach = function() end, Refresh = function() end }, Gear = { Attach = function() end, Refresh = function() end, RefreshSoon = function() end },
+      Remind = { ROWS = QB.Remind.ROWS, ON_LABEL = QB.Remind.ON_LABEL, Settings = function() return settings.remind end, Hidden = function() return {} end,
+                 SetRow = function() end, SetNever = function() end, Refresh = function() end },
+    }
+    login(q); tickAll(5)
+    local QL = q.C.Layout
+    assert(QL.pieces == nil and QL.Why() == "QuestBank is loaded: its frames are its own.", "QuestBank loaded: no pieces")
+    n0 = #q.chat
+    q.env.SlashCmdList.CUTE("layout")
+    assert(not QL.on and table.concat(q.chat, "\n", n0 + 1):find("QuestBank is loaded", 1, true), "/cute layout says why")
+    q.C.UI.mini.__scripts.OnClick(q.C.UI.mini, "RightButton")
+    assert(entry(lastMenu(q), "Move frames...").off, "the menu's Move frames... greyed")
+    q.C.UI:Open("settings", "layout")
+    assert(texts(q):find("QuestBank is loaded: its frames are its own.", 1, true), "Settings > Layout says so")
+    local qrow = checkBox(q, function(cb) return cb.label and cb.label:GetText() == "Lock frames" end)
+    assert(qrow and qrow.__disabled, "its rows greyed")
+    check(sframe(q), "Settings > Layout, QuestBank loaded")
+    fire(q, "PLAYER_LOGOUT")
+    local after = {}
+    for k in pairs(snapshot) do after[k] = true end
+    local function same(t, pre) for k, v in pairs(t) do local key = pre .. tostring(k); assert(snapshot[key] ~= nil and (type(v) == "table" or snapshot[key] == v), "QuestBank's setting " .. key .. " untouched"); if type(v) == "table" then same(v, key .. ".") end end end
+    same(settings, "")
+    said[#said + 1] = "QuestBank loaded: no mover, nothing of its settings written, the entry and the rows greyed"
+    leave(q)
+    print("hud layout: " .. table.concat(said, "; "))
   end)
 end
 
