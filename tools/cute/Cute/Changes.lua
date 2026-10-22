@@ -2,6 +2,7 @@
 -- One line per version, newest first: Core.lua prints this version's at the first login on it.
 local _, C = ...
 C.CHANGES = {
+  ["0.8.0"] = "Cute's own windows: J for the guild, L for quests with Quests, Route, Dungeons and Gear tabs you switch on or off, and Settings with nothing cut; a first-run card asks which parts you want and binds the keys; right-click the minimap button to jump anywhere; click any quest to read it, Share or Abandon; a new look in the game's art, colours by kind, the step frame a stop on the route, fewer pins on the game's map; after dungeons, raids and group runs, the run report: award cards with each player's picture, Send to party, the run history.",
   ["0.7.2"] = "The guild channel rides out errors and the dungeon chat lockdown, a /reload no longer floods the guild, big guilds cost far less, a half-loaded roster deletes nobody, and /cute diag says what the channel is doing; the quest modules rank by XP a minute, share nothing with the guild, leave the minimap alone unless Map is on, and say Cute, not QuestBank.",
   ["0.7.1"] = "Camp shows missing buffs until you have them, your party's too; Quests can hide the game's quest tracker; Map leaves grey quests off and draws one line at a time.",
   ["0.7.0"] = "QuestBank's guiding inside Cute: the step now on the Guide, and Quests, Route, Journal, Gear, Map and Camp as modules you switch on.",
