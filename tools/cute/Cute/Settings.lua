@@ -651,7 +651,9 @@ end
 
 -- the modules this character runs, by window: Guild (always) with the built-in modules under it (Runs, Achievements,
 -- Records); the always-on base (a module addon's: the quests window with its Route tab) with the quests window's tabs
--- under it; then the rest (Map, Reminders, any other module addon's). A change waits: the boxes show it at once, the
+-- under it; then the rest (Map, Reminders, any other module addon's). A module with a switch for the whole guild
+-- (def.guildSwitch: Achievements, Records) has it under its row, the officers' to click and greyed for members; it
+-- applies at once, as the officers' settings do. A change waits: the boxes show it at once, the
 -- one reload line at the top says so with Reload now and Undo, and closing Settings asks (Setup.lua); a few words on
 -- the right where something is not as the box says, its notes in the tooltip
 local function drawModules(col, officer)
@@ -680,6 +682,13 @@ local function drawModules(col, officer)
       if e.notes then tip:AddLine(e.notes, 0.85, 0.85, 0.85, true) end
       if e.status then tip:AddLine(e.status, 0.7, 0.7, 0.7, true) end
     end, indent)
+    local gs = e.def and e.def.guildSwitch
+    if type(gs) == "table" and type(gs.on) == "function" and type(gs.set) == "function" then
+      col:Check(e.title .. " for the whole guild", gs.on(), officer, function(v) gs.set(v); redraw() end,
+        not officer and "Set by the officers" or nil, gs.tip, indent + 20)
+      local note = officer and gs.note and gs.note()
+      if note then col:Note(note) end
+    end
   end
   col:Check("Guild", true, false, function() end, "always")
   for _, e in ipairs(guild) do box(e, 20) end

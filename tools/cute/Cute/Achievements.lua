@@ -1,7 +1,7 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- Achievements: the run report's design, section 5 (with 9.1, 12, 13.2 and 14). A built-in module, on by default,
--- which a member may switch off for themselves (Settings > Modules) and the officers for the whole guild (its own
--- section: a switch that travels with the officers' rules, as a threshold does, Rules.lua and Policy.lua). Forever's
+-- which a member may switch off for themselves (Settings > Modules) and the officers for the whole guild (the switch
+-- beside its row there, which travels with the officers' rules as a threshold does, Rules.lua and Policy.lua). Forever's
 -- achievements are its Legacy Challenges, read with the achievement API by id.
 --   Earns    your own ACHIEVEMENT_EARNED (none the account earned before, no guild achievement) goes to the officers as
 --            1A|<id>|<server time>, on GUILD where the officers' policy routes Achievements (ac) Everyone, else
@@ -679,25 +679,25 @@ function A.Diag()
 end
 
 ----------------------------------------------------------------------------
--- Settings > Achievements: the officers' switch for the whole guild (greyed for members, who set it said), and where
--- guild news cannot vouch for a first on this officer's client, why
+-- the officers' switch for the whole guild, beside the module's row in Settings > Modules (Settings.lua draws it,
+-- greyed for members with who sets it), and where guild news cannot vouch for a first on this officer's client, why
 ----------------------------------------------------------------------------
-function A.Settings(_, col)
-  local isOfficer = C.Roster:MeOfficer()
-  col:Head("Achievements")
-  col:Check("On for the whole guild", A.GuildOn(), isOfficer, function(on)
+A.GuildSwitch = {
+  on = function() return A.GuildOn() end,
+  set = function(on)
     C.Policy:SetRule("achGuild", (not on) and 0 or nil)
     C.Comm:PolicySoon()
     A:SetRecent()
     C.UI:Draw()
-  end, not isOfficer and "Set by the officers" or nil, function(tip)
-    tip:AddLine("On for the whole guild", 1, 1, 1)
-    tip:AddLine("Off: no member's Cute sends achievements. Each member can also switch Achievements off in Modules.", 0.85, 0.85, 0.85, true)
+  end,
+  tip = function(tip)
+    tip:AddLine("Achievements for the whole guild", 1, 1, 1)
+    tip:AddLine("Off: no member's Cute sends achievements, whatever their own Achievements box says. It applies at once and reaches the guild with the officers' settings.", 0.85, 0.85, 0.85, true)
     local by = C.Rules.SetBy("achGuild")
     if by then tip:AddLine("Switched off by " .. C.Rules.WhoName(by) .. ".", 0.7, 0.7, 0.7, true) end
-  end)
-  if isOfficer and A.NewsWords() then col:Note(A.NewsWords()) end
-end
+  end,
+  note = function() return A.NewsWords() end,
+}
 
 ----------------------------------------------------------------------------
 -- events. The module's own (heard while it is on): your earns, the server's line, guild news, your level. And a core
@@ -748,7 +748,7 @@ end
 C:RegisterModule({
   id = "ach", title = "Achievements", order = 46, builtin = true, default = true,
   notes = "Achievements as members earn them, and guild firsts, reach the officers' Queue.",
-  settings = function(ui, col) A.Settings(ui, col) end,
+  guildSwitch = A.GuildSwitch,
   events = events,
   onToggle = function(on)
     -- (switched off: no 1A, nothing held to send later, no ach_recent)

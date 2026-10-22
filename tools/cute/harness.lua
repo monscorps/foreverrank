@@ -15805,13 +15805,13 @@ do local function cardsStage()
     fire(max, "ACHIEVEMENT_EARNED", 150016, false)
     tickAll(5)
     assert(guildSends(max, "^1A|") == m0 and max.C.Sample:Value("ach_recent") == nil and not A(ada).Taking(), "off for the guild: no 1A, no ach_recent, nothing taken")
-    -- Settings > Achievements: the officers' switch, greyed for a member with who sets it
+    -- the officers' switch, greyed for a member with who sets it (fix-cute-ui: beside its row in Settings > Modules)
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
       for _, c in ipairs({ ada, max }) do
-        c.C.UI:Open("settings", "ach")
+        c.C.UI:Open("settings", "modules")
         sizeAll(c, size[1], size[2])
-        c.C.UI:Open("settings", "ach")
-        assert(texts(c):find("On for the whole guild", 1, true) and (c == ada or texts(c):find("Set by the officers", 1, true)), "Settings > Achievements")
+        c.C.UI:Open("settings", "modules")
+        assert(texts(c):find("Achievements for the whole guild", 1, true) and (c == ada or texts(c):find("Set by the officers", 1, true)), "Settings > Modules, Achievements' switch")
         -- (merge3: Settings its own window)
         check(sframe(c), string.format("achievements: settings, %s, %dx%d", c == ada and "officer" or "member", size[1], size[2]))
       end
@@ -15850,7 +15850,7 @@ do local function cardsStage()
     check(CF.frame, "achievements: a guild card and an achievement card")
     CF.frame:Hide()
   end)
-  said[#said + 1] = "achievements: an earn one 1A on GUILD, none for an earn the account had or a guild one; the officers' day row, nothing on a member's client; an unknown id, an untrusted sender, a 21st in ten minutes dropped; over six hours old dated by its arrival, two by its own; held inside and through the lockdown, sent once out; the server's line and guild news for a member without Cute, marked server, a guild card, a secret line nothing; ach_recent the newest twenty within 200 bytes, whispered to the officers, an officer away learns from it; Only you whispered and locked; off for a member and for the guild; Settings > Achievements; /cute diag cards"
+  said[#said + 1] = "achievements: an earn one 1A on GUILD, none for an earn the account had or a guild one; the officers' day row, nothing on a member's client; an unknown id, an untrusted sender, a 21st in ten minutes dropped; over six hours old dated by its arrival, two by its own; held inside and through the lockdown, sent once out; the server's line and guild news for a member without Cute, marked server, a guild card, a secret line nothing; ach_recent the newest twenty within 200 bytes, whispered to the officers, an officer away learns from it; Only you whispered and locked; off for a member and for the guild; its guild switch in Settings > Modules; /cute diag cards"
 
   -- (14) firsts: the ledger seeds 90 s into an officer's first login (guild news, the members' ach_recent); an earn with
   -- no earlier entry is "Guild first?"; one guild news shows earlier is not; one whose earlier entry rests on one
@@ -16254,15 +16254,15 @@ do local function cardsStage()
     assert(recOf(oti, "c36") and recOf(oti, "c36").v == 900 and toasts(oti) == 0 and newsRecords(oti) == 0, "a login's records: quiet")
     assert(Rc(oti).IsOn("c36") and Rc(oti).IsOn("deaths") and Rc(oti).IsOn("g2007"), "the officers' list in the answer to 1G")
     for _, r in ipairs(H(oti).Rows()) do assert(r.src ~= "record", "no Record? row from a login") end
-    -- the Records chip and Settings > Records, for an officer and a member, at both sizes; Preview
+    -- the Records chip and its guild switch in Settings > Modules, for an officer and a member, at both sizes; Preview
     for _, c in ipairs({ ola, dot }) do
       H(c).OpenChip("records")
       for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
         sizeAll(c, size[1], size[2])
         H(c).OpenChip("records")
         check(c.C.UI.frame, string.format("records: the chip, %s, %dx%d", c == ola and "officer" or "member", size[1], size[2]))
-        c.C.UI:Open("settings", "records")
-        assert(texts(c):find("On for the whole guild", 1, true) and (c == ola or texts(c):find("Set by the officers", 1, true)), "Settings > Records")
+        c.C.UI:Open("settings", "modules")
+        assert(texts(c):find("Records for the whole guild", 1, true) and (c == ola or texts(c):find("Set by the officers", 1, true)), "Settings > Modules, Records' switch")
         -- (merge3: Settings its own window)
         check(sframe(c), string.format("records: settings, %s, %dx%d", c == ola and "officer" or "member", size[1], size[2]))
       end
@@ -16291,8 +16291,8 @@ do local function cardsStage()
     assert(recOf(eli, "c36").v == e0 and toasts(eli) == 2, "off: no table kept, no toast")
     assert(toasts(dot) == 2 and recOf(dot, "c36").v == 700, "a second record today on the others: quiet, its row again")
     eli.C.Modules.Set("records", true)
-    ola.C.UI:Open("settings", "records")
-    local sw = checkBox(ola, function(f) return f.label and f.label:GetText() == "On for the whole guild" end)
+    ola.C.UI:Open("settings", "modules")
+    local sw = checkBox(ola, function(f) return f.label and f.label:GetText() == "Records for the whole guild" end)
     assert(sw, "the guild's switch")
     click(sw)
     ola.C.Comm:SendPolicy()
@@ -16323,7 +16323,7 @@ do local function cardsStage()
     local msg = Rc(ola).Message()
     assert(#msg <= 255, "1O within a message: " .. #msg)
     assert(tableBytes < 50000, "the table at 400: " .. tableBytes)
-    said[#said + 1] = string.format("records: every record off at first; a second voice within 5 s a clear record and one toast on every client, nothing sent; members above the range quiet; a holder's own improvement quiet; a second record of an instance in a day its News row again; within 5%% quiet, past it the next day a toast; an untrusted voice and a clear under two minutes none; a most record on a Record? row in the officer's Queue alone, its holder's improvement none, one off the table alone; an untrusted member's and an out-of-bounds most none; a stat the officers close leaves every table and locks its row; a statistic added on the band, filled and a Record? row; a member's 1O refused, one a minute, a login's records quiet and the list in the answer to 1G; the chip and Settings > Records at both sizes, Preview; off for a member and for the guild; /cute diag cards; the table at 400 %d KB, 1O %d bytes", math.ceil(tableBytes / 1024), #msg)
+    said[#said + 1] = string.format("records: every record off at first; a second voice within 5 s a clear record and one toast on every client, nothing sent; members above the range quiet; a holder's own improvement quiet; a second record of an instance in a day its News row again; within 5%% quiet, past it the next day a toast; an untrusted voice and a clear under two minutes none; a most record on a Record? row in the officer's Queue alone, its holder's improvement none, one off the table alone; an untrusted member's and an out-of-bounds most none; a stat the officers close leaves every table and locks its row; a statistic added on the band, filled and a Record? row; a member's 1O refused, one a minute, a login's records quiet and the list in the answer to 1G; the chip and the guild switch in Settings > Modules at both sizes, Preview; off for a member and for the guild; /cute diag cards; the table at 400 %d KB, 1O %d bytes", math.ceil(tableBytes / 1024), #msg)
   end)
 
   -- the Records chip with nothing in it, for a member and an officer
@@ -19686,7 +19686,8 @@ do
     c.C.UI:Open("settings", "modules")
     local rows, labels, x = UIX.rows(c), {}, {}
     for _, r in ipairs(rows) do labels[#labels + 1] = r.label; x[r.label] = r.x end
-    local want = { "Guild", "Runs", "Achievements", "Records", "Quests and Route", "Dungeons tab", "Gear tab", "Map", "Reminders" }
+    -- (each guild switch under its module: U11)
+    local want = { "Guild", "Runs", "Achievements", "Achievements for the whole guild", "Records", "Records for the whole guild", "Quests and Route", "Dungeons tab", "Gear tab", "Map", "Reminders" }
     assert(table.concat(labels, ", ") == table.concat(want, ", "), "Settings > Modules by window: " .. table.concat(labels, ", "))
     local g, q = x["Guild"], x["Quests and Route"]
     assert(x.Runs == g + 20 and x.Achievements == g + 20 and x.Records == g + 20, "Runs, Achievements and Records under Guild")
@@ -19700,6 +19701,43 @@ do
     c.C.Modules.Undo()
     leave(c)
     print("fix-cute-ui U10: Settings > Modules by window, Guild's modules under Guild and the quest tabs under Quests and Route; one reload line")
+  end)
+end
+
+-- U11. Achievements' and Records' guild switches sit beside their module's row in Settings > Modules ("Achievements
+--     for the whole guild" under Achievements), greyed for a member with "Set by the officers"; Settings has no
+--     one-row Achievements or Records section. An officer's click applies at once, as the section's did
+do
+  isolated({ UIX.member("Rone", 1), UIX.member("Pim", 3) }, function()
+    local o = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    local m = newClient(charOf({ "Pim", 3, "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(o); login(m); tickAll(60)
+    for _, c in ipairs({ o, m }) do
+      local ids = {}
+      for _, sec in ipairs(c.C.SettingsPage.Sections(c.C.Roster:MeOfficer())) do ids[#ids + 1] = sec.id end
+      local list = " " .. table.concat(ids, " ") .. " "
+      assert(not list:find(" ach ", 1, true) and not list:find(" records ", 1, true), "no Achievements or Records section:" .. list)
+      c.C.UI:Open("settings", "modules")
+      local rows = UIX.rows(c)
+      for _, t in ipairs({ "Achievements", "Records" }) do
+        local at
+        for i, r in ipairs(rows) do if r.label == t then at = i end end
+        local sw = at and rows[at + 1]
+        assert(sw and sw.label == t .. " for the whole guild" and sw.x == rows[at].x + 20, "the guild switch under " .. t .. ": " .. tostring(sw and sw.label))
+        if c == m then
+          assert(sw.row.__disabled and texts(c):find("Set by the officers", 1, true), "greyed for a member, who sets it said")
+        else
+          assert(not sw.row.__disabled, "the officer's to click")
+        end
+      end
+      check(sframe(c), "fix-cute-ui U11 Settings > Modules with the guild switches, " .. (c == o and "officer" or "member"))
+    end
+    click(UIX.row(o, "Records for the whole guild"))
+    assert(o.C.Rules.Get("recGuild") == 0 and not UIX.row(o, "Records for the whole guild"):GetChecked(), "an officer's click: off for the guild at once")
+    click(UIX.row(o, "Records for the whole guild"))
+    assert(o.C.Rules.Get("recGuild") ~= 0, "and on again")
+    leave(o); leave(m)
+    print("fix-cute-ui U11: Achievements' and Records' guild switches under their rows in Settings > Modules, greyed for members; no one-row sections")
   end)
 end
 
