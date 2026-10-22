@@ -13,6 +13,19 @@ Node 18 or later, no network and no wrangler: D1 is a stand-in. It checks the al
 
 ## Deploying the finds round (QuestBank 6.2, Cute's uploader)
 
+The QuestBank page on this round asks for `Cute_Quest.lua` (the upload box cuts it to the allow-list), which only this
+Worker takes: the one live before it answers every `Cute_Quest.lua` with 400 "not a QuestBank.lua file". Pages publishes
+main on push, and this Worker goes live only by the owner's deploy, so the release goes in this order:
+
+1. Deploy the Worker (the deploy, below) and check `/api/finds.json` answers.
+2. Rebuild the uploaders from `uploader/` as it is now: `python3 tools/build_uploader.py` (QuestBank-Uploader.zip,
+   which reads `Cute_Quest.lua` too) and `python3 tools/build_uploader.py --cute` (Cute-Uploader.zip, for Cute's page).
+3. `python3 -I tools/questbank/build_page.py --online`: it stops while the zip does not read `Cute_Quest.lua` or the
+   live Worker has no finds round.
+4. Only then push main.
+
+The deploy:
+
 1. `cd worker && npx wrangler deploy` (the code: the `cutequest-savedvars` kind, Cute.lua refused, every QuestBank.lua and
    Cute_Quest.lua cut to the allow-list before it is stored, `GET /api/finds.json`, `POST /api/finds`).
 2. The `finds_data` table is created on the first publish; to make it by hand:

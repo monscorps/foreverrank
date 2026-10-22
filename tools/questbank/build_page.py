@@ -9,6 +9,7 @@ by level band, Forever data against the Classic seed, what players' games confir
 <!--@name--> ... <!--/@name--> markers, then check the page:
   - every local href/src exists beside the page or under the repo; the ids the game and the site link to (share,
     install, help) are there, and every /questbank/#id link elsewhere on the site lands on an id
+  - a page that asks for Cute_Quest.lua links an Uploader zip that reads it, and (--online) the live Worker takes it
   - every class the page's own style defines starts with qb- and none appears in forever.css; every class the markup
     and the scripts use is styled; no selector reaches past qb- (the one html rule respects reduced motion)
   - no version number, placeholder or retired wording outside the markers and the changelog labels (Prep, No bag,
@@ -247,6 +248,42 @@ def check_links(html):
         problem("links to missing files or ids: " + ", ".join(sorted(set(bad))))
     else:
         ok("every local link, image and id resolves; share, install and help are there; the site's links in land")
+
+
+def check_cute_quest(html):
+    """The page asks for Cute_Quest.lua (the upload box, its words and its script) only alongside what takes one: the
+    Uploader zip it links reads Cute_Quest.lua (tools/build_uploader.py packs uploader/ as it is now), and, with --online,
+    the live Worker is the finds round's (GET /api/finds.json answers v 1; worker/README.md deploys it). Pages publishes
+    main on push and the Worker waits for the owner's wrangler deploy, so the order at release is: deploy the Worker,
+    rebuild the zip, then push"""
+    if "Cute_Quest.lua" not in html:
+        ok("the page asks for no Cute_Quest.lua")
+        return
+    with zipfile.ZipFile(UPZIP) as z:
+        script = next((z.read(n).decode("utf-8", "replace") for n in z.namelist() if n.endswith("QuestBank-Uploader.ps1")), "")
+    if "Cute_Quest.lua" not in script:
+        problem("the page asks for Cute_Quest.lua, but QuestBank-Uploader.zip's uploader does not read it: python3 tools/build_uploader.py "
+                "(and deploy the Worker first: worker/README.md)")
+    else:
+        ok("the page asks for Cute_Quest.lua and the Uploader zip reads it")
+    if "--online" not in sys.argv:
+        print("  skip the live Worker's finds round (--online asks it)")
+        return
+    import urllib.request
+    api = re.search(r'\|\| "(https://[^"]+)"\)', html)
+    url = (api.group(1) if api else "https://foreverrank.andustemme.workers.dev").rstrip("/") + "/api/finds.json"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (questbank build check)"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            body = json.loads(r.read().decode("utf-8", "replace"))
+        live = isinstance(body, dict) and body.get("v") == 1
+    except Exception:  # noqa: BLE001 - any failure is a Worker without the finds round
+        live = False
+    if live:
+        ok("the live Worker is the finds round's: it takes Cute_Quest.lua")
+    else:
+        problem("the page asks for Cute_Quest.lua, but the live Worker has no finds round (%s): deploy it first (worker/README.md), "
+                "or every Cute_Quest.lua sent gets 'not a QuestBank.lua file'" % url)
 
 
 def check_online(html):
@@ -693,6 +730,7 @@ def main():
     page_rules = rules_of(page_style(html))
     site_rules = rules_of(open(SITE_CSS, encoding="utf-8").read())
     check_links(html)
+    check_cute_quest(html)
     check_online(html)
     check_classes(html, page_rules, site_rules)
     check_stale(html, version)
