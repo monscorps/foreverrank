@@ -3804,10 +3804,11 @@ do
     tick(slow, 1)
     assert(slow.C.Rules.SeedState() == "fresh" and slow.C.Stats.EnchantKnown(9, "4.1") and slow.C.Sample:Value("unenchanted")[9], "done a frame on: the seed's wrist now asks for an enchant")
     redraw(slow)
-    -- (fix-cute-ui: a member's tooltip says what the pick means; where it comes from is /cute diag's)
+    -- (fix-cute-ui: a member's tooltip says what the pick means; where it comes from is /cute diag's. fix2-cute-ui V1:
+    -- the guild has met nothing yet, so the foot says nothing of the guild)
     local sd0 = #slow.chat
     slow.env.SlashCmdList.CUTE("diag")
-    assert(tipOf(guideHead(slow)):find("Levels and bosses as the guild has met them.", 1, true)
+    assert(not tipOf(guideHead(slow)):find("as the guild has met them", 1, true)
       and table.concat(slow.chat, "\n", sd0 + 1):find("diag guide: From research and the beta, checked against this client", 1, true), "and /cute diag says where the Guide's knowledge comes from")
     leave(slow)
     -- a partial seed: a dungeon without a range, one without a name, one whose range is upside down, a boss without an id,
@@ -4342,10 +4343,12 @@ do
     -- (the windows round: the pick a card, its name on it and the whole line in its tooltip; no pick, the line itself)
     local shown = cyPlan.next.card and cyPlan.next.card.d.name or cyPlan.next.line
     local headTip = tipOf(guideHead(cy))
-    -- (fix-cute-ui: a member's tooltip says what the pick means; where it comes from is /cute diag's)
+    -- (fix-cute-ui: a member's tooltip says what the pick means; where it comes from is /cute diag's. fix2-cute-ui V1:
+    -- the guild's levels and bosses said where they are the guild's: no seed, all of it; with the seed, the pick's range
+    -- is learned but bosses are the beta's, and the foot says nothing of the guild)
     local cd0 = #cy.chat
     cy.env.SlashCmdList.CUTE("diag")
-    assert(first:find(shown, 1, true) and headTip:find(cyPlan.next.line, 1, true) and headTip:find("Levels and bosses as the guild has met them.", 1, true)
+    assert(first:find(shown, 1, true) and headTip:find(cyPlan.next.line, 1, true) and (headTip:find("Levels and bosses as the guild has met them.", 1, true) ~= nil) == (not SEEDED)
       and table.concat(cy.chat, "\n", cd0 + 1):find(SEEDED and "diag guide: From research and the beta, checked against this client" or "diag guide: Nothing shipped with this copy", 1, true),
       "the page opens on the pick, what it means in the head's tooltip, where it comes from in /cute diag:\n" .. headTip)
     -- /cute diag on the officer: the seed's state, with what was learned
@@ -20279,7 +20282,8 @@ do
     openGuide(m); redraw(m)
     local head = guideHead(m)
     local tip = head and tipOf(head) or ""
-    assert(tip:find("Levels and bosses as the guild has met them.", 1, true), "the member's pick says what it means:\n" .. tip)
+    -- (fix2-cute-ui V1: said where it is so, no seed; the seed's research range, which the guild has not met, not)
+    assert((tip:find("Levels and bosses as the guild has met them.", 1, true) ~= nil) == (m.C.Rules.SeedState() == "none"), "the member's pick says what it means:\n" .. tip)
     -- (the how-sure words beside a range or a boss, "from research", are the Guide's own: the foot alone is the source's)
     for _, w in ipairs({ first, detail, "Research build", "the beta, checked", "This client is", "Nothing shipped", "The research calls it" }) do
       assert(not tip:find(w, 1, true), "no source words for a member: " .. w .. "\n" .. tip)
@@ -20308,7 +20312,8 @@ end
 
 -- U10. Settings > Modules lists the modules by window: Guild (always) with Runs, Achievements and Records under it;
 --     Quests and Route (always) with the Dungeons and Gear tabs under it; then Map and Reminders. One reload line, at
---     the top ("Changes here apply on reload.", "Applies on reload." with Reload now and Undo once a change waits); none
+--     the top ("Module boxes apply on reload; the guild switches apply at once." since fix2-cute-ui V5, "Applies on
+--     reload." with Reload now and Undo once a change waits); none
 --     in the rows' tooltips
 -- the check rows a Settings section shows, top to bottom: { label, x }
 function UIX.rows(c)
@@ -20334,7 +20339,7 @@ do
     assert(x.Runs == g + 20 and x.Achievements == g + 20 and x.Records == g + 20, "Runs, Achievements and Records under Guild")
     assert(q == g and x["Dungeons tab"] == q + 20 and x["Gear tab"] == q + 20 and x.Map == g and x.Reminders == g, "the tabs under Quests and Route; Map and Reminders on their own")
     local function reloadLines() local n = 0; for l in texts(c):gmatch("[^\n]+") do if l ~= "Reload now" and l:lower():find("reload", 1, true) then n = n + 1 end end return n end
-    assert(reloadLines() == 1 and texts(c):find("Changes here apply on reload.", 1, true), "one reload line:\n" .. texts(c))
+    assert(reloadLines() == 1 and texts(c):find("Module boxes apply on reload; the guild switches apply at once.", 1, true), "one reload line:\n" .. texts(c))
     for _, r in ipairs(rows) do assert(not tipOf(r.row):lower():find("reload", 1, true), "no reload in the tooltip of " .. r.label) end
     check(sframe(c), "fix-cute-ui U10 Settings > Modules by window")
     click(UIX.row(c, "Gear tab"))
@@ -21009,7 +21014,7 @@ end
 -- H1. A member promoted while offline logs in to an officer's halls: the members idle since are in This week (its
 --     client kept no weeks while it was a member, and an ask with a since brings only what changed); an officer who
 --     leaves the guild, its weeks gone, keeps no hold, so a rejoin asks every record whole
--- U1. The setup card's line under Map, unticked, says the minimap's far view stays (the Route tab's own row): the wheel
+-- U1. The setup card's line under Map, unticked, says the minimap's far view stays (its row in Settings, Route): the wheel
 --     past the game's widest and a drag; with the far view off, the minimap is the game's
 -- B1. QuestBank before 6.4.1 beside Cute (no Sync.GuildOn: it reads no noGuildSync) has its guild share off for the
 --     session and put back at the logout; one that reads the flag is left as it is
@@ -21079,7 +21084,7 @@ do
       login(c); tick(c, 3)
       assert(c.env.CuteSetupFrame and c.env.CuteSetupFrame:IsShown(), "the card")
       local ON = "Cute's map on M; the minimap's wheel and right-click become Cute's"
-      local FAR = "The minimap stays the game's, but for the far view (Route tab): wheel out past its widest, drag to look around"
+      local FAR = "The minimap stays the game's, but for the far view (Settings, Route): wheel out past its widest, drag to look around"
       local GAME = "The minimap stays the game's"
       assert(UIX.text(c, ON), "ticked, the line as before:\n" .. texts(c))
       click(UIX.row(c, "Map"))
@@ -21440,6 +21445,166 @@ do
   end
   assert(#failed == 0, "fix2-cute-core: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
   print("fix2-cute-core: " .. table.concat(said, "; "))
+end
+
+-- [stage: fix2-cute-ui] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The second launch audit's cute-ui findings, a case each; every case runs, and the block fails at its end naming each
+-- one that did not hold:
+-- V1. A member's pick card on L says "Levels and bosses as the guild has met them." only where that is so: its range
+--     and every boss the guild's (no seed: all of it). A research or beta range, or a boss from research, and the
+--     line is not there (each line above says its source)
+-- V2. The setup card's Map line, unticked, sends the far view to where its switch is: Settings, Route ("Minimap far
+--     view"), not the Route tab
+-- V3. Settings > Data you share counts the finds in the footers' words ("1 new find, a dot, 0 confirmed by the
+--     guild"), and Show finds says the Map window's words: never QuestBank, an addon a Cute player does not have
+-- V4. The officer ranks stop at the guild's last rank (GuildControlGetNumRanks, Blizzard_Communities/GuildRoster.lua:137;
+--     9 where the client lacks it): no made-up "rank 4"; the guild master alone "sees every value and sets this list"
+-- V5. Settings > Modules' top line says both: the module boxes apply on reload, the guild switches at once
+----------------------------------------------------------------------------
+UNDOCUMENTED.GuildControlGetNumRanks = { "Blizzard_Communities/GuildRoster.lua:137 (the roster's rank menu: maxRankOrder, the guild's rank count)", optional = true }
+do
+  local CASES, failed, said = {}, {}, {}
+  local function inGuild(guild, fn)
+    local ok, err = true, nil
+    isolated(guild, function() ok, err = pcall(fn) end)
+    if not ok then error(err, 0) end
+  end
+
+  CASES[#CASES + 1] = { "V1 a member's pick says the guild's levels and bosses only where they are the guild's", function()
+    inGuild({ UIX.member("Helga", 1), UIX.member("Pim", 3) }, function()
+      local LINE = "Levels and bosses as the guild has met them."
+      local m = newClient(charOf({ "Pim", 3, "Raider", "WARRIOR", 20 }))
+      login(m); tickAll(35)
+      local R = m.C.Rules
+      openGuide(m); redraw(m)
+      local tip = tipOf(guideHead(m))
+      if R.SeedState() == "none" then
+        assert(tip:find(LINE, 1, true), "no seed: every level and boss is the guild's, and the line says so:\n" .. tip)
+        said[#said + 1] = "no seed: the member's line"
+        leave(m)
+        return
+      end
+      assert(R.SeedState() == "fresh", "the seed checked: " .. tostring(R.SeedState()))
+      local _, plan = m.C.Guide.Items(false)
+      local d = assert(plan.next.card, "a level 20 member's pick is a card: " .. tostring(plan.next.line)).d
+      assert(tip:find("Levels " .. d.min .. "-" .. d.max, 1, true) and (tip:find("the research's range", 1, true) or tip:find("the beta's range", 1, true)),
+        "the card's range is the research's:\n" .. tip)
+      assert(not tip:find(LINE, 1, true), "a research range: the line does not say the guild met it:\n" .. tip)
+      -- the range learned from the guild, its bosses still the research's: still not said
+      d.range, d.levels = "learned", 2
+      redraw(m)
+      tip = tipOf(guideHead(m))
+      assert(tip:find("learned from 2 members", 1, true) and not tip:find(LINE, 1, true), "the guild's range, the research's bosses: not said:\n" .. tip)
+      -- and every boss the guild's: said
+      for _, enc in ipairs(d.bosses or {}) do local b = R.Model().bosses[enc]; if b then b.state, b.n = "seen", 2 end end
+      redraw(m)
+      tip = tipOf(guideHead(m))
+      assert(tip:find(LINE, 1, true) and not tip:find("from research;", 1, true), "the guild's range and bosses: said:\n" .. tip)
+      said[#said + 1] = "the member's line only where the range and bosses are the guild's"
+      leave(m)
+    end)
+  end }
+
+  CASES[#CASES + 1] = { "V2 the card's Map line, unticked, sends the far view to Settings, Route", function()
+    inGuild({ UIX.member("Rone", 1) }, function()
+      local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, card = true }))
+      login(c); tick(c, 3)
+      assert(c.env.CuteSetupFrame and c.env.CuteSetupFrame:IsShown(), "the card")
+      click(UIX.row(c, "Map"))
+      local FAR = "The minimap stays the game's, but for the far view (Settings, Route): wheel out past its widest, drag to look around"
+      assert(UIX.text(c, FAR) and not texts(c):find("Route tab", 1, true), "unticked, the far view by where its switch is:\n" .. texts(c))
+      check(c.env.CuteSetupFrame, "fix2-cute-ui V2 the card, Map unticked")
+      click(UIX.row(c, "Map"))
+      c.env.CuteSetupFrame:Hide()
+      -- where the line sends you: Settings' Route section has the row; the Route tab has none
+      c.C.UI:Open("settings", "route")
+      assert(UIX.row(c, "Minimap far view"), "Settings, Route: the far view's row:\n" .. texts(c))
+      c.C.UI.Window("settings").frame:Hide()
+      c.C.UI:Open("quests", "route")
+      assert(not texts(c):find("far view", 1, true), "the Route tab has no far view:\n" .. texts(c))
+      leave(c)
+    end)
+    said[#said + 1] = "the card sends the far view to Settings, Route"
+  end }
+
+  CASES[#CASES + 1] = { "V3 Data you share counts the finds in the footers' words, never QuestBank", function()
+    inGuild({ UIX.member("Rone", 1) }, function()
+      local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, log = { [7] = 2 } }))
+      login(c); tickAll(6)
+      c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+      local QB = c.addons[2].private
+      local disc = QB.Discover.DB()
+      disc.find = { o9001 = { p = { { 1429, 400, 400, 1 } }, b = "A Diary of Your Own", n = 1 } }
+      disc.findN = (tonumber(disc.findN) or 0) + 1
+      c.C.UI:Open("settings", "share")
+      local new, sure2 = c.C.Finds.Tally()
+      local words = c.C.API.Finds.FooterText(new, sure2)
+      local st = texts(c)
+      assert(new == 1 and words:find("^1 new find") and st:find(words, 1, true), "the footers' words, \"" .. words .. "\":\n" .. st)
+      assert(not st:find("QuestBank does not have", 1, true), "no QuestBank in the count:\n" .. st)
+      local tip = tipOf(UIX.button(c, "Show finds"))
+      assert(tip:find("what players' games and guides gave foreverrank.com", 1, true) and not tip:find("QuestBank", 1, true), "Show finds in the Map window's words:\n" .. tip)
+      check(c.C.UI.Window("settings").frame, "fix2-cute-ui V3 Data you share, the finds line")
+      leave(c)
+    end)
+    said[#said + 1] = "Data you share counts new finds as the footers do"
+  end }
+
+  CASES[#CASES + 1] = { "V4 the officer ranks stop at the guild's last rank; the guild master alone sees and sets", function()
+    inGuild({ UIX.member("Gwen", 0), UIX.member("Rone", 1), UIX.member("Pim", 2) }, function()
+      local names = { "Guild Master", "Officer", "Member" }
+      local c = newClient(charOf({ "Gwen", 0, "Guild Master", "WARRIOR", 5 }, { rankNames = names }))
+      c.env.GuildControlGetNumRanks = function() return #names end
+      login(c); tickAll(60)
+      local listed = false
+      for _, n in ipairs(c.C.UNDOCUMENTED) do if n == "GuildControlGetNumRanks" then listed = true end end
+      assert(listed, "/cute api reports GuildControlGetNumRanks")
+      local P = c.C.Policy
+      assert(P.Editable() and P:Threshold() == 1, "the guild master edits the officer ranks: " .. tostring(P:Threshold()))
+      c.C.UI:Open("settings", "vis")
+      local function step(label)
+        for _, fr in ipairs(c.frames) do
+          if fr.__kind == "Button" and fr:IsVisible() and fr.label and fr.label:GetText() == label and tipOf(fr):find("Officer ranks", 1, true) then return fr end
+        end
+      end
+      press(step("+"))
+      local t = texts(c)
+      assert(P:Threshold() == 2 and t:find("Officer ranks: Guild Master to Member see every value and set this list", 1, true), "a step up to the last rank:\n" .. t)
+      local plus = step("+")
+      assert(plus and not plus:IsEnabled(), "the last rank: + is off")
+      press(plus)
+      t = texts(c)
+      assert(P:Threshold() == 2 and not t:find("rank 4", 1, true) and not tipOf(plus):find("rank 4", 1, true), "no step past it, no made-up rank:\n" .. t)
+      press(step("-")); press(step("-"))
+      t = texts(c)
+      assert(P:Threshold() == 0 and t:find("Officer ranks: Guild Master alone sees every value and sets this list", 1, true), "the guild master alone:\n" .. t)
+      check(sframe(c), "fix2-cute-ui V4 Who sees what, the guild master alone")
+      leave(c)
+    end)
+    said[#said + 1] = "the officer ranks stop at the guild's last; the guild master alone sees and sets"
+  end }
+
+  CASES[#CASES + 1] = { "V5 Settings > Modules' top line: the boxes on reload, the guild switches at once", function()
+    inGuild({ UIX.member("Rone", 1) }, function()
+      local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+      login(c); tickAll(6)
+      c.C.UI:Open("settings", "modules")
+      local t = texts(c)
+      assert(UIX.row(c, "Achievements for the whole guild") and UIX.row(c, "Records for the whole guild"), "the guild switches are there:\n" .. t)
+      assert(t:find("Module boxes apply on reload; the guild switches apply at once.", 1, true) and not t:find("Changes here apply on reload.", 1, true), "the top line says both:\n" .. t)
+      check(sframe(c), "fix2-cute-ui V5 Settings > Modules, the top line")
+      leave(c)
+    end)
+    said[#said + 1] = "Settings > Modules says the boxes reload and the guild switches apply at once"
+  end }
+
+  for _, case in ipairs(CASES) do
+    local ok, err = pcall(case[2])
+    if not ok then failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
+  end
+  assert(#failed == 0, "fix2-cute-ui: " .. #failed .. " of " .. #CASES .. " failed:\n  " .. table.concat(failed, "\n  "))
+  print("fix2-cute-ui: " .. table.concat(said, "; "))
 end
 
 -- this pass's problems and layouts join the run's; the last pass prints them all

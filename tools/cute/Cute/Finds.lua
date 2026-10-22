@@ -849,9 +849,9 @@ function F.StripTraces(only)
 end
 
 ----------------------------------------------------------------------------
--- Settings > Data you share (Cute_Quest's section draws these): the line, while there is something to say, and the row
+-- Settings > Data you share (Cute_Quest's section draws these): the line, while there is something to say, in the
+-- footers' words (D.FooterText, no ink: a Cute player has no QuestBank to name), and the row
 ----------------------------------------------------------------------------
--- (the line in the L and M footers' words, D.FooterText: under Cute the engine's data is no QuestBank's)
 function D.ShareLine(col)
   local new, sure2 = F.Tally()
   if new <= 0 then return end

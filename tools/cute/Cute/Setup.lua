@@ -8,8 +8,8 @@
 -- (CuteDB.chars[me].setup[row]), keeps the keys (Keys.lua) and reloads; after the reload the quest window opens once (the
 -- map's, for a card that came back with its Map row alone).
 -- The rows that change the game unasked say how in one dim line under them (Map: the minimap's mouse is the engine's
--- while it is ticked, Minimap.lua Mini.Owned; unticked, the line says the far view stays, the Route tab's own row and
--- on by default, Mini.FarOn: the wheel past the game's widest and the drag; Reminders: what the bar and banner remind
+-- while it is ticked, Minimap.lua Mini.Owned; unticked, the line says the far view stays, its own row in Settings, Route
+-- and on by default, Mini.FarOn: the wheel past the game's widest and the drag; Reminders: what the bar and banner remind
 -- of; Interact light: the game's soft-target settings, Glow.lua, put back when it is switched off).
 -- Not now changes nothing and the card never comes back by itself (the menu keeps "Set up Cute..." until Start). A row a
 -- later round adds comes back alone, once. Nothing on it is cut: labels and the note wrap.
@@ -68,11 +68,12 @@ local function rows()
     -- asked while QuestBank is loaded (no window to open: asked once it is not)
     if not dormant() then
       add({ id = "mapwin", group = "Windows", label = "Map", kind = "check", module = "Cute_Quest:map", key = "map", note = function()
-        -- (merge4) unticked, the minimap is the game's but for the far view, the Route tab's own row (Minimap.lua
-        -- Mini.FarOn, on by default): its wheel past the game's widest and its drag stay
+        -- (merge4) unticked, the minimap is the game's but for the far view, its own row in Settings, Route ("Minimap far
+        -- view", PageRoute.lua R.Settings; Minimap.lua Mini.FarOn, on by default): its wheel past the game's widest and
+        -- its drag stay
         if S.pick and S.pick.on.mapwin == false then
           local s = q and q.Settings and q.Settings() or nil
-          if s and s.mmExtended ~= false then return "The minimap stays the game's, but for the far view (Route tab): wheel out past its widest, drag to look around" end
+          if s and s.mmExtended ~= false then return "The minimap stays the game's, but for the far view (Settings, Route): wheel out past its widest, drag to look around" end
           return "The minimap stays the game's"
         end
         local k = S.KeyText("map")
