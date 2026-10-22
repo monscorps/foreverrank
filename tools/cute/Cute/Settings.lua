@@ -570,6 +570,14 @@ local function rankName(i)
   for _, m in ipairs(C.Roster.members or {}) do if m.rank == i and type(m.rankName) == "string" and m.rankName ~= "" then return m.rankName end end
   return "rank " .. (i + 1)
 end
+-- the guild's last rank, 0 the guild master: the game's count of them less one (GuildRoster.lua:137 bounds its rank
+-- menu by GuildControlGetNumRanks, another undocumented global), the policy's 9 where the client gives none
+C.UNDOCUMENTED[#C.UNDOCUMENTED + 1] = "GuildControlGetNumRanks"
+local function lastRank()
+  local n = C.Callable("GuildControlGetNumRanks") and C.Plain(C.Get(GuildControlGetNumRanks)) or nil
+  if type(n) == "number" and n >= 1 then return math.min(9, n - 1) end
+  return 9
+end
 
 -- who sees what: the policy, the threshold, the buttons and the two headings in the band, the list under them. A
 -- member reads one line of it: the officers decide, and how many values go to everyone
@@ -601,10 +609,11 @@ local function drawVisibility(col, officer, ui)
   -- (the ranks by the game's names, never by number: the stepper counts them)
   local names = {}
   for i = 0, thr do names[#names + 1] = rankName(i) end
-  local who = #names == 1 and (names[1] .. " alone sees") or (names[1] .. " to " .. names[#names] .. " see")
-  band:Step("Officer ranks: " .. who .. " every value and set this list", tostring(#names), false,
+  local who = #names == 1 and (names[1] .. " alone sees every value and sets") or (names[1] .. " to " .. names[#names] .. " see every value and set")
+  -- (a step up never past the guild's last rank: no made-up "rank 8" in a guild of six)
+  band:Step("Officer ranks: " .. who .. " this list", tostring(#names), false,
     (editor and thr > 0 and thr - 1 >= mine) and function() C.Policy:SetThreshold(thr - 1); C.Comm:PolicySoon(); redraw() end or nil,
-    (editor and thr < 9) and function() C.Policy:SetThreshold(thr + 1); C.Comm:PolicySoon(); redraw() end or nil,
+    (editor and thr < lastRank()) and function() C.Policy:SetThreshold(thr + 1); C.Comm:PolicySoon(); redraw() end or nil,
     function(tip)
       tip:AddLine("Officer ranks", 1, 1, 1)
       tip:AddLine("The guild's ranks, from the guild master down, that see every value and set this list and the rules.", 0.85, 0.85, 0.85, true)

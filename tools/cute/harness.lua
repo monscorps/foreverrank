@@ -21215,7 +21215,10 @@ end
 --     view"), not the Route tab
 -- V3. Settings > Data you share counts the finds in the footers' words ("1 new find, a dot, 0 confirmed by the
 --     guild"), and Show finds says the Map window's words: never QuestBank, an addon a Cute player does not have
+-- V4. The officer ranks stop at the guild's last rank (GuildControlGetNumRanks, Blizzard_Communities/GuildRoster.lua:137;
+--     9 where the client lacks it): no made-up "rank 4"; the guild master alone "sees every value and sets this list"
 ----------------------------------------------------------------------------
+UNDOCUMENTED.GuildControlGetNumRanks = { "Blizzard_Communities/GuildRoster.lua:137 (the roster's rank menu: maxRankOrder, the guild's rank count)", optional = true }
 do
   local CASES, failed, said = {}, {}, {}
   local function inGuild(guild, fn)
@@ -21302,6 +21305,40 @@ do
       leave(c)
     end)
     said[#said + 1] = "Data you share counts new finds as the footers do"
+  end }
+
+  CASES[#CASES + 1] = { "V4 the officer ranks stop at the guild's last rank; the guild master alone sees and sets", function()
+    inGuild({ UIX.member("Gwen", 0), UIX.member("Rone", 1), UIX.member("Pim", 2) }, function()
+      local names = { "Guild Master", "Officer", "Member" }
+      local c = newClient(charOf({ "Gwen", 0, "Guild Master", "WARRIOR", 5 }, { rankNames = names }))
+      c.env.GuildControlGetNumRanks = function() return #names end
+      login(c); tickAll(60)
+      local listed = false
+      for _, n in ipairs(c.C.UNDOCUMENTED) do if n == "GuildControlGetNumRanks" then listed = true end end
+      assert(listed, "/cute api reports GuildControlGetNumRanks")
+      local P = c.C.Policy
+      assert(P.Editable() and P:Threshold() == 1, "the guild master edits the officer ranks: " .. tostring(P:Threshold()))
+      c.C.UI:Open("settings", "vis")
+      local function step(label)
+        for _, fr in ipairs(c.frames) do
+          if fr.__kind == "Button" and fr:IsVisible() and fr.label and fr.label:GetText() == label and tipOf(fr):find("Officer ranks", 1, true) then return fr end
+        end
+      end
+      press(step("+"))
+      local t = texts(c)
+      assert(P:Threshold() == 2 and t:find("Officer ranks: Guild Master to Member see every value and set this list", 1, true), "a step up to the last rank:\n" .. t)
+      local plus = step("+")
+      assert(plus and not plus:IsEnabled(), "the last rank: + is off")
+      press(plus)
+      t = texts(c)
+      assert(P:Threshold() == 2 and not t:find("rank 4", 1, true) and not tipOf(plus):find("rank 4", 1, true), "no step past it, no made-up rank:\n" .. t)
+      press(step("-")); press(step("-"))
+      t = texts(c)
+      assert(P:Threshold() == 0 and t:find("Officer ranks: Guild Master alone sees every value and sets this list", 1, true), "the guild master alone:\n" .. t)
+      check(sframe(c), "fix2-cute-ui V4 Who sees what, the guild master alone")
+      leave(c)
+    end)
+    said[#said + 1] = "the officer ranks stop at the guild's last; the guild master alone sees and sets"
   end }
 
   for _, case in ipairs(CASES) do
