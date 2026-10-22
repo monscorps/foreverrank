@@ -22557,6 +22557,23 @@ do
     assert(shownCamp(c, "eat"), "through the meal: the icon stays")
     c.buffs = { aura(c, "Well Fed", 1248420, 900) }; auraEv(c)
     assert(not shownCamp(c, "eat"), "Well Fed: gone")
+    -- (water drunk while Well Fed: that Well Fed was the meat's, never the water's)
+    R.castFrame.__scripts.OnEvent(R.castFrame, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-8", 430)
+    c.buffs = { aura(c, "Well Fed", 1248420, 900), aura(c, "Drink", 430, 18) }; auraEv(c); tick(c, 18)
+    c.buffs = { aura(c, "Well Fed", 1248420, 880) }; auraEv(c)
+    local food = c.env.QuestBankDB.remind.food or {}
+    assert(food[159] == nil, "water drunk while Well Fed: never learned as a food: " .. tostring(food[159]))
+    c.buffs = {}; auraEv(c)
+    assert(not shownCamp(c, "eat"), "Well Fed over, water and bread carried: still no Eat")
+    -- (a drink with the meal: Well Fed after the two tells nothing of the water)
+    c.o.bagSlots = { { 159, 5 }, { 4540, 5 }, { 2680, 1 } }; ev(c, "BAG_UPDATE_DELAYED"); tick(c, 1)
+    R.castFrame.__scripts.OnEvent(R.castFrame, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-11", 1127)
+    R.castFrame.__scripts.OnEvent(R.castFrame, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-12", 430)
+    c.buffs = { aura(c, "Food", 1127, 20), aura(c, "Drink", 430, 20) }; auraEv(c); tick(c, 10)
+    c.buffs = { aura(c, "Food", 1127, 10), aura(c, "Drink", 430, 10), aura(c, "Well Fed", 1248420, 900) }; auraEv(c)
+    food = c.env.QuestBankDB.remind.food or {}
+    assert(food[159] == nil, "water drunk with the meal: never learned as a food: " .. tostring(food[159]))
+    c.buffs = {}; auraEv(c)
     -- a localised client: the client's own name of a Well Fed aura
     c.o.bagSlots = { { 2680, 3 } }; R.Refresh()
     local getName = env.C_Spell.GetSpellName

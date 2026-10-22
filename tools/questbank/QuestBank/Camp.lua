@@ -614,10 +614,11 @@ Camp.Diag = diagFire
 ----------------------------------------------------------------------------
 -- meals: which foods give Well Fed (D.FOOD, generated from the items' own Use lines), and the ones learned in play: a
 -- meal from your bags followed by Well Fed keeps that food (acctDB().food[id] = true), one that ends without it drops it
--- (false); 200 kept at most
+-- (false); 200 kept at most. (The hud review) only a meal begun while not Well Fed can be the one that gave it, and only
+-- one at a time: water drunk while Well Fed, or with the meal, is never taught as a food
 ----------------------------------------------------------------------------
 local MEAL = { Food = true, Drink = true, ["Food & Drink"] = true, Refreshment = true }
-local meal -- { id, at }: the food you started on (its spell cast)
+local meals = {} -- [item id] = { at = its cast, fed = Well Fed already on then }: the meals begun from your bags
 local itemSpell = {} -- [item id] = its spell id, or false (C_Item.GetItemSpell, read once)
 local function spellOf(id)
   local v = itemSpell[id]
@@ -691,17 +692,27 @@ local function onCast(_, unit, _, spell)
   for id in pairs(R.Bags()) do
     if spellOf(id) == sp then
       local okI, _, _, _, _, _, classID, subID = pcall(C_Item.GetItemInfoInstant, id)
-      if okI and plain(classID) == 0 and plain(subID) == 5 then meal = { id = id, at = now() } end
+      -- (whether Well Fed was on as it began: your auras as the last look read them)
+      if okI and plain(classID) == 0 and plain(subID) == 5 then meals[id] = { at = now(), fed = fed(myNames, myIds) } end
       break
     end
   end
 end
 local function watchMeal(names, ids)
-  if not meal then return end
+  if next(meals) == nil then return end
   -- (the live client's word, section 11: which meals give Forever's Well Fed XP Boost, applied by the server)
-  if ids[1243969] then R.Diag("fedBoost", meal.id) end
-  if fed(names, ids) then learnFood(meal.id, true); meal = nil return end
-  if not eating(names) and now() - meal.at > 3 then learnFood(meal.id, false); meal = nil end
+  if ids[1243969] then for id in pairs(meals) do R.Diag("fedBoost", id) end end
+  if fed(names, ids) then
+    -- (the one meal begun without it gave it; none, or two at once, a drink with the meal: nothing learned)
+    local gave, n = nil, 0
+    for id, m in pairs(meals) do if not m.fed then gave, n = id, n + 1 end end
+    if n == 1 then learnFood(gave, true) end
+    for id in pairs(meals) do meals[id] = nil end
+    return
+  end
+  if not eating(names) then
+    for id, m in pairs(meals) do if now() - m.at > 3 then learnFood(id, false); meals[id] = nil end end
+  end
 end
 
 ----------------------------------------------------------------------------
