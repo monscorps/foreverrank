@@ -14460,6 +14460,11 @@ do local function cardsStage()
       local r = recOf(c, "c36")
       assert(r and r.v == 1003 and toasts(c) == 0 and newsRecords(c) == 0, c.o.name .. ": two runs' times are no group's: quiet, " .. tostring(r and r.v) .. ", " .. toasts(c))
     end
+    -- (/cute diag cards counts a record its voices' times kept quiet, so a tester's paste says whether 30 minutes is
+    -- enough for one group's in game)
+    local d0 = #quay.chat
+    quay.env.SlashCmdList.CUTE("diag cards")
+    assert(table.concat(quay.chat, "\n", d0 + 1):find("voices apart 1", 1, true), "diag counts a record whose voices came apart")
     -- one group's two voices a few seconds apart: the toast, with one mate
     assert(Rc(quod).OwnClear(36, 900) and Rc(quip).OwnClear(36, 898), "one group's clear")
     tickAll(125)

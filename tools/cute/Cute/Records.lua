@@ -37,7 +37,7 @@
 --            heading's switch for every instance, and Add (the stat picker) for a game statistic
 -- Nothing of a member's in /cute diag cards: counts and states.
 local _, C = ...
-local Rec = { announced = 0, quiet = 0, suggested = 0, sent = 0, taken = 0, refused = 0, defs = 0, heardAt = 0, lone = 0 }
+local Rec = { announced = 0, quiet = 0, suggested = 0, sent = 0, taken = 0, refused = 0, defs = 0, heardAt = 0, lone = 0, apart = 0 }
 C.Records = Rec
 
 local MAX = 400             -- entries in the table at most
@@ -363,7 +363,8 @@ function Rec:Clear(n, live)
     local came, together = Rec.came[id] or {}, {}
     local t0 = came[best.g]
     for _, b in ipairs(group) do if t0 and came[b.g] and math.abs(came[b.g] - t0) <= TOGETHER then together[#together + 1] = b end end
-    if #together < 2 then loud = false else group = together end
+    -- (counted: /cute diag cards says whether one group's voices come within the window in game)
+    if #together < 2 then loud = false; Rec.apart = Rec.apart + 1 else group = together end
   end
   if loud then
     local top = Rec.RangeTop(n)
@@ -783,9 +784,9 @@ function Rec.Diag()
   local on = 0
   for _ in pairs(Rec.List().codes) do on = on + 1 end
   return {
-    string.format("diag cards: records %s (guild %s) | %d on, list %s | table %d entries (%d clears), clear stats %d, a faster clear with one voice %d | shown %d, quiet %d, Record? rows %d | 1O sent %d, taken %d, refused %d",
+    string.format("diag cards: records %s (guild %s) | %d on, list %s | table %d entries (%d clears), clear stats %d, a faster clear with one voice %d, voices apart %d | shown %d, quiet %d, Record? rows %d | 1O sent %d, taken %d, refused %d",
       moduleOn() and "on" or "off", Rec.GuildOn() and "on" or "off", on, Rec.Stamp() > 0 and (math.floor(now() - Rec.Stamp()) .. " s old") or "never set", n, clears, Rec.defs,
-      Rec.lone, Rec.announced, Rec.quiet, Rec.suggested, Rec.sent, Rec.taken, Rec.refused),
+      Rec.lone, Rec.apart, Rec.announced, Rec.quiet, Rec.suggested, Rec.sent, Rec.taken, Rec.refused),
   }
 end
 
