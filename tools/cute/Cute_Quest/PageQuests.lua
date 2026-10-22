@@ -399,8 +399,8 @@ if E then
       tip:AddLine("Your level, your XP into it, your class, the levels your plan reaches and the quests in it go to your party or instance group (never a raid), whatever Who sees what says. Group members who run Cute or QuestBank see them.", 0.85, 0.85, 0.85, true)
     end)
     if F and F.ShareRow then F.ShareRow(col) end
-    -- (where it comes from, once Cute's page offers Cute-Uploader.zip at release: build.py check_uploader_note holds
-    -- the two together)
-    col:Note("The QuestBank Uploader sends what you found in the world to foreverrank.com, never a name or anything about your guild.")
+    -- (the launch audit) no word of an uploader here until Cute's page offers Cute-Uploader.zip (build_uploader.py
+    -- --cute, whose copy never installs QuestBank): the QuestBank Uploader is on QuestBank's page, and its installer offers
+    -- to put QuestBank in, which puts this copy to sleep. build.py check_uploader_note holds the words and the page together
   end })
 end

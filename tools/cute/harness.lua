@@ -15044,11 +15044,12 @@ do
     local c = questClient()
     c.C.UI:Open("settings", "share")
     local shown = texts(c)
-    assert(shown:find("The QuestBank Uploader sends what you found in the world to foreverrank.com", 1, true), "Data you share names the uploader:\n" .. shown)
     local page = assert(io.open(HERE .. "/../../addons/cute/index.html")):read("*a")
     local zip = io.open(HERE .. "/../../addons/cute/Cute-Uploader.zip", "rb")
     local offered = page:find('href="Cute-Uploader.zip"', 1, true) ~= nil and zip ~= nil
     if zip then zip:close() end
+    -- (no uploader named at all until the page offers Cute's: the launch audit, the fix-engine stage's S13)
+    assert(offered or not shown:find("Uploader", 1, true), "Data you share names an uploader Cute's page does not offer:\n" .. shown)
     local readme = assert(io.open(HERE .. "/README.md")):read("*a")
     assert(offered or not shown:find("Cute's page", 1, true), "Data you share says the uploader comes on Cute's page, which does not offer it")
     assert(offered or not readme:find("Cute's second download", 1, true), "the README calls the uploader Cute's second download, which Cute's page does not offer")
@@ -19614,6 +19615,18 @@ do
       press(button(c, "Show on arrow"))
       assert(#clicks == 1 and clicks[1] == 33 and #spots == 4, "a quest not held: the engine's click (its giver)")
       QB.StepFrame.QuestSpot, QB.UI.QuestClick = spot, qclick
+      leave(c)
+    end)
+  end }
+
+  -- S13 (look). Data you share named "The QuestBank Uploader", which Cute's page does not offer; its only copy offers to
+  -- install QuestBank, which puts Cute's quest copy to sleep. No word of it until Cute's page offers Cute-Uploader.zip
+  FECASES[#FECASES + 1] = { "S13: Data you share names no uploader Cute's page does not offer", function()
+    inGuild({ member("Rone", 1) }, function()
+      local c = quest("Rone")
+      login(c); tickAll(6)
+      c.C.UI:Open("settings", "share")
+      assert(not texts(c):find("Uploader", 1, true), "no uploader named:\n" .. texts(c))
       leave(c)
     end)
   end }
