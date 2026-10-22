@@ -14776,6 +14776,8 @@ end
 -- The second merge round: what finds, runs and windows left for each other, each item on one Cute character.
 -- M1: the engine's arrow under Cute stands in the top's middle under the game's error text (UIErrorsFrame, TOP 0
 -- -122, 512 x 60, to 182 px down) and off the step frame (QuestBank's harness weighs the places, its merge2 M1).
+-- M2: the dungeon pick's two rules in the rules' registry (Rules.lua R.TUNE, which /cute rules prints and the page's
+-- stats.js carries) name the Quests window, never the retired Guide or its Next up.
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
   isolated({ member("Rone", 1) }, function()
@@ -14794,6 +14796,20 @@ do
     assert(c.env.QuestBankStep:IsShown() and bx, "the step frame shows")
     assert(p.x + half <= bx - fhalf or bx + fhalf <= p.x - half or top + 143 <= ftop or fbottom <= top, "the arrow off the step frame")
     said[#said + 1] = "the arrow in the top's middle under the error text (TOP " .. p.x .. " " .. p.y .. ") and off the step frame"
+    -- M2
+    local R = c.C.Rules
+    for _, id in ipairs({ "guideWindow", "guideAhead" }) do
+      local t = R.TUNE_BY[id]
+      assert(t[2]:find("Quests window", 1, true) and t[7]:find("Quests window", 1, true), id .. " names the Quests window: " .. t[2] .. " | " .. t[7])
+      for _, w in ipairs({ "Guide", "Next up" }) do assert(not t[2]:find(w, 1, true) and not t[7]:find(w, 1, true), id .. " never names " .. w .. ": " .. t[2] .. " | " .. t[7]) end
+    end
+    local n0 = #c.chat
+    c.env.SlashCmdList.CUTE("rules")
+    local rules = table.concat(c.chat, "\n", n0 + 1)
+    assert(rules:find("Quests window: members near you (guideWindow)", 1, true) and rules:find("Quests window: dungeons ahead (guideAhead)", 1, true) and not rules:find("Guide:", 1, true), "/cute rules:\n" .. rules)
+    local js = assert(io.open(HERE .. "/../../addons/cute/stats.js")):read("*a")
+    assert(js:find('"Quests window: members near you"', 1, true) and js:find('"Quests window: dungeons ahead"', 1, true) and not js:find("Next up", 1, true), "the page's stats.js carries the registry's words (build.py writes it)")
+    said[#said + 1] = "the pick's two rules name the Quests window (registry, /cute rules, stats.js)"
     assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
     leave(c)
     print("merge2: " .. table.concat(said, "; "))

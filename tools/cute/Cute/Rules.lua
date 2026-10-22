@@ -41,9 +41,10 @@ R.TUNE = {
   { "xpAgree", "Members to agree on XP", 2, 20, 1, nil, "Members who report the same XP for a level before it replaces the research's." },
   { "lootDoubtKills", "Kills to note unseen loot", 1, 50, 1, nil, "Kills of a boss before the research's loot nobody has seen drop is noted." },
   { "staleShare", "Stale when absent over", 0.05, 0.95, 0.05, "pct", "The research is stale when this client lacks more than this share of what it names." },
-  -- (the Guide's own two, in its section; the rest are in Settings > Rules)
-  { "guideWindow", "Guide: levels near you", 0, 10, 1, nil, "The Guide names the guild mates online in a dungeon's range within this many levels of yours; for officers, where most members are, over twice as many.", "guide" },
-  { "guideAhead", "Guide: levels ahead", 1, 20, 1, nil, "The Guide lists the dungeons opening within this many levels under Next up.", "guide" },
+  -- (the dungeon pick's two, the Quests window's: Settings > Rules shows them under "Dungeons and gear", in words of
+  -- its own; these are /cute rules' and the page's. The module key stays "guide", the pick's first home)
+  { "guideWindow", "Quests window: members near you", 0, 10, 1, nil, "The Quests window's dungeon pick names the guild mates online in a dungeon's range within this many levels of yours; for officers, where most members are, over twice as many.", "guide" },
+  { "guideAhead", "Quests window: dungeons ahead", 1, 20, 1, nil, "The Quests window's dungeon pick names the next dungeon to open within this many levels of yours.", "guide" },
 }
 R.TUNE_BY, R.LOWER = {}, {}
 for _, t in ipairs(R.TUNE) do R.TUNE_BY[t[1]] = t; R.LOWER[t[1]:lower()] = t[1] end

@@ -131,8 +131,8 @@ window.CUTE_TUNE = [
   ["xpAgree", "Members to agree on XP", 2, 20, 1, null, "Members who report the same XP for a level before it replaces the research's.", null],
   ["lootDoubtKills", "Kills to note unseen loot", 1, 50, 1, null, "Kills of a boss before the research's loot nobody has seen drop is noted.", null],
   ["staleShare", "Stale when absent over", 0.05, 0.95, 0.05, "pct", "The research is stale when this client lacks more than this share of what it names.", null],
-  ["guideWindow", "Guide: levels near you", 0, 10, 1, null, "The Guide names the guild mates online in a dungeon's range within this many levels of yours; for officers, where most members are, over twice as many.", "guide"],
-  ["guideAhead", "Guide: levels ahead", 1, 20, 1, null, "The Guide lists the dungeons opening within this many levels under Next up.", "guide"],
+  ["guideWindow", "Quests window: members near you", 0, 10, 1, null, "The Quests window's dungeon pick names the guild mates online in a dungeon's range within this many levels of yours; for officers, where most members are, over twice as many.", "guide"],
+  ["guideAhead", "Quests window: dungeons ahead", 1, 20, 1, null, "The Quests window's dungeon pick names the next dungeon to open within this many levels of yours.", "guide"],
 ];
 window.CUTE_RULES = { rangeMembers: 5, rangeLow: 0.1, rangeHigh: 0.9, doubtRuns: 3, enchantDoubtDays: 14, enchantDoubtLevel: 30, xpAgree: 3, lootDoubtKills: 5, staleShare: 0.3, guideWindow: 3, guideAhead: 5 };
 window.CUTE_VOICES = 2;
