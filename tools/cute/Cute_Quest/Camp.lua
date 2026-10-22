@@ -590,7 +590,12 @@ local function readSoft()
   guid = ok and plain(guid) or nil
   if type(guid) ~= "string" or not guid:find("^GameObject") then return end
   local entry = tonumber(guid:match("^GameObject%-%d+%-%d+%-%d+%-%d+%-(%d+)%-"))
-  if entry and isCookingFire(entry) and not givesNothing[entry] then softFire.entry, softFire.at = entry, now() end
+  if entry and isCookingFire(entry) and not givesNothing[entry] then
+    local at = now()
+    softFire.entry, softFire.at = entry, at
+    -- (the hud review: its 15 s end by themselves, with nothing else happening: one look then)
+    if C_Timer and C_Timer.After then C_Timer.After(15.1, QB.Safe(function() if softFire.at == at then R.Dirty("camp") end end, "reminders: a fire")) end
+  end
 end
 Camp.SoftFire = softFire
 -- (a diagnostic for the live client, section 11: what a fire under your Interact key puts on you, kept in
@@ -897,7 +902,13 @@ R.Add({ key = "sit", neverName = "Sit", piece = "reminders", order = 10, row = "
     R.Click(rec, "macro", "/sit") -- (the game's own slash command, as a macro of yours: SitStandOrDescendStart is restricted, PlayerScriptDocumentation.lua:1772)
     rec.name, rec.why, rec.clickWord = "Sit by the fire", "A minute sitting by it gives Camp Benefits for an hour: the buffs of its camp features.", "sit down"
   end,
-  used = function() if softFire.entry then sitAt = now() end end,
+  -- (a /sit by a Cooking Fire object: 10 s on, one look whether Welcoming Campfire came, since sitting brings no event)
+  used = function()
+    if not softFire.entry then return end
+    local at = now()
+    sitAt = at
+    if C_Timer and C_Timer.After then C_Timer.After(10.1, QB.Safe(function() if sitAt == at then R.Dirty("camp") end end, "reminders: a fire")) end
+  end,
 })
 
 -- place: a camp feature by your own kit's fire (a kit's fire is the one that holds camp features)
