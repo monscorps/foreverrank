@@ -4913,7 +4913,7 @@ do
     rone.C.UI:Open("settings", "modules")
     local base = boxOf(rone, "Quests and Route")
     assert(base and base:GetChecked() and base.__disabled, "Settings > Modules: Quests and Route, ticked and greyed:\n" .. texts(rone))
-    assert(boxOf(rone, "Dungeons tab") and boxOf(rone, "Gear tab") and boxOf(rone, "Map") and boxOf(rone, "Camp"), "the switchable ones: Dungeons and Gear tabs, Map, Camp:\n" .. texts(rone))
+    assert(boxOf(rone, "Dungeons tab") and boxOf(rone, "Gear tab") and boxOf(rone, "Map") and boxOf(rone, "Reminders"), "the switchable ones: Dungeons and Gear tabs, Map, Reminders:\n" .. texts(rone))
     -- the quest window (L, CuteQuestFrame): Quests and Route; the guild window keeps the guild's pages alone
     rone.C.UI:Open("race")
     assert(tabsShown(rone) == "race prog shame game officers me", "the guild window's tabs: " .. tabsShown(rone))
@@ -5035,19 +5035,22 @@ do
     click(boxOf(rone, "Show low-level quests"))
     assert(rone.env.CuteQuestDB.settings.mapLowLevel == false, "and off again")
     rone.C.UI:Open("settings", "camp")
-    assert(not texts(rone):find("Sleeping bag", 1, true) and not texts(rone):find("Sellers", 1, true) and texts(rone):find("Camp bar", 1, true), "Camp: the bar, the banner and the light alone:\n" .. texts(rone))
-    assert(texts(rone):find("Party members' buffs", 1, true) and texts(rone):find("Missing buffs", 1, true), "Camp: the missing-buffs and party rows:\n" .. texts(rone))
+    local rt = texts(rone)
+    for _, row in ipairs(QB.Remind.ROWS) do assert(rt:find(row.label, 1, true), "Reminders: the engine's row " .. row.label .. ":\n" .. rt) end
+    assert(rt:find("Interact light", 1, true) and rt:find("Light style", 1, true) and not rt:find("Camp bar", 1, true) and not rt:find(QB.Remind.ON_LABEL, 1, true),
+      "Reminders: the engine's six and the light's two, no master row (the module is the switch):\n" .. rt)
     local function rowsOf(id)
       local n = 0
       local col = setmetatable({}, { __index = function(_, k) return function() if k == "Check" or k == "Choice" or k == "Step" or k == "Edit" then n = n + 1 end end end })
       M.byId[id].settings(M.byId[id], col)
       return n
     end
-    assert(rowsOf("camp") <= 6 and rowsOf("map") <= 6, string.format("Camp and Map keep six rows at most: %d, %d", rowsOf("camp"), rowsOf("map")))
+    assert(rowsOf("camp") == 8 and rowsOf("map") <= 6, string.format("Reminders eight rows, Map six at most: %d, %d", rowsOf("camp"), rowsOf("map")))
     local s = rone.env.CuteQuestDB.settings
-    assert(s.mapIcons == true and s.pins == true and s.minimapGivers == true and s.campBar == true and s.glow.on == true, "on: the switches on")
+    assert(s.mapIcons == true and s.pins == true and s.minimapGivers == true and s.remind.on == true and s.glow.on == false, "on: the switches on; the light its own row, off on a fresh install")
     M.Set("Cute_Quest:map", false); M.Set("Cute_Quest:camp", false)
-    assert(s.mapIcons == false and s.pins == false and s.minimapPins ~= false and s.campBar == false and s.glow.on == false, "off: the world map's and the camp's off, the minimap's route kept (the Route tab's)")
+    assert(s.mapIcons == false and s.pins == false and s.minimapPins ~= false and s.remind.on == false and s.remind.buffs == true and s.remind.party == true,
+      "off: the world map's and Reminders off, the minimap's route kept (the Route tab's), the rows as they were")
     for _, key in ipairs({ "Cute_Quest:map", "Cute_Quest:camp" }) do M.Set(key, true) end
     -- every tab and every Quests section at both sizes for an officer with every quest module on
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
@@ -5080,9 +5083,9 @@ do
   isolated({ member("Rone", 1) }, function()
     local state = {}
     local function client() return newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true })) end
-    local function flags(s) return string.format("mapIcons=%s pins=%s minimapPins=%s minimapLines=%s minimapGivers=%s mmExtended=%s campBar=%s buffs=%s glow=%s guide=%s frame=%s arrow=%s",
+    local function flags(s) return string.format("mapIcons=%s pins=%s minimapPins=%s minimapLines=%s minimapGivers=%s mmExtended=%s remind.on=%s buffs=%s glow=%s guide=%s frame=%s arrow=%s",
       tostring(s.mapIcons), tostring(s.pins), tostring(s.minimapPins), tostring(s.minimapLines), tostring(s.minimapGivers), tostring(s.mmExtended),
-      tostring(s.campBar), tostring(s.remind.buffs), tostring(s.glow.on), tostring(s.guide.on), tostring(s.guide.frame), tostring(s.arrow)) end
+      tostring(s.remind.on), tostring(s.remind.buffs), tostring(s.glow.on), tostring(s.guide.on), tostring(s.guide.frame), tostring(s.arrow)) end
     local function stepShown(c) return c.env.QuestBankStep ~= nil and c.env.QuestBankStep:IsShown() end
     -- a saved table from before with more runs than the engine keeps: the prune must run on it, not on a throwaway
     local runs = {}
@@ -5095,8 +5098,8 @@ do
     assert(s.guide.on == true and s.guide.frame == true and stepShown(c), "the base alone: the guide on, the frame up: " .. flags(s))
     assert(s.mapIcons == false and s.pins == false, "Map off: no quest icons, no route pins on the world map: " .. flags(s))
     assert(s.minimapPins ~= false and s.minimapLines ~= false, "the minimap's route is the Route tab's: left on: " .. flags(s))
-    assert(s.campBar == false and s.remind.buffs == false and s.remind.party == false and s.glow.on == false, "Camp off: no camp bar, no buffs banner, no party's buffs, no light: " .. flags(s))
-    assert(s.cuteOff.map.mapIcons == true and s.cuteOff.camp.campBar == true and s.cuteOff.map.minimapPins == nil, "what the flags were is kept for the switch on, the world map's alone")
+    assert(s.remind.on == false and s.remind.buffs == true and s.remind.party == true and s.glow.on == false, "Reminders off: nothing on screen, the rows as they are, no light on a fresh install: " .. flags(s))
+    assert(s.cuteOff.map.mapIcons == true and s.cuteOff.camp["remind.on"] == true and s.cuteOff.map.minimapPins == nil, "what the flags were is kept for the switch on, the world map's alone")
     -- Map on: its flags back as they were (the engine's defaults); a row's choice survives off and on
     c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
     assert(s.mapIcons == true and s.pins == true and s.cuteOff.map == nil, "Map on: both back on: " .. flags(s))
@@ -5106,11 +5109,11 @@ do
     c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
     assert(s.mapIcons == true and s.pins == false, "Map on again: the row's choice kept: " .. flags(s))
     s.pins = true
-    -- Camp on: the bar and the light; the light's switch goes through Glow.Set, which puts the game's settings back
+    -- Reminders on: on screen again; the light is its own row (the card's), never the module's
     c.C.Modules.Set("Cute_Quest:camp", true); tick(c, 1)
-    assert(s.campBar == true and s.remind.buffs == true and s.remind.party == true and s.glow.on == true, "Camp on: the bar, the banner, the party's buffs, the light: " .. flags(s))
+    assert(s.remind.on == true and s.remind.buffs == true and s.remind.party == true and s.glow.on == false, "Reminders on: on screen, the rows as they were, the light untouched: " .. flags(s))
     c.C.Modules.Set("Cute_Quest:camp", false); tick(c, 1)
-    assert(s.campBar == false and s.glow.on == false, "Camp off: off again: " .. flags(s))
+    assert(s.remind.on == false and s.glow.on == false, "Reminders off: off again: " .. flags(s))
     -- the step frame hidden by its row stays hidden over the switches and a login (0.7.0's switch set it shown again)
     s.guide.frame = false; QB.StepFrame.Apply()
     assert(not stepShown(c), "the frame hidden by its row")
@@ -5124,7 +5127,7 @@ do
     login(c2, db); tickAll(6)
     local s2 = c2.env.CuteQuestDB.settings
     assert(c2.addons[2].loaded and c2.C.Modules.byId.quests.active and s2.guide.on == true and s2.guide.frame == false and not stepShown(c2), "the next login: the base on, the frame as its row left it: " .. flags(s2))
-    assert(s2.mapIcons == false and s2.campBar == false and s2.glow.on == false, "Map and Camp still off: " .. flags(s2))
+    assert(s2.mapIcons == false and s2.remind.on == false and s2.glow.on == false, "Map and Reminders still off: " .. flags(s2))
     -- the frame's row ticked again: up at this login and the next
     s2.guide.frame = true; c2.addons[2].private.StepFrame.Apply()
     assert(stepShown(c2), "the frame back by its row")
@@ -14826,6 +14829,124 @@ do
     assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
     leave(c)
     print("merge2: " .. table.concat(said, "; "))
+  end)
+end
+
+-- [stage: hud] that stage's tests go right below this line
+-- The hud round: Reminders in Cute (docs/superpowers/specs/2026-10-21-reminders-design.md, section 10, case 17). One
+-- engine, Remind.lua, copied byte for byte; the Reminders module (id camp, its saved state kept) the master switch over
+-- remind.on alone, its section the engine's rows and the light's two.
+-- H1: a fresh character: the interact light off until the first-run card says (the engine's default is on and the
+-- light changes the game's soft-target settings); the card's Reminders row ticked; Start with it: Reminders on screen.
+-- H2: a 0.7 save whose Camp module was off: its kept cuteOff.camp (campBar, the two buffs rows, the light) rewritten,
+-- the module follows remind.on alone and the rows go back as kept; on again, Reminders back.
+-- H3: QuestBank loaded: its reminders are its own: the section greyed, nothing written.
+-- H4: the engine files byte-identical; Reminders eight rows, Quests eight at most.
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local said = {}
+    local state = {}
+    local function client(card) return newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true, card = card })) end
+    -- H1
+    local c = client(true)
+    login(c); tick(c, 3)
+    local s = c.env.CuteQuestDB.settings
+    local QB = c.addons[2].private
+    assert(QB.Remind and s.remind.v == 2 and s.glow.on == false and s.remind.on == false, "fresh: the light off, Reminders off with the module (off until Start): " .. tostring(s.remind.on))
+    local card = c.env.CuteSetupFrame
+    assert(card and card:IsShown(), "the first-run card")
+    local function row(label) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == label end) end
+    assert(row("Camp bar and missing buffs"):GetChecked() and row("Interact light"):GetChecked(), "the card: Reminders' row and the light, ticked")
+    local start
+    for _, b in ipairs(c.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == "Start" then start = b end end
+    press(start)
+    local ch = c.env.CuteDB.chars["Rone-Forever"]
+    assert(ch.modules["Cute_Quest:camp"] == true and s.remind.on == true and s.glow.on == true and (s.cuteOff == nil or s.cuteOff.camp == nil), "Start: the module on, Reminders on screen, the light as its row said")
+    local db, qdb = c.env.CuteDB, c.env.CuteQuestDB
+    leave(c)
+    local d = client()
+    d.env.CuteQuestDB = qdb
+    login(d, db, true); tickAll(6)
+    local ds = d.env.CuteQuestDB.settings
+    assert(d.C.Modules.byId.camp.active and ds.remind.on == true and ds.glow.on == true and d.env.QuestBankCampBar and d.env.QuestBankBuffBanner, "after the reload: on, both pieces made")
+    said[#said + 1] = "a fresh character: the light off until the card, Start puts Reminders on screen"
+    leave(d)
+    -- H2
+    local o = client()
+    o.env.CuteQuestDB = { settings = { cuteDefaults = 2, v544 = true, v600 = true, campBar = false, guide = { on = true, frame = true },
+      remind = { camp = true, food = false, bag = true, fire = true, quietInstance = true, buffs = false, sit = true, wood = true, bagChain = true, party = false },
+      glow = { on = false, style = "sparkle" }, cuteOff = { camp = { campBar = true, ["remind.buffs"] = true, ["remind.party"] = true, ["glow.on"] = true } } } }
+    login(o); tickAll(6)
+    local so = o.env.CuteQuestDB.settings
+    assert(so.remind.buffs == true and so.remind.party == true and so.glow.on == true and so.remind.on == false and so.cuteOff.camp["remind.on"] == true
+      and so.cuteOff.camp.campBar == nil and so.remind.never.eat == "Eat", "0.7's kept switch rewritten: the rows back as kept, Reminders off with the module, the food's switch a Never")
+    o.C.Modules.Set("Cute_Quest:camp", true); tick(o, 1)
+    assert(so.remind.on == true and so.cuteOff.camp == nil and so.glow.on == true, "the module on: Reminders back, the light its own")
+    o.C.Modules.Set("Cute_Quest:camp", false); tick(o, 1)
+    assert(so.remind.on == false and so.remind.buffs == true and so.glow.on == true, "off again: Reminders alone off")
+    said[#said + 1] = "a 0.7 save's kept Camp switch rewritten to remind.on alone, its rows back"
+    leave(o)
+    -- H3
+    local q = client()
+    local isLoaded = q.env.C_AddOns.IsAddOnLoaded
+    q.env.C_AddOns.IsAddOnLoaded = function(x) if x == "QuestBank" then return true, true end return isLoaded(x) end
+    local writes = 0
+    local rset = { on = true, buffs = true, party = true, camp = true, upkeep = true, class = true, instance = "buffs", never = { eat = "Eat" } }
+    local settings = { guide = { on = true, frame = true }, arrow = true, mapIcons = true, pins = true, glow = { on = true, style = "sparkle" }, remind = rset, share = { party = true }, djShow = { boss = true, rare = true, trash = false, other = true } }
+    q.env.QuestBankAPI = {
+      version = "6.2.0", logReady = true, state = { level = 5, log = {} }, routeNow = { legs = {}, xp = 0, level = 5, t = 0 },
+      Settings = function() return settings end, MarkDirty = function() end, Comma = tostring, Short = tostring,
+      Model = { Busy = function() return false end }, Data = { CAT = {} }, Quest = { Get = function() return nil end },
+      Guide = { Steps = function() return {} end, Text = function(st) return st.text end, TimeToLevel = function() return nil end, MemberSteps = function() return {} end },
+      StepFrame = { Menu = function() end, Apply = function() end }, Arrow = { Set = function() end },
+      UI = { PlaceGroups = function() return {}, {}, nil, nil, nil end, Candidates = function() return {} end, QuestClick = function() end, QuestTooltip = function() end },
+      Target = { Route = function() return { legs = {}, xp = 0, level = 5, t = 0 } end }, Run = { Get = function() return nil end },
+      DMap = { Attach = function() end, Refresh = function() end }, Gear = { Attach = function() end, Refresh = function() end, RefreshSoon = function() end },
+      Remind = { ROWS = QB.Remind.ROWS, ON_LABEL = QB.Remind.ON_LABEL, Settings = function() return rset end, Hidden = function() return { { "eat", "Eat" } } end,
+                 SetRow = function() writes = writes + 1 end, SetNever = function() writes = writes + 1 end, Refresh = function() end },
+    }
+    login(q); tickAll(5)
+    q.C.Modules.Set("Cute_Quest", true); tick(q, 6)
+    q.C.Modules.Set("Cute_Quest:camp", true); tick(q, 1)
+    q.C.UI:Open("settings", "camp")
+    local t = texts(q)
+    assert(t:find("QuestBank is loaded: its reminders are its own.", 1, true), "QuestBank loaded: said so:\n" .. t)
+    local box = checkBox(q, function(cb) return cb.label and cb.label:GetText() == "Your buffs and weapon" end)
+    assert(box and box.__disabled, "its rows greyed")
+    click(box)
+    q.C.Modules.Set("Cute_Quest:camp", false); tick(q, 1)
+    assert(writes == 0 and rset.on == true and settings.glow.on == true, "nothing written: QuestBank's own")
+    check(sframe(q), "Reminders, QuestBank loaded")
+    said[#said + 1] = "QuestBank loaded: the section greyed, nothing written"
+    leave(q)
+    -- H4
+    for _, f in ipairs({ "Remind.lua", "Camp.lua", "Guide.lua", "StepFrame.lua", "Glow.lua" }) do
+      local a = assert(io.open(HERE .. "/../questbank/QuestBank/" .. f, "rb")):read("*a")
+      local b = assert(io.open(HERE .. "/Cute_Quest/" .. f, "rb")):read("*a")
+      assert(a == b, f .. ": Cute_Quest's copy is QuestBank's, byte for byte (build.py)")
+    end
+    local r = client()
+    login(r); tickAll(6)
+    local Mr = r.C.Modules
+    for _, key in ipairs({ "Cute_Quest:camp" }) do Mr.Set(key, true) end
+    local function rowsOf(id)
+      local n = 0
+      local col = setmetatable({}, { __index = function(_, k) return function() if k == "Check" or k == "Choice" or k == "Step" or k == "Edit" then n = n + 1 end end end })
+      Mr.byId[id].settings(Mr.byId[id], col)
+      return n
+    end
+    assert(rowsOf("camp") == 8 and rowsOf("quests") <= 8, string.format("Reminders eight rows, Quests eight at most: %d, %d", rowsOf("camp"), rowsOf("quests")))
+    for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+      sizeAll(r, size[1], size[2])
+      r.C.UI:Open("settings", "camp")
+      check(sframe(r), string.format("Settings > Reminders, %dx%d", size[1], size[2]))
+    end
+    sizeAll(r, 1040, 640)
+    assert(#(r.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    said[#said + 1] = "the engine's five files byte for byte; Reminders eight rows at both sizes"
+    leave(r)
+    print("hud: " .. table.concat(said, "; "))
   end)
 end
 
