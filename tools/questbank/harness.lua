@@ -22264,6 +22264,9 @@ do
     local r0 = R.refreshes
     c.combat = false; ev(c, "PLAYER_REGEN_ENABLED")
     c.secretAuras = false
+    -- (the client's restriction ends just after the fight, its Combat type Inactive: the wait still brings them back,
+    -- never a flash before it)
+    ev(c, "ADDON_RESTRICTION_STATE_CHANGED", 0, 0)
     tick(c, 1)
     assert(not B:IsShown(), "a second after the fight: not back yet")
     c.combat = true; ev(c, "PLAYER_REGEN_DISABLED"); tick(c, 2)
@@ -23025,10 +23028,14 @@ do
     print(string.format("hud: a full refresh with four reminders up: %.0f bytes of its own", per))
   end }
 
+  -- (each case on its own: a failing one is named and the rest still run; the block fails at its end)
+  local failed = {}
   for _, case in ipairs(CASES) do
-    case[2]()
-    print("hud: " .. case[1] .. ": ok")
+    local ok, err = pcall(case[2])
+    if ok then print("hud: " .. case[1] .. ": ok")
+    else failed[#failed + 1] = case[1] .. ": " .. tostring(err); print("hud: " .. case[1] .. ": FAILED: " .. tostring(err)) end
   end
+  assert(#failed == 0, #failed .. " hud case(s) failed:\n" .. table.concat(failed, "\n"))
 end
 
 ----------------------------------------------------------------------------

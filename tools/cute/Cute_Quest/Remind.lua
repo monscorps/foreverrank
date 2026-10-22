@@ -1800,7 +1800,12 @@ function R.OnEvent(event, a1, a2, ...)
     -- RestrictedActionsDocumentation.lua:58: the end is looked at on the next frame, as Pins.lua does)
     local inactive = Enum and Enum.AddOnRestrictionState and Enum.AddOnRestrictionState.Inactive or 0
     if plain(a2) == inactive and not fighting() then
-      if C_Timer and C_Timer.After then C_Timer.After(0, QB.Safe(function() if not R.Blocked() then after.waiting = false; R.Refresh() end end, "reminders"))
+      -- (the hud review: one ending in the 2 s after a fight, the Encounter's or Combat's own end, is that wait's: the
+      -- after-fight timer brings the pieces back with their fade, never a flash before it)
+      if C_Timer and C_Timer.After then C_Timer.After(0, QB.Safe(function()
+          if after.gen > 0 and after.waiting then return end
+          if not R.Blocked() then after.waiting = false; R.Refresh() end
+        end, "reminders"))
       end
     end
     return
