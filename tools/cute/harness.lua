@@ -19584,6 +19584,40 @@ do
     end)
   end }
 
+  -- S12 (owner). For a quest you hold and have not finished, "show it on the arrow" (the reader's button, Ctrl-click on a
+  -- row, on the band's step, on the step frame's) pointed at the hand-in NPC in town; a plain click on the step frame's
+  -- quest goes to its nearest open objective. One way now: the step frame's (SF.QuestSpot); the engine's click otherwise
+  FECASES[#FECASES + 1] = { "S12: show on the arrow, a held unfinished quest: its nearest open objective, everywhere", function()
+    inGuild({ member("Rone", 1) }, function()
+      local c = quest("Rone", { log = { [7] = 1 } })
+      login(c); tickAll(6)
+      local QB = c.addons[2].private
+      local q = QB.Quest.Get(7)
+      assert(QB.state.log[7] and not QB.state.log[7].complete, "Kobold Camp Cleanup held, not finished")
+      local spots, clicks = {}, {}
+      local spot, qclick = QB.StepFrame.QuestSpot, QB.UI.QuestClick
+      QB.StepFrame.QuestSpot = function(id) spots[#spots + 1] = id; return true end
+      QB.UI.QuestClick = function(x, st, which) clicks[#clicks + 1] = x.id end
+      local L = qwin(c)
+      c.C.UI:Open("quests")
+      QB.Reader.Read(L, q)
+      press(button(c, "Show on arrow"))
+      c.ctrl = true
+      QB.RowClick(L, q, QB:Status(q), "LeftButton")
+      c.env.Cute.QuestBand.Arrow({ qid = 7 })
+      QB.UI.scrollToQuest = 7
+      QB.UI:Open(1)
+      c.ctrl = false
+      assert(#spots == 4 and #clicks == 0, "the reader, a row, the band, the step frame: its objective each time: " .. #spots .. " spots, " .. #clicks .. " clicks")
+      local other = QB.Quest.Get(33)
+      QB.Reader.Read(L, other)
+      press(button(c, "Show on arrow"))
+      assert(#clicks == 1 and clicks[1] == 33 and #spots == 4, "a quest not held: the engine's click (its giver)")
+      QB.StepFrame.QuestSpot, QB.UI.QuestClick = spot, qclick
+      leave(c)
+    end)
+  end }
+
   -- S4 (firsthour), Cute_Quest's own words: the Finds list's note said what guides gave "QuestBank"; the site, which
   -- gathers them, is foreverrank.com
   FECASES[#FECASES + 1] = { "S4: the Finds list's note names foreverrank.com", function()

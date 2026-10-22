@@ -153,12 +153,16 @@ local function pageOf(tab)
   return page
 end
 -- (the step frame's click on a quest's step names the quest, UI.scrollToQuest, and opens tab 1: in Cute the quest window
--- reads that quest, as a click on a quest reads it everywhere; with Ctrl it goes on the arrow instead)
+-- reads that quest, as a click on a quest reads it everywhere; with Ctrl it goes on the arrow instead, as everywhere:
+-- Reader.lua R.Arrow)
 function UI:Open(tab)
   local qid = UI.scrollToQuest
   UI.scrollToQuest = nil
   local q = qid and tab == 1 and E.Quest.Get(qid)
-  if q and IsControlKeyDown and IsControlKeyDown() then UI.QuestClick(q, E:Status(q), "LeftButton") return end
+  if q and IsControlKeyDown and IsControlKeyDown() then
+    if QB.Reader then QB.Reader.Arrow(q, E:Status(q)) else UI.QuestClick(q, E:Status(q), "LeftButton") end
+    return
+  end
   Cute.Open(pageOf(tab), tab == 5 and "quests" or nil)
   local win = q and QB.Reader and Cute.Window and Cute.Window("quests")
   if win and win.frame and win.frame:IsShown() then QB.Reader.Read(win, q) end
