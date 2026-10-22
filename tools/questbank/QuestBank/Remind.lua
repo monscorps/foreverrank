@@ -767,8 +767,11 @@ local function paint(b, rec)
   local tex = rec.tex or 134400
   if b.qbTex ~= tex or b.qbAtlas ~= rec.atlas then
     b.qbTex, b.qbAtlas = tex, rec.atlas
-    if rec.atlas then QB.Art(b.icon, rec.atlas, tex) else b.icon:SetTexture(tex) end
-    if rec.tc then b.icon:SetTexCoord(rec.tc[1], rec.tc[2], rec.tc[3], rec.tc[4]) else b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    -- (an atlas as the game cuts it: no corners after it, whose own part of its sheet they would replace; a file cropped)
+    if not (rec.atlas and QB.Art(b.icon, rec.atlas, tex)) then
+      b.icon:SetTexture(tex)
+      if rec.tc then b.icon:SetTexCoord(rec.tc[1], rec.tc[2], rec.tc[3], rec.tc[4]) else b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    end
   end
   local waiting = not rec.lit
   b.icon:SetDesaturated(waiting)

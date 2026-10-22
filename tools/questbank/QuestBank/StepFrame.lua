@@ -563,15 +563,19 @@ function SF.RemindChanged(rec)
   lastVer = -1
   if SF.frame and SF.frame:IsShown() then SF.Refresh() end
 end
--- the line drawn from its record: its icon (an atlas where the client has it, else the file, at its corners), words,
--- minutes and bar
+-- the line drawn from its record: its icon (an atlas where the client has it, else the file, at its corners; the
+-- corners never set after an atlas, whose own part of its sheet they would replace), desaturated where its record says
+-- (Flight path's), words, minutes and bar
 local function drawLine(line, rec)
   line.rec = rec
   if line.qbTex ~= rec.tex or line.qbAtlas ~= rec.atlas then
     line.qbTex, line.qbAtlas = rec.tex, rec.atlas
-    QB.Art(line.icon, rec.atlas, rec.tex or QB.Data.TEX.questGeneric)
-    if rec.tc and not rec.atlas then line.icon:SetTexCoord(rec.tc[1], rec.tc[2], rec.tc[3], rec.tc[4]) else line.icon:SetTexCoord(0, 1, 0, 1) end
+    if not QB.Art(line.icon, rec.atlas, rec.tex or QB.Data.TEX.questGeneric) and rec.tc then
+      line.icon:SetTexCoord(rec.tc[1], rec.tc[2], rec.tc[3], rec.tc[4])
+    end
   end
+  local grey = rec.desat == true
+  if line.qbGrey ~= grey then line.qbGrey = grey; line.icon:SetDesaturated(grey) end
   -- (the words take the minutes' room where there are none)
   local tw = INNER - TEXT_X - (rec.mins and LINE_MINS or 0)
   if line.text:GetWidth() ~= tw then line.text:SetWidth(tw); line.text.qbText, line.text.qbA = nil, nil end

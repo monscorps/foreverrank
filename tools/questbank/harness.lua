@@ -22912,6 +22912,22 @@ do
       ev(c, "ZONE_CHANGED"); tick(c, 0)
       local rec = c.QB.Guide.Reminder()
       assert(rec and rec.key == "flight" and rec.text == "Learn the flight path: " .. town and rec.word:find("min$"), town .. ": the line: " .. tostring(rec and rec.text))
+      -- (its icon the game's FlightPath atlas whole, desaturated, on the line and on Reminders with the step frame off:
+      -- no texture corners set after the atlas, which the client sets with it, as the stand-in here does)
+      local function clientAtlas(t) rawset(t, "SetAtlas", function(self, a) self.__atlas = a; self.__tex = "atlas:" .. tostring(a); self.__tc = nil end) end
+      local s = c.QB:Settings()
+      s.guide.on, s.guide.frame, s.welcome = true, true, nil
+      c.QB.StepFrame.Apply()
+      local line = env.QuestBankStep.remind
+      clientAtlas(line.icon); line.qbTex, line.qbAtlas = nil, nil
+      c.QB.StepFrame.Apply()
+      assert(line:IsShown() and line.icon.__atlas == "FlightPath" and line.icon.__tc == nil and line.icon.__desat, town .. ": the line's icon the FlightPath atlas whole, desaturated")
+      s.guide.frame = false; c.QB.StepFrame.Apply(); R.Refresh()
+      local bi = env.QuestBankCamp_flight
+      assert(bi and bi:IsShown(), town .. ": the step frame off, the flight path on Reminders")
+      clientAtlas(bi.icon); bi.qbTex, bi.qbAtlas = nil, nil
+      R.Refresh()
+      assert(bi.icon.__atlas == "FlightPath" and bi.icon.__tc == nil, town .. ": its icon there the atlas whole too")
       c.taxiKnown[h[6]] = true
       fireTV(c, "UI_INFO_MESSAGE", 0, env.ERR_NEWTAXIPATH); ev(c, "UI_INFO_MESSAGE", 0, env.ERR_NEWTAXIPATH); tick(c, 0)
       rec = c.QB.Guide.Reminder()

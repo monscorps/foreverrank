@@ -1371,7 +1371,7 @@ R.Add({ key = "flight", neverName = "Flight paths", piece = "step", order = 220,
     if not p then return end
     local m = R.Minutes(ctx.me, p) or 0
     local rec = add()
-    rec.tex, rec.atlas, rec.lit = 132239, "FlightPath", false
+    rec.tex, rec.atlas, rec.lit, rec.desat = 132239, "FlightPath", false, true
     if flightFor ~= p.name then flightFor = p.name; flightText = "Learn the flight path: " .. (p.name or "the flight master") end
     rec.text, rec.name = flightText, "Flight path"
     rec.mins, rec.word, rec.timed = m, R.MinWord(m), true
