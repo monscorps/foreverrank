@@ -559,10 +559,11 @@ function P:Settle()
     self.settled = settled
     if C.Comm and C.Comm.PolicySettled then C.Comm:PolicySettled(settled) end
   end
-  -- (a member's client that dropped a value while it did not hold the line's policy (Guild Info unread, or in doubt), a
-  -- stat the officers opened meanwhile sent once by every client: asked for again, once, as the doubt ends or the line
-  -- changes, so what rarely changes comes again. One dropped while it routed by the line from before is kept aside and
-  -- taken as the line read opens it: Roster.lua R:ReleaseAside)
+  -- (a member's client that lost a value while it did not hold the line's policy (Guild Info unread, or in doubt): one
+  -- it could not keep aside, its sender's share full, Roster.lua R.lostUnsettled. Asked for again, once, as the doubt
+  -- ends or the line changes, so what rarely changes comes again. What came meanwhile, a stat the officers opened sent
+  -- once by every client as it read the line, is kept aside with its labels and claims, and taken as the read here
+  -- opens it: Roster.lua R:ReleaseAside. 0.9.2 asked for that too, and every client online answered whole)
   if settled and (self.doubtEnded or self.lineChanged) then
     if lost and C.Comm and C.Comm.Ask and C.Comm.hello and not R:MeOfficer() then
       R.lostUnsettled = nil
