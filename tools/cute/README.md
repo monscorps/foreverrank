@@ -1544,8 +1544,8 @@ panels and in the window (UI.lua's EDGE), and the Download button is dark text o
 a light button through the whole cascade. It ends `problems: 0` and `OK`, or lists the problems and exits 1.
 `--online` also fetches the external links. The page is `addons/cute/index.html`; `#l` or `#m` on its URL opens that
 window's picture. The pictures (`img/j.webp`, `l.webp`, `m.webp`, `card.webp`, under 160 KB each, which the build
-checks) are cut from the agreed mockup `research/qbrender/cute-windows.html`, J's tabs and Race columns and the card's
-Reminders row set to 0.9.0's.
+checks) are cut from the agreed mockup `research/qbrender/cute-windows.html`, J's tabs and Race columns set to 0.9.0's
+and the card's rows to `Setup.lua`'s (Runs under Guild, Reminders, the dim line under Map, Reminders and Interact light).
 
 ## The seed
 
