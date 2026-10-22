@@ -117,9 +117,11 @@ function H.DB()
   for _, k in ipairs({ "queue", "sets", "weeks", "gone" }) do if type(d[k]) ~= "table" then d[k] = {} end end
   return d
 end
+-- (the guild chat line goes only where the officer ticks it in the composer, 18: unticked until the first tick, then
+-- the last choice)
 local function settings()
   local s = C.Settings()
-  if type(s.halls) ~= "table" then s.halls = { toast = true, chat = true } end
+  if type(s.halls) ~= "table" then s.halls = { toast = true } end
   return s.halls
 end
 H.Prefs = settings
@@ -374,7 +376,7 @@ function H:Compose(items)
   end
   local first = list[1] and list[1].it or {}
   local kind = (first.src == "first" and "f") or (first.src == "record" and "r") or "n"
-  return { kind = kind, title = TITLES[first.src] or "Guild news", cards = cards, from = from, chat = H.Prefs().chat ~= false }
+  return { kind = kind, title = TITLES[first.src] or "Guild news", cards = cards, from = from, chat = H.Prefs().chat == true }
 end
 -- a composed set kept as a row (Save draft), up to 6
 function H:SaveDraft(set)
@@ -1316,7 +1318,7 @@ function H.Draw(ui)
   elseif chip == "queue" and not H.draft then
     local n = #H.Ticked()
     local function newCard()
-      H.draft = { mode = "card", kind = "n", title = "Guild news", cards = { { kind = "shout", title = "", line = "" } }, chat = H.Prefs().chat ~= false }
+      H.draft = { mode = "card", kind = "n", title = "Guild news", cards = { { kind = "shout", title = "", line = "" } }, chat = H.Prefs().chat == true }
       C.UI:Draw()
     end
     local function compose()
@@ -1782,7 +1784,7 @@ function H.NewHall(kind, period, keepId)
     local d = stats[i] and C.Stats.byId[stats[i]]
     titles[i], lines[i] = d and d.label or "", L[i]
   end
-  H.draft = { mode = "hall", chat = H.Prefs().chat ~= false, draftId = keepId,
+  H.draft = { mode = "hall", chat = H.Prefs().chat == true, draftId = keepId,
     hall = { kind = kind, period = period, stats = stats, titles = titles, lines = lines, title = H.HallTitle(period) } }
 end
 local PERIODS = { { "a", "All time" }, { "w", "This week" }, { "l", "Last week" } }

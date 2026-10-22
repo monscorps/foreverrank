@@ -13041,6 +13041,7 @@ do local function cardsStage()
     local es = edits(ofa)
     typeInto(es[3], "A line of our own")
     assert(H(ofa).draft.cards[1].line == "A line of our own", "typing edits the card's line")
+    click(checkBox(ofa, function(f) return f.label and f.label:GetText() == "Also post a line in guild chat" end))
     press(buttonOf(ofa, "Preview"))
     local CF = ofa.C.CardFrame
     assert(CF.frame:IsShown() and CF.preview and CF.label:GetText() == "GUILD NEWS PREVIEW", "the preview: " .. tostring(CF.label:GetText()))
@@ -14130,6 +14131,41 @@ do local function cardsStage()
     assert(askAt and firstAt and firstAt - askAt <= 3, "the first officer with Cute answers at once: " .. tostring(firstAt and askAt and firstAt - askAt))
   end)
   said[#said + 1] = "1G with five sets of five cards and two officers: the lowest GUID among those with Cute answers newest first, the other says nothing"
+
+  -- the guild chat line goes only where the officer ticks it in the composer (18): unticked at first, the choice
+  -- remembered once made
+  isolated({ gmember("Ylva", 1, "MAGE"), gmember("Yeti", 3, "ROGUE") }, function()
+    local ylva, yeti = cchar("Ylva", 1), cchar("Yeti", 3, { class = "ROGUE" })
+    login(ylva); login(yeti)
+    tickAll(200)
+    local function chatBox() return checkBox(ylva, function(f) return f.label and f.label:GetText() == "Also post a line in guild chat" end) end
+    local function newCard()
+      H(ylva).OpenChip("queue")
+      press(buttonOf(ylva, "New card"))
+      typeInto(edits(ylva)[2], "Yeti")
+      typeInto(edits(ylva)[3], "Kind words")
+      ylva.C.UI:Draw()
+    end
+    newCard()
+    assert(not H(ylva).draft.chat and chatBox() and not chatBox():GetChecked(), "the guild chat line unticked at first")
+    press(buttonOf(ylva, "Preview"))
+    local CF = ylva.C.CardFrame
+    assert(CF.preview and not (CF.gone:IsShown() and CF.gone:GetText():find("Guild chat", 1, true)), "the preview shows no guild line")
+    press(buttonOf(ylva, "Publish"))
+    assert(#ylva.guildOut == 0, "nothing posted in guild chat the officer never ticked: " .. #ylva.guildOut)
+    tickAll(65)
+    newCard()
+    click(chatBox())
+    assert(H(ylva).draft.chat == true and H(ylva).Prefs().chat == true, "ticked")
+    press(buttonOf(ylva, "Preview"))
+    press(buttonOf(ylva, "Publish"))
+    assert(#ylva.guildOut == 1, "ticked: the line goes")
+    tickAll(65)
+    newCard()
+    assert(H(ylva).draft.chat == true and chatBox():GetChecked(), "the choice remembered")
+    press(buttonOf(ylva, "Clear"))
+  end)
+  said[#said + 1] = "the guild chat line unticked until the officer ticks it, then remembered"
 
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end
