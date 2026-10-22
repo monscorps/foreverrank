@@ -10730,7 +10730,7 @@ do
     local ask
     for _, m in ipairs(a3.sent) do if m.msg:sub(1, 3) == "1R|" then ask = ask or m.msg end end
     local hex = ask and ask:match("^1R|[^|]*|%d+|%d*|(%x*)$")
-    assert(hex and #hex > 16 and tonumber(hex:sub(17), 16) == held.at, "the ask carries the hold as since: " .. tostring(ask))
+    assert(hex and #hex > 16 and tonumber(hex:sub(17, 24), 16) == held.at, "the ask carries the hold as since: " .. tostring(ask))
     local s1, s2, fp7 = ask:match("^1R|[^|]*|(%d+)|?(%d*)|?(%x*)$")
     assert(tonumber(s1) and tonumber(s2) and #fp7 ~= 16, "a 0.7 client reads its stamps, and no fingerprint")
     local fs = {}
@@ -19320,6 +19320,116 @@ do
     said[#said + 1] = "a card's toast clears the clock strip"
     print("merge3 review: " .. table.concat(said, "; "))
   end)
+end
+
+-- [stage: fix-cute-core] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- fix-cute-core: the launch audit's findings on Cute's core (the channel, the roster, the rules, the first hour).
+-- C1. A login a day on is answered by what changed since its last logout from each guild mate whose whole record it
+--     heard in its last session, though that mate logged out and in again meanwhile (its record whole again, unheard),
+--     its statistics pass too; a mate online in none of that session answers whole, as a 0.9 ask (no window) is.
+--     What went is kept from login to login: a value unchanged since the last session is not sent again
+-- C2. What a client deleted of others' records and may want back (a stat the officers closed and opened again) leaves it
+--     no hold, so its next login asks every record whole; so does a registry grown since its last ask
+----------------------------------------------------------------------------
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "MAGE", level = 30, online = true } end
+  local function char(name, rank, extra) return newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", "MAGE", 30 }, extra)) end
+  -- (the record chunks a client sent after the n-th message)
+  local function chunks(c, n) local out = {}; for i = (n or 0) + 1, #c.sent do local m = c.sent[i].msg; if m:sub(1, 3) == "1F|" then out[#out + 1] = m end end return out end
+  local function askOf(c) for _, m in ipairs(c.sent) do if m.msg:sub(1, 3) == "1R|" then return m.msg end end end
+  local said = {}
+  -- C1
+  isolated({ member("Coraline", 1), member("Cobb", 3), member("Cyra", 3), member("Cato", 3) }, function()
+    local off, a, b = char("Coraline", 1), char("Cobb", 3), char("Cyra", 3, { withStats = true })
+    local adb, bdb = {}, {}
+    login(off); login(a, adb); login(b, bdb)
+    tickAll(200)
+    assert(adb.roster[b.sender] and adb.roster[b.sender].stats.g2001 == 1234, "Cobb has Cyra's record and pass")
+    -- Cobb logs out; Cyra logs out and in again while he is away (her record whole again, unheard by him), then moves
+    fire(a, "PLAYER_LOGOUT"); leave(a)
+    local held = adb.chars[a.name].hold
+    assert(type(held) == "table" and tonumber(held.from) and tonumber(held.from) <= held.at, "the hold keeps where his session began: " .. tostring(held and held.from))
+    tickAll(30)
+    fire(b, "PLAYER_LOGOUT"); leave(b)
+    tickAll(100)
+    local b2 = char("Cyra", 3, { withStats = true })
+    login(b2, bdb)
+    tickAll(200)
+    b2.o.zone = "Feralas"
+    fire(b2, "ZONE_CHANGED_NEW_AREA")
+    tickAll(30)
+    -- Cato logs in only now: online in none of Cobb's session
+    local d = char("Cato", 3, { withStats = true })
+    login(d)
+    tickAll(200)
+    local b0, d0 = #b2.sent, #d.sent
+    local a2 = char("Cobb", 3)
+    login(a2, adb)
+    tickAll(200)
+    local ask = askOf(a2)
+    local hex = ask and ask:match("^1R|[^|]*|%d+|%d*|(%x*)$")
+    assert(hex and #hex == 32 and tonumber(hex:sub(17, 24), 16) == held.at and tonumber(hex:sub(25, 32), 16) == math.floor(held.from),
+      "the ask carries his last session: since, and from when: " .. tostring(ask))
+    local s1, s2, fp7 = ask:match("^1R|[^|]*|(%d+)|?(%d*)|?(%x*)$")
+    assert(tonumber(s1) and tonumber(s2) and #fp7 ~= 16, "a 0.7 client reads its stamps, and no fingerprint")
+    local fs = chunks(b2, b0)
+    assert(#fs >= 1 and #fs <= 2, "Cyra answers with a part, not her whole record: " .. #fs .. " chunks: " .. table.concat(fs, " / "))
+    for _, m in ipairs(fs) do assert(m:find("^1F|%d+|%d+|%d+s|"), "marked since: " .. m) end
+    local all = table.concat(fs, " ")
+    assert(all:find("zone=Feralas", 1, true), "with the zone she moved to: " .. all)
+    assert(not all:find("level=", 1, true) and not all:find("g2001=", 1, true), "and nothing unchanged since he left, her statistics pass included: " .. all)
+    local rec = a2.env.CuteDB.roster[b2.sender]
+    assert(rec and rec.stats.zone == "Feralas" and rec.stats.level == 30 and rec.stats.g2001 == 1234, "Cobb holds her record as it is")
+    -- Cato, online in none of his session, answers whole
+    local ds = chunks(d, d0)
+    assert(ds[1] and ds[1]:find("^1F|1|%d+|%d+|") and table.concat(ds, " "):find("level=", 1, true), "Cato answers whole: " .. tostring(ds[1]))
+    -- a 0.9 ask, a since and no window: whole, her record having gone whole this login after it
+    local b1 = #b2.sent
+    b2.C.Comm:Receive("1R|" .. guidOf("Cato") .. "|0|0|" .. b2.C.Policy:Fp() .. string.format("%x", held.at), "GUILD", "Cato-Forever")
+    tickAll(60)
+    local w9 = chunks(b2, b1)
+    assert(w9[1] and w9[1]:find("^1F|1|%d+|%d+|") and table.concat(w9, " "):find("level=", 1, true), "a 0.9 ask with no window: whole: " .. tostring(w9[1]))
+    for _, x in ipairs({ off, b2, d, a2 }) do leave(x) end
+  end)
+  said[#said + 1] = "a login a day on: what changed since, from a mate who was online in its last session though she relogged; whole from one who was not, and for a 0.9 ask"
+  -- C2
+  isolated({ member("Coraline", 1), member("Cobb", 3), member("Cyra", 3) }, function()
+    local off, a, b = char("Coraline", 1), char("Cobb", 3), char("Cyra", 3)
+    local adb, bdb = {}, {}
+    login(off); login(a, adb); login(b, bdb)
+    tickAll(200)
+    fire(b, "PLAYER_LOGOUT"); leave(b)
+    -- the officers close Zone and open it again while Cyra is away: Cobb deleted her zone meanwhile
+    off.C.Policy:Set("zone", "self"); off.C.Comm:SendPolicy()
+    tickAll(10)
+    assert(adb.roster[b.sender].stats.zone == nil, "Zone closed: Cobb deleted her zone")
+    off.C.Policy:Set("zone", "all"); off.C.Comm:SendPolicy()
+    tickAll(10)
+    fire(a, "PLAYER_LOGOUT"); leave(a)
+    assert(adb.chars[a.name].hold == nil, "Cobb keeps no hold: he deleted what he wants back")
+    local b2 = char("Cyra", 3)
+    login(b2, bdb)
+    tickAll(200)
+    local a2 = char("Cobb", 3)
+    login(a2, adb)
+    tickAll(200)
+    local hex = askOf(a2):match("|(%x*)$")
+    assert(#hex == 16, "his next ask whole: " .. askOf(a2))
+    assert(adb.roster[b2.sender].stats.zone == "Duskwood", "and he has her zone again: " .. tostring(adb.roster[b2.sender].stats.zone))
+    fire(a2, "PLAYER_LOGOUT"); leave(a2)
+    -- a registry that grew since his last ask (a module switched on, a newer Cute): his next ask whole
+    local hold = adb.chars[a.name].hold
+    assert(type(hold) == "table" and hold.from and hold.reg == a2.C.Comm.Reg(), "a hold again, with what he takes on the wire: " .. tostring(hold and hold.reg))
+    hold.reg = "1:1"
+    local a3 = char("Cobb", 3)
+    login(a3, adb)
+    tickAll(30)
+    assert(#(askOf(a3):match("|(%x*)$")) == 16, "a registry changed since: his ask whole: " .. askOf(a3))
+    for _, x in ipairs({ off, b2, a3 }) do leave(x) end
+  end)
+  said[#said + 1] = "a stat closed and opened again, or a registry that grew, leaves the next login asking whole"
+  print("fix-cute-core review: " .. table.concat(said, "; "))
 end
 
 -- this pass's problems and layouts join the run's; the last pass prints them all

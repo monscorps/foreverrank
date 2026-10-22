@@ -1226,8 +1226,13 @@ function P:Rerouted(before)
   if #opened > 0 and C.Comm and C.Comm.Opened then C.Comm:Opened(opened) end
   -- (the officers' threshold may have changed who this client is)
   if C.Roster and C.Roster.PurgeCheck then C.Roster:PurgeCheck() end
-  local grew = before.closed == nil
-  if not grew then for id in pairs(closedSet()) do if not before.closed[id] then grew = true break end end end
+  local grew, closed = before.closed == nil, closedSet()
+  if not grew then for id in pairs(closed) do if not before.closed[id] then grew = true break end end end
+  -- (a stat the officers opened again: this client may have deleted it of others while it was closed, and those who
+  -- are offline now never send it again unless it changes. Its next login asks every record whole: Comm.lua M:Unheld)
+  for id in pairs(before.closed or EMPTY) do
+    if not closed[id] then if C.Comm and C.Comm.Unheld then C.Comm:Unheld() end break end
+  end
   local counts, shrank = C.Stats.ReadyCounts(), false
   for id in pairs(before.ready or EMPTY) do if not counts[id] then shrank = true end end
   if grew or shrank then self:Purge(shrank) end
@@ -1265,7 +1270,7 @@ function P:Purge(ready)
   if account == nil then self.purgeDue = true; return 0 end
   if account then return 0 end
   ready, self.readyDue, self.purgeDue = self.readyDue, nil, nil
-  local n = 0
+  local n, readyGone = 0, false
   local pending = C.Stats.gamePending == true
   -- (each id routed once, however many records hold it)
   local routes = {}
@@ -1280,6 +1285,7 @@ function P:Purge(ready)
           e.stats[id] = nil
           if type(e.at) == "table" then e.at[id] = nil end
           n = n + 1
+          if id == "ready" and ready then readyGone = true end
         end
       end
       -- (a suspect's reason names the value that could not be: the mark stays, a value the officers keep goes)
@@ -1302,6 +1308,9 @@ function P:Purge(ready)
   -- (sub-project G: who saw each find, by GUID, where the officers keep Finds or Zone; a find of yours and the officers'
   -- word stay)
   if self:FindsRoute() == "self" and C.Finds and C.Finds.StripTraces then traces = traces + C.Finds.StripTraces(only) end
+  -- (the Readys a policy change took: each sender's next read says it again, and an offline member's Ready unchanged
+  -- would never come with what changed since this client's last session: Comm.lua M:Unheld)
+  if readyGone and C.Comm and C.Comm.Unheld then C.Comm:Unheld() end
   if n > 0 then
     R:Changed()
     if C.Rules then C.Rules:Dirty(true) end
