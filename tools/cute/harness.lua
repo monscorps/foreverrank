@@ -17292,7 +17292,8 @@ do
     local state = {}
     local function client(name, rank) return newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true, card = true })) end
     local p = client("Pim", 3)
-    local answered = { guild = true, quests = true, dungeons = true, gear = true, mapicons = true, step = true, camp = true, light = true, accept = true, handin = true }
+    -- (fix-cute-ui: Runs answered too, its row the card's since; U1 checks it alone)
+    local answered = { guild = true, runs = true, quests = true, dungeons = true, gear = true, mapicons = true, step = true, camp = true, light = true, accept = true, handin = true }
     local db = { version = "0.8.0", chars = { ["Pim-Forever"] = { counters = {}, setup = answered, keys = { guild = "follow", quests = "follow" },
       modules = { ["Cute_Quest:map"] = false, ["Cute_Quest:journal"] = true } } } }
     login(p, db); tick(p, 3)
@@ -18072,7 +18073,8 @@ do
       return q
     end
     local p = client("Pim", 3)
-    local answered = { guild = true, quests = true, dungeons = true, gear = true, mapicons = true, step = true, camp = true, light = true, accept = true, handin = true }
+    -- (fix-cute-ui: Runs answered too, its row the card's since; U1 checks it alone)
+    local answered = { guild = true, runs = true, quests = true, dungeons = true, gear = true, mapicons = true, step = true, camp = true, light = true, accept = true, handin = true }
     local db = { version = "0.8.0", chars = { ["Pim-Forever"] = { counters = {}, setup = answered, keys = { guild = "follow", quests = "follow" },
       modules = { ["Cute_Quest:map"] = true, ["Cute_Quest:journal"] = true } } } }
     login(p, db); tick(p, 3)
@@ -19319,6 +19321,64 @@ do
     leave(t)
     said[#said + 1] = "a card's toast clears the clock strip"
     print("merge3 review: " .. table.concat(said, "; "))
+  end)
+end
+
+-- [stage: fix-cute-ui] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The launch audit's cute-ui findings, Cute's side.
+-- U1. The setup card asks about Runs: "Run reports after dungeons, raids and long groups", ticked, under Guild (the
+--     run-report design's 14 and 18: Runs sends run values to the group, so the card asks); Start chooses the module.
+--     A character who answered every other row sees the card once more with this row alone, unindented
+----------------------------------------------------------------------------
+-- (this stage's helpers, in one table: the main chunk's locals are near Lua's limit)
+local UIX = {}
+function UIX.member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+function UIX.row(c, label) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == label end) end
+function UIX.button(c, label) for _, b in ipairs(c.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == label then return b end end end
+function UIX.rowIds(c) local out = {}; for _, r in ipairs(c.C.Setup.Rows()) do out[#out + 1] = r.id end return table.concat(out, " ") end
+do
+  local uiMember, uiRow, uiButton, uiRowIds = UIX.member, UIX.row, UIX.button, UIX.rowIds
+  isolated({ uiMember("Rone", 1), uiMember("Pim", 3) }, function()
+    local said = {}
+    local state = {}
+    local function client(name, rank) return newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true, card = true })) end
+    local RUNS = "Run reports after dungeons, raids and long groups"
+    -- a fresh character: the row, ticked, under Guild; unticked and Start, Runs is off and the row answered
+    local c = client("Rone", 1)
+    login(c); tick(c, 3)
+    local r = uiRow(c, RUNS)
+    assert(c.env.CuteSetupFrame and c.env.CuteSetupFrame:IsShown() and r and r:GetChecked(), "a fresh character's card asks about Runs, ticked: " .. uiRowIds(c))
+    local g = checkBox(c, function(cb) return cb.label and cb.label:GetText():find("^Guild") end)
+    assert(g and r.__points[1].x > g.__points[1].x and r.__points[1].y < g.__points[1].y, "the Runs row under Guild, indented")
+    check(c.env.CuteSetupFrame, "fix-cute-ui U1 the setup card with Runs")
+    click(r)
+    press(uiButton(c, "Start"))
+    local ch = c.env.CuteDB.chars["Rone-Forever"]
+    assert(c.reloads == 1 and ch.modules.runs == false and ch.setup.runs == true, "unticked and Start: Runs off, the row answered: " .. tostring(ch.modules.runs))
+    leave(c)
+    said[#said + 1] = "a fresh character's card asks about Runs, ticked, under Guild; Start chooses the module"
+    -- a character who answered every row before Runs had one: the card once more, with this row alone
+    local answered = { guild = true, quests = true, dungeons = true, gear = true, mapwin = true, step = true, camp = true, light = true, accept = true, handin = true }
+    local db = { version = "0.9.0", chars = { ["Pim-Forever"] = { counters = {}, setup = answered, keys = { guild = "follow", quests = "follow", map = "follow" } } } }
+    local p = client("Pim", 3)
+    login(p, db); tick(p, 3)
+    assert(p.env.CuteSetupFrame and p.env.CuteSetupFrame:IsShown() and uiRowIds(p) == "runs", "the card comes back with the Runs row alone: " .. uiRowIds(p))
+    local pr = uiRow(p, RUNS)
+    assert(pr and pr:GetChecked() and pr.__points[1].x == 14, "alone, ticked and unindented: " .. tostring(pr and pr.__points[1].x))
+    check(p.env.CuteSetupFrame, "fix-cute-ui U1 the setup card, the Runs row alone")
+    press(uiButton(p, "Start"))
+    local pch = p.env.CuteDB.chars["Pim-Forever"]
+    assert(pch.modules.runs == true and pch.setup.runs == true and pch.openAfter == nil, "Start: Runs on, answered, no window to open")
+    local db2, qdb = p.env.CuteDB, p.env.CuteQuestDB
+    leave(p)
+    local p2 = client("Pim", 3)
+    p2.env.CuteQuestDB = qdb
+    login(p2, db2, true); tickAll(6)
+    assert(not (p2.env.CuteSetupFrame and p2.env.CuteSetupFrame:IsShown()) and not p2.C.Setup.Pending() and p2.C.Modules.byId.runs.active, "after the reload: no card, Runs on")
+    leave(p2)
+    said[#said + 1] = "a character who answered the rest sees the Runs row alone, once"
+    print("fix-cute-ui U1: " .. table.concat(said, "; "))
   end)
 end
 

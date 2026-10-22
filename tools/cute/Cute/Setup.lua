@@ -1,7 +1,7 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- Setup: the first-run card, once per character, and the reload rule's question when Settings closes.
--- The card (CuteSetupFrame, 480 px, centred): the windows (Guild and Quests always, with the key that opens each; the
--- Dungeons and Gear tabs; Cute's Map with its key), what Cute puts on screen (the step frame and arrow, Reminders, the
+-- The card (CuteSetupFrame, 480 px, centred): the windows (Guild and Quests always, with the key that opens each; Runs
+-- under Guild; the Dungeons and Gear tabs; Cute's Map with its key), what Cute puts on screen (the step frame and arrow, Reminders, the
 -- interact light) and the two quest choices (Accept for me, the hand-in). Every row starts
 -- from what this character has saved (its modules, the engine's settings), and only a row with nothing saved starts at
 -- the default: everything on but the two automatic choices. Start writes the choices, marks every row shown answered
@@ -52,6 +52,9 @@ local function rows()
   local q = engine()
   local function add(r) out[#out + 1] = r end
   add({ id = "guild", group = "Windows", label = "Guild", kind = "fixed", key = "guild" })
+  -- (the run-report design's 14 and 18) Runs, on by default, sends run values to the group, so the card asks: a row of
+  -- its own under Guild, ticked; a character who answered the rest sees it alone, once (unindented: no Guild row over it)
+  if C.Modules.byId.runs then add({ id = "runs", group = "Windows", label = "Run reports after dungeons, raids and long groups", kind = "check", module = "runs", indent = 20, under = "guild" }) end
   if quests then
     add({ id = "quests", group = "Windows", label = "Quests and Route", kind = "fixed", key = "quests" })
     add({ id = "dungeons", group = "Windows", label = "Dungeons tab", kind = "check", module = "Cute_Quest:journal", indent = 20 })
@@ -72,7 +75,9 @@ local function rows()
     end
   end
   local done, shown = answered(), {}
-  for _, r in ipairs(out) do if r.kind == "line" or not done[r.id] then shown[#shown + 1] = r end end
+  local ids = {}
+  for _, r in ipairs(out) do if r.kind == "line" or not done[r.id] then shown[#shown + 1] = r; ids[r.id] = true end end
+  for _, r in ipairs(shown) do if r.under and not ids[r.under] then r.indent = nil end end
   -- (a line alone is no question)
   local asks = 0
   for _, r in ipairs(shown) do if r.kind ~= "line" then asks = asks + 1 end end
@@ -91,6 +96,7 @@ function S.Start(id)
   local s = q and q.Settings and q.Settings() or nil
   local saved = q and q.Saved and q.Saved() or false
   local camp = modOn("Cute_Quest:camp")
+  if id == "runs" then local v = modOn("runs"); if v == nil then return true end return v end
   if id == "dungeons" then local v = modOn("Cute_Quest:journal"); if v == nil then return true end return v end
   if id == "gear" then local v = modOn("Cute_Quest:gear"); if v == nil then return true end return v end
   if id == "mapwin" or id == "mapicons" then local v = modOn("Cute_Quest:map"); if v == nil then return true end return v end
@@ -328,6 +334,7 @@ function S.Go()
   local shown = {}
   for _, r in ipairs(p.rows) do if r.kind ~= "line" then done[r.id] = true; shown[r.id] = true end end
   -- the modules (the reload applies them): each shown tab or switch; Reminders (the Camp module) from its own row alone
+  if shown.runs then M.Choose("runs", p.on.runs) end
   if shown.dungeons then M.Choose("Cute_Quest:journal", p.on.dungeons) end
   if shown.gear then M.Choose("Cute_Quest:gear", p.on.gear) end
   if shown.mapwin then M.Choose("Cute_Quest:map", p.on.mapwin) end
