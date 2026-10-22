@@ -3497,7 +3497,8 @@ function UI:CreatePartyView(parent)
   v.syncBtn:SetPoint("BOTTOMLEFT", LEFT + 252, 12)
   v.syncBtn:SetScript("OnClick", QB.Safe(function() if QB.Sync then QB.Sync:Broadcast(true) end end, "send now"))
   tooltip(v.syncBtn, function(tip)
-    tip:AddLine("Send your quests to QuestBank users now", GOLD[1], GOLD[2], GOLD[3])
+    -- (the final audit) as Sync.lua S:Broadcast sends them: the quest list to the group alone, the guild your status
+    tip:AddLine("Share now: your quests with your group, your level with your guild", GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine("Party and guild sharing is set in Settings. /qb sync Name whispers one friend.", 1, 1, 1, true)
   end)
 

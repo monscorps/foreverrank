@@ -24854,6 +24854,43 @@ end)()
     assert(line:find("saved file", 1, true) and line:find("QuestBank.lua", 1, true), "the line says where it is kept: " .. line)
   end }
 
+  -- N1 (look, must). A forced share (Party's Send now, /qb sync) printed "Shared your quests with guild." though the quest
+  -- list goes to the group alone and the guild hears your status; the button's tooltip said the same
+  CASES[#CASES + 1] = { "N1: Send now says what went where, and its tooltip too", function()
+    local c = char("Sender", { group = false })
+    local QB, S = c.QB, c.QB.Sync
+    QB:Settings().share.guild = true
+    local n0 = #c.chat
+    S:Broadcast(true)
+    local line = said(c, n0)
+    assert(line == "Sent your level and progress to your guild.", "in a guild, out of a group: " .. line)
+    c.o.group = true
+    n0 = #c.chat
+    S:Broadcast(true)
+    line = said(c, n0)
+    assert(line == "Sent your quests to your party and your level and progress to your guild.", "in a party and a guild: " .. line)
+    QB:Settings().share.guild = false
+    n0 = #c.chat
+    S:Broadcast(true)
+    line = said(c, n0)
+    assert(line == "Shared your quests with your party.", "the party alone: " .. line)
+    c.raid = true
+    n0 = #c.chat
+    S:Broadcast(true)
+    line = said(c, n0)
+    c.raid = nil
+    assert(line == "Shared your quests with your raid.", "a raid: " .. line)
+    local UI = QB.UI
+    UI:Open(4); UI:Refresh()
+    local btn = UI.views[4].syncBtn
+    lines = {}
+    btn.__scripts.OnEnter(btn)
+    local tip = table.concat(lines, "\n")
+    if btn.__scripts.OnLeave then btn.__scripts.OnLeave(btn) end
+    UI.frame:Hide()
+    assert(tip:find("Share now: your quests with your group, your level with your guild", 1, true), "the button's tooltip:\n" .. tip)
+  end }
+
   local failed = {}
   for _, case in ipairs(CASES) do
     local ok, err = pcall(case[2])

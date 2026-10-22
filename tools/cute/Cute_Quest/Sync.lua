@@ -22,6 +22,7 @@ local STALE = 30 * 60
 -- reach you from anyone of your faction)
 local GROUP = { PARTY = true, RAID = true, INSTANCE_CHAT = true }
 S.GROUP = GROUP
+local GROUP_WORD = { PARTY = "party", RAID = "raid", INSTANCE_CHAT = "instance group" }
 -- (the launch audit) GUILD hears your status alone: the quest list goes to your group (and to a friend by /qb sync). Every
 -- login made every QuestBank in the guild send its status and its whole list there (a 1R on GUILD cleared what each had
 -- sent), and each objective ticked sent the list again; only the group reads it (the Party page's dungeons, the
@@ -144,7 +145,14 @@ function S:Broadcast(force)
     if ch ~= "GUILD" and (force or sig ~= self.lastQuests) then for _, m in ipairs(msgs) do queue(m, ch) end end
   end
   self.lastStatus, self.lastQuests = status, sig
-  if force then QB:Print("Shared your quests with " .. table.concat(chans, " and "):lower() .. ".") end
+  if force then
+    -- (the final audit) what went where: the quests to your group, your level and progress to your guild
+    local group, guild
+    for _, ch in ipairs(chans) do if ch == "GUILD" then guild = true else group = GROUP_WORD[ch] or "group" end end
+    if group and guild then QB:Print("Sent your quests to your " .. group .. " and your level and progress to your guild.")
+    elseif guild then QB:Print("Sent your level and progress to your guild.")
+    else QB:Print("Shared your quests with your " .. group .. ".") end
+  end
 end
 
 -- (the review round) the names you sent your quests to (/qb sync Name): a whispered ask ("1R") is answered for them
