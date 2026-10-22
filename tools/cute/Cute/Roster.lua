@@ -482,6 +482,7 @@ end
 -- was kept of the other guild's records this session goes, and the first purge is this guild's
 function R:ClubChanged()
   self.misses, self.charMisses, self.held, self.dings, self.shared, self.unsureGuid, self.wasOfficer = {}, {}, {}, {}, {}, {}, nil
+  self.aside = {}
   self:Identity()
   if C.Rules and C.Rules.Dirty then C.Rules:Dirty(true) end
 end
@@ -998,6 +999,84 @@ function R:ReleaseHeld()
   if C.Policy and C.Policy.Purge then C.Policy:Purge() end
   return n
 end
+-- (fix2) a value dropped because the policy this client routes by keeps its stat to the officers, while the sender may
+-- route by a newer one that opens it: the officer's own value goes at the click that opens it, before the save, and a
+-- mate's as it reads the saved line, both before this client has read it. Kept aside in memory (R.aside[key][id], as
+-- R.held, MAX_GAME a member) ASIDE_FOR seconds, and taken once a reroute here opens its stat (R:ReleaseAside, from
+-- Policy.lua P:Rerouted); what is left then goes, never saved and never shown. 0.9.1 dropped them and asked every
+-- record whole once its read opened the stat: every member online at once, at every save that opened one
+R.aside = {}
+local ASIDE_FOR = 600
+local function sweepAside()
+  local old, soonest = now() - ASIDE_FOR, nil
+  for key, a in pairs(R.aside) do
+    for id, x in pairs(a.v) do
+      if x.at <= old then a.v[id] = nil; a.n = a.n - 1
+      elseif not soonest or x.at < soonest then soonest = x.at end
+    end
+    if a.n <= 0 then R.aside[key] = nil end
+  end
+  -- (the next sweep as the oldest left runs out)
+  if soonest and not R.asideDue then
+    R.asideDue = true
+    C_Timer.After(soonest + ASIDE_FOR + 1 - now(), C.Safe(function() R.asideDue = false; sweepAside() end, "roster: values aside"))
+  end
+end
+local function putAside(key, id, v, t)
+  local a = R.aside[key]
+  if not a then a = { n = 0, v = {} }; R.aside[key] = a end
+  if a.v[id] == nil then
+    if a.n >= MAX_GAME then return end
+    a.n = a.n + 1
+  end
+  a.v[id] = { v = v, t = t, at = now() }
+  if not R.asideDue then
+    R.asideDue = true
+    C_Timer.After(ASIDE_FOR + 1, C.Safe(function() R.asideDue = false; sweepAside() end, "roster: values aside"))
+  end
+end
+function R:ReleaseAside()
+  if next(self.aside) == nil then return 0 end
+  local officer, n, old = self:MeOfficer(), 0, now() - ASIDE_FOR
+  local S, dynamic = C.Stats, C.Stats.IsDynamic
+  for key, a in pairs(self.aside) do
+    local e = CuteDB.roster[key]
+    local ok = type(e) == "table" and type(e.stats) == "table"
+    local kv, prev, games = {}, {}, nil
+    for id, x in pairs(a.v) do
+      local open = officer or C.Policy:Route(id) == "all"
+      if x.at <= old or open then a.v[id] = nil; a.n = a.n - 1 end
+      if ok and open and x.at > old and not S.Implausible(id, x.v, e.stats[id], nil) then
+        e.at = type(e.at) == "table" and e.at or {}
+        local dyn = dynamic(id)
+        if dyn or e.at[id] == nil or e.at[id] <= x.t then
+          local room = true
+          if e.stats[id] == nil and dyn then
+            if not games then games = 0; for k in pairs(e.stats) do if dynamic(k) then games = games + 1 end end end
+            room = games < MAX_GAME
+            if room then games = games + 1 end
+          end
+          if room then
+            if e.stats[id] == nil then prev[id] = false else prev[id] = e.stats[id] end
+            e.stats[id], kv[id] = x.v, x.v
+            if dyn then e.at[id] = nil else e.at[id] = x.t end
+            n = n + 1
+            -- (a discovery whose label came before a member's value for it, as R:Apply)
+            if dyn and prev[id] == false and S.ValueCame then S.ValueCame(id, key) end
+          end
+        end
+      end
+    end
+    if a.n <= 0 then self.aside[key] = nil end
+    -- (what the rules weigh, as R:Apply)
+    if next(kv) ~= nil and C.Rules then C.Rules:Observe(e.stats, kv, self:VoiceOf(key, e), prev) end
+  end
+  if n > 0 then
+    self:Changed()
+    if C.UI and C.UI.Refresh then C.UI:Refresh() end
+  end
+  return n
+end
 -- a member's level as C_Club gives it now (the roster refreshes on its events and once a minute, and a ding reaches
 -- the channel first): asked again before a level that disagrees with it is judged
 local function freshLevel(m)
@@ -1125,9 +1204,11 @@ function R:Apply(name, kv, whispered)
     elseif id == "ready" and not officer and not P.CurrentReady(ver) then
       if e.stats.ready ~= nil then e.stats.ready = nil; e.at.ready = nil end
     elseif not officer and P:Route(id) ~= "all" then
-      -- (dropped: maybe a stat the officers have just opened, sent once by a client that read the new line first;
-      -- asked for again once this client holds the line that opens it, Policy.lua P:Settle)
-      self.lostUnsettled = true
+      -- (not in the record: maybe a stat the officers have just opened, sent once by a client that routes by the newer
+      -- policy first. Kept aside a while, taken once a reroute here opens it (putAside); asked for again only where it
+      -- came before this client held the line's policy at all, Policy.lua P:Settle)
+      putAside(name, id, v, t)
+      if unsettled then self.lostUnsettled = true end
     else
       if (CHECKED[id] or (type(id) == "string" and id:match("^k%d+$"))) and not ctx then
         -- the member as the roster lists them: by the GUID that came, else the record's, else the sender's name (a GUID

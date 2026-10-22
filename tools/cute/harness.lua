@@ -10070,7 +10070,8 @@ do
   said[#said + 1] = "a stale officer's routing raises no doubt"
 
   -- (e) the line keeps Hearthstone to the officers; Mia's roster ask went a second before Ofa opens it and saves, so
-  -- her read waits and she drops Zed's hearth, sent once: as her read brings the new line she asks, once, and holds it
+  -- her read waits and Zed's hearth, sent once, is kept from her record: as her read brings the new line she holds it,
+  -- kept aside meanwhile, and asks nothing (fix2-cute-core: 0.9.1 asked, every member online at once)
   isolated({ member("Ofa", 1), member("Mia", 3), member("Zed", 3) }, function()
     INFO[7] = infoLine(pol(nil, { hearth = "self" }).policy)
     local ofa, mia, zed = char("Ofa", 1), char("Mia", 3), char("Zed", 3, { hearth = "Stormwind" })
@@ -10085,11 +10086,11 @@ do
     assert(not mia.C.Policy.doubt and mia.C.Policy:Route("hearth") == "self" and rec(mia.env.CuteDB, "Zed").stats.hearth == nil, "Mia routes by the line from before, and dropped what came")
     tickAll(120)
     assert(mia.C.Policy:Settled() and mia.C.Policy:Route("hearth") == "all", "Mia read the line")
-    assert(msgs(mia, "1R") == asks + 1, "she asked once as the doubt ended: " .. (msgs(mia, "1R") - asks))
+    assert(msgs(mia, "1R") == asks, "she asked nothing: " .. (msgs(mia, "1R") - asks))
     assert(rec(mia.env.CuteDB, "Zed").stats.hearth == "Stormwind", "and holds Zed's hearth")
     for _, c in ipairs({ ofa, mia, zed }) do leave(c) end
   end)
-  said[#said + 1] = "a value dropped before the line read asked for again"
+  said[#said + 1] = "a value that came before the line read taken as it opens"
 
   -- (f) the line keeps Empty slots to the officers; Mia's held policy opened it. She logs in where Guild Info is a
   -- secret, her Ready counting the empty slots meanwhile, then reads the line: the record released counts by it
@@ -21208,6 +21209,9 @@ end
 --     closed (not an officer's, which deletes nothing, nor one that never held any: a stat closed by default opened
 --     for the first time), and for one login: a member offline at the opening asks whole at its next login, whose
 --     logout keeps a hold again
+-- R2. A stat opened: no member asks the guild for what it dropped while it routed by the line from before (the
+--     officer's value sent at the click, a mate's sent as it read the line first). Kept aside in memory, those are
+--     taken once its own read opens the stat; one of a stat that stays closed goes after a while, never kept
 ----------------------------------------------------------------------------
 do
   local CASES, failed, said = {}, {}, {}
@@ -21267,6 +21271,37 @@ do
       leave(ofa); leave(b)
     end)
     said[#said + 1] = "a stat opened again asks whole only where its values were deleted, and for one login"
+  end }
+
+  CASES[#CASES + 1] = { "R2 a stat opened: nobody asks the guild, and what came before the read is taken as it opens", function()
+    inGuild({ member("Ofa", 1), member("Mia", 3), member("Zed", 3) }, function()
+      INFO[7] = infoLine(pol(nil, { hearth = "self" }).policy)
+      local ofa, mia, zed = char("Ofa", 1), char("Mia", 3), char("Zed", 3, { hearth = "Stormwind" })
+      local mdb, zdb = pol(nil, { hearth = "self" }), pol(nil, { hearth = "self" })
+      login(ofa, pol(true, { hearth = "self" })); login(mia, mdb); login(zed, zdb)
+      tickAll(200)
+      assert(mdb.roster[zed.sender].stats.hearth == nil and zdb.roster[ofa.sender].stats.hearth == nil, "the officers alone hold the hearths")
+      -- Mia's roster ask went a second ago: her read of the new line waits, and Zed's hearth, sent as he reads it, comes first
+      mia.C.Roster.askedAt = mia.C.Now() - 1
+      local m0, z0 = msgs(mia, "1R"), msgs(zed, "1R")
+      assert(ofa.C.Policy:Set("hearth", "all") and saveLine(ofa))
+      tickAll(4)
+      assert(mia.C.Policy:Route("hearth") == "self" and mdb.roster[zed.sender].stats.hearth == nil, "Mia routes by the line from before: nothing taken yet")
+      tickAll(120)
+      assert(mia.C.Policy:Route("hearth") == "all" and zed.C.Policy:Route("hearth") == "all", "both read the line")
+      assert(msgs(mia, "1R") == m0 and msgs(zed, "1R") == z0, "nobody asked the guild: " .. (msgs(mia, "1R") - m0) .. " and " .. (msgs(zed, "1R") - z0) .. " asks")
+      assert(mdb.roster[zed.sender].stats.hearth == "Stormwind" and mdb.roster[ofa.sender].stats.hearth == "Goldshire",
+        "Mia holds Zed's hearth and Ofa's, kept aside until her read: " .. tostring(mdb.roster[zed.sender].stats.hearth) .. ", " .. tostring(mdb.roster[ofa.sender].stats.hearth))
+      assert(zdb.roster[ofa.sender].stats.hearth == "Goldshire", "Zed holds Ofa's, sent at her click: " .. tostring(zdb.roster[ofa.sender].stats.hearth))
+      -- a value of a stat the line keeps closed (Whispers an hour): aside, never in the record, gone after a while
+      local R = mia.C.Roster
+      R:Apply(zed.sender, { whispers = 7 })
+      assert(mdb.roster[zed.sender].stats.whispers == nil and R.aside and R.aside[zed.sender] and R.aside[zed.sender].v.whispers, "kept aside, not in Zed's record")
+      tickAll(700)
+      assert(R.aside[zed.sender] == nil and mdb.roster[zed.sender].stats.whispers == nil and msgs(mia, "1R") == m0, "gone after a while, never kept, nothing asked")
+      for _, c in ipairs({ ofa, mia, zed }) do leave(c) end
+    end)
+    said[#said + 1] = "a stat opened: nobody asks the guild, what came before the read is taken as it opens, a closed one's goes"
   end }
 
   for _, case in ipairs(CASES) do

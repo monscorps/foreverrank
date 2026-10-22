@@ -559,9 +559,10 @@ function P:Settle()
     self.settled = settled
     if C.Comm and C.Comm.PolicySettled then C.Comm:PolicySettled(settled) end
   end
-  -- (a member's client that dropped a value while it waited for Guild Info or routed by the line from before, a stat
-  -- the officers opened meanwhile sent once by every client: asked for again, once, as the doubt ends or the line
-  -- changes, so what rarely changes comes again)
+  -- (a member's client that dropped a value while it did not hold the line's policy (Guild Info unread, or in doubt), a
+  -- stat the officers opened meanwhile sent once by every client: asked for again, once, as the doubt ends or the line
+  -- changes, so what rarely changes comes again. One dropped while it routed by the line from before is kept aside and
+  -- taken as the line read opens it: Roster.lua R:ReleaseAside)
   if settled and (self.doubtEnded or self.lineChanged) then
     if lost and C.Comm and C.Comm.Ask and C.Comm.hello and not R:MeOfficer() then
       R.lostUnsettled = nil
@@ -1262,6 +1263,8 @@ function P:Rerouted(before)
   local counts, shrank = C.Stats.ReadyCounts(), false
   for id in pairs(before.ready or EMPTY) do if not counts[id] then shrank = true end end
   if grew or shrank then self:Purge(shrank) end
+  -- (values dropped while this client routed by the policy from before, a stat it opens now: taken. Roster.lua)
+  if C.Roster and C.Roster.ReleaseAside then C.Roster:ReleaseAside() end
   -- Ready counts what the guild may see (Stats.lua): read again now, before anything held back leaves by the policy in
   -- force (a line read ends the wait in this same call, and the record released then carried a Ready counted under the
   -- policy held before, an empty slot the line keeps among its gaps); and an officer's client says what the guild
