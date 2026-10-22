@@ -21007,6 +21007,8 @@ end
 -- H1. A member promoted while offline logs in to an officer's halls: the members idle since are in This week (its
 --     client kept no weeks while it was a member, and an ask with a since brings only what changed); an officer who
 --     leaves the guild, its weeks gone, keeps no hold, so a rejoin asks every record whole
+-- U1. The setup card's line under Map, unticked, says the minimap's far view stays (the Route tab's own row): the wheel
+--     past the game's widest and a drag; with the far view off, the minimap is the game's
 -- B1. QuestBank before 6.4.1 beside Cute (no Sync.GuildOn: it reads no noGuildSync) has its guild share off for the
 --     session and put back at the logout; one that reads the flag is left as it is
 ----------------------------------------------------------------------------
@@ -21063,6 +21065,30 @@ do
       leave(o2); leave(x)
     end)
     said[#said + 1] = "a member promoted while offline has idle members' weeks; an officer who left keeps no hold"
+  end }
+
+  CASES[#CASES + 1] = { "U1 the card's Map line, unticked, says the far view stays", function()
+    inGuild({ UIX.member("Rone", 1) }, function()
+      local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, card = true }))
+      login(c); tick(c, 3)
+      assert(c.env.CuteSetupFrame and c.env.CuteSetupFrame:IsShown(), "the card")
+      local ON = "Cute's map on M; the minimap's wheel and right-click become Cute's"
+      local FAR = "The minimap stays the game's, but for the far view (Route tab): wheel out past its widest, drag to look around"
+      local GAME = "The minimap stays the game's"
+      assert(UIX.text(c, ON), "ticked, the line as before:\n" .. texts(c))
+      click(UIX.row(c, "Map"))
+      assert(UIX.text(c, FAR) and not UIX.text(c, ON), "unticked, the far view is said:\n" .. texts(c))
+      check(c.env.CuteSetupFrame, "merge4 U1 the card, Map unticked")
+      local s = c.env.CuteQuestDB.settings
+      s.mmExtended = false
+      c.C.Setup.Draw()
+      assert(UIX.text(c, GAME) and not UIX.text(c, FAR), "the far view off: the minimap is the game's:\n" .. texts(c))
+      s.mmExtended = true
+      click(UIX.row(c, "Map"))
+      assert(UIX.text(c, ON), "ticked again, the line as before")
+      leave(c)
+    end)
+    said[#said + 1] = "the card's Map line says the far view when Map is unticked"
   end }
 
   CASES[#CASES + 1] = { "B1 QuestBank before 6.4.1 beside Cute: its guild share off for the session", function()
