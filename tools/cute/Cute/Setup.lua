@@ -38,6 +38,9 @@ local function engine() return C.API.QuestSetup end
 -- whether this client has the quest window: its addon registered, or loading once a fight ends (its rows are left out
 -- otherwise: one the client would not load is no window)
 local function hasQuests() return C.Modules.byId.quests ~= nil or C.Modules.BaseComing() end
+-- the quest window registered and no engine of its own: the addon QuestBank serves it (Bridge.lua's dormant copy), whose
+-- own Map page is its map, so Cute's Map window draws nothing and M stays the game's (Keys.lua holds no key for it)
+local function dormant() return C.Modules.byId.quests ~= nil and engine() == nil end
 
 -- the rows, each { id, group, label, kind = "check" | "choice" | "key" | "fixed", ... }; a row only where its part is
 local function rows()
@@ -51,8 +54,9 @@ local function rows()
     add({ id = "dungeons", group = "Windows", label = "Dungeons tab", kind = "check", module = "Cute_Quest:journal", indent = 20 })
     add({ id = "gear", group = "Windows", label = "Gear tab", kind = "check", module = "Cute_Quest:gear", indent = 20 })
     -- (sub-project F) the Map window with its key: row mapwin, whose tick starts from the earlier mapicons answer (the
-    -- game's map with Cute's icons, which took no key); a character who answered that sees this row alone, once
-    add({ id = "mapwin", group = "Windows", label = "Map", kind = "check", module = "Cute_Quest:map", key = "map" })
+    -- game's map with Cute's icons, which took no key); a character who answered that sees this row alone, once. Not
+    -- asked while QuestBank is loaded (no window to open: asked once it is not)
+    if not dormant() then add({ id = "mapwin", group = "Windows", label = "Map", kind = "check", module = "Cute_Quest:map", key = "map" }) end
     if q then
       add({ id = "step", group = "On screen", label = "Step frame and arrow", kind = "check" })
       add({ id = "camp", group = "On screen", label = "Camp bar and missing buffs", kind = "check" })
@@ -250,7 +254,7 @@ function S.Draw()
   end
   -- (M named where the Map window is on, or ticked on the card)
   local mapOn = p.on.mapwin
-  if mapOn == nil then mapOn = C.Modules.OnKey("Cute_Quest:map") end
+  if mapOn == nil then mapOn = C.Modules.OnKey("Cute_Quest:map") and not dormant() end
   local keys = mapOn and "J, L and M" or "J and L"
   local nh = say(f, PAD, y + 10, inner, keys .. " open Cute's windows; each window has a button to the game's own. Change any of this later in Settings: right-click the minimap button. Window and tab changes reload; the rest applies at once.", DIM, 12)
   y = y + 10 + nh + 12

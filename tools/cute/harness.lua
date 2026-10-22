@@ -15968,6 +15968,36 @@ do
     leave(c)
     said[#said + 1] = "the menu's Map (M): your zone, the last three zones opened, Finds, the game's map greyed in a fight; none with the module off"
   end)
+  -- K7: with the addon QuestBank loaded M stays the game's: the card asks nothing of the Map window (a character who
+  -- answered the old Map row sees no card for it) and names J and L
+  isolated({ member("Pim", 3), member("Rone", 1) }, function()
+    local state = {}
+    local function client(name, rank)
+      local q = newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true, card = true }))
+      local isLoaded = q.env.C_AddOns.IsAddOnLoaded
+      q.env.C_AddOns.IsAddOnLoaded = function(x) if x == "QuestBank" then return true, true end return isLoaded(x) end
+      q.env.QuestBankAPI = { version = "6.1.0", logReady = true, state = { level = 5, log = {} }, Settings = function() return { guide = {} } end, MarkDirty = function() end }
+      return q
+    end
+    local p = client("Pim", 3)
+    local answered = { guild = true, quests = true, dungeons = true, gear = true, mapicons = true, step = true, camp = true, light = true, accept = true, handin = true }
+    local db = { version = "0.8.0", chars = { ["Pim-Forever"] = { counters = {}, setup = answered, keys = { guild = "follow", quests = "follow" },
+      modules = { ["Cute_Quest:map"] = true, ["Cute_Quest:journal"] = true } } } }
+    login(p, db); tick(p, 3)
+    assert(p.addons[2].private.dormant, "QuestBank loaded: the copy sleeps")
+    assert(not (p.env.CuteSetupFrame and p.env.CuteSetupFrame:IsShown()) and #p.C.Setup.Rows() == 0, "a character who answered the old Map row: no card")
+    leave(p)
+    local f = client("Rone", 1)
+    login(f); tick(f, 3)
+    local card = f.env.CuteSetupFrame
+    assert(card and card:IsShown(), "a fresh character: the card")
+    for _, r in ipairs(f.C.Setup.Rows()) do assert(r.id ~= "mapwin", "no Map row while QuestBank is loaded") end
+    assert(not checkBox(f, function(cb) return cb.label and cb.label:GetText() == "Map" end) and texts(f):find("J and L open Cute's windows", 1, true)
+      and not texts(f):find("J, L and M", 1, true), "no Map row, and the card names J and L")
+    check(card, "map K7 the setup card with QuestBank loaded")
+    leave(f)
+    said[#said + 1] = "with QuestBank loaded the card asks nothing of the Map window and names J and L"
+  end)
   print("map K: " .. table.concat(said, "; "))
 end
 
