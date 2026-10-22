@@ -1510,9 +1510,31 @@ local function say(ui, x, y, w, s, c)
   return l
 end
 H.Say = say
--- the Hall of Shame chip: 0.7's live cards as the core draws them (UI:DrawShame); with none ticked, the line names where
--- the list is now (the section is the tab's, Halls: the core's own line names the page's old title)
+-- a weekly stat of the live cards (Deaths this week) as of this week: the roster holds a member's value as it came, so
+-- one that came before this Monday is last week's (H:Seen kept it for the halls' Last week) and the member's Monday
+-- turned it to 0, whether or not they have logged in since (their own client sends that 0 when they do). The roster's
+-- e.at is when a value came by this client's clock (Roster.lua R:Apply, C.Now), this Monday by the calendar of
+-- date("*t") on the same clock
+function H.ExpireWeeks()
+  local d = date and date("*t")
+  if type(d) ~= "table" or type(d.wday) ~= "number" or type(CuteDB.roster) ~= "table" then return end
+  local monday = C.Now() - (((d.wday + 5) % 7) * 86400 + (d.hour or 0) * 3600 + (d.min or 0) * 60 + (d.sec or 0))
+  local ids = {}
+  for _, def in ipairs(C.Stats.byCat.funny or {}) do if C.Sample.WEEKLY[def.id] then ids[#ids + 1] = def.id end end
+  for _, e in pairs(CuteDB.roster) do
+    if type(e) == "table" and type(e.stats) == "table" and type(e.at) == "table" then
+      for _, id in ipairs(ids) do
+        local v, t = e.stats[id], e.at[id]
+        if type(v) == "number" and v ~= 0 and type(t) == "number" and t < monday then e.stats[id] = 0 end
+      end
+    end
+  end
+end
+-- the Hall of Shame chip: 0.7's live cards as the core draws them (UI:DrawShame), a weekly one as of this week; with
+-- none ticked, the line names where the list is now (the section is the tab's, Halls: the core's own line names the
+-- page's old title)
 function H.DrawLive(ui)
+  H.ExpireWeeks()
   local ticked = C.UI.Ticked and C.UI.Ticked("shame") or {}
   local any = false
   for _, def in ipairs(C.Stats.byCat.funny or {}) do if ticked[def.id] then any = true break end end

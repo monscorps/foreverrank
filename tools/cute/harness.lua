@@ -14635,6 +14635,28 @@ do local function cardsStage()
   end)
   said[#said + 1] = "two officers' sets in the same second both kept, one withdrawn alone"
 
+  -- the live Hall of Shame ranks this week's: a member's Deaths this week that came before this Monday is last week's,
+  -- 0 now whether or not they have logged in since
+  isolated({ gmember("Uzi", 1, "MAGE"), gmember("Ulm", 3, "ROGUE") }, function()
+    local uzi, ulm = cchar("Uzi", 1), cchar("Ulm", 3, { class = "ROGUE" })
+    login(uzi); login(ulm)
+    tickAll(30)
+    for _ = 1, 4 do fire(ulm, "PLAYER_DEAD") end
+    tickAll(5)
+    local e = uzi.env.CuteDB.roster[ulm.sender]
+    assert(e and e.stats.deaths_week == 4 and type(e.at.deaths_week) == "number", "the officer holds Ulm's 4 deaths this week")
+    local function leader()
+      for _, c in ipairs(uzi.C.UI.cards.items) do if c:IsShown() and c.def and c.def.id == "deaths_week" then return c.leader:GetText() end end
+    end
+    H(uzi).OpenChip("shame")
+    assert((leader() or ""):find("Ulm", 1, true), "this week's: Ulm leads: " .. tostring(leader()))
+    e.at.deaths_week = uzi.env.GetServerTime() - 8 * 86400
+    H(uzi).OpenChip("shame")
+    assert(not (leader() or ""):find("Ulm", 1, true) and e.stats.deaths_week == 0, "a value from before this Monday is last week's: " .. tostring(leader()))
+    assert(e.stats.deaths == 4, "the lifetime count stays")
+  end)
+  said[#said + 1] = "the live Hall of Shame ranks this week's Deaths this week"
+
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end
 
