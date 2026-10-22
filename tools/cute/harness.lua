@@ -15839,6 +15839,42 @@ do
     leave(c)
     said[#said + 1] = "a pin hovered or clicked while reading leaves the reader's scroll alone; M closed ends the reader; the Finds list opened over it shows"
   end)
+  -- K4: M's finds footer stands under the list alone: the canvas keeps its size (and with it the zoom the player chose)
+  -- as the footer comes and goes; the list ends above it; laid out clean at both sizes
+  isolated({ member("Rone", 1) }, function()
+    local c, QB = mapClient("Rone", 1)
+    local MP = QB.MapPage
+    c.C.UI:Open("map")
+    local ui = c.C.UI.Window("map")
+    MP.Go(1429, "user")
+    ui:Draw()
+    local canvas = MP.canvas
+    local sized = 0
+    local fit = canvas.OnFrameSizeChanged
+    canvas.OnFrameSizeChanged = function(...) sized = sized + 1; return fit(...) end
+    local h0, w0 = canvas:GetHeight(), canvas:GetWidth()
+    assert(not (ui.findsFoot and ui.findsFoot:IsShown()), "no footer while nothing is new")
+    local disc = QB.Discover.DB()
+    disc.find = { o9001 = { p = { { 1429, 400, 400, 1 } }, b = "A Diary of Your Own", n = 1 } }
+    disc.findN = (tonumber(disc.findN) or 0) + 1
+    ui:Draw()
+    assert(ui.findsFoot and ui.findsFoot:IsShown(), "your find QuestBank lacks: the footer")
+    assert(canvas:GetHeight() == h0 and canvas:GetWidth() == w0 and sized == 0, "the canvas keeps its size, its zoom untouched: " .. canvas:GetHeight() .. " of " .. h0 .. ", resized " .. sized)
+    local _, _, _, fx = ui.findsFoot:GetPoint()
+    assert(fx >= (ui.insetX or 0), "the footer under the list alone: " .. tostring(fx) .. " from " .. tostring(ui.insetX))
+    check(ui.frame, "map window at 1120x640 with the finds footer")
+    ui.frame:SetSize(860, 500); ui:Draw()
+    check(ui.frame, "map window at 860x500 with the finds footer")
+    local h1 = canvas:GetHeight()
+    disc.find = {}
+    disc.findN = disc.findN + 1
+    sized = 0
+    ui:Draw()
+    assert(not ui.findsFoot:IsShown() and canvas:GetHeight() == h1 and sized == 0, "the footer gone: the canvas as it was")
+    canvas.OnFrameSizeChanged = fit
+    leave(c)
+    said[#said + 1] = "M's finds footer under the list alone, the canvas's size and zoom kept as it comes and goes, laid out clean at both sizes"
+  end)
   print("map K: " .. table.concat(said, "; "))
 end
 

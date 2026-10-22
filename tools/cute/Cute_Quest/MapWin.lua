@@ -755,17 +755,22 @@ local function hooksFor(ui)
     Showing = function(text) MW.Say(ui, "Showing " .. text .. " on the arrow") end,
   }
 end
--- the room: the list 320 px wide (260 at the window's smallest), the map the rest, both under the window's row
+-- the room: the list 320 px wide (260 at the window's smallest), the map the rest, both under the window's row. (The
+-- content panel: the window less 8 px on the left and 9 on the right, UI.lua's builder; the scroll area 8 in from the
+-- inset and 18 from the right)
+local function insetOf(ui)
+  local fw = ui.frame:GetWidth() or W
+  return fw - 17 - 26 - (fw >= 1000 and LIST_W or LIST_NARROW)
+end
+-- the map's box runs to the window's foot whatever the finds footer does, which stands under the list alone (the canvas
+-- resized resets its zoom: MapCanvas_ScrollContainerMixin.lua, OnCanvasSizeChanged)
 local function layout(ui)
   local MP = engineMap()
-  local fw, fh = ui.frame:GetWidth() or W, ui.frame:GetHeight() or H
-  local listW = fw >= 1000 and LIST_W or LIST_NARROW
-  -- (the content panel: the window less 8 px on the left and 9 on the right, UI.lua's builder; the scroll area 8 in from
-  -- the inset and 18 from the right)
-  local inset = fw - 17 - 26 - listW
+  local fh = ui.frame:GetHeight() or H
+  local inset = insetOf(ui)
   ui:SetInset(inset)
   local b = boxOf(ui)
-  local bw, bh = inset - 12, fh - 73 - 14 - (ui.foot or 0)
+  local bw, bh = inset - 12, fh - 73 - 14
   b:SetSize(bw, bh)
   b.inner:SetSize(bw - 2, bh - 2)
   b:Show()
@@ -848,8 +853,6 @@ local function footerOf(ui)
   if b then return b end
   local K = ui.COLORS
   b = CreateFrame("Button", nil, ui.content)
-  b:SetPoint("BOTTOMLEFT", 1, 1)
-  b:SetPoint("BOTTOMRIGHT", -10, 1)
   b:SetHeight(FOOT - 1)
   b.line = b:CreateTexture(nil, "ARTWORK")
   b.line:SetColorTexture(K.LINE[1], K.LINE[2], K.LINE[3], 1)
@@ -888,8 +891,13 @@ function MW.Footer(ui)
   local foot = new > 0 and FOOT or 0
   if foot > 0 then
     local b = footerOf(ui)
+    -- (on M under the list alone, from its inset: the map's box keeps the whole height)
+    local left = ui.key == "map" and (insetOf(ui) + 1) or 1
+    b:ClearAllPoints()
+    b:SetPoint("BOTTOMLEFT", left, 1)
+    b:SetPoint("BOTTOMRIGHT", -10, 1)
     b.text:SetText(F.FooterText(new, sure, ui.Hex(ui.COLORS.INK)))
-    b.text:SetWidth(math.max(60, (ui.frame:GetWidth() or W) - 70))
+    b.text:SetWidth(math.max(60, (ui.frame:GetWidth() or W) - left - 70))
     b:Show()
   elseif ui.findsFoot then
     ui.findsFoot:Hide()
