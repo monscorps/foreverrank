@@ -20831,6 +20831,174 @@ do
   print("fix-data: Data you share names Cute's page, which offers Cute-Uploader.zip")
 end
 
+-- [stage: pages] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The pages round: addons/cute/index.html and questbank/index.html say what this build does, read against the client.
+-- W1. The window's pictures are this build's: one each for J, L and M, whose alt text names the window's tabs as the
+--     client draws them, in order (J an officer's, L with its Dungeons and Gear tabs on, M with the Map on); nothing of
+--     0.7's single window is left (its Guide and Settings tabs, its band's "Tick Quests" line)
+-- W2. Install: Cute_Quest is the base and loads at every login, so no step says it loads only while a module is on; no
+--     clause that says what you switch on or off names a base tab (Quests, Route), on the page or in Changes.lua's
+--     lines from 0.8.0 on; every key the setup card binds is named
+-- W3. The hero's privacy line: the engine shares your level and quest steps with your party by default (share.party),
+--     so the line names the party and never says nothing leaves the guild
+-- W4. QuestBank loaded: the card asks no Map (M stays the game's) and says the step frame, arrow and Reminders are
+--     QuestBank's; Install tells a QuestBank player what that costs (M among it), and the footer does not say QuestBank
+--     runs beside Cute
+-- W5. QuestBank's page: a help answer that points at the chat line after a hand-in names the box that turns it on,
+--     as QuestBank's Settings label it (sayXP is off by default)
+-- W6. The owner's order: the window, then Install, then what is new (one line, the older ones folded); who sees what
+--     one sentence, the stat list folded
+----------------------------------------------------------------------------
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "MAGE", level = 21, online = true } end
+  local function read(path) local f = assert(io.open(HERE .. "/../../" .. path)); local s = f:read("*a"); f:close(); return s end
+  -- a piece of the page as a reader sees it: tags out, entities read, white space one space
+  local function plainOf(s)
+    s = s:gsub("<[^>]+>", " "):gsub("&#39;", "'"):gsub("&quot;", '"'):gsub("&lt;", "<"):gsub("&gt;", ">"):gsub("&amp;", "&"):gsub("%s+", " ")
+    return s
+  end
+  local function sectionOf(page, id) return page:match('<section[^>]*id="' .. id .. '".-</section>') end
+  -- the clauses of a text (cut at . ; : ( and ), lower case) that say what you switch on or off
+  local function switchClauses(text)
+    local out = {}
+    for cl in (text:lower() .. "."):gmatch("[^%.;:%(%)]+") do if cl:find("switch", 1, true) then out[#out + 1] = cl end end
+    return out
+  end
+  -- the elements (p, li, details) of a piece of the page, each as its text
+  local function blocks(s)
+    local out = {}
+    for _, t in ipairs({ "p", "li", "details" }) do for body in s:gmatch("<" .. t .. "[%s>].-</" .. t .. ">") do out[#out + 1] = plainOf(body) end end
+    return out
+  end
+  isolated({ member("Rone", 1) }, function()
+    local said, failed = {}, {}
+    local page, qbPage = read("addons/cute/index.html"), read("questbank/index.html")
+    local c = newClient(charOf({ "Rone", 1, "Officer", "MAGE", 21 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, card = true }))
+    login(c); tick(c, 3)
+    local Mods = c.C.Modules
+    local s = c.env.CuteQuestDB.settings
+    local install = sectionOf(page, "install") or ""
+    local installText = plainOf(install)
+    -- (each case on its own: a failed one names itself and the others still run, so one run shows every page fault)
+    local CASES = {}
+    CASES[#CASES + 1] = { "W1 J, L and M pictured as the client draws them", function()
+      assert(not page:find('data-tab="guide"', 1, true) and not page:find('id="cu-tab-settings"', 1, true) and not page:find("Tick Quests in Settings", 1, true),
+        "the page still draws 0.7's single window (a Guide tab, a Settings tab, the band's Tick Quests line)")
+      Mods.Set("Cute_Quest:journal", true); Mods.Set("Cute_Quest:gear", true); Mods.Set("Cute_Quest:map", true)
+      local function titles(window) local out = {}; for _, def in ipairs(Mods.Pages(true, window)) do out[#out + 1] = def.title end return out end
+      local wins = { { "j", titles("guild") }, { "l", titles("quests") }, { "m", titles("map") } }
+      for _, w in ipairs(wins) do
+        local fig = page:match('<figure[^>]*id="cu%-shot%-' .. w[1] .. '".-</figure>')
+        assert(fig, "the page has no picture of the " .. w[1]:upper() .. " window (figure#cu-shot-" .. w[1] .. ")")
+        local src, alt = fig:match('<img[^>]*src="([^"]+)"'), plainOf(fig:match('<img[^>]*alt="([^"]*)"') or "")
+        local f = src and io.open(HERE .. "/../../addons/cute/" .. src)
+        assert(f, "the " .. w[1]:upper() .. " picture's file is beside the page: " .. tostring(src))
+        f:close()
+        assert(#w[2] > 0, "the client draws the " .. w[1]:upper() .. " window's pages")
+        local at = 1
+        for _, t in ipairs(w[2]) do
+          local i = alt:find(t, at, true)
+          assert(i, "the " .. w[1]:upper() .. " picture's alt names the tab " .. t .. " after the ones before it, as the client draws them (" .. table.concat(w[2], ", ") .. "): " .. alt)
+          at = i + #t
+        end
+      end
+      said[#said + 1] = "J, L and M pictured with their tabs as the client draws them (" .. table.concat(wins[1][2], ", ") .. "; " .. table.concat(wins[2][2], ", ") .. "; " .. table.concat(wins[3][2], ", ") .. ")"
+    end }
+    CASES[#CASES + 1] = { "W2 Install true for the base and the card's keys", function()
+      assert(install ~= "", "the page has an Install section")
+      assert(Mods.Base("Cute_Quest") and not installText:find("loads only while", 1, true), "Cute_Quest is the base, loaded at every login: Install says otherwise:\n" .. installText)
+      local bases = {}
+      for _, def in ipairs(Mods.list) do if def.base and def.page then bases[#bases + 1] = def.title end end
+      assert(#bases >= 2, "the quest window's base tabs: " .. table.concat(bases, ", "))
+      local function noBaseSwitched(text, where)
+        for _, cl in ipairs(switchClauses(text)) do
+          for _, t in ipairs(bases) do assert(not cl:find(t:lower(), 1, true), where .. " says the base tab " .. t .. " is switched on or off: \"" .. cl .. "\"") end
+        end
+      end
+      noBaseSwitched(installText, "Install")
+      -- (from 0.8.0, the windows' round, where Quests and Route became the base; 0.7's lines tell 0.7's modules)
+      for v, line in pairs(c.C.CHANGES) do if not c.C.VersionNewer("0.8.0", v) then noBaseSwitched(line, "Changes.lua's " .. v .. " line") end end
+      local keyed = {}
+      for _, r in ipairs(c.C.Setup.Rows()) do
+        if r.key then
+          for _, w in ipairs(c.C.Keys.ALL) do
+            if w.id == r.key then
+              local letter = c.bindings[w.action] and c.bindings[w.action][1]
+              assert(letter and install:find("<code>" .. letter .. "</code>", 1, true), "Install names the key the card binds for " .. r.label .. ": " .. tostring(letter))
+              keyed[#keyed + 1] = letter
+            end
+          end
+        end
+      end
+      assert(#keyed >= 3, "the card binds J, L and M: " .. table.concat(keyed, " "))
+      said[#said + 1] = "Install: the base always loads, no base tab switched (the page and Changes.lua), the card's keys " .. table.concat(keyed, " ")
+    end }
+    CASES[#CASES + 1] = { "W3 the hero's privacy line names the party", function()
+      local hero = plainOf(assert(page:match('<header class="cu%-hero".-</header>'), "the page has its hero"))
+      assert(s.share and s.share.party ~= false, "the engine shares with the party by default")
+      assert(not hero:find("nothing leaves the guild", 1, true) and hero:find("party", 1, true), "the party sees your level and quest steps by default: the hero says otherwise:\n" .. hero)
+      said[#said + 1] = "the hero names the party"
+    end }
+    CASES[#CASES + 1] = { "W4 a QuestBank player told what M and Reminders need", function()
+      local q = c.C.API.QuestSetup
+      c.C.API.QuestSetup = nil
+      local mapAsked, line = false, nil
+      for _, r in ipairs(c.C.Setup.Rows()) do
+        if r.id == "mapwin" then mapAsked = true end
+        if r.id == "dormant" then line = r.label end
+      end
+      c.C.API.QuestSetup = q
+      assert(not mapAsked and line and line:find("Reminders", 1, true), "QuestBank loaded: no Map row, the dormant line: " .. tostring(line))
+      local told = false
+      for _, b in ipairs(blocks(install)) do if b:find("QuestBank", 1, true) and b:find("%f[%w]M%f[^%w]") and b:find("Reminders", 1, true) then told = true end end
+      assert(told, "Install tells a QuestBank player that Cute's map (M) and Reminders need QuestBank off:\n" .. installText)
+      local foot = plainOf(assert(page:match("<footer.-</footer>"), "the page has its footer"))
+      assert(not foot:find("runs beside", 1, true), "the footer says QuestBank runs beside Cute:\n" .. foot)
+      said[#said + 1] = "a QuestBank player told what M and Reminders need"
+    end }
+    CASES[#CASES + 1] = { "W5 QuestBank's help names the Say XP box", function()
+      local label = assert(read("tools/questbank/QuestBank/UI.lua"):match('v%.sayXP = checkRow%([^"]*"([^"]+)"'), "QuestBank's Settings label the sayXP box")
+      assert(s.sayXP ~= true, "sayXP is off by default")
+      local help = assert(sectionOf(qbPage, "help"), "QuestBank's page has its Help")
+      local answers = 0
+      for _, b in ipairs(blocks(help)) do
+        if b:find("chat line", 1, true) then
+          answers = answers + 1
+          assert(b:find(label, 1, true), "QuestBank's help points at the hand-in's chat line, off by default, without its box (" .. label .. "): " .. b)
+        end
+      end
+      assert(answers > 0, "QuestBank's help still answers the XP question")
+      said[#said + 1] = "QuestBank's help names " .. label
+    end }
+    CASES[#CASES + 1] = { "W6 the window, Install, one line new, who sees what in a sentence", function()
+      local order = {}
+      for id in page:gmatch('<section[^>]*id="([%w_-]+)"') do order[#order + 1] = id end
+      local at = {}
+      for i, id in ipairs(order) do at[id] = i end
+      assert(at.window == 1 and at.install == 2, "the window first, Install right under it: " .. table.concat(order, ", "))
+      local log = assert(sectionOf(page, "changelog"), "the page has its changelog")
+      local open = log:gsub("<details.-</details>", "")
+      local shown = 0
+      for _ in open:gmatch("<li><b>%d+%.%d+%.%d+</b>") do shown = shown + 1 end
+      assert(shown == 1 and log:find("<details", 1, true), "one line of what is new, the older ones folded: " .. shown .. " shown")
+      local rules = assert(sectionOf(page, "rules"), "the page has who sees what")
+      local ruleText = plainOf((rules:gsub("<details.-</details>", ""):gsub("<h2.-</h2>", "")))
+      local sentences = 0
+      for _ in (ruleText .. " "):gmatch("[%.!?]%s") do sentences = sentences + 1 end
+      assert(sentences <= 1 and rules:find("<details", 1, true), "who sees what in one sentence, the stats folded: " .. sentences .. " sentences:\n" .. ruleText)
+      said[#said + 1] = "the order: " .. table.concat(order, ", ")
+    end }
+    for _, case in ipairs(CASES) do
+      local ok, err = pcall(case[2])
+      if not ok then failed[#failed + 1] = case[1] .. ": " .. tostring(err) end
+    end
+    leave(c)
+    assert(#failed == 0, "pages cases failed:\n" .. table.concat(failed, "\n"))
+    print("pages: " .. table.concat(said, "; "))
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

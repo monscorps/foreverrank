@@ -1542,8 +1542,10 @@ the Cute bundle of Cute.zip's version (never QuestBank's uploader; `--online`: t
 left, the changelog's newest entry is the toc's version, the greys pass 4.5:1, a check box's edge 3:1 on the page's
 panels and in the window (UI.lua's EDGE), and the Download button is dark text on
 a light button through the whole cascade. It ends `problems: 0` and `OK`, or lists the problems and exits 1.
-`--online` also fetches the external links. The page is `addons/cute/index.html`; `#prog`, `#officers` or
-`#settings-officer` on its URL opens the mock on that page.
+`--online` also fetches the external links. The page is `addons/cute/index.html`; `#l` or `#m` on its URL opens that
+window's picture. The pictures (`img/j.webp`, `l.webp`, `m.webp`, `card.webp`, under 160 KB each, which the build
+checks) are cut from the agreed mockup `research/qbrender/cute-windows.html`, J's tabs and Race columns and the card's
+Reminders row set to 0.9.0's.
 
 ## The seed
 

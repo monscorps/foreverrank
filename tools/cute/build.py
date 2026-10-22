@@ -20,6 +20,7 @@ size), then check the page:
   - no version number, TODO or placeholder outside the markers and the changelog labels; no middle dots or arrows in
     the body text
   - the changelog's newest entry is the toc's version
+  - the windows' pictures: one each for J, L and M, small, sized as their files, with alt text
   - the page's greys pass 4.5:1 on every surface they sit on
   - the Download button is black text on a white button through the whole cascade (forever.css included), at rest
     and on hover
@@ -225,7 +226,8 @@ def build_stats():
     cats = re.findall(r'^\s*\{ id: "[^"]+",.*?", cat: "([^"]+)"', js, re.M)
     if not cats:
         sys.exit("stats.js has no stats")
-    # the mock's Rules section and its enchant voices read these, Rules.lua's and Stats.lua's own
+    # Rules.lua's thresholds and Stats.lua's voices, which page_stats.lua writes beside the registry (the page's mock read
+    # them; a stats.js without them means page_stats.lua broke)
     for name in ("CUTE_TUNE", "CUTE_RULES", "CUTE_VOICES"):
         if "window.%s = " % name not in js:
             sys.exit("stats.js has no window.%s (page_stats.lua writes it)" % name)
@@ -630,9 +632,12 @@ def check_classes(html, page_rules, site_rules):
         used.update(re.findall(r"-?[_a-zA-Z][\w-]*", s))
     for s in re.findall(r"\bclass(?:Name)?\s*=\s*\"([^\"]*)\"", html):
         used.update(s.split())
-    # the pip shades are built as "cu-p" + digit: check the shades, not the prefix
-    used.discard("cu-p")
-    used.update("cu-p%d" % d for d in range(1, 9))
+    # classes a script switches by name (classList) are used too
+    used.update(re.findall(r"classList\.(?:add|remove|toggle)\(\"([\w-]+)\"", html))
+    # the pip shades, where a script builds them as "cu-p" + digit: check the shades, not the prefix
+    if "cu-p" in used:
+        used.discard("cu-p")
+        used.update("cu-p%d" % d for d in range(1, 9))
     known = defined | site
     unknown = sorted(c for c in used if c not in known)
     if unknown:
@@ -662,6 +667,54 @@ def check_stale(html, version):
         problem("the changelog's newest entry is %s but Cute.toc says %s: bump the toc or add the entry" % (logs[0], version))
     if not vers and not words and not glyphs and logs and logs[0] == version:
         ok("no stale text; changelog newest = toc = %s" % version)
+
+
+def picture_size(path):
+    """(width, height) of a WebP or PNG file, read from its header; None for anything else"""
+    head = open(path, "rb").read(32)
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        kind = head[12:16]
+        if kind == b"VP8 ":
+            return (int.from_bytes(head[26:28], "little") & 0x3FFF, int.from_bytes(head[28:30], "little") & 0x3FFF)
+        if kind == b"VP8L":
+            b = int.from_bytes(head[21:25], "little")
+            return (1 + (b & 0x3FFF), 1 + ((b >> 14) & 0x3FFF))
+        if kind == b"VP8X":
+            return (1 + int.from_bytes(head[24:27], "little"), 1 + int.from_bytes(head[27:30], "little"))
+    if head[:8] == b"\x89PNG\r\n\x1a\n":
+        return (int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big"))
+    return None
+
+
+PICTURE_KB = 160  # one window's picture at most; the page carries three
+
+
+def check_pictures(html):
+    """the windows' pictures (figure.cu-shot): one for each of J, L and M, each a file beside the page no larger than
+    PICTURE_KB, its width and height the file's own (the page keeps their room while they load), and an alt text"""
+    figs = re.findall(r'<figure class="cu-shot" id="cu-shot-(\w)".*?</figure>', html, re.S)
+    bad = []
+    if figs != ["j", "l", "m"]:
+        bad.append("the windows' pictures are %s, not j, l and m in that order" % (figs,))
+    for key, img in re.findall(r'<figure class="cu-shot" id="cu-shot-(\w)".*?(<img[^>]*>)', html, re.S):
+        src = re.search(r'src="([^"]+)"', img)
+        f = os.path.join(PAGE_DIR, src.group(1)) if src else None
+        if not f or not os.path.isfile(f):
+            bad.append("%s: no picture file" % key); continue
+        kb = os.path.getsize(f) / 1024.0
+        if kb > PICTURE_KB:
+            bad.append("%s: %s is %d KB (at most %d)" % (key, src.group(1), kb, PICTURE_KB))
+        size = picture_size(f)
+        w, h = re.search(r'width="(\d+)"', img), re.search(r'height="(\d+)"', img)
+        if not size or not w or not h or (int(w.group(1)), int(h.group(1))) != size:
+            bad.append("%s: width and height %s, the file %s" % (key, (w and w.group(1), h and h.group(1)), size))
+        alt = re.search(r'alt="([^"]*)"', img)
+        if not alt or len(alt.group(1)) < 40:
+            bad.append("%s: no alt text that says what the picture shows" % key)
+    if bad:
+        problem("the windows' pictures: " + "; ".join(bad))
+    else:
+        ok("the windows' pictures: J, L and M, each under %d KB, sized as their files, with alt text" % PICTURE_KB)
 
 
 def check_contrast(page_rules):
@@ -715,17 +768,10 @@ def check_contrast(page_rules):
             c = contrast((g, g, g), (f, f, f))
             if c < 4.5:
                 bad.append("%s's muted text %.2f on %.2f is %.2f:1" % (name, float(m.group(1)), fill, c))
-    # a tag ("(suspect)", "offline") on a picked Officers row, whose background is the panel lightened to #2a2a2a
-    pk = [d.get("color") for sel, d, _ in page_rules if sel.strip() == ".cu-rows tbody tr.cu-picked .cu-tag"]
-    col = resolve_color(pk[0], t) if pk and pk[0] else None
-    if not col:
-        bad.append("no colour for a tag on a picked row")
-    elif contrast(col, (0x2a, 0x2a, 0x2a)) < 4.5:
-        bad.append("a tag on a picked row is %.2f:1" % contrast(col, (0x2a, 0x2a, 0x2a)))
     if bad:
         problem("contrast under 4.5:1 (text) or 3:1 (a control's edge): " + "; ".join(bad))
     else:
-        ok("greys pass 4.5:1 on black, the window, its panels and the stage, a picked row's tags too, and the window's muted text on its panels; a box's edge 3:1 on the page and in the window")
+        ok("greys pass 4.5:1 on black, the panels and the stage, and the window's muted text on its panels; a box's edge 3:1 on the page and in the window")
 
 
 def check_download_cascade(page_rules, site_rules):
@@ -807,6 +853,7 @@ def main():
     check_uploader_note(html)
     check_online(html)
     check_classes(html, page_rules, site_rules)
+    check_pictures(html)
     check_stale(html, version)
     check_contrast(page_rules)
     check_download_cascade(page_rules, site_rules)

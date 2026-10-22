@@ -2,14 +2,14 @@
 -- One line per version, newest first: Core.lua prints this version's at the first login on it.
 local _, C = ...
 C.CHANGES = {
-  ["0.9.0"] = "M opens Cute's map with the books, keys and chests the guild found; Reminders and Move frames; officers publish halls, achievements and records as cards.",
-  ["0.8.0"] = "Cute's own windows: J for the guild, L for quests with Quests, Route, Dungeons and Gear tabs you switch on or off, and Settings with nothing cut; a first-run card asks which parts you want and binds the keys; right-click the minimap button to jump anywhere; click any quest to read it, Share or Abandon; a new look in the game's art, colours by kind, the step frame a stop on the route, fewer pins on the game's map; after dungeons, raids and group runs, the run report: award cards with each player's picture, Send to party, the run history.",
-  ["0.7.2"] = "The guild channel rides out errors and the dungeon chat lockdown, a /reload no longer floods the guild, big guilds cost far less, a half-loaded roster deletes nobody, and /cute diag says what the channel is doing; the quest modules rank by XP a minute, share nothing with the guild, leave the minimap alone unless Map is on, and say Cute, not QuestBank.",
+  ["0.9.0"] = "Cute's map on M with the guild's finds; Reminders; Move frames; officers publish cards: halls, achievements and guild records.",
+  ["0.8.0"] = "Cute's own windows: J for the guild, L for your quests and route (Dungeons and Gear are tabs you switch on or off), Settings its own; a first-run card binds the keys; the run report after dungeons, raids and group runs.",
+  ["0.7.2"] = "The guild channel rides out errors and the dungeon chat lockdown; big guilds cost far less; a half-loaded roster deletes nobody; quests ranked by XP a minute.",
   ["0.7.1"] = "Camp shows missing buffs until you have them, your party's too; Quests can hide the game's quest tracker; Map leaves grey quests off and draws one line at a time.",
   ["0.7.0"] = "QuestBank's guiding inside Cute: the step now on the Guide, and Quests, Route, Journal, Gear, Map and Camp as modules you switch on.",
-  ["0.6.1"] = "Every check in Settings is a row that takes the click anywhere on it, and /cute guide switches the Guide on; an error the game swallows no longer stops the window, Rule 0 or the saved choice, and lands in /cute errors with where it happened.",
-  ["0.6.0"] = "Starts with only the statistics; the Guide, switched on in Settings, Modules, says what to run next and with whom; Only-you values, and what Cute knows would give them away, go to the officers only, by the policy they save in Guild Info; false data is dropped and marked.",
-  ["0.5.0"] = "Ships what research and the beta showed about Forever, checks it against the game at login and learns the rest by rules the officers can retune; the Guide page: dungeons for your level, the bosses you still need, the enchants you lack, your pace; says when a guild mate runs a newer Cute.",
+  ["0.6.1"] = "Every check in Settings takes a click anywhere on its row; /cute guide switches the Guide on; an error the game swallows lands in /cute errors instead of stopping the window.",
+  ["0.6.0"] = "Starts with only the statistics; the Guide says what to run next and with whom; Only-you values go to the officers alone, by the policy saved in Guild Info; false data is dropped.",
+  ["0.5.0"] = "Ships what research and the beta showed about Forever and learns the rest by rules the officers can retune; the Guide page; says when a guild mate runs a newer Cute.",
   ["0.4.0"] = "Learns what Forever has as the guild finds it: enchantable slots, bosses, dungeons, reputations; Classic attunements gone, consumables counted by type; gear updates without a reload.",
   ["0.3.1"] = "One row for you, under your two-word name; item level and empty slots read by item id; a round minimap button; fast with hundreds of members, the column headings staying in view; /cute diag.",
   ["0.3.0"] = "The Statistics page: the server's own statistics, the guild ranked on any of them. Legacy Challenges as stats. Visibility per statistics category.",
