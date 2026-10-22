@@ -14336,6 +14336,26 @@ do local function cardsStage()
   end)
   said[#said + 1] = "the Hall of Shame chip unticked names Settings, Halls"
 
+  -- a day's digest full of one sender's entries makes room for another's: the sender with the most gives its oldest
+  -- up, so one copy's earns never keep the guild's out; the server's own lines give nothing up
+  isolated({ gmember("Yule", 1, "MAGE") }, function()
+    local yule = cchar("Yule", 1)
+    login(yule)
+    tickAll(20)
+    local function entry(from, k) return { id = "dg:" .. from .. ":" .. k, src = "ach", from = from, digest = "ach", what = "x", card = { name = "Moe", kind = "ach", title = "t" .. k, source = "" } } end
+    local function count(from) local n = 0; for _, r in ipairs(H(yule).Rows()) do for _, e in ipairs(r.entries or {}) do if e.from == from then n = n + 1 end end end return n end
+    for k = 1, 70 do H(yule):Queue(entry("Spam-Forever", k)) end
+    assert(count("Spam-Forever") == 60, "one sender fills the day's digest")
+    local took = 0
+    for k = 1, 15 do if H(yule):Queue(entry("Other-Forever", k)) then took = took + 1 end end
+    assert(took == 15 and count("Spam-Forever") == 45, "another member's earns find room: " .. took .. ", " .. count("Spam-Forever"))
+    local server = 0
+    for k = 1, 15 do if H(yule):Queue(entry("server", k)) then server = server + 1 end end
+    assert(server == 15 and count("Spam-Forever") == 30 and count("Other-Forever") == 15, "the server's lines too, from the one with the most")
+    assert(not H(yule).Item("dg:Spam-Forever:30") and H(yule).Item("dg:Spam-Forever:31") and H(yule).Item("dg:Spam-Forever:60"), "the oldest went first")
+  end)
+  said[#said + 1] = "a full digest makes room from the sender with the most"
+
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end
 

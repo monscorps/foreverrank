@@ -3,8 +3,8 @@
 -- member receives, whatever modules they run.
 --   Queue    each officer's own (CuteDB.halls[club].queue): a row for what an officer is likely to publish (a GOLD STAR
 --            from a run, a hall, a card by hand, a draft) and one digest row a day per source for the rest (the run
---            cards that are no GOLD STAR); 100 rows at most, 10 from one sender, none older than 30 days, the oldest out
---            first and never a draft (6 at most)
+--            cards that are no GOLD STAR); 100 rows at most, 10 from one sender (a full digest of 60 makes room from
+--            the sender with the most), none older than 30 days, the oldest out first and never a draft (6 at most)
 --   Publish  an officer's set of one to five cards goes on GUILD as 1C, with its sources (a<id> an achievement,
 --            r<run>.<CODE> a run's award, s<stat> a hall's or a record's stat), and shows on the officer's own screen
 --            as everyone sees it; one guild chat line in the same click where the officer ticked it. Greyed for 60 s
@@ -302,6 +302,19 @@ local function prune()
     if not gone then break end
   end
 end
+-- room in a full digest for an entry from a sender: the oldest entry of the sender with the most goes, where that one
+-- has two more than this one at least. True where room was made
+function H.MakeRoom(row, from)
+  local counts = {}
+  for _, e in ipairs(row.entries) do local f = e.from or "?"; counts[f] = (counts[f] or 0) + 1 end
+  local top, most = nil, 0
+  for f, n in pairs(counts) do if f ~= "server" and f ~= "me" and n > most then top, most = f, n end end
+  if not top or most < (counts[from or "?"] or 0) + 2 then return false end
+  for j = #row.entries, 1, -1 do
+    if row.entries[j].from == top then H.ticked[row.entries[j].id] = nil; table.remove(row.entries, j) return true end
+  end
+  return false
+end
 -- an item into this officer's queue: its own row, or the day's digest of its source (item.digest); one of the same id
 -- is not queued twice. True where it was
 function H:Queue(item)
@@ -319,7 +332,9 @@ function H:Queue(item)
       row = { id = "d:" .. item.digest .. ":" .. item.day, digest = item.digest, day = item.day, at = item.at, entries = {} }
       table.insert(q, 1, row)
     end
-    if #row.entries >= DIGEST_MAX then return false end
+    -- (full: the sender with the most entries gives its oldest up to one with fewer, so one copy's spree never keeps
+    -- the guild's out; the server's own lines and this officer's own give nothing up)
+    if #row.entries >= DIGEST_MAX and not H.MakeRoom(row, item.from) then H.capped = (H.capped or 0) + 1; return false end
     table.insert(row.entries, 1, item)
     row.at = math.max(row.at or 0, item.at)
   else
@@ -1953,8 +1968,8 @@ function H.Diag()
   local newest = H.Newest()
   local quiet, why = quietNow()
   local out = {
-    string.format("diag cards: %d sets held (newest %s), %d unseen | queue %d rows, %d items, %d drafts | officer %s", #d.sets, newest > 0 and (math.floor(now() - newest) .. " s ago") or "none",
-      H.Unseen(), rows, items, drafts, tostring(officer())),
+    string.format("diag cards: %d sets held (newest %s), %d unseen | queue %d rows, %d items, %d drafts, %d past a cap | officer %s", #d.sets, newest > 0 and (math.floor(now() - newest) .. " s ago") or "none",
+      H.Unseen(), rows, items, drafts, H.capped or 0, tostring(officer())),
     string.format("diag cards: toasts shown %d, waiting %d, %d this hour, now %s | guild line filter %s, lines hidden %d, posted %d | refused %d | 1G %s, answers %d | 1W sent %d, held %d",
       H.toastsShown or 0, #H.toasts, recent(H.toastLog, HOUR), quiet and "free" or ("held: " .. tostring(why)), H.filterOK and "on" or "missing", H.hidden or 0, H.posted or 0, H.refused or 0,
       H.asked and "asked" or "not asked", H.answers or 0, H.wSent or 0, type(C.Char().pendingW) == "table" and #C.Char().pendingW or 0),
