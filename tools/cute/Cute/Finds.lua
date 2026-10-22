@@ -120,7 +120,9 @@ function F.StatsShown()
 end
 
 ----------------------------------------------------------------------------
--- the store: CuteDB.known.finds = { n, list }, each { k, id, m, x, y (the mean of its voices), t (a book's title), m2,
+-- the store: CuteDB.known.finds = { n, list }, each { k, id, m, x, y (the mean of its voices), t (a book's title as the
+-- guild shows it, titleOf: two voices' alike, else an officer's word's), tv = { [GUID] = the title that voice gave },
+-- wt (the title an officer's word gave), m2,
 -- x2, y2, s (a crossing's far end and seconds), v = { [GUID] = its spot packed }, o (the sender string of the officer
 -- whose word said it: sure while that is an officer's voice), at (n when last touched), sa (n when it became sure), st
 -- (the server's time then, to the minute), wx, wy, wx2, wy2 (its place then: the word's key, which a voice moving the
@@ -209,6 +211,23 @@ local function said(e)
 end
 local function sure(e) return said(e) or (tally(e)) >= 2 end
 F.Sure, F.Said = sure, said
+-- a book's title as the guild shows and says it: one that two of its voices that count gave alike (each voice keeps its
+-- own, e.tv), else the one an officer's word that says it gave (e.wt). Never the first voice's alone: an edited copy's
+-- title, joined by an honest member who read the book, was drawn whole on every map and said in the officers' word
+local function titleOf(e)
+  if e.k ~= "b" then return nil end
+  if type(e.tv) == "table" then
+    local me, seen = C.MyGUID(), {}
+    for g, t in pairs(e.tv) do
+      if type(t) == "string" and e.v[g] ~= nil and counts(g, me) then
+        seen[t] = (seen[t] or 0) + 1
+        if seen[t] >= 2 then return t end
+      end
+    end
+  end
+  return (type(e.wt) == "string" and said(e)) and e.wt or nil
+end
+F.TitleOf = titleOf
 -- the voices that count, counted again when the roster's who is who (Roster.lua R.idVersion), the policy or the line's
 -- officer ranks changed: where the count moved, the version does (the map and the footers drawn from it again)
 local votersAt, votersPol, votersThr, voters = nil, nil, nil, nil
@@ -257,7 +276,7 @@ end
 local function make(s, en, g)
   room(s, en, g)
   local idx = byGroup(s)
-  local e = { k = en.k, id = en.id, m = en.m, x = en.x, y = en.y, t = en.t, m2 = en.m2, x2 = en.x2, y2 = en.y2, s = en.s, v = {} }
+  local e = { k = en.k, id = en.id, m = en.m, x = en.x, y = en.y, m2 = en.m2, x2 = en.x2, y2 = en.y2, s = en.s, v = {} }
   s.list[#s.list + 1] = e
   local key = groupOf(e)
   idx[key] = idx[key] or {}
@@ -282,9 +301,16 @@ function F.Voice(g, en)
   if not (s and type(g) == "string") then return nil end
   local e = match(s, en) or make(s, en, g)
   local was = sure(e)
-  if e.v[g] ~= nil or count(e.v) < VOICES then e.v[g] = packOf(en) end
+  if e.v[g] ~= nil or count(e.v) < VOICES then
+    e.v[g] = packOf(en)
+    -- (a book's title, each voice its own: titleOf)
+    if e.k == "b" and en.t then
+      if type(e.tv) ~= "table" then e.tv = {} end
+      e.tv[g] = en.t
+    end
+  end
   remean(e)
-  if en.t and not e.t then e.t = en.t end
+  e.t = titleOf(e)
   if en.s and e.k == "x" then e.s = math.floor(((e.s or en.s) + en.s) / 2 + 0.5) end
   s.n = s.n + 1
   e.at = s.n
@@ -429,7 +455,7 @@ local function build()
       local n, others = tally(e)
       local o = said(e)
       if others > 0 or o then
-        add(e.m, { kind = e.k, id = e.id, x = e.x, y = e.y, name = e.t, mates = others, sure = (o or n >= 2) or nil })
+        add(e.m, { kind = e.k, id = e.id, x = e.x, y = e.y, name = titleOf(e), mates = others, sure = (o or n >= 2) or nil })
       end
     end
   end
@@ -703,7 +729,8 @@ function F:WordParts()
   -- for the members who ask while that officer is away)
   local noMe = not shareOn()
   for _, e in ipairs(s.list) do
-    if (tally(e, noMe)) >= 2 and aged(e, closed, t) then
+    -- (a book whose title no two voices gave alike is not said: titleOf)
+    if (tally(e, noMe)) >= 2 and aged(e, closed, t) and (e.k ~= "b" or titleOf(e)) then
       list[#list + 1] = e
       if not e.wx then e.wx, e.wy, e.wx2, e.wy2 = e.x, e.y, e.x2, e.y2 end
     end
@@ -712,7 +739,7 @@ function F:WordParts()
   local out = {}
   for i = 1, math.min(WORD_MAX, #list) do
     local e = list[i]
-    local v = (e.k == "b" and title(e.t)) or (e.k == "x" and b36(e.s or 1)) or "1"
+    local v = (e.k == "b" and title(titleOf(e))) or (e.k == "x" and b36(e.s or 1)) or "1"
     out[#out + 1] = wordKey(e) .. "=" .. v
   end
   table.sort(out)
@@ -766,7 +793,8 @@ function F:TakeWord(quiet)
           local e = match(s, en)
           if not e then e = make(s, en, nil); s.n = s.n + 1; e.at = s.n end
           if not said(e) then e.o, n = sender, n + 1; e.sa = e.sa or s.n end
-          if en.t and not e.t then e.t = en.t end
+          if en.t then e.wt = en.t end
+          e.t = titleOf(e)
         end
       end
     end
@@ -786,7 +814,13 @@ function F.StripTraces(only)
   for i = #s.list, 1, -1 do
     local e = s.list[i]
     if type(e) == "table" and type(e.v) == "table" then
-      for g in pairs(e.v) do if g ~= me and g ~= "me" and (only == nil or only(g)) then e.v[g] = nil; n = n + 1 end end
+      for g in pairs(e.v) do
+        if g ~= me and g ~= "me" and (only == nil or only(g)) then
+          e.v[g] = nil; n = n + 1
+          if type(e.tv) == "table" then e.tv[g] = nil end
+        end
+      end
+      e.t = titleOf(e)
       if next(e.v) == nil and not e.o then table.remove(s.list, i) else remean(e) end
     end
   end

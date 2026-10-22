@@ -19335,6 +19335,8 @@ end
 --     changelog line written for upgraders
 -- C4. A member's file keeps none of the halls' store the officers keep: the weekly values of a stat they close, the
 --     Queue's run cards, earns and firsts, a card locked to them, the firsts ledger and the earns remembered
+-- C5. A book's title is one two of its voices gave alike: an edited copy's first title, joined by an honest member who
+--     read the book, is never drawn or said in the officers' word
 ----------------------------------------------------------------------------
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "MAGE", level = 30, online = true } end
@@ -19481,6 +19483,30 @@ do
     for _, x in ipairs({ ofa, mo }) do leave(x) end
   end)
   said[#said + 1] = "a member's file keeps none of the halls' store the officers keep: weekly values of a closed stat, the queue's run cards, earns and firsts, the ledger"
+  -- C5
+  isolated({ member("Ann", 3), member("Ben", 3), member("Cy", 3), member("Dee", 3) }, function()
+    local cy = char("Cy", 3)
+    login(cy); tickAll(10)
+    local F = cy.C.Finds
+    local function rowOf(m, id) for _, r in ipairs(F.door.Rows(m)) do if r.id == id then return r end end end
+    local function book(t, x) return { k = "b", id = 9401, m = 1429, x = x, y = 300, t = t } end
+    -- an edited copy names a book first; an honest member who read it joins the find
+    F.Voice(guidOf("Ann"), book("Ann was here and so on", 300))
+    F.Voice(guidOf("Ben"), book("The Drowned Ledger", 304))
+    F:Bump()
+    local r = rowOf(1429, 9401)
+    assert(r and r.sure and r.name == nil, "two voices, two titles: sure, and no title shown: " .. tostring(r and r.name))
+    assert(#F:WordParts() == 0, "nor said in a word: " .. table.concat(F:WordParts(), ";"))
+    -- a second honest voice: the title two of them gave
+    F.Voice(guidOf("Dee"), book("The Drowned Ledger", 302))
+    F:Bump()
+    r = rowOf(1429, 9401)
+    assert(r and r.name == "The Drowned Ledger", "two voices alike: their title: " .. tostring(r and r.name))
+    local word = table.concat(F:WordParts(), ";")
+    assert(word:find("=The Drowned Ledger", 1, true) and not word:find("Ann was here", 1, true), "said by the title two gave: " .. word)
+    leave(cy)
+  end)
+  said[#said + 1] = "a book's title is one two voices gave alike: an edited copy's first title is never drawn or said"
   print("fix-cute-core review: " .. table.concat(said, "; "))
 end
 
