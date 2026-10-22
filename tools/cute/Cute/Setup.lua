@@ -1,8 +1,8 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- Setup: the first-run card, once per character, and the reload rule's question when Settings closes.
 -- The card (CuteSetupFrame, 480 px, centred): the windows (Guild and Quests always, with the key that opens each; Runs
--- under Guild; the Dungeons and Gear tabs; Cute's Map with its key), what Cute puts on screen (the step frame and arrow, Reminders, the
--- interact light) and the two quest choices (Accept for me, the hand-in). Every row starts
+-- under Guild; the Dungeons and Gear tabs; Cute's Map with its key), what Cute puts on screen (the step frame and
+-- arrow, Reminders, the interact light) and the two quest choices (Accept for me, the hand-in). Every row starts
 -- from what this character has saved (its modules, the engine's settings), and only a row with nothing saved starts at
 -- the default: everything on but the two automatic choices. Start writes the choices, marks every row shown answered
 -- (CuteDB.chars[me].setup[row]), keeps the keys (Keys.lua) and reloads; after the reload the quest window opens once (the

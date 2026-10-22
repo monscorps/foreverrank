@@ -672,9 +672,9 @@ end
 -- Records); the always-on base (a module addon's: the quests window with its Route tab) with the quests window's tabs
 -- under it; then the rest (Map, Reminders, any other module addon's). A module with a switch for the whole guild
 -- (def.guildSwitch: Achievements, Records) has it under its row, the officers' to click and greyed for members; it
--- applies at once, as the officers' settings do. A change waits: the boxes show it at once, the
--- one reload line at the top says so with Reload now and Undo, and closing Settings asks (Setup.lua); a few words on
--- the right where something is not as the box says, its notes in the tooltip
+-- applies at once, as the officers' settings do. A change waits: the boxes show it at once, the one reload line at the
+-- top says so with Reload now and Undo, and closing Settings asks (Setup.lua); a few words on the right where something
+-- is not as the box says, its notes in the tooltip
 local function drawModules(col, officer)
   local M = C.Modules
   col:Head("Modules")
