@@ -18108,7 +18108,7 @@ do
     -- Settings > Data you share: the line and the row
     c.C.UI:Open("settings", "share")
     local st = texts(c)
-    assert(st:find("QuestBank does not have yet", 1, true) and st:find("1 confirmed by the guild", 1, true) and st:find("Share finds with the guild", 1, true)
+    assert(st:find(" new find", 1, true) and st:find("1 confirmed by the guild", 1, true) and st:find("Share finds with the guild", 1, true)
       and st:find("A guild mate's find counts once two of you agree", 1, true), "Data you share: the line and the row:\n" .. st)
     local sw = c.C.UI.Window("settings")
     for _, size in ipairs({ { 800, 560 }, { 760, 420 } }) do
@@ -18451,12 +18451,12 @@ do
     disc.findN = (tonumber(disc.findN) or 0) + 1
     c.C.UI:Open("settings", "share")
     local st = texts(c)
-    assert(st:find("1 find QuestBank does not have yet", 1, true) and st:find("Show finds", 1, true), "the Map module on: the line and Show finds:\n" .. st)
+    assert(st:find("1 new find" .. c.C.UI.Look.DOT, 1, true) and st:find("Show finds", 1, true), "the Map module on: the line and Show finds:\n" .. st)
     c.C.UI.Window("settings").frame:Hide()
     c.C.Modules.Set("Cute_Quest:map", false); tick(c, 1)
     c.C.UI:Open("settings", "share")
     st = texts(c)
-    assert(st:find("1 find QuestBank does not have yet", 1, true) and not st:find("Show finds", 1, true), "the Map module off: the line, no Show finds:\n" .. st)
+    assert(st:find("1 new find" .. c.C.UI.Look.DOT, 1, true) and not st:find("Show finds", 1, true), "the Map module off: the line, no Show finds:\n" .. st)
     check(c.C.UI.Window("settings").frame, "map K8 Data you share with the Map module off")
     leave(c)
     said[#said + 1] = "Data you share's finds line with Show finds only while the Map window is on"
@@ -21218,6 +21218,8 @@ end
 --     or a growing loot list ever sent; a wire of the old kind is kept by id
 -- Q1. A 1Q from a member the officers marked untrusted starts nothing; one asker's 1Q is answered twice a session at
 --     most, and forces the whole statistics pass once in half an hour
+-- N1. Settings > Data you share counts finds in the footers' words and its Show finds tooltip ends as M's note does:
+--     no "QuestBank" under Cute
 ----------------------------------------------------------------------------
 do
   local CASES, failed, said = {}, {}, {}
@@ -21409,6 +21411,27 @@ do
       leave(ann)
     end)
     said[#said + 1] = "an untrusted member's 1Q starts nothing; one asker's is answered twice a session, its pass once in half an hour"
+  end }
+
+  CASES[#CASES + 1] = { "N1 Data you share counts finds in Cute's words", function()
+    inGuild({ UIX.member("Rone", 1) }, function()
+      local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, log = { [7] = 2 } }))
+      login(c); tickAll(6)
+      c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+      local QB = c.addons[2].private
+      local disc = QB.Discover.DB()
+      disc.find = { o9001 = { p = { { 1429, 400, 400, 1 } }, b = "A Diary of Your Own", n = 1 } }
+      disc.findN = (tonumber(disc.findN) or 0) + 1
+      c.C.UI:Open("settings", "share")
+      local st = texts(c)
+      assert(st:find("1 new find" .. c.C.UI.Look.DOT, 1, true) and st:find(" confirmed by the guild", 1, true) and not st:find("QuestBank does not have", 1, true),
+        "the footers' words: " .. st)
+      local tip = tipOf(UIX.button(c, "Show finds"))
+      assert(tip:find("what players' games and guides gave foreverrank.com.", 1, true) and not tip:find("QuestBank", 1, true), "the tooltip as M's note: " .. tip)
+      check(c.C.UI.Window("settings").frame, "fix2-cute-core N1 Data you share")
+      leave(c)
+    end)
+    said[#said + 1] = "Data you share counts finds in the footers' words, Show finds' tooltip as M's note"
   end }
 
   for _, case in ipairs(CASES) do
