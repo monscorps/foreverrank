@@ -19506,6 +19506,34 @@ do
     end)
   end }
 
+  -- S8 (scale). The Map window's per-frame OnUpdate went through Cute.Safe: a table and a closure every frame while M
+  -- was open (QuestBank 5.4.2 took that pattern out of the engine's own OnUpdates). A plain pcall now, nothing a frame
+  FECASES[#FECASES + 1] = { "S8: the Map window's frame tick makes no garbage", function()
+    inGuild({ member("Rone", 1) }, function()
+      local c = quest("Rone")
+      login(c); tickAll(6)
+      local QB = c.addons[2].private
+      c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+      c.C.UI:Open("map")
+      local b = c.C.UI.Window("map").mapBox
+      assert(b and b.__scripts.OnUpdate, "the map's box ticks")
+      local ticks = 0
+      local was = QB.MapPage.Tick
+      QB.MapPage.Tick = function() ticks = ticks + 1 end
+      local on = b.__scripts.OnUpdate
+      if jit then jit.off(); jit.flush() end
+      collectgarbage("collect"); collectgarbage("stop")
+      local before = collectgarbage("count")
+      for _ = 1, 500 do on(b, 0.016) end
+      local kb = collectgarbage("count") - before
+      collectgarbage("restart")
+      if jit then jit.on() end
+      QB.MapPage.Tick = was
+      assert(ticks == 500 and kb < 2, string.format("500 frames: %d ticks, %.1f KB", ticks, kb))
+      leave(c)
+    end)
+  end }
+
   -- S4 (firsthour), Cute_Quest's own words: the Finds list's note said what guides gave "QuestBank"; the site, which
   -- gathers them, is foreverrank.com
   FECASES[#FECASES + 1] = { "S4: the Finds list's note names foreverrank.com", function()

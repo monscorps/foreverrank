@@ -34,6 +34,7 @@ end
 
 -- QuestBank loaded beside Cute (this copy sleeps): its own Map page shows its map
 local function engineMap() return (not QB.dormant) and E and E.MapPage or nil end
+local tickFailed = false -- (the map's frame tick failed once this session: said once, MW's box below)
 
 ----------------------------------------------------------------------------
 -- the four of the game's own providers the world map has and QuestBank's page did not (Blizzard_WorldMap.lua:213,
@@ -752,8 +753,18 @@ local function boxOf(ui)
   b.said.text = ui.Text(b.said, 12, ui.COLORS.INK, "LEFT")
   b.said.text:SetPoint("LEFT", 6, 0)
   b.said:Hide()
-  -- (while it shows: the canvas's route strokes, the arrow's step, a lit row's fade: MapPage.lua MP.Tick)
-  b:SetScript("OnUpdate", Cute.Safe(function(_, dt) local MP = engineMap(); if MP and MP.canvas then MP.Tick(dt or 0) end end, "map window: tick"))
+  -- (while it shows: the canvas's route strokes, the arrow's step, a lit row's fade: MapPage.lua MP.Tick). Every frame, so
+  -- through pcall, which makes nothing (the launch audit: Cute.Safe made a table and a closure a frame, 15 to 35 KB a
+  -- second of garbage while M was open); an error goes to Cute's list once
+  b:SetScript("OnUpdate", function(_, dt)
+    local MP = engineMap()
+    if not (MP and MP.canvas) then return end
+    local ok, err = pcall(MP.Tick, dt or 0)
+    if not ok and not tickFailed then
+      tickFailed = true
+      Cute.Safe(function() error(err, 0) end, "map window: tick")()
+    end
+  end)
   ui.mapBox = b
   return b
 end
