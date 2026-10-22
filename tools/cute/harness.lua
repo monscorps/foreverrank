@@ -14322,6 +14322,20 @@ do local function cardsStage()
   end)
   said[#said + 1] = "Preview's guild line whole on two lines at most, none promised in the chat lockdown"
 
+  -- the Hall of Shame chip with every card unticked names where the list is now: Settings, Halls
+  isolated({ gmember("Yes", 1, "MAGE") }, function()
+    local yes = cchar("Yes", 1)
+    login(yes)
+    tickAll(20)
+    for _, def in ipairs(yes.C.Stats.byCat.funny) do yes.C.UI.SetTicked("shame", def.id, false) end
+    H(yes).OpenChip("shame")
+    assert(texts(yes):find("No cards ticked. Settings, Halls has the list.", 1, true) and not texts(yes):find("Settings, Hall of Shame", 1, true), "the empty chip names Settings, Halls:\n" .. texts(yes))
+    check(yes.C.UI.frame, "halls: the Hall of Shame chip, nothing ticked")
+    yes.C.UI:Open("settings", "shame")
+    assert(texts(yes):find("Announcements on my screen", 1, true) and texts(yes):find("Cards", 1, true), "Settings, Halls has the list")
+  end)
+  said[#said + 1] = "the Hall of Shame chip unticked names Settings, Halls"
+
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end
 

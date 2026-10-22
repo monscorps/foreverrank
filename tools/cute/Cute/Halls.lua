@@ -1364,7 +1364,7 @@ function H.Draw(ui)
     valid[chip].band(ui, w)
   end
   ui:SetBand(28)
-  if chip == "shame" then if ui.DrawShame then ui:DrawShame() end
+  if chip == "shame" then H.DrawLive(ui)
   elseif chip == "news" then H.DrawNews(ui)
   elseif chip == "queue" then if H.draft then H.DrawCompose(ui) else H.DrawQueue(ui) end
   else valid[chip].draw(ui) end
@@ -1410,6 +1410,18 @@ local function say(ui, x, y, w, s, c)
   return l
 end
 H.Say = say
+-- the Hall of Shame chip: 0.7's live cards as the core draws them (UI:DrawShame); with none ticked, the line names where
+-- the list is now (the section is the tab's, Halls: the core's own line names the page's old title)
+function H.DrawLive(ui)
+  local ticked = C.UI.Ticked and C.UI.Ticked("shame") or {}
+  local any = false
+  for _, def in ipairs(C.Stats.byCat.funny or {}) do if ticked[def.id] then any = true break end end
+  if any then if ui.DrawShame then ui:DrawShame() end return end
+  ui.rows:Clear()
+  say(ui, 6, 6, ui.scroll:Width() - 12, "No cards ticked. Settings, Halls has the list.")
+  ui.scroll:SetContentHeight(38)
+end
+
 local function scrollButton(ui, x, y, w, label, fn)
   local b = ui.buttons:Get()
   b:ClearAllPoints()
