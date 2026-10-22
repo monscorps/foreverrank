@@ -14527,6 +14527,34 @@ do local function cardsStage()
   end)
   said[#said + 1] = "the week spanning the new year is one week, its Monday's"
 
+  -- a clear this client has not defined routes as one it has (the strictest of Fastest clears and its instance), and
+  -- one member's spree of made-up clears spends that member's share of definitions, not the guild's
+  isolated({ gmember("Qua", 1, "MAGE"), gmember("Qeb", 3, "ROGUE"), gmember("Qix", 3, "DRUID") }, function()
+    local qua, qeb, qix = cchar("Qua", 1), cchar("Qeb", 3, { class = "ROGUE" }), cchar("Qix", 3, { class = "DRUID" })
+    login(qua); login(qeb); login(qix)
+    tickAll(30)
+    local P, S = qua.C.Policy, qua.C.Stats
+    assert(not S.byId.c999999 and P:Route("c999999") == "all", "an undefined clear open by default")
+    local saved = qua.env.CuteDB.policy
+    qua.env.CuteDB.policy = { vis = { gc_clears = "self" } }
+    assert(P:Route("c999999") == "self", "Fastest clears closed: an undefined clear too")
+    qua.env.CuteDB.policy = { vis = { gc_raids = "self" } }
+    assert(P:Route("c999999") == "self", "Raids closed: an undefined clear of an instance of no known kind too")
+    qua.env.CuteDB.policy = saved
+    -- (Qeb's edited copy: 400 made-up clears; Qix's real one after it is still defined)
+    local junk = {}
+    for k = 1, 400 do junk["c" .. k] = 200 end
+    Rc(qua):Before(junk, qeb.sender)
+    local n = 0
+    for k = 1, 400 do if S.byId["c" .. k] then n = n + 1 end end
+    assert(n <= 60, "one member's share of definitions: " .. n)
+    Rc(qua):Clear(399, true)
+    assert(not recOf(qua, "c399"), "a clear past the share holds no record")
+    Rc(qua):Before({ c389 = 1500 }, qix.sender)
+    assert(S.byId.c389 and S.byId.c389.learned == "clears", "a real clear from another member still defined")
+  end)
+  said[#said + 1] = "an undefined clear routes as a defined one; one member's made-up clears spend their own share of definitions"
+
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end
 

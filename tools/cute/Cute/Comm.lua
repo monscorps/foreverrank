@@ -1793,7 +1793,7 @@ function M:Receive(text, channel, sender)
     if C.Achievements then C.Achievements:Seen(sender, dkv, whispered, kind) end
     -- (a fastest clear's stat defined before the roster takes it, so its route and bounds are the stat's; the guild's
     -- records see what the roster kept: Records.lua)
-    if C.Records then C.Records:Before(dkv) end
+    if C.Records then C.Records:Before(dkv, sender) end
     R:Apply(sender, dkv, whispered)
     if C.Records and not whispered then C.Records:After(sender, dkv, true) end
     if not whispered then self:WantWhole(sender, had, true) end
@@ -1803,7 +1803,7 @@ function M:Receive(text, channel, sender)
     local had = CuteDB.roster[sender] ~= nil
     if C.Halls then C.Halls:Seen(sender, kv) end
     if C.Achievements then C.Achievements:Seen(sender, kv, whispered, kind) end
-    if C.Records then C.Records:Before(kv) end
+    if C.Records then C.Records:Before(kv, sender) end
     R:Apply(sender, kv, whispered)
     if C.Records and not whispered then C.Records:After(sender, kv, false) end
     if not whispered then self:WantWhole(sender, had, (text:match("^1F|%d+|%d+|([^|]*)|") or ""):sub(-1) == "s") end

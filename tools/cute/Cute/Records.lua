@@ -45,7 +45,8 @@ local GAP = 5               -- two voices within this many seconds back a fastes
 local BETTER = 0.95         -- a fastest clear is shown where it is 5% faster or more
 local LIVE_AFTER = 90       -- seconds into a login before a delta is live
 local SEND_GAP = 60         -- 1O: one message a minute at most
-local CLEARS_CHANNEL = 300  -- clear stats defined from the channel at most (your own always are)
+local CLEARS_CHANNEL = 300  -- clear stats defined from the channel in a session at most (your own always are)
+local CLEARS_SENDER = 60    -- and from one member (a session's and the saved roster's at login), well past the instances
 local CODES_MAX, LIMIT = 60, 255
 local CLEAR_LO, CLEAR_HI = 120, 6 * 3600
 local TOGETHER = 1800       -- a NEW RECORD's voices came live within this many seconds of its holder's (one group's)
@@ -86,6 +87,18 @@ do
   -- (a clear is an id the wire carries as a bare int whether or not this client defined it, as a boss or an instance)
   local dynamic = S.IsDynamic
   function S.IsDynamic(id) return dynamic(id) or (type(id) == "string" and id:match("^c%d+$") ~= nil and #id <= 12) end
+  -- (and one this client has not defined routes as a defined one would: the strictest of Fastest clears and its
+  -- instance, as Policy.lua P:Route takes an instance of no known kind; the core's own fall-through sends an id it does
+  -- not know to everyone)
+  local P = C.Policy
+  local route = P.Route
+  function P:Route(id)
+    if type(id) == "string" and id:byte(1) == 99 and not S.byId[id] then
+      local n = id:match("^c(%d+)$")
+      if n then return (route(self, "gc_clears") == "self" or route(self, "i" .. n) == "self") and "self" or "all" end
+    end
+    return route(self, id)
+  end
   -- the officers' switch for the whole guild: a rule, 1 on and 0 off, as Achievements' (Achievements.lua): sent and
   -- taken with the policy's rules by its entry in TUNE_BY and LOWER, left out of R.TUNE (a switch, drawn in this
   -- module's own section)
@@ -132,10 +145,11 @@ local function clearReveals(n)
   if cat then out[#out + 1] = cat else out[#out + 1] = "gc_dungeons"; out[#out + 1] = "gc_raids" end
   return out
 end
--- a clear's stat, defined once: own (your own full clear, or your saved one) always, from the channel CLEARS_CHANNEL
--- at most
-Rec.channelDefs = 0
-function Rec.ClearDef(n, own)
+-- a clear's stat, defined once: own (your own full clear, or your saved one) always; from a member (by), CLEARS_SENDER
+-- from that member and, from the channel this session (not saved), CLEARS_CHANNEL in all: one member's made-up clears
+-- spend their own share, not the guild's
+Rec.channelDefs, Rec.defsBy = 0, {}
+function Rec.ClearDef(n, own, by, saved)
   if type(n) ~= "number" or n ~= n or n < 0 or n >= 2 ^ 31 or n ~= math.floor(n) then return nil end
   local S = C.Stats
   local id = "c" .. n
@@ -145,8 +159,10 @@ function Rec.ClearDef(n, own)
     return def
   end
   if not own then
-    if Rec.channelDefs >= CLEARS_CHANNEL then return nil end
-    Rec.channelDefs = Rec.channelDefs + 1
+    local k = by or "?"
+    if (Rec.defsBy[k] or 0) >= CLEARS_SENDER or (not saved and Rec.channelDefs >= CLEARS_CHANNEL) then return nil end
+    Rec.defsBy[k] = (Rec.defsBy[k] or 0) + 1
+    if not saved then Rec.channelDefs = Rec.channelDefs + 1 end
   end
   def = S.def(id, "Fastest clear: " .. Rec.Place(n), "found", { learned = "clears", num = n, track = true, slow = true, lo = CLEAR_LO, hi = CLEAR_HI,
     record = "min", recordIn = "clear", reveals = clearReveals(n), fmt = clock, default = "all",
@@ -178,10 +194,10 @@ do
         local n = type(id) == "string" and tonumber(id:match("^c(%d+)$"))
         if n then Rec.ClearDef(n, true) end
       end
-      for _, e in pairs(CuteDB.roster or {}) do
+      for key, e in pairs(CuteDB.roster or {}) do
         for id in pairs(type(e) == "table" and type(e.stats) == "table" and e.stats or {}) do
           local n = type(id) == "string" and tonumber(id:match("^c(%d+)$"))
-          if n then Rec.ClearDef(n) end
+          if n then Rec.ClearDef(n, false, key, true) end
         end
       end
     end, "records: the clears saved")()
@@ -305,7 +321,9 @@ end
 function Rec:Clear(n, live)
   if type(n) ~= "number" then return end
   local id = "c" .. n
-  -- (its route as its instance is known now)
+  -- (its route as its instance is known now; one this client did not define, past the definitions' shares, holds no
+  -- record: its bounds are unknown here)
+  if not C.Stats.byId[id] then return end
   Rec.ClearDef(n)
   if C.Policy:Route(id) ~= "all" then return end
   local list = voices(id)
@@ -442,11 +460,11 @@ end
 -- what arrives (Comm.lua): a clear's stat defined before the roster takes the value (so its route and bounds are the
 -- stat's), then every value it kept, seen; your own as Sample sets it
 ----------------------------------------------------------------------------
-function Rec:Before(kv)
+function Rec:Before(kv, sender)
   if type(kv) ~= "table" then return end
   for id in pairs(kv) do
     local n = type(id) == "string" and tonumber(id:match("^c(%d+)$"))
-    if n then Rec.ClearDef(n) end
+    if n then Rec.ClearDef(n, false, sender) end
   end
 end
 function Rec:After(sender, kv, delta)
