@@ -722,8 +722,9 @@ function MV.Hook(before)
   if MV.blocked then Minimap:HookScript("OnMouseUp", QB.Safe(before, "minimap move")); return end
   local orig = Minimap:GetScript("OnMouseUp")
   MV.ourUp = function(self, button, ...)
-    -- (the minimap not the engine's now, a host's map module switched off: the game's own release, a ping)
-    if not QB.Mini.Owned() then
+    -- (the minimap not the engine's now, a host's map module switched off: the game's own release, a ping; the far view,
+    -- its own row's, keeps a drag's end and a ping on its ground, never the right-click's menu: Mini.FarOn)
+    if not QB.Mini.Owned() and (button == "RightButton" or not MV.On()) then
       if orig then return orig(self, button, ...) end
       return
     end

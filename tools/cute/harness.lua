@@ -5314,9 +5314,11 @@ do
     assert(seenGuild, "with the switch on a share goes to GUILD: the look sees it")
     s.share.guild = false
     for k = #c.outbox, 1, -1 do c.outbox[k] = nil end
-    -- the minimap with the Map module off: the game's own
+    -- the minimap with the Map module off: the game's own (its far view, Settings > Route's row, off here: since the
+    -- launch audit the far view follows that row alone, the fix-engine stage's S2)
     local Mini, mini = QB.Mini, c.env.Minimap
-    assert(not Mini.Owned() and not Mini.hooked, "Map off: the minimap is not the engine's, nothing hooked")
+    s.mmExtended = false
+    assert(not Mini.Owned(), "Map off: the minimap is not the engine's")
     local clicks, wheels, menus = c.gameClicks or 0, c.gameWheel or 0, #c.contextMenus
     mini.__scripts.OnMouseUp(mini, "RightButton"); tick(c, 1)
     mini.__scripts.OnMouseWheel(mini, 1)
@@ -5359,6 +5361,7 @@ do
     assert(c.tracking[2].active == true and math.abs((cont:GetScale() or 1) - 1.5) < 0.01, "Map on again: Target and the engine's size back")
     c.C.Modules.Set("Cute_Quest:map", false); tick(c, 1); frameTick()
     assert(c.tracking[2].active == false and math.abs((cont:GetScale() or 1) - s0) < 0.01, "and off: the game's again")
+    s.mmExtended = true
     -- a step without a quest (travel, train, grind, corpse) clicked: the quest window's Route tab (the base, always
     -- there), never the guild's Race
     QB.UI:Open(3)
@@ -19465,6 +19468,40 @@ do
       assert(kit.run:IsShown(), "shown while it is on")
       press(kit.run)
       assert(not QB.Run.Get(), "Stop timing stops it")
+      leave(c)
+    end)
+  end }
+
+  -- S2 (firsthour). Settings > Route's "Minimap far view" (on by default) did nothing with Cute's Map off: the wheel was
+  -- hooked only while the minimap was the engine's. The far view (the wheel past the game's widest, a drag to look
+  -- around) follows its row alone; Ctrl-wheel, Alt-drag, the right-click menu, the size and the place stay the Map
+  -- module's. Both off, the game's own wheel
+  FECASES[#FECASES + 1] = { "S2: the minimap's far view follows its row, Map on or off", function()
+    inGuild({ member("Rone", 1) }, function()
+      local c = quest("Rone")
+      login(c); tickAll(6)
+      local QB = c.addons[2].private
+      local Mini, MV, mini, s = QB.Mini, QB.MiniView, c.env.Minimap, QB:Settings()
+      assert(not Mini.Owned() and s.mmExtended ~= false, "Map off, the far view on")
+      local far = 0
+      local wheel = MV.Wheel
+      MV.Wheel = function(d) far = far + 1; return wheel(d) end
+      local wheels, clicks, menus = c.gameWheel or 0, c.gameClicks or 0, #c.contextMenus
+      assert(mini.__scripts.OnMouseWheel, "the wheel hooked")
+      mini.__scripts.OnMouseWheel(mini, -1)
+      assert(far == 1 and (c.gameWheel or 0) == wheels, "Map off: the wheel is the far view's")
+      local scale = c.env.MinimapCluster.MinimapContainer:GetScale() or 1
+      c.ctrl = true
+      mini.__scripts.OnMouseWheel(mini, 1)
+      c.ctrl = false
+      assert(far == 1 and (c.gameWheel or 0) == wheels + 1 and math.abs((c.env.MinimapCluster.MinimapContainer:GetScale() or 1) - scale) < 0.001, "Ctrl-wheel: the game's, no size of ours")
+      mini.__scripts.OnMouseUp(mini, "RightButton"); tick(c, 1)
+      assert((c.gameClicks or 0) == clicks + 1 and #c.contextMenus == menus, "a right-click: the game's")
+      s.mmExtended = false
+      mini.__scripts.OnMouseWheel(mini, -1)
+      assert(far == 1 and (c.gameWheel or 0) == wheels + 2, "the far view off: the game's wheel")
+      s.mmExtended = true
+      MV.Wheel = wheel
       leave(c)
     end)
   end }
