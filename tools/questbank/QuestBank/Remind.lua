@@ -917,13 +917,14 @@ end
 -- which records each piece shows, in order; Reminders' six (a BAD status always in: the last camp icon gives way)
 local QUIET = { { "reminders", "reminders" }, { "buffs", "buffs" }, { "buffs", "party" }, { "buffs", "pull" } }
 local badBuf = {}
+local asked = false -- (/qb buffs: Buffs now, whatever the dungeons' choice; that one refresh alone)
 local function collect()
   for _, l in pairs(shown) do for i = #l, 1, -1 do l[i] = nil end end
   stepRec = nil
   local inst = ctx.inst
   local mode = set.instance
-  local quietInside = inst ~= nil and mode ~= "all"
-  if inst and mode == "none" then return end
+  local quietInside = inst ~= nil and (mode ~= "all" or asked)
+  if inst and mode == "none" and not asked then return end
   for _, p in ipairs(R.list) do
     for i = 1, p.n do
       local rec = p.recs[i]
@@ -1900,13 +1901,29 @@ function R:Init()
 end
 
 ----------------------------------------------------------------------------
--- /qb buffs: Buffs now, its Not now forgotten; the one line a reminder ever prints is its reply
+-- /qb buffs: Buffs now, its Not now forgotten, inside a dungeon or raid too whatever their choice says (until the next
+-- look); the one line a reminder ever prints is its reply: nothing while it shows some, where they are switched off,
+-- or "No buffs missing." only once your buffs were read (never while the game keeps them secret)
 ----------------------------------------------------------------------------
 function R.Command()
   if fighting() then QB:Print("Not in a fight: type /qb buffs after it.") return end
+  if R.Blocked() then QB:Print("Not now: type /qb buffs again in a moment.") return end
+  local r = R.Settings()
+  -- (where to switch them on: a host's own words, Cute's module and its section; QuestBank's Settings page)
+  if r.on == false then QB:Print(QB.host and "Reminders are off: Settings > Modules." or "Reminders on screen is off: Settings, Reminders.") return end
+  if r.buffs == false and r.party == false then
+    QB:Print("Your buffs and your party's are off: " .. (QB.host and "Settings > Reminders." or "Settings, Reminders."))
+    return
+  end
   pieceSnooze.buffs = nil
-  R.Refresh()
-  if #shown.buffs + #shown.party + #shown.pull == 0 then QB:Print("No buffs missing.") end
+  asked = true
+  local ok, err = pcall(R.Refresh)
+  asked = false
+  if not ok then error(err, 0) end
+  if #shown.buffs + #shown.party + #shown.pull > 0 then return end
+  local _, _, hidden = QB.Camp and QB.Camp.Mine and QB.Camp.Mine(ctx)
+  if hidden then QB:Print("Not now: type /qb buffs again in a moment.") return end
+  QB:Print("No buffs missing.")
 end
 
 -- the shared reads Cute's dashboard takes too (one answer for both)

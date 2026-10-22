@@ -23102,6 +23102,32 @@ do
     sf.bar:SetValue(0); UI:ShowTab(1); UI:Refresh(); UI.frame:Hide()
   end }
 
+  -- 16c. /qb buffs: Buffs now even inside where the dungeons' choice is Nothing, nothing said when it shows some; with
+  -- Buffs' rows or Reminders on screen off it says where they are; never "No buffs missing." unless your buffs were read
+  CASES[#CASES + 1] = { "/qb buffs: Buffs now, inside too; off, it says so; no false all-clear", function()
+    local c = hud("Asker", "MAGE", "Mage", 8, { [1459] = true }, { level = 20 })
+    local env, R = c.env, c.QB.Remind
+    env.IsInInstance = function() return true, "party" end
+    R.SetRow("instance", "none"); ev(c, "PLAYER_ENTERING_WORLD"); tick(c, 6)
+    local B = env.QuestBankBuffBanner
+    assert(not B:IsShown(), "Nothing inside: no Buffs")
+    local n0 = #c.chat
+    R.Command()
+    assert(B:IsShown() and buffIcons(c):find("1459", 1, true) and #c.chat == n0, "/qb buffs inside: Buffs now, nothing said: " .. tostring(c.chat[#c.chat]))
+    R.SetRow("buffs", false); R.SetRow("party", false); tick(c, 0)
+    R.Command()
+    assert(#c.chat == n0 + 1 and c.chat[#c.chat]:find("Settings", 1, true) and not c.chat[#c.chat]:find("No buffs missing", 1, true), "its rows off: where they are: " .. tostring(c.chat[#c.chat]))
+    R.SetRow("buffs", true); R.SetRow("party", true)
+    R.Settings().on = false
+    R.Command()
+    assert(#c.chat == n0 + 2 and c.chat[#c.chat]:find("Settings", 1, true), "Reminders on screen off: said so: " .. tostring(c.chat[#c.chat]))
+    R.Settings().on = true
+    c.buffs = { "Arcane Intellect" }; auraEv(c)
+    R.Command()
+    assert(c.chat[#c.chat]:find("No buffs missing", 1, true), "nothing missing: No buffs missing.")
+    R.SetRow("instance", "buffs"); env.IsInInstance = function() return false end
+  end }
+
   -- 18. layout: Reminders with six icons and Buffs with six and four members, apart and within the screen; Reminders
   -- grows both ways from its middle, Buffs upward from its bottom; a moved Buffs keeps its own point; past six, the last
   -- wait, a BAD status takes the last camp icon's place; a step frame holding a secure button keeps its size in a fight
