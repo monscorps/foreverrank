@@ -22361,6 +22361,9 @@ do
     c.buffs = {}
     ev(c, "READY_CHECK", SECRET.str(), 30); tick(c, 0)
     assert(B.title:GetText() == "Before the pull", "a ready check: Before the pull")
+    -- (what Before the pull shows, for a host's reader: Cute's Ready column; R.StartPull starts it)
+    local pl, pon = R.Pull()
+    assert(pon == true and type(pl) == "table" and #pl >= 4, "R.Pull(): Before the pull's records and that it is on: " .. tostring(pl and #pl))
     local list = buffIcons(c)
     for _, id in ipairs({ FLASK, E1, E2, RIBS, STONE }) do assert(list:find("item:" .. id, 1, true), "Before the pull offers " .. id .. ": " .. list) end
     for _, pr in ipairs(checkLayout(B, "Buffs, before the pull")) do problems[#problems + 1] = pr end

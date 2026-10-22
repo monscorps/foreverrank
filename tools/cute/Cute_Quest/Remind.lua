@@ -1191,7 +1191,8 @@ function R.PullOn()
   if now() >= pull.untilT then pull.untilT = nil return false end
   return true
 end
-function R.Pull(seconds, delay)
+-- Before the pull for seconds, delay seconds on (READY_CHECK, a raid's entry)
+function R.StartPull(seconds, delay)
   pull.gen = pull.gen + 1
   local gen = pull.gen
   local function start()
@@ -1202,6 +1203,9 @@ function R.Pull(seconds, delay)
   end
   if delay and delay > 0 and C_Timer and C_Timer.After then C_Timer.After(delay, QB.Safe(start, "reminders: pull")) else start() end
 end
+-- (the hud review) what Before the pull shows now, for a host's reader (Cute's Ready column): its records (a list the
+-- next refresh makes again: read, never kept) and whether it is on
+function R.Pull() return shown.pull, R.PullOn() end
 function R.PullEnd(delay)
   if not pull.untilT then return end
   if delay then pull.untilT = math.min(pull.untilT, now() + delay)
@@ -1880,10 +1884,10 @@ function R.OnEvent(event, a1, a2, ...)
   elseif event == "CINEMATIC_START" then inCinematic = true
   elseif event == "CINEMATIC_STOP" then inCinematic = false
   elseif event == "READY_CHECK" then
-    R.Pull(600, 0)
+    R.StartPull(600, 0)
   elseif event == "READY_CHECK_FINISHED" then R.PullEnd(10)
   elseif event == "PLAYER_ENTERING_WORLD" then
-    if R.InstanceKind() == "raid" then R.Pull(60, 5) elseif pull.untilT then R.PullEnd() end
+    if R.InstanceKind() == "raid" then R.StartPull(60, 5) elseif pull.untilT then R.PullEnd() end
   end
   local gs = groupsOf[event]
   if gs then for _, g in ipairs(gs) do dirty[g] = true end end
