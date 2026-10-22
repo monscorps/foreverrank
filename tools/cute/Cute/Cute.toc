@@ -18,6 +18,7 @@ Sample.lua
 Roster.lua
 Policy.lua
 Comm.lua
+Finds.lua
 UI.lua
 Look.lua
 Cards.lua

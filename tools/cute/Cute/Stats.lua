@@ -1775,18 +1775,21 @@ end
 -- only when a discovered stat or the game's list changed
 local boardCache, boardKey
 local function byLabel(a, b) if a.label == b.label then return a.id < b.id end return a.label < b.label end
+-- (S.BoardKey, where a module sets one: more that the categories hang on, as Finds.lua's counts, shown once anyone has one)
 function S.Board()
-  local key = S.foundVersion .. ":" .. tostring(S.game)
+  local key = S.foundVersion .. ":" .. tostring(S.game) .. ":" .. (S.BoardKey and tostring(S.BoardKey()) or "")
   if boardCache and boardKey == key then return boardCache end
   local k = S.Known() or {}
   local cats, byCat = {}, {}
-  local groups, inst = { dungeons = {}, raids = {}, rep = {} }, {}
+  -- (each discovered category but Bosses, which goes by instance: S.FOUND's, a module's added there too, as Finds.lua's)
+  local groups, inst = {}, {}
+  for _, f in ipairs(S.FOUND) do if f[1] ~= "bosses" then groups[f[1]] = {} end end
   for _, def in ipairs(S.byCat.found) do
     if def.learned == "bosses" then
       local i = S.InstOf(def.num) or -1
       inst[i] = inst[i] or {}
       table.insert(inst[i], def)
-    elseif groups[def.learned] then
+    elseif groups[def.learned] and (not def.shown or def.shown()) then
       table.insert(groups[def.learned], def)
     end
   end

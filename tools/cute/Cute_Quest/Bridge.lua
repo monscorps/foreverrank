@@ -310,6 +310,18 @@ f:SetScript("OnEvent", E.Safe(function(self, _, name)
   -- the modules' switches, now on the saved table (before the engine's login: its files read the flags as they start)
   for id, fn in pairs(QB.Toggles) do fn(Cute.ModuleOn(id)) end
   E:Login()
+  -- (sub-project G) the guild's finds: Cute's door (Cute/Finds.lua) is the engine's host (Finds.lua Finds.host), told what
+  -- you find and drawn with yours on the map; attached after the engine's login, once the data file's rows are in, so
+  -- what QuestBank's data carries now leaves the guild's
+  if E.Finds and Cute.Finds and Cute.Finds.Attach then
+    E.Finds.host = Cute.Finds
+    Cute.Finds.Attach({
+      Known = E.Finds.Known,
+      Tally = function() if E.MapPage and E.MapPage.FindTally then return E.MapPage.FindTally() end return 0, 0 end,
+      Changed = function() local MP = E.MapPage; if MP and MP.finds and MP.canvas and MP.canvas:IsVisible() then MP.finds:RefreshAllData() end end,
+      ShowFinds = function() if QB.MapWin then QB.MapWin.OpenFinds() end end,
+    })
+  end
   enteringWorld()
   -- the engine takes the log as read at the game's next QUEST_LOG_UPDATE, which after PLAYER_LOGIN comes at once;
   -- loaded on demand in the middle of a session it could wait minutes for one, so the log is read now

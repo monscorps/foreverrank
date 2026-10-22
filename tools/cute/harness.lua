@@ -3469,7 +3469,7 @@ do
       check(rona.C.UI.frame, string.format("member statistics, discovered, %dx%d", size[1], size[2]))
     end
     sizeAll(wynn, 1040, 640); sizeAll(rona, 1040, 640)
-    -- the policy per discovered category: Bosses only-you; Settings has the four pairs
+    -- the policy per discovered category: Bosses only-you; Settings has the four pairs, and Finds' (sub-project G)
     wynn.C.Policy:Set("gc_bosses", "self")
     wynn.C.Comm:SendPolicy()
     tickAll(3)
@@ -3482,7 +3482,7 @@ do
     wynn.C.UI:Open("settings", "vis")
     local pairs4 = 0
     for _, fr in ipairs(wynn.frames) do if fr.__kind == "CheckButton" and fr:IsVisible() and fr.vis == "self" and type(fr.statId) == "string" and fr.statId:match("^gc_%l+$") then pairs4 = pairs4 + 1 end end
-    assert(pairs4 == 4, "four discovered pairs in Settings: " .. pairs4)
+    assert(pairs4 == 5, "five discovered pairs in Settings: " .. pairs4)
     check(sframe(wynn), "officer settings, discovered categories")
     -- the Me page counts what you discovered; the Officers page what the guild learned
     xavi.C.UI:Open("me")
@@ -3596,7 +3596,8 @@ do
     local petra = newClient(charOf({ "Petra", 3, "Raider", "MAGE", 50 }, { withStats = true, manyStats = 300, factions = factions }))
     local quinn = newClient(charOf({ "Quinn", 3, "Raider", "PRIEST", 50 }, { withStats = true, manyStats = 300, factions = {} }))
     login(petra, db); login(quinn)
-    assert(#petra.C.Stats.byCat.found == 40 + 18 + 60, "Petra's discoveries defined at login: " .. #petra.C.Stats.byCat.found)
+    -- (and the Finds category's four counts, defined at load: sub-project G)
+    assert(#petra.C.Stats.byCat.found == 40 + 18 + 60 + 4, "Petra's discoveries defined at login: " .. #petra.C.Stats.byCat.found)
     tickAll(60)
     local first = #petra.sent
     assert(first < 20 and #quinn.sent < 20, "under twenty messages in the first minute: " .. first .. ", " .. #quinn.sent)
@@ -3609,7 +3610,7 @@ do
     local lootN = 0
     for enc in pairs(quinn.env.CuteDB.known.loot) do if enc > 7000 and enc <= 7012 then lootN = lootN + 1 end end
     assert(lootN == 12 and quinn.env.CuteDB.known.loot[7001].items[60001], "and the loot of the twelve bosses: " .. lootN)
-    assert(#quinn.C.Stats.byCat.found == 40 + 18 + 60, "and every label: Quinn defined them all: " .. #quinn.C.Stats.byCat.found)
+    assert(#quinn.C.Stats.byCat.found == 40 + 18 + 60 + 4, "and every label: Quinn defined them all: " .. #quinn.C.Stats.byCat.found)
     local labelMsgs = msgs(petra, "1L")
     assert(#petra.oversize == 0 and labelMsgs >= 1 and #petra.sent < 80, "the whole login: " .. #petra.sent .. " messages, " .. labelMsgs .. " of labels")
     print(string.format("budget: 300 statistics, 40 bosses in 18 instances and 60 factions: %d messages in the first minute, %d in all (%d of labels), everything across", first, #petra.sent, labelMsgs))
@@ -15298,6 +15299,317 @@ do
   end)
 end
 
+----------------------------------------------------------------------------
+-- (map, part 2: sub-project G, finds in the guild: Cute/Finds.lua, its 1X on Comm's channel, the Finds category)
+-- G1. The wire: each kind packed and parsed back; a title cleaned to 60 bytes; a message at most 10 entries in 255
+--     bytes; refused: a map the client lacks, a spot past the map, an id or level out of range, a kind it does not know.
+-- G2. The pace: nothing in the first two minutes after the hello; a questing hour's finds in 30 messages at most, a
+--     minute apart; a rare's ping first in the next message, one a creature in five minutes; nothing from inside an
+--     instance, all of it after; nothing with "Share finds with the guild" off; a /reload keeps what waited.
+-- G3. Two voices: one guild mate's chest is dim (one voice); a second member's at a spot near it makes it sure, its place
+--     the mean; a rare's ping shows ten minutes and goes.
+-- G4. The bounds: an unknown map, a spot past the map, a sender the roster lacks, an untrusted one, past ten entries and
+--     past 40 messages an hour from one sender; four voices a find; 300 of one member's alone; 2,000 in all; 100
+--     crossings.
+-- G5. The officers keep Finds (and with Zone): each 1X whispered to the officers online, none on GUILD; an officer's
+--     client confirms with two voices and says it in the officers' word, which the members take (no GUID in it); a
+--     member's 1X on GUILD then and a member's word are refused; closed later, a member's client keeps no other
+--     member's voice.
+-- G6. On Cute_Quest: the engine's host is Cute's door; your book counted and kept as one voice, a guild mate's the same
+--     book confirming it; the footers of L and M ("1 new find, 1 confirmed by the guild"), a click on the Finds list;
+--     one guild mate's chest dim on the map at half alpha; Settings > Data you share's line and row; Statistics' Finds
+--     category with your counts; the quest engine's file holds nothing of the guild's; a find QuestBank's data carries
+--     now dropped; /cute diag's finds line, no name.
+----------------------------------------------------------------------------
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 20, online = true } end
+  local function maps(c)
+    c.env.C_Map = c.env.C_Map or {}
+    local was = c.env.C_Map.GetMapInfo
+    c.env.C_Map.GetMapInfo = function(m) if type(m) ~= "number" or m >= 99000 then return nil end return was and was(m) or { mapID = m, name = "Map " .. m, mapType = 3 } end
+  end
+  local function char(name, rank, extra)
+    local c = newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", "WARRIOR", 20 }, extra))
+    maps(c)
+    return c
+  end
+  local function noted(c, ...) c.C.Finds.door.Noted(...) end
+  local function sent1X(c, from, channel)
+    local out = {}
+    for i = from or 1, #c.sent do local m = c.sent[i]; if m.msg:sub(1, 3) == "1X|" and (channel == nil or m.channel == channel) then out[#out + 1] = m end end
+    return out
+  end
+  local function finds(c) return c.env.CuteDB.known.finds and c.env.CuteDB.known.finds.list or {} end
+  local function rowsOf(c, m) return c.C.Finds.door.Rows(m) end
+  local said = {}
+
+  -- G1: the wire
+  isolated({ member("Wira", 3) }, function()
+    local c = char("Wira", 3)
+    login(c); tick(c, 2)
+    local F, b36 = c.C.Finds, c.C.Comm.b36
+    local cases = {
+      { k = "b", id = 9101, m = 1429, x = 401, y = 402, t = "Raven Hill Tome" },
+      { k = "k", id = 424080, m = 1429, x = 610, y = 220 },
+      { k = "h", id = 2843, m = 1436, x = 0, y = 1000 },
+      { k = "r", id = 7001, m = 1431, x = 200, y = 250, lv = 31 },
+      { k = "x", id = 0, m = 1429, x = 310, y = 690, m2 = 1453, x2 = 500, y2 = 500, s = 12 },
+    }
+    for _, en in ipairs(cases) do
+      local kv = F.Pack(en)
+      local back = F.Parse(kv)
+      assert(back and back.k == en.k and back.id == en.id and back.m == en.m and back.x == en.x and back.y == en.y and back.t == en.t and back.lv == en.lv
+        and back.m2 == en.m2 and back.x2 == en.x2 and back.y2 == en.y2 and back.s == en.s, "packed and parsed back: " .. tostring(kv))
+    end
+    assert(F.Pack(cases[1]) == "b" .. b36(9101) .. "@" .. b36(1429) .. ":" .. b36(401) .. "," .. b36(402) .. "=Raven Hill Tome" and F.Pack(cases[2]) == "k" .. b36(424080) .. "@" .. b36(1429) .. ":" .. b36(610) .. "," .. b36(220)
+      and F.Pack(cases[5]) == "x" .. b36(1429) .. ":" .. b36(310) .. "," .. b36(690) .. ">" .. b36(1453) .. ":" .. b36(500) .. "," .. b36(500) .. "=" .. b36(12), "the wire's form: " .. F.Pack(cases[1]))
+    local long = F.Pack({ k = "b", id = 1, m = 1429, x = 1, y = 1, t = ("Tome;of=Ages|" ):rep(10) })
+    local t = long:match("=(.*)$")
+    assert(#t <= 60 and not t:find("[;=|]"), "a title cleaned, 60 bytes at most: " .. t)
+    -- a message: ten entries at most in 255 bytes, its parts routed by the Finds category with Zone
+    local many = {}
+    for i = 1, 14 do many[i] = { k = "b", id = 100000 + i, m = 1429, x = 999, y = 999, t = ("Long Book Title " .. i):rep(3) } end
+    local e, took = F.Message({}, many)
+    local n = select(2, e.msg:gsub(";", ";")) + 1
+    assert(#e.msg <= 255 and n <= 10 and n == took.out and e.parts[1].id == "gc_finds" and e.parts[1].also == "zone" and e.kind == "f", "a message: " .. #e.msg .. " bytes, " .. n .. " entries")
+    local short = {}
+    for i = 1, 14 do short[i] = { k = "h", id = i, m = 1429, x = 1, y = 1 } end
+    local e2 = F.Message({}, short)
+    assert(select(2, e2.msg:gsub(";", ";")) + 1 == 10, "ten short entries a message at most")
+    -- refused
+    for _, bad in ipairs({ "b" .. b36(1) .. "@" .. b36(99500) .. ":1,1=T", "h" .. b36(1) .. "@" .. b36(1429) .. ":" .. b36(1001) .. ",1", "h0@" .. b36(1429) .. ":1,1",
+      "r" .. b36(5) .. "@" .. b36(1429) .. ":1,1=0", "x" .. b36(1429) .. ":1,1>" .. b36(1453) .. ":1,1=0", "b" .. b36(1) .. "@" .. b36(1429) .. ":1,1=", "zz@1:1,1", "h" .. b36(1) .. "@" .. b36(1429) .. ":1.5,1" }) do
+      assert(F.Parse(bad) == nil, "refused: " .. bad)
+    end
+    leave(c)
+    said[#said + 1] = "the wire: each kind and back, a title cleaned to 60 bytes, ten entries in 255 bytes, routed by Finds with Zone; an unknown map, a spot past the map, ids and levels out of range refused"
+  end)
+
+  -- G2: the pace
+  isolated({ member("Pace", 3), member("Hark", 3) }, function()
+    local c, h = char("Pace", 3), char("Hark", 3)
+    login(c); login(h)
+    tickAll(20)
+    noted(c, "h", 501, 1429, 300, 300)
+    tickAll(60)
+    assert(#sent1X(c) == 0, "nothing in the first two minutes after the hello")
+    tickAll(60)
+    local first = sent1X(c)
+    assert(#first == 1 and first[1].channel == "GUILD" and first[1].msg == "1X|h" .. c.C.Comm.b36(501) .. "@" .. c.C.Comm.b36(1429) .. ":" .. c.C.Comm.b36(300) .. "," .. c.C.Comm.b36(300),
+      "then the chest, on GUILD: " .. tostring(first[1] and first[1].msg))
+    assert(#rowsOf(h, 1429) == 1 and rowsOf(h, 1429)[1].mates == 1 and not rowsOf(h, 1429)[1].sure, "Hark has it, one voice")
+    -- a questing hour: a chest every minute and a half, a rare every ten minutes
+    local n0 = #c.sent
+    local t0 = c.clock
+    for i = 1, 40 do
+      noted(c, "h", 1000 + i, 1429, 10 + i * 20, 500)
+      if i % 7 == 0 then noted(c, "r", 7000 + i, 1429, 600, 600, 30) end
+      tickAll(90)
+    end
+    local hour = sent1X(c, n0 + 1)
+    local gap = math.huge
+    for i = 2, #hour do gap = math.min(gap, hour[i].at - hour[i - 1].at) end
+    local inHour = 0
+    for _, m in ipairs(hour) do if m.at - t0 <= 3600 then inHour = inHour + 1 end end
+    assert(inHour <= 30 and gap >= 60, "a questing hour: " .. inHour .. " messages in the hour, a minute apart at least (" .. gap .. " s)")
+    tickAll(900)
+    assert(#c.env.CuteDB.chars["Pace-Forever"].findsOut == 0, "every find gone in the end")
+    local got = 0
+    for _, r in ipairs(rowsOf(h, 1429)) do if not r.ping then got = got + 1 end end
+    assert(got == 41, "Hark has the forty-one chests: " .. got)
+    -- the rare first in the next message; one a creature in five minutes
+    local n1 = #c.sent
+    for i = 1, 12 do noted(c, "k", 3000 + i, 1436, 100 + i * 30, 100) end
+    tickAll(30)
+    noted(c, "r", 8001, 1436, 500, 500, 33)
+    noted(c, "r", 8001, 1436, 505, 500, 33)
+    tickAll(70)
+    local after = sent1X(c, n1 + 1)
+    assert(#after >= 2 and after[2].msg:sub(1, 4) == "1X|r", "the rare's ping first in the next message: " .. tostring(after[2] and after[2].msg))
+    local pings = 0
+    for _, m in ipairs(sent1X(c, n1 + 1)) do for _ in m.msg:gmatch("r" .. c.C.Comm.b36(8001) .. "@") do pings = pings + 1 end end
+    assert(pings == 1, "one ping a creature in five minutes: " .. pings)
+    tickAll(120)
+    -- inside an instance: nothing, all of it after
+    c.o.instance = "party"
+    local n2 = #c.sent
+    noted(c, "h", 4001, 1436, 700, 700)
+    tickAll(200)
+    assert(#sent1X(c, n2 + 1) == 0, "nothing from inside an instance")
+    c.o.instance = nil
+    tickAll(30)
+    assert(#sent1X(c, n2 + 1) == 1, "after it, what waited")
+    -- sharing off: nothing queued, nothing sent
+    c.C.Settings().shareFinds = false
+    local n3 = #c.sent
+    noted(c, "h", 4002, 1436, 800, 700)
+    tickAll(130)
+    assert(#sent1X(c, n3 + 1) == 0 and #c.env.CuteDB.chars["Pace-Forever"].findsOut == 0, "Share finds with the guild off: nothing goes")
+    c.C.Settings().shareFinds = nil
+    -- a /reload keeps what waited, and sends it after the hello
+    noted(c, "h", 4003, 1436, 900, 700)
+    local db = c.env.CuteDB
+    leave(c)
+    local c2 = char("Pace", 3)
+    login(c2, db, true)
+    tickAll(200)
+    local back = false
+    for _, m in ipairs(sent1X(c2)) do if m.msg:find("h" .. c2.C.Comm.b36(4003) .. "@", 1, true) then back = true end end
+    assert(back, "a /reload: the find that waited goes")
+    leave(c2); leave(h)
+    said[#said + 1] = "the pace: nothing in two minutes after the hello; a questing hour in " .. inHour .. " messages a minute apart; a rare's ping first, one a creature in five minutes; nothing inside an instance, all of it after; nothing with sharing off; a /reload keeps the queue"
+  end)
+
+  -- G3: two voices, a rare's ping
+  isolated({ member("Ann", 3), member("Ben", 3), member("Cy", 3) }, function()
+    local ann, ben, cy = char("Ann", 3), char("Ben", 3), char("Cy", 3)
+    for _, c in ipairs({ ann, ben, cy }) do login(c) end
+    tickAll(130)
+    noted(ann, "h", 9201, 1429, 500, 500)
+    tickAll(65)
+    local r = rowsOf(ben, 1429)[1]
+    assert(r and r.kind == "h" and r.id == 9201 and r.mates == 1 and not r.sure, "one guild mate's chest: one voice, not sure (dim on the map)")
+    assert(not ben.C.Finds.Sure(finds(ben)[1]), "and so in Ben's store")
+    noted(ben, "h", 9201, 1429, 508, 496)
+    tickAll(65)
+    local rb = rowsOf(ben, 1429)[1]
+    assert(rb.mates == 1 and rb.sure, "Ben found it too: sure on his client, Ann's voice with his")
+    local rc = rowsOf(cy, 1429)[1]
+    assert(rc and rc.mates == 2 and rc.sure and rc.x == 504 and rc.y == 498, "Cy heard two: sure, at their mean: " .. tostring(rc and rc.x) .. "," .. tostring(rc and rc.y))
+    -- a chest at another spot is another find
+    noted(ann, "h", 9201, 1429, 800, 200)
+    tickAll(65)
+    assert(#rowsOf(cy, 1429) == 2, "the same chest at another spot: a find of its own")
+    -- a rare's ping: ten minutes, then gone
+    noted(ann, "r", 7001, 1429, 200, 250, 31)
+    tickAll(65)
+    local ping
+    for _, x in ipairs(rowsOf(ben, 1429)) do if x.ping then ping = x end end
+    assert(ping and ping.id == 7001 and ping.level == 31, "a rare up now: a ping on Ben's map")
+    tickAll(620)
+    ping = nil
+    for _, x in ipairs(rowsOf(ben, 1429)) do if x.ping then ping = x end end
+    assert(not ping, "ten minutes on, gone")
+    for _, c in ipairs({ ann, ben, cy }) do leave(c) end
+    said[#said + 1] = "two voices: one guild mate's chest dim, a second member's near it sure at their mean, another spot another find; a rare's ping ten minutes"
+  end)
+
+  -- G4: the bounds and the caps
+  isolated({ member("Ann", 3), member("Ben", 3), member("Cy", 3) }, function()
+    local ann, ben, cy = char("Ann", 3), char("Ben", 3), char("Cy", 3)
+    for _, c in ipairs({ ann, ben, cy }) do login(c) end
+    tickAll(30)
+    local F, b36 = ben.C.Finds, ben.C.Comm.b36
+    local function spot(m, x, y) return b36(m) .. ":" .. b36(x) .. "," .. b36(y) end
+    local function body(list) return table.concat(list, ";") end
+    -- an unknown map, a spot past the map: nothing
+    assert(F:Receive(body({ "h" .. b36(1) .. "@" .. spot(99500, 1, 1), "h" .. b36(2) .. "@" .. b36(1429) .. ":" .. b36(2000) .. ",1" }), ann.sender, false) == 0 and #finds(ben) == 0, "an unknown map, a spot past the map: refused")
+    -- a sender the roster lacks, an untrusted one
+    assert(F:Receive("h" .. b36(3) .. "@" .. spot(1429, 1, 1), "Zed-Forever", false) == 0, "a sender the roster lacks")
+    ben.env.CuteDB.policy = ben.env.CuteDB.policy or {}
+    ben.env.CuteDB.policy.untrusted = { [guidOf("Cy")] = true }
+    assert(F:Receive("h" .. b36(3) .. "@" .. spot(1429, 1, 1), cy.sender, false) == 0, "an untrusted member")
+    ben.env.CuteDB.policy.untrusted = nil
+    -- ten entries a message
+    local twelve = {}
+    for i = 1, 12 do twelve[i] = "h" .. b36(100 + i) .. "@" .. spot(1429, i * 50, 10) end
+    assert(F:Receive(body(twelve), ann.sender, false) == 10, "ten entries a message at most")
+    -- 40 messages an hour from one sender
+    local took = 0
+    for i = 1, 45 do took = took + F:Receive("h" .. b36(5000 + i) .. "@" .. spot(1436, i * 10, 10), cy.sender, false) end
+    assert(took == 40 and F.capped >= 5, "forty messages an hour from one sender: " .. took)
+    tick(ben, 3601)
+    assert(F:Receive("h" .. b36(6000) .. "@" .. spot(1436, 999, 999), cy.sender, false) == 1, "the next hour, again")
+    -- four voices a find
+    local en = { k = "h", id = 777, m = 1440, x = 500, y = 500 }
+    for i = 1, 6 do F.Voice("Player-4242-0B0000" .. i, en) end
+    local e = F.Voice("Player-4242-0B000099", en)
+    local n = 0
+    for _ in pairs(e.v) do n = n + 1 end
+    assert(n == 4, "four voices a find: " .. n)
+    -- 300 of one member's alone
+    for i = 1, 310 do F.Voice("Player-4242-0C000001", { k = "k", id = 20000 + i, m = 1441, x = 1, y = 1 }) end
+    local lone = 0
+    for _, x in ipairs(finds(ben)) do if x.v["Player-4242-0C000001"] then lone = lone + 1 end end
+    assert(lone == 300 and ben.C.Finds.capped > 0, "300 of one member's alone, the oldest out: " .. lone)
+    -- 100 crossings, 2,000 in all
+    for i = 1, 110 do F.Voice("Player-4242-0D0000" .. (i % 9), { k = "x", id = 0, m = 1442, x = (i % 50) * 20, y = math.floor(i / 50) * 20 + 1, m2 = 1453, x2 = 1, y2 = 1, s = 5 }) end
+    local cross = 0
+    for _, x in ipairs(finds(ben)) do if x.k == "x" then cross = cross + 1 end end
+    assert(cross == 100, "100 crossings: " .. cross)
+    for i = 1, 2100 do F.Voice("Player-4242-0E" .. string.format("%06d", i % 60), { k = "h", id = 30000 + i, m = 1443, x = i % 1000, y = 2 }) end
+    assert(#finds(ben) == 2000, "2,000 in all: " .. #finds(ben))
+    for _, c in ipairs({ ann, ben, cy }) do leave(c) end
+    said[#said + 1] = "the bounds: an unknown map, a spot past it, a sender the roster lacks and an untrusted one refused; ten entries a message, forty messages an hour a sender; four voices a find, 300 of one member's alone, 100 crossings, 2,000 in all"
+  end)
+
+  -- G5: the officers keep Finds
+  local function pol(mine, vis) return { policy = { vis = vis or {}, by = "Ofa-Forever", mine = mine or nil, rank = 0, at = EPOCH, threshold = 1 } } end
+  isolated({ member("Ofa", 0), member("Mia", 3), member("Ann", 3), member("Mal", 3) }, function()
+    local ofa, mia, ann, mal = char("Ofa", 0), char("Mia", 3), char("Ann", 3), char("Mal", 3)
+    local closed = { gc_finds = "self" }
+    login(ofa, pol(true, closed)); login(mia, pol(nil, closed)); login(ann, pol(nil, closed)); login(mal, pol(nil, closed))
+    tickAll(130)
+    assert(mia.C.Policy:FindsRoute() == "self" and mia.C.Policy:Route("books_read") == "self" and not mia.C.Policy:CanSee(false, false, "books_read"),
+      "Finds closed: finds and the Finds statistics the officers'")
+    local m0, a0 = #mia.sent, #ann.sent
+    noted(mia, "h", 9201, 1429, 500, 500)
+    tickAll(65)
+    local w = sent1X(mia, m0 + 1)
+    assert(#w == 1 and w[1].channel == "WHISPER" and w[1].target == ofa.sender and #sent1X(mia, m0 + 1, "GUILD") == 0, "Mia's chest whispered to Ofa, never on GUILD")
+    assert(#rowsOf(ann, 1429) == 0, "Ann, a member, has none of it")
+    noted(ann, "h", 9201, 1429, 506, 500)
+    tickAll(65)
+    assert(#sent1X(ann, a0 + 1, "GUILD") == 0, "Ann's too")
+    local ro = rowsOf(ofa, 1429)[1]
+    assert(ro and ro.sure and ro.mates == 2, "Ofa's client: two voices, sure")
+    -- the officers' word says it, a GUID nowhere in it
+    tickAll(90)
+    local word
+    for _, m in ipairs(ofa.sent) do if m.msg:sub(1, 3) == "1N|" and m.msg:find(";fh", 1, true) or (m.msg:sub(1, 3) == "1N|" and m.msg:find("|fh", 1, true)) then word = m.msg end end
+    assert(word and not word:find("Player-", 1, true), "the officers' word says the sure chest: " .. tostring(word))
+    tickAll(5)
+    local ra = rowsOf(ann, 1429)[1]
+    assert(ra and ra.sure and ra.mates == 0, "the members have it from the word: sure, no guild mate counted")
+    local seen = 0
+    for _, e in ipairs(finds(ann)) do for g in pairs(e.v) do if g ~= ann.o.guid then seen = seen + 1 end end end
+    assert(seen == 0, "Ann's store: no other member's voice")
+    -- a member's 1X on GUILD and a member's word refused
+    local before = ann.C.Finds.refused
+    mal.C.Comm.Queue({ msg = "1X|h" .. ann.C.Comm.b36(9301) .. "@" .. ann.C.Comm.b36(1429) .. ":" .. ann.C.Comm.b36(100) .. "," .. ann.C.Comm.b36(100) })
+    tickAll(3)
+    assert(ann.C.Finds.refused == before + 1 and #rowsOf(ann, 1429) == 1, "a member's 1X on GUILD while Finds is closed: refused")
+    mal.C.Comm.Queue({ msg = string.format("1N|%d|1/1|fh%s@%s:1,1=1", EPOCH + mal.clock, ann.C.Comm.b36(9401), ann.C.Comm.b36(1436)) })
+    tickAll(5)
+    assert(#rowsOf(ann, 1436) == 0, "a member's word: never taken")
+    for _, c in ipairs({ ofa, mia, ann, mal }) do leave(c) end
+  end)
+  isolated({ member("Ofa", 0), member("Mia", 3), member("Ann", 3) }, function()
+    local ofa, mia, ann = char("Ofa", 0), char("Mia", 3), char("Ann", 3)
+    login(ofa, pol(true, {})); login(mia, pol(nil, {})); login(ann, pol(nil, {}))
+    tickAll(130)
+    noted(mia, "h", 9201, 1429, 500, 500)
+    noted(ann, "h", 9202, 1429, 700, 700)
+    tickAll(65)
+    assert(#rowsOf(ann, 1429) == 1, "open: Ann has Mia's chest")
+    -- Zone closed: the finds go to the officers, and Ann keeps none of Mia's
+    ofa.C.Policy:Set("zone", "self")
+    ofa.C.Comm:SendPolicy()
+    tickAll(10)
+    assert(ann.C.Policy:FindsRoute() == "self", "Zone closed: finds the officers'")
+    local others = 0
+    for _, e in ipairs(finds(ann)) do for g in pairs(e.v) do if g ~= ann.o.guid then others = others + 1 end end end
+    assert(others == 0 and #rowsOf(ann, 1429) == 0 and #finds(ann) == 1, "closed: Ann's client keeps no other member's voice, her own find kept")
+    local m0 = #mia.sent
+    noted(mia, "k", 9203, 1429, 300, 300)
+    tickAll(65)
+    local w = sent1X(mia, m0 + 1)
+    assert(#w == 1 and w[1].channel == "WHISPER" and w[1].target == ofa.sender, "Zone closed: Mia's lock whispered to Ofa")
+    for _, c in ipairs({ ofa, mia, ann }) do leave(c) end
+    said[#said + 1] = "the officers keep Finds: whispered to them, none on GUILD; two voices on the officer's client, said in the officers' word with no GUID, the members sure from it; a member's 1X and word refused; Zone closed later: whispered, and a member's client keeps no other member's voice"
+  end)
+  print("finds G1-G5: " .. table.concat(said, "; "))
+end
 
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
