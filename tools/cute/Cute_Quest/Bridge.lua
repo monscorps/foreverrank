@@ -89,7 +89,7 @@ E.noRaidSync = true
 -- error text (Arrow.lua A.Place)
 E.cornerPlace = true
 -- (the windows round) fewer pins on the game's world map: none of ours where the game draws one, touching ones merged with
--- a count (QuestMap.lua QM.Thin); QuestBank alone draws them all
+-- a count (QuestMap.lua QM.Thin); QuestBank alone does the same since 6.4.4
 E.thinMap = true
 -- (sub-project F) the engine's map canvas is Cute's Map window (M, MapWin.lua): the game's smooth wheel through zones, its
 -- right-click up a map, pins merged where they touch and drawn on a continent, the finds (MapPage.lua, QuestMap.lua); and

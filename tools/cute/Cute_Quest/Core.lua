@@ -3,7 +3,7 @@
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
 if QB.dormant then return end
-QB.version = "6.4.3"
+QB.version = "6.4.4"
 -- the engine, for a host that runs beside QuestBank and must not run a second one (Cute_Quest reads this table
 -- instead of its own copy while QuestBank is loaded); QuestBank itself never reads it
 QuestBankAPI = QB
@@ -1388,6 +1388,12 @@ function QB:Settings()
   -- (the windows round) a new install draws the quest icons at the game's own size: half-size art beside the game's
   -- full-size pins looked soft ("icons on map are scuffed as they are wrong size"); a save keeps the size it has
   if fresh then s.mapIconPct = 100 end
+  -- (6.4.4) a save still at 5.4.4's half size takes the game's, once: on the game's map those discs read as smaller
+  -- copies of its own (the owner at launch: "they duplicate and they are not same size"); a half size picked after stays
+  if s.v644 == nil then
+    s.v644 = true
+    if tonumber(s.mapIconPct) == 50 then s.mapIconPct = 100 end
+  end
   db.turnins = db.turnins or {}
   db.runs = db.runs or {}
   db.plans = db.plans or {}

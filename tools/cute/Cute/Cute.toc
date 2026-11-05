@@ -2,7 +2,7 @@
 ## Title: |cffe8b24aCute|r
 ## Notes: The guild in one window (J), your quests and route in another (L). /cute
 ## Author: Mikal
-## Version: 0.9.3
+## Version: 0.9.4
 ## X-License: GPL-3.0-or-later
 ## IconTexture: Interface\AddOns\Cute\art\logo.png
 ## AddonCompartmentFunc: Cute_OnCompartment

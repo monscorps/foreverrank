@@ -14816,7 +14816,7 @@ do
 end
 
 -- W26 (the review of sub-project D): fewer pins on the game's world map is Cute's, through the host's flag the Bridge
--- sets (QB.thinMap: QuestMap.lua thins the game's map layer by it; QuestBank alone draws every pin, its windows D9)
+-- sets (QB.thinMap: QuestMap.lua thins the game's map layer by it; QuestBank alone too since 6.4.4, its windows D9)
 do
   isolated({ { name = "Rone-Forever", guid = guidOf("Rone"), rank = 1, rankName = "Officer", class = "WARRIOR", level = 5, online = true } }, function()
     local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))

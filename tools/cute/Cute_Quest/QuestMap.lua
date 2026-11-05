@@ -1143,8 +1143,10 @@ local KIND = { give = QM.OFFER, start = QM.OFFER, turn = QM.POI, obj = QM.POI, d
 -- on screen) merge into one with a count on its corner, the hand-in's first, then in progress, then the offer, its
 -- tooltip naming every one. Zoomed in they part: the layer is drawn again once the zoom settles. QuestBank's own Map
 -- page draws them all. QM.gameDrawn says how many quests the game drew this time (the diag lines read it).
--- (the review of the windows round) A host's choice: QB.thinMap, which Cute's Bridge sets; QuestBank alone draws the game's
--- map as 6.1.1 did. A ? whose hand-ins the game draws stays as its NPC's ! for the quests it offers there
+-- (the review of the windows round) A host's choice: QB.thinMap, which Cute's Bridge sets. (6.4.4) QuestBank alone thins too:
+-- its half-size discs beside the game's own read as copies of them (the owner at launch: "they duplicate and they are
+-- not same size"); a host that wants every pin sets QB.thinMap = false. A ? whose hand-ins the game draws stays as its
+-- NPC's ! for the quests it offers there
 ----------------------------------------------------------------------------
 QM.MERGE_PX = 22
 local gameLog, gameOffer = {}, {}
@@ -1278,7 +1280,7 @@ end
 
 function QM:Draw(layer, m)
   local list = self:Build(m, not layer.world)
-  if layer.world and QB.thinMap then list = QM.Thin(list, layer)
+  if layer.world and QB.thinMap ~= false then list = QM.Thin(list, layer)
   elseif not layer.world and QB.mapWindow then list = QM.Merge(list, layer) end
   for _, d in ipairs(list) do
     layer:Add(KIND[d.kind] or QM.POI, d, d.x, d.y, nil, d.index)
@@ -1298,7 +1300,7 @@ function QM:Init()
     local placed = QM.provider.OnCanvasScaleChanged
     QM.provider.OnCanvasScaleChanged = QB.Safe(function(self, ...)
       placed(self, ...)
-      if not QB.thinMap then return end -- (QuestBank alone merges nothing: nothing to part)
+      if QB.thinMap == false then return end -- (a host that keeps every pin merges nothing: nothing to part)
       local map = self:GetMap()
       local zoom = map and tonumber(QB.Plain(map.GetCanvasScale and map:GetCanvasScale())) or 1
       if math.floor(zoom * 4 + 0.5) == self.qmZoom or self.qmSoon then return end
