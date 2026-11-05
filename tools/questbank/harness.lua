@@ -11505,6 +11505,9 @@ do
   -- (a save from 5.4.4 on, at half size: these cases weigh the pins' art at it; a new install draws the game's own size,
   -- windows D2)
   MQ:Settings().mapIconPct = 50
+  -- (every pin drawn, as a host may ask: these cases weigh each pin; the thinning QuestBank alone does since 6.4.4, none
+  -- of ours where the game draws its own and touching ones merged, is windows D8 and D9's)
+  MQ.thinMap = false
   assert(QMm.provider, "on Forever the icons have their own provider on the world map")
   assert(#MQ.Pins.layers == 2 and MQ.Pins.watcher and MQ.Pins.watcher.__parent == M.map:GetCanvas(),
     "no hook on the world map (the mock's HookScript errors): both layers hear it shut as its providers, and a frame of QuestBank's on its canvas watches the keys")
@@ -14819,7 +14822,7 @@ end)()
   -- 12. QuestBank's quest icons half the game's size on the maps; where a click lands still the game's pin; a size you
   -- set kept. (The windows round: a new install at the game's own size, windows D2; a save from 5.4.4 on at half)
   B3CASES[#B3CASES + 1] = { "quest icons half size", function()
-    local c = mage("Iconic", nil, nil, nil, nil, { settings = { mapIconPct = 50 } })
+    local c = mage("Iconic", nil, nil, nil, nil, { settings = { mapIconPct = 50, v644 = true } })
     local P = c.QB.Pins
     local poi = c.env.CreateFrame("Frame", nil, c.env.UIParent, "QuestBankPoiTemplate")
     P.StylePoi(poi, { complete = true })
@@ -14831,7 +14834,7 @@ end)()
     local p1 = new.env.CreateFrame("Frame", nil, new.env.UIParent, "QuestBankPoiTemplate")
     new.QB.Pins.StylePoi(p1, {})
     assert(p1.Disc.__w == 32 and p1.__w == 20, "a new install: the game's 32 px art")
-    local mine = mage("Bigicons", nil, nil, nil, nil, { settings = { mapIconPct = 75 } })
+    local mine = mage("Bigicons", nil, nil, nil, nil, { settings = { mapIconPct = 75, v644 = true } })
     local p2 = mine.env.CreateFrame("Frame", nil, mine.env.UIParent, "QuestBankPoiTemplate")
     mine.QB.Pins.StylePoi(p2, {})
     assert(p2.Disc.__w == 24, "a size you set: yours")
@@ -21587,8 +21590,9 @@ do
 end
 
 -- D2. A new install draws QuestBank's quest icons on the maps at the game's own size (mapIconPct 100): 5.4.4's half size
--- drawn beside the game's full-size pins looked soft ("icons on map are scuffed as they are wrong size"). A save keeps
--- the size it has, the one its player picked included
+-- drawn beside the game's full-size pins looked soft ("icons on map are scuffed as they are wrong size"). (6.4.4) A save
+-- still at that half size takes the game's once (at launch: "they duplicate and they are not same size"); a size picked
+-- after, or any other size, stays
 do
   local fresh = lookChar("Freshmaps")
   assert(fresh.QB:Settings().mapIconPct == 100 and fresh.QB.Pins.IconScale() == 1, "a new install: the game's size")
@@ -21596,11 +21600,13 @@ do
   fresh.QB.UI:ShowTab(5)
   local v5 = fresh.QB.UI.views[5]
   assert(v5.iconSize and v5.iconSize:GetText() == "Game's size", "its Settings button says so: " .. tostring(v5.iconSize and v5.iconSize:GetText()))
-  local kept = lookChar("Keptmaps", { saved = { settings = { v544 = true, v600 = true, mapIconPct = 50, guide = { on = true, frame = true, locked = false, scale = 1 } } } })
-  assert(kept.QB:Settings().mapIconPct == 50 and kept.QB.Pins.IconScale() == 0.5, "a save at half size keeps it")
+  local moved = lookChar("Movedmaps", { saved = { settings = { v544 = true, v600 = true, mapIconPct = 50, guide = { on = true, frame = true, locked = false, scale = 1 } } } })
+  assert(moved.QB:Settings().mapIconPct == 100 and moved.QB.Pins.IconScale() == 1 and moved.QB:Settings().v644, "a save at 5.4.4's half size: the game's, once")
+  local kept = lookChar("Keptmaps", { saved = { settings = { v544 = true, v600 = true, v644 = true, mapIconPct = 50, guide = { on = true, frame = true, locked = false, scale = 1 } } } })
+  assert(kept.QB:Settings().mapIconPct == 50 and kept.QB.Pins.IconScale() == 0.5, "half size picked after 6.4.4: kept")
   local picked = lookChar("Pickedmaps", { saved = { settings = { v544 = true, v600 = true, mapIconPct = 75, guide = { on = true, frame = true, locked = false, scale = 1 } } } })
   assert(picked.QB:Settings().mapIconPct == 75, "a size picked stays")
-  print("windows D2: a new install's map icons at the game's size (100), a save's own size kept")
+  print("windows D2: a new install's map icons at the game's size (100); a save at 5.4.4's half moved once, a size picked kept")
 end
 
 -- D3. The game's quest tracker out of sight takes no click: 6.1.1 left it at alpha 0, where its lines still took a click
@@ -21908,7 +21914,7 @@ do
   local MD, QMm = QB.Data, QB.QuestMap
   login(c)
   QB:Settings().pins = false
-  QB.thinMap = true -- (a host's: Cute's Bridge sets it; QuestBank alone draws every pin, windows D9)
+  QB.thinMap = true -- (Cute's Bridge sets it; QuestBank alone thins too since 6.4.4, windows D9)
   -- two of quest 7's spots 10 px apart at the map's zoom (1002 px wide), one of quest 18's far off; both away from the
   -- hand-in at Eagan Peltskinner (a ? near them would stand for them all, its glyph first)
   MD.SN = { [1] = "Kobold Vermin", [2] = "Red Burlap Bandana" }
@@ -21976,10 +21982,11 @@ do
   print("windows D8: the game's world map: two pins 10 px apart one with a count, parted zoomed in; none of ours where the game draws its quest POI or its offer")
 end
 
--- D9. (the review of the windows round) Fewer pins on the game's map is a host's choice (QB.thinMap, which Cute's
--- Bridge sets): QuestBank alone draws the game's map as 6.1.1 did, two marks 10 px apart two pins and its own mark
--- where the game draws a POI. Under the flag, a ? whose hand-ins the game draws itself was dropped whole with the
--- quests its NPC offers, which the game does not draw: it stays as that NPC's ! for them
+-- D9. Fewer pins on the game's map: (6.4.4) QuestBank alone thins too, as under Cute's QB.thinMap (the owner at launch,
+-- of QuestBank's half-size discs beside the game's: "they duplicate and they are not same size"); a host that sets
+-- QB.thinMap = false keeps every pin, two marks 10 px apart two pins and its own mark where the game draws a POI. A ?
+-- whose hand-ins the game draws itself was dropped whole with the quests its NPC offers, which the game does not draw:
+-- it stays as that NPC's ! for them
 do
   local c = newClient({ name = "Alone", level = 3, cap = 60, faction = "Alliance", className = "Priest", class = "PRIEST", classID = 5, race = "Human",
     log = { { 7, 0 }, { 18, 0 }, { 33, 1 } }, done = {}, group = false, guild = false, world = { 0, -8914, -133 }, bind = "Northshire Abbey", riding = false,
@@ -21997,17 +22004,19 @@ do
   local function redraw() QB:Recompute(true); QB.Model.Finish(); QB.Pins:Update(); QMm:Update() end
   local function pins(kind) local out = {}; for _, f in ipairs(ours(c, "QuestBankQuestPinTemplate")) do if not kind or f.data.kind == kind then out[#out + 1] = f end end return out end
   local function marks(id) local n = 0; for _, f in ipairs(pins("obj")) do if f.data.id == id then n = n + 1 end end return n end
-  -- QuestBank alone: every pin, none merged, our mark where the game draws its POI
+  -- QuestBank alone: none of ours where the game draws its POI, the two marks 10 px apart merged
   env.C_QuestLog.GetQuestsOnMap = function(m) if m == 1429 then return { { questID = 18, x = 0.2, y = 0.7 } } end return {} end
   c.cvars = c.cvars or {}; c.cvars.questPOI = "1"
   redraw()
+  assert(QB.thinMap == nil and marks(18) == 0 and marks(7) == 1, "QuestBank alone: thinned and merged: " .. marks(7) .. ", " .. marks(18))
+  -- a host that keeps every pin: two marks for quest 7, none merged, quest 18's own mark
+  QB.thinMap = false
+  redraw()
   local counted = false
   for _, f in ipairs(pins()) do if f.data.count then counted = true end end
-  assert(QB.thinMap == nil and marks(7) == 2 and not counted and marks(18) == 1, "QuestBank alone: two marks for quest 7, none merged, quest 18's own mark: " .. marks(7) .. ", " .. marks(18))
-  -- the host's flag: merged, and none of ours where the game draws one
-  QB.thinMap = true
+  assert(marks(7) == 2 and not counted and marks(18) == 1, "QB.thinMap false: every pin: " .. marks(7) .. ", " .. marks(18))
+  QB.thinMap = nil
   redraw()
-  assert(marks(18) == 0 and marks(7) == 1, "under the host's flag: thinned and merged")
   -- a ? at an NPC who offers a quest too: the game draws the hand-in, the NPC's ! stays for the offer
   local turn = pins("turn")[1]
   local give = pins("give")[1]
@@ -22030,7 +22039,7 @@ do
   assert(tipText:find(offer.name, 1, true) and not tipText:find(handin.name, 1, true), "its tooltip names the offer alone:\n" .. tipText)
   offer.give = was
   env.C_QuestLog.GetQuestsOnMap, c.cvars.questPOI, QB.thinMap = nil, nil, nil
-  print("windows D9: fewer pins on the game's map is the host's: QuestBank alone draws every pin as 6.1.1; under the flag a ? the game draws keeps its NPC's ! for the quests it offers")
+  print("windows D9: fewer pins on the game's map, QuestBank alone too (QB.thinMap false keeps every pin); a ? the game draws keeps its NPC's ! for the quests it offers")
 end
 
 -- [stage: merge2] that stage's tests go right below this line
