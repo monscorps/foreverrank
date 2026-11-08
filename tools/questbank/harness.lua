@@ -5207,6 +5207,19 @@ do
       if b and b.q and b.q.id == 55 and b.choice then fromMF = fromMF + 1 end
     end
     local hq, bq = head.best and head.best.q and head.best.q.id, back.best and back.best.q and back.best.q.id
+    -- (6.4.5) a quest the survey alone knows has no required level: its level, less the window above you, stands in
+    -- (Lists.lua Candidates). Before, Preventative Measures (95064, level 39, a head at iL 40) and Corpsefeeder's
+    -- Carapace (93574, level 45, a cloak at iL 43) were a level 20's best head and back
+    do
+      local above = QB:Range()
+      assert(D.SURVEYED[95064] and D.SURVEYED[93574] and D.SURVEYED[95064][1] > 20 + above + 2 and D.SURVEYED[93574][1] > 20 + above + 2,
+        "(the fixture: both quests are the survey's alone, above a level 20's window)")
+      for _, slot in ipairs({ head, back }) do
+        for _, r in ipairs(U:FindRewards("gear", 20, slot.slot.loc)) do
+          assert(not r.q.surveyOnly or r.q.lvl <= 20 + above + 2, "a quest the survey alone knows stays within the level window: " .. r.q.name .. " at " .. r.q.lvl)
+        end
+      end
+    end
     assert(hq == 55 or bq == 55, "Morbent Fel's choice goes to the head or the back")
     assert(fromMF == 1 and hq ~= bq, "and to one of them only: " .. fromMF)
     assert(D.RIT[1282][1] == 33 and D.RIT[2953][1] == 33, "(the fixture: both pieces at level 33)")
@@ -5718,7 +5731,12 @@ do
     -- (the finders' window: takeable at your level, not grey below it)
     local mine = (r[3] == 0 or r[3] == 1) and r[9] == 0 and not D.RACE[id] and r[2] <= level and r[1] >= level - below and not QB.state.log[id] and not QB.API.IsDone(id)
       and not D.FOLLOW[id] and math.floor(fl / 128) % 2 == 0 and math.floor(fl / 65536) % 2 == 0
-    if mine and math.floor(fl / 131072) % 2 == 1 and not D.RITEMS[id] and (not writ or id < writ) then writ = id end
+    -- (6.4.5: the launch week's survey read every writ's reward, so a writ with items does when none is without: the
+    -- test puts its own shield in, and the real list back)
+    if mine and math.floor(fl / 131072) % 2 == 1 then
+      local better = not writ or (D.RITEMS[writ] and not D.RITEMS[id]) or ((D.RITEMS[writ] == nil) == (D.RITEMS[id] == nil) and id < writ)
+      if better then writ = id end
+    end
     if mine and math.floor(fl / 4096) % 2 == 1 and math.floor(fl / 131072) % 2 == 0 and (not rep or id < rep) then rep = id end
   end
   assert(writ and rep, "a writ and a repeatable an Alliance paladin at 20 could take: " .. tostring(writ) .. " " .. tostring(rep))
@@ -10011,13 +10029,15 @@ do
     for _, k in ipairs({ "c", "r", "u" }) do for _, id in ipairs((D.RITEMS[qid] or {})[k] or {}) do out[#out + 1] = id end end
     return out
   end
-  -- (a) quests no Forever source has rewards for take the Classic database's: quest 600 offers the Goblin Igniter
-  local igniter
-  for _, id in ipairs(rewardsOf(600)) do if id == 5253 then igniter = true end end
-  assert(igniter and D.RCLASSIC[600], "quest 600 rewards the Goblin Igniter, from the Classic database")
-  assert(D.RIT[5253] and D.RIT[5253][1] == 40 and D.RIT[5253][2] == 26 and D.RIT[5253][3] == 2 and D.RIT[5253][4] == 19,
-    "the Goblin Igniter: a wand, item level 40")
-  lines = {}; owner.env.GameTooltip:ClearLines(); U.RewardLines(owner.env.GameTooltip, QB.Quest.Get(600))
+  -- (a) quests no Forever source has rewards for take the Classic database's: Sunken Treasure (666) offers a wand
+  -- (4547, item level 40). (6.4.5: quest 600 was the fixture until the launch week's survey read its Forever list, a
+  -- third choice with it; the Goblin Igniter stays in it, and in the "2 levels ahead" checks below)
+  local wand
+  for _, id in ipairs(rewardsOf(666)) do if id == 4547 then wand = true end end
+  assert(wand and D.RCLASSIC[666], "quest 666 rewards its wand, from the Classic database")
+  assert(D.RIT[4547] and D.RIT[4547][1] == 40 and D.RIT[4547][2] == 26 and D.RIT[4547][3] == 2 and D.RIT[4547][4] == 19,
+    "Sunken Treasure's wand: a wand, item level 40")
+  lines = {}; owner.env.GameTooltip:ClearLines(); U.RewardLines(owner.env.GameTooltip, QB.Quest.Get(666))
   assert(table.concat(lines, "\n"):find("Rewards from Classic data", 1, true), "its tooltip says the rewards are Classic data")
   local some
   for id in pairs(D.RITEMS) do if not D.RCLASSIC[id] and QB.Quest.Get(id) then some = id; break end end

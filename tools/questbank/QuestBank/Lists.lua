@@ -750,10 +750,15 @@ function UI:Candidates(limit, level, reqMax, finder)
     local side, cls = r[3], r[9]
     local turn = D.NPC[(fac == "H" and D.TURNH and D.TURNH[id]) or r[6]]
     local race = D.RACE[id]
+    -- (6.4.5) a quest the survey alone knows has no required level (Survey.lua place: 0); its level less the window
+    -- above you stands in, so a level-40 quest is no find for a level 20 (the launch week's uploads brought 73 such
+    -- quests, and Best gear offered their heads and cloaks to everyone)
+    local req = r[2]
+    if req == 0 and math.floor(r[10] / 65536) % 2 == 1 then req = r[1] - above end
     if (side == 0 or (side == 1 and fac == "A") or (side == 2 and fac == "H"))
       and (cls == 0 or bit == 0 or math.floor(cls / bit) % 2 == 1)
       and (not race or rbit == 0 or rbit > 128 or math.floor(race / rbit) % 2 == 1)
-      and r[2] <= (reqMax or s.level + 2) and r[1] >= level - below and (reqMax ~= nil or r[1] <= ceiling) and not s.log[id] and not D.FOLLOW[id]
+      and req <= (reqMax or s.level + 2) and r[1] >= level - below and (reqMax ~= nil or r[1] <= ceiling) and not s.log[id] and not D.FOLLOW[id]
       and math.floor(r[10] / 128) % 2 == 0 -- never suggest Season of Discovery leftovers
       -- nor, but in the reward finders, repeatables, a quest the survey alone knows or a writ's turn-in
       and (finder or (math.floor(r[10] / 4096) % 2 == 0 and math.floor(r[10] / 65536) % 2 == 0 and math.floor(r[10] / 131072) % 2 == 0))
