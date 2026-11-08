@@ -151,7 +151,7 @@
           : "Procs, on-use effects and set bonuses do not count. ") +
         "An item with no stored required level counts as needing its item level minus 5, as in The Forge" +
         (DATA.held && DATA.held[L] ? ", which for now holds back " + DATA.held[L] + " quest rewards (all classes and factions) from quests open at level " + L + ". " : ". ") +
-        "Listed is only gear our data can place: drops from dungeons open in the beta now, quest rewards the " + FACTION[f] + " can take, crafts with a recipe item, " +
+        "Listed is only gear our data can place: drops from dungeons our loot records cover, quest rewards the " + FACTION[f] + " can take, crafts with a recipe item, " +
         "and tradeable gear players' games have shown. Vendor and PvP-reward gear, other world drops and recipes trainers teach are missing until our data has them.</p>";
 
     var grid = document.getElementById("bisgrid"), flat = [];

@@ -2,6 +2,36 @@
  "note": "The Forever wire, newest first: {d: ISO date, t: headline, s: source, l: link, img?: picture}. ForeverRank's own entries may add hl (highlights on the home feature) and kind (the feature's label: datamine, article or addon). The site renders this file as-is.",
  "items": [
   {
+   "d": "2026-11-08",
+   "t": "Live build 1.60.1.70862 read into the site: the talent trees as the game shipped them, 24 talents re-ranked, 21 new, 20 gone, racials and 23,375 items refreshed",
+   "s": "FOREVERRANK",
+   "l": "/plan/",
+   "img": "/codex/img/stat-classes.jpg",
+   "kind": "datamine",
+   "hl": [
+    {
+     "i": "spell_arcane_blast",
+     "t": "Mage: Arcane Wrath joins Arcane; Fire Power, Precision and Incineration re-ranked"
+    },
+    {
+     "i": "ability_druid_lacerate",
+     "t": "Druid: Lacerate, Predatory Discipline and Bloom; Berserk and Heart of the Wild leave Feral"
+    },
+    {
+     "i": "ability_rogue_deathmark",
+     "t": "Rogue: Death Mark, Mutilate and Venom rebuilt in Assassination and Subtlety"
+    },
+    {
+     "i": "ability_warrior_warcry",
+     "t": "Racials: Orc Command, Human Ruthless and Dwarf Artisan's Precision replace the weapon specializations"
+    },
+    {
+     "i": "inv_sword_39",
+     "t": "Thunderfury, Sulfuras, Benediction and Rhok'delar enter the item database"
+    }
+   ]
+  },
+  {
    "d": "2026-10-08",
    "t": "Build 70291 datamined: the City of Dalaran opens, a first run on video, and every class's nerfs and buffs at a glance",
    "s": "FOREVERRANK",

@@ -53,8 +53,8 @@
     el.setAttribute("aria-label", "Feedback and support");
     el.innerHTML =
       '<button type="button" class="fr-x" aria-label="Dismiss">×</button>' +
-      '<h3><img src="/mark.svg" alt="">Fan-run. Ad-free. Beta-fast.</h3>' +
-      "<p>ForeverRank is rebuilt after every beta build, for free, by people who should be sleeping. " +
+      '<h3><img src="/mark.svg" alt="">Fan-run. Ad-free. Launch-fast.</h3>' +
+      "<p>ForeverRank is rebuilt after every client build, for free, by people who should be sleeping. " +
       "Tell us what is wrong or missing" + (DONATE_URL ? ", or toss a coin at the hosting bill." : ".") + "</p>" +
       '<div class="fr-acts">' +
       '<a href="' + FEEDBACK_URL + '" rel="noopener" data-act="feedback" title="Tell us on the ForeverRank Discord">Feedback</a>' +

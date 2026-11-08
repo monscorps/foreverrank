@@ -18,10 +18,10 @@ DEFAULT_IMG = "/assets/og.jpg"  # 1200x630 crop of the hero art
 
 PAGES = {
     "/": ("ForeverRank: WoW Forever News, Datamines and Tools",
-          "WoW Forever news and beta datamines, plus a talent calculator, a datamined item and spell database, BiS lists, and the character and guild progression ladder for launch.",
+          "WoW Forever news and client datamines, plus a talent calculator, a datamined item and spell database, BiS lists, and the character and guild progression ladder for launch.",
           DEFAULT_IMG),
     "/plan/": ("WoW Forever Talent Calculator and Planner · The Forge",
-               "WoW Forever talent calculator and character planner: race, class, talents, Legacy trees and gear from the beta client. Share builds as links and compose whole raids.",
+               "WoW Forever talent calculator and character planner: race, class, talents, Legacy trees and gear from the live client. Share builds as links and compose whole raids.",
                DEFAULT_IMG),
     "/codex/": ("WoW Forever Database: Items, Spells, Legacy · ForeverRank",
                 "The WoW Forever database: over 21,000 items with stats, drop sources and dungeon loot, 2,500 profession recipes, PvP ranks, rare spawns, spells, the Legacy system and item sets. Filter gear by stat and dungeon.",
@@ -36,14 +36,14 @@ PAGES = {
                 "WoW Forever dungeon loot tables for every dungeon (bosses, rare spawns and quest rewards), plus zones, raids, battlegrounds and the full zone Atlas.",
                 "/codex/img/hyjal-summit.jpg"),
     "/bis/": ("WoW Forever BiS Lists at Level 30 · ForeverRank",
-              "WoW Forever best-in-slot gear at the beta's level-30 cap: every slot ranked per class, spec and faction by The Forge's stat weights, with where each piece comes from.",
+              "WoW Forever best-in-slot gear at levels 30 and 20 while the first characters level: every slot ranked per class, spec and faction by The Forge's stat weights, with where each piece comes from.",
               "/codex/img/excavation-site.jpg"),
     "/questbank/": ("QuestBank, the free WoW Forever questing addon · ForeverRank",
                     "QuestBank is a free questing addon for WoW Forever, level 1 to 60, Alliance and Horde: your next step, an arrow to it, the game's own pins on the map, and every quest priced as Forever pays it.",
                     # build_page.py writes img/share.jpg (1200x630) from img/shot-now.jpg once it exists; switch to it then
                     "/questbank/img/route.jpg"),
     "/news/": ("WoW Forever News and Datamines · ForeverRank",
-               "WoW Forever news in one place, newest first: Blizzard posts, fansite coverage and ForeverRank's own beta client datamines.",
+               "WoW Forever news in one place, newest first: Blizzard posts, fansite coverage and ForeverRank's own client datamines.",
                DEFAULT_IMG),
 }
 ARTICLES = ["/news/level-30/", "/news/build-70291/", "/news/build-70009/", "/news/hidden-systems/", "/news/era-verdict/",

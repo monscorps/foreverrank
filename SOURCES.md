@@ -271,6 +271,31 @@ Corrections welcome: open an issue.
   (tools/scavenge_items.py): 23,283 rows, every tooltip at 70291. Reflect and
   enchants re-read at 70291; dungeon loot refreshed since 3 October
   (codex/loot.json: 2,019 boss drops, 100 more; 510 quest rewards, 32 more).
+- 2026-11-08, **the live game, build 1.60.1.70862** (wago.tools product `wowf`,
+  7 November; the beta's `wow_classic_beta` ended at 70532). The whole site moved
+  from beta build 70291 to it. Talents (tools/apply_talents.py): 261 changes in the
+  carry, then a new rule for a node's rank count, 24 talents re-ranked (Precision 5
+  to 3, Relentless Strikes 1 to 5, Spiritual Focus 2 to 5...); 21 new talents, 20
+  gone, 5 moved to another spec, 9 renamed; 12 texts the resolver could not carry
+  written by hand from the client's rows, with rank values the client stores
+  without a curve divided over the ranks as the site always has (marked est, and
+  the Forge says so). Spellbooks: 54 changes (apply_spellbook.py), pets 3. Items:
+  23,375 rows at 70862 (apply_items.py: 95 added, 20 gone, 406 changed; Thunderfury,
+  Sulfuras, Benediction, Anathema, Rhok'delar and the Endless elixirs among the
+  new), re-merged with ForeverChanges' and Wowhead's caches (scavenge_items.py
+  --no-fetch); effects, reflect, enchants, sets (9 new, 28 bonuses), recipes, PvP
+  (BattlemasterList and PVPDifficulty fetched), rares and the Atlas rebuilt; BiS
+  re-ranked. Racials: read per race from the client's racial skill lines; 17
+  changed (Shatter Curse 15% to 5% and no immunity, Endurance loses its hit,
+  Plainsrunning 2% to 60%, Regeneration 20%, Wind Blessed 2%, Berserking 15 sec,
+  The Human Spirit 10%, Skysight and Read Leyline reworked with Charged and
+  Attuned hours) and three replaced: Axe, Sword and Mace Specialization are now
+  Command (Orc, pet damage), Ruthless (Human, 1% crit) and Artisan's Precision
+  (Dwarf, 1% hit). Legacy perks: Bountiful Harvest reworded; the trees are
+  unchanged. The Forge's default cap is 60 (51 points); the beta's 20 and 30 stay
+  for old links. Pages say "game client" where they said "beta client". Not yet
+  redone at 70862: the class-change cards on /classes/ (still the level-30 beta
+  builds), BiS at level 60, the painted maps, and the game tables (69876).
 - 2026-10-09, **players' loot records**: QuestBank 3.6.2 notes, on the
   Forever client, which creature or chest each loot window came from: its id,
   the item ids and how often, the instance map and difficulty, and the boss

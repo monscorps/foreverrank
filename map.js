@@ -2,7 +2,7 @@
  * World, then continent, then zone. Left-click descends, right-click or Esc
  * climbs back out, X closes. Hotspots come straight from UiMapAssignment.
  * Zone levels, flight paths, towns and dungeon doors load lazily from
- * map/atlas.json (tools/build_atlas.py, read from the beta client). */
+ * map/atlas.json (tools/build_atlas.py, read from the game client). */
 (function () {
   "use strict";
   var Z = [{"id":"16606","n":"Darkspear Islands","c":"New in Forever","sz":4,"new":1},{"id":"16591","n":"Riverglades","c":"New in Forever","sz":20,"new":1},{"id":"16651","n":"Shen'dralas","c":"New in Forever","sz":6,"new":1},{"id":"16593","n":"Zephras Isle","c":"New in Forever","sz":27,"new":1},{"id":"36","n":"Alterac Mountains","c":"Eastern Kingdoms","sz":21,"new":0},{"id":"45","n":"Arathi Highlands","c":"Eastern Kingdoms","sz":24,"new":0},{"id":"3","n":"Badlands","c":"Eastern Kingdoms","sz":17,"new":0},{"id":"4","n":"Blasted Lands","c":"Eastern Kingdoms","sz":9,"new":0},{"id":"46","n":"Burning Steppes","c":"Eastern Kingdoms","sz":13,"new":0},{"id":"41","n":"Deadwind Pass","c":"Eastern Kingdoms","sz":10,"new":0},{"id":"1","n":"Dun Morogh","c":"Eastern Kingdoms","sz":25,"new":0},{"id":"10","n":"Duskwood","c":"Eastern Kingdoms","sz":20,"new":0},{"id":"139","n":"Eastern Plaguelands","c":"Eastern Kingdoms","sz":34,"new":0},{"id":"12","n":"Elwynn Forest","c":"Eastern Kingdoms","sz":26,"new":0},{"id":"267","n":"Hillsbrad Foothills","c":"Eastern Kingdoms","sz":16,"new":0},{"id":"38","n":"Loch Modan","c":"Eastern Kingdoms","sz":16,"new":0},{"id":"44","n":"Redridge Mountains","c":"Eastern Kingdoms","sz":16,"new":0},{"id":"51","n":"Searing Gorge","c":"Eastern Kingdoms","sz":12,"new":0},{"id":"130","n":"Silverpine Forest","c":"Eastern Kingdoms","sz":24,"new":0},{"id":"33","n":"Stranglethorn Vale","c":"Eastern Kingdoms","sz":45,"new":0},{"id":"8","n":"Swamp of Sorrows","c":"Eastern Kingdoms","sz":15,"new":0},{"id":"47","n":"The Hinterlands","c":"Eastern Kingdoms","sz":22,"new":0},{"id":"85","n":"Tirisfal Glades","c":"Eastern Kingdoms","sz":30,"new":0},{"id":"28","n":"Western Plaguelands","c":"Eastern Kingdoms","sz":17,"new":0},{"id":"40","n":"Westfall","c":"Eastern Kingdoms","sz":19,"new":0},{"id":"11","n":"Wetlands","c":"Eastern Kingdoms","sz":28,"new":0},{"id":"331","n":"Ashenvale","c":"Kalimdor","sz":42,"new":0},{"id":"16","n":"Azshara","c":"Kalimdor","sz":31,"new":0},{"id":"148","n":"Darkshore","c":"Kalimdor","sz":17,"new":0},{"id":"405","n":"Desolace","c":"Kalimdor","sz":21,"new":0},{"id":"14","n":"Durotar","c":"Kalimdor","sz":28,"new":0},{"id":"15","n":"Dustwallow Marsh","c":"Kalimdor","sz":28,"new":0},{"id":"361","n":"Felwood","c":"Kalimdor","sz":18,"new":0},{"id":"357","n":"Feralas","c":"Kalimdor","sz":35,"new":0},{"id":"493","n":"Moonglade","c":"Kalimdor","sz":5,"new":0},{"id":"616","n":"Mount Hyjal","c":"Kalimdor","sz":9,"new":1},{"id":"215","n":"Mulgore","c":"Kalimdor","sz":29,"new":0},{"id":"1377","n":"Silithus","c":"Kalimdor","sz":21,"new":0},{"id":"406","n":"Stonetalon Mountains","c":"Kalimdor","sz":19,"new":0},{"id":"440","n":"Tanaris","c":"Kalimdor","sz":25,"new":0},{"id":"141","n":"Teldrassil","c":"Kalimdor","sz":24,"new":0},{"id":"17","n":"The Barrens","c":"Kalimdor","sz":44,"new":0},{"id":"400","n":"Thousand Needles","c":"Kalimdor","sz":22,"new":0},{"id":"490","n":"Un'Goro Crater","c":"Kalimdor","sz":12,"new":0},{"id":"618","n":"Winterspring","c":"Kalimdor","sz":18,"new":0},{"id":"1657","n":"Darnassus","c":"Cities","sz":5,"new":0},{"id":"1537","n":"Ironforge","c":"Cities","sz":0,"new":0},{"id":"1637","n":"Orgrimmar","c":"Cities","sz":0,"new":0},{"id":"1519","n":"Stormwind City","c":"Cities","sz":2,"new":0},{"id":"1638","n":"Thunder Bluff","c":"Cities","sz":4,"new":0},{"id":"1497","n":"Undercity","c":"Cities","sz":0,"new":0},{"id":"2597","n":"Alterac Valley","c":"Battlegrounds","sz":26,"new":0},{"id":"3358","n":"Arathi Basin","c":"Battlegrounds","sz":7,"new":0},{"id":"3277","n":"Warsong Gulch","c":"Battlegrounds","sz":2,"new":0}];
@@ -306,7 +306,7 @@
     var b = D ? D.build : "";
     var un = D && D.unplaced && D.unplaced.length ? " The new dungeons the client lists so far (" + D.unplaced.map(esc).join(", ") + ") have no door in it yet, so they are not on the map." : "";
     if (D && D.notyet && D.notyet.length) un += " The client has no dungeon at all yet for the other new ones in our loot tables (" + D.notyet.map(esc).join(", ") + ").";
-    return '<p class="atlas-src">Read from the beta client' + (b ? ", build " + esc(b) : "") + ". Levels are the range the client gives the places in each zone; one or two far-off places are left out and named on that zone\u2019s map. Starting areas carry no level in the client, so a starting zone\u2019s range begins a few levels in. " +
+    return '<p class="atlas-src">Read from the game client' + (b ? ", build " + esc(b) : "") + ". Levels are the range the client gives the places in each zone; one or two far-off places are left out and named on that zone\u2019s map. Starting areas carry no level in the client, so a starting zone\u2019s range begins a few levels in. " +
       "Flight costs are the client\u2019s base prices. Dungeon doors are where the client sends your ghost to run back in." + un + " Map art: Forever\u2019s own repainted maps from the client.</p>";
   }
   function countFits() {
@@ -347,7 +347,7 @@
     if (D) {
       var n = d ? d.n : z.sz;
       if (d && d.lv) {
-        facts += '<p class="full">Levels ' + lv + " come from the beta client (build " + esc(D.build) + "): the range of the levels it gives " + d.of + " of this zone\u2019s " + n + " named places." +
+        facts += '<p class="full">Levels ' + lv + " come from the game client (build " + esc(D.build) + "): the range of the levels it gives " + d.of + " of this zone\u2019s " + n + " named places." +
           (d.out ? " Left out as far off: " + d.out.map(function (o) { return esc(o[0]) + " (" + o[1] + ")"; }).join(", ") + "." : "") + "</p>";
       } else if (!CITY[id] && z.c !== "Battlegrounds") {
         facts += '<p class="full">' + (n ? n + " named places in the client, none with a level yet." : "The client gives this zone no level yet.") + "</p>";
@@ -372,7 +372,7 @@
   function newNote() {
     if (!D || !NEWZ.some(function (id) { return lvText(id); })) return "";
     var zi = zd("16593");   // Zephras Isle: its starting area has no level, Blizzard says 1-12
-    return '<p class="atlas-src">Levels read from the beta client, build ' + esc(D.build) + ": the range it gives each zone\u2019s places." +
+    return '<p class="atlas-src">Levels read from the game client, build ' + esc(D.build) + ": the range it gives each zone\u2019s places." +
       (zi && zi.lv && zi.lv[0] > 1 ? " Starting areas carry no level there, so Zephras Isle starts at " + zi.lv[0] + " (Blizzard: levels 1\u201312)." : "") + "</p>";
   }
   function drawWorld() {

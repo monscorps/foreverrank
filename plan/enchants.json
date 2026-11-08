@@ -1,6 +1,6 @@
 {
- "note": "Every permanent enchant a player can put on gear, from the beta client's item and spell tables (build 1.60.1.70338, tools/build_enchants.py): Forever's Enchanting scrolls, armor kits, scopes, spikes and chains, librams and the Zandalar, Argent Dawn and Scourge enchants. stats are what the Forge counts; fx is the item's own Use line; skill is the profession level needed to make it, not to use it; rf (shield spikes, Retricutioner) is the damage to attackers from tools/apply_reflect.py.",
- "build": "1.60.1.70338",
+ "note": "Every permanent enchant a player can put on gear, from the beta client's item and spell tables (build 1.60.1.70862, tools/build_enchants.py): Forever's Enchanting scrolls, armor kits, scopes, spikes and chains, librams and the Zandalar, Argent Dawn and Scourge enchants. stats are what the Forge counts; fx is the item's own Use line; skill is the profession level needed to make it, not to use it; rf (shield spikes, Retricutioner) is the damage to attackers from tools/apply_reflect.py.",
+ "build": "1.60.1.70862",
  "enchants": [
   {
    "id": "i273604",
@@ -406,6 +406,41 @@
     ],
     "by": [
      11098
+    ]
+   }
+  },
+  {
+   "id": "i273482",
+   "item": 273482,
+   "name": "Enchant Cloak - Minor Agility",
+   "slot": "back",
+   "stats": {
+    "agility": 3
+   },
+   "fx": "Permanently enchant a cloak to grant +3 Agility.",
+   "ench": [
+    247
+   ],
+   "spell": 13419,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "back"
+   ],
+   "skill": [
+    "Enchanting",
+    110
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13419,
+    "sk": 110,
+    "c": [
+     135,
+     175
+    ],
+    "by": [
+     11039
     ]
    }
   },
@@ -1125,11 +1160,11 @@
    "name": "Enchant Chest - Minor Stats",
    "slot": "chest",
    "stats": {
-    "strength": 2,
-    "agility": 2,
-    "stamina": 2,
-    "intellect": 2,
-    "spirit": 2
+    "strength": 1,
+    "agility": 1,
+    "stamina": 1,
+    "intellect": 1,
+    "spirit": 1
    },
    "fx": "Permanently enchant a piece of chest armor to grant +2 to all stats.",
    "ench": [
@@ -2249,7 +2284,7 @@
    "itSlot": [
     "feet"
    ],
-   "raw": "aura 31 8",
+   "raw": "aura 31 4",
    "skill": [
     "Enchanting",
     225
@@ -3386,9 +3421,7 @@
     "head",
     "legs"
    ],
-   "stats": {
-    "bonusArmor": 125
-   },
+   "stats": {},
    "fx": "Permanently adds 125 armor to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
    "ench": [
     1504
@@ -3400,6 +3433,7 @@
     "head",
     "legs"
    ],
+   "raw": "aura 674 (1) 125",
    "skill": null,
    "binding": "Quest"
   },
@@ -7482,8 +7516,7 @@
    "name": "Fortitude of the Scourge",
    "slot": "shoulder",
    "stats": {
-    "stamina": 16,
-    "bonusArmor": 100
+    "stamina": 16
    },
    "fx": "Permanently adds to a shoulder slot item increased Stamina by 16 and also grants 100 armor.",
    "ench": [
@@ -7496,6 +7529,7 @@
     "shoulder"
    ],
    "lvl": 60,
+   "raw": "aura 674 (1) 100",
    "skill": null,
    "binding": "BoP"
   },
@@ -8094,11 +8128,11 @@
    "name": "Enchant Bracer - Lesser Intellect",
    "slot": "wrist",
    "stats": {
-    "intellect": 5
+    "intellect": 3
    },
    "fx": "Permanently enchant a bracer so it increases the wearer's Intellect by 5.",
    "ench": [
-    723
+    8734
    ],
    "spell": 13622,
    "icon": "inv_misc_enchantedscroll",

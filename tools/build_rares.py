@@ -15,7 +15,7 @@ import collections, csv, datetime, json, os, re, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools", "questbank"))
-BUILD = sys.argv[1] if len(sys.argv) > 1 else "1.60.1.70291"
+BUILD = sys.argv[1] if len(sys.argv) > 1 else "1.60.1.70862"
 OUT = os.path.join(ROOT, "codex", "rares.json")
 OVERLAY = {2482, 2548, 2652}  # Mount Hyjal, the Riverglades, Shen'dralas: Forever maps drawn over Classic zones
 TYPES = {1: "Beast", 2: "Dragonkin", 3: "Demon", 4: "Elemental", 5: "Giant", 6: "Undead", 7: "Humanoid", 8: "Critter", 9: "Mechanical"}

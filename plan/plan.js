@@ -1,4 +1,4 @@
-/* The Forge v3: plan a Forever beta character, share it as a link.
+/* The Forge v3: plan a Forever character, share it as a link.
  * Class data (full vanilla rows 1-5 talent trees, class-appropriate gear)
  * lives in plan-data.json; races, racials and the quiz live here. Spec is
  * not a step: it is wherever your points went, like the game itself. */
@@ -6,7 +6,7 @@
   "use strict";
 
   var CAPS = { 20: 11, 30: 21, 60: 51 };
-  var cap = 30;
+  var cap = 60;  // the live game's cap since launch (4 November 2026); the beta's 20 and 30 stay for old links
   // Points at a level cap. The Legacy perk Talented (Adventure tree) starts the points one level earlier per rank,
   // up to 5, and the total stays capped at 51: the client's TraitCurrencySource rows for talent points.
   function pointsAt(c, lg) { return Math.min(51, (CAPS[c] || CAPS[30]) + talentedRank(lg)); }
@@ -388,8 +388,8 @@
       if (e.hd) meta.push("Classic header: " + e.hd + ".");
       if (e.note) meta.push(e.note);
       return cmpCard(name, e.s || "same", (book.desc || {})[name], e.ct, meta.join(" "),
-        e.s === "new" ? "No Classic spell of this name." : e.cb ? "Classic Era client tooltip against the beta client tooltip" + (e.cr ? ", same rank." : ".") :
-          "Wowhead Classic tooltip against the beta client tooltip" + (e.rk ? " (" + e.rk + ")" : "") + ".");
+        e.s === "new" ? "No Classic spell of this name." : e.cb ? "Classic Era client tooltip against the Forever client tooltip" + (e.cr ? ", same rank." : ".") :
+          "Wowhead Classic tooltip against the Forever client tooltip" + (e.rk ? " (" + e.rk + ")" : "") + ".");
     }
     if ((p[0] === "r" || p[0] === "rx") && DATA && DATA.races) {
       var R = DATA.races[+p[1]];
@@ -403,7 +403,7 @@
       e = (R.cmp || {})[a[0]] || { s: "same" };
       if (e.cn && e.cn !== a[0]) meta.push("Classic name: " + e.cn + ".");
       if (e.note) meta.push(e.note);
-      return cmpCard(a[0], e.s, a[1], e.ct, meta.join(" "), e.s === "new" ? "Not a Classic racial." : "Wowhead Classic racial tooltip against the beta client tooltip.");
+      return cmpCard(a[0], e.s, a[1], e.ct, meta.join(" "), e.s === "new" ? "Not a Classic racial." : "Wowhead Classic racial tooltip against the Forever client tooltip.");
     }
     return "";
   }
@@ -472,7 +472,7 @@
     }
     o.eqRaw = String(p[3] || "");
     o.eq = GEAR ? GEAR.decode(o.eqRaw) : {};
-    o.cap = CAPS[+p[5]] ? +p[5] : 30;
+    o.cap = CAPS[+p[5]] ? +p[5] : 60;
     o.lg = CAPS[+p[5]] && /^[0-5]{1,12}(-[0-5]{0,12}){0,4}$/.test(p[6] || "") ? p[6] : "";
     o.g = CAPS[+p[5]] && p[7] === "f" ? "f" : "m";
     o.cons = CAPS[+p[5]] ? String(p[8] || "").split("~").filter(function (id) { return /^[A-Za-z0-9_-]+$/.test(id); }).slice(0, 20) : [];
@@ -846,7 +846,7 @@
           '<b>' + esc(x.n) + ' <i class="cmpf inl cmp-removed">CLASSIC</i></b><span>' + esc(x.ct || "") + "</span></li>";
       }).join("") : "") + "</ul>" +
       '<p class="line finenote">' + (tf.abilities.every(function (a) { return a[3] === "client"; })
-        ? "Racial tooltips from the beta client" + ((/1\.60\.1\.\d+/.exec(DATA.source || "") || [""])[0] ? ", build " + (/1\.60\.1\.\d+/.exec(DATA.source || "") || [""])[0] : "") + "."
+        ? "Racial tooltips from the Forever client" + ((/1\.60\.1\.\d+/.exec(DATA.source || "") || [""])[0] ? ", build " + (/1\.60\.1\.\d+/.exec(DATA.source || "") || [""])[0] : "") + "."
         : "Racials marked demo were transcribed from BlizzCon footage; sources credited on GitHub.") + "</p>";
     }
     return '<ul class="racials">' + r.rx.map(function (x) {
@@ -934,7 +934,7 @@
       '<div class="tb-acts">' +
         '<button type="button" class="tb-btn cmpswitch' + (CMP ? " on" : "") + '" id="cmpbtn" aria-pressed="' + CMP + '" data-tip="' +
           attrEnc("<b>Compare to Classic</b>Badges every talent that is new, changed or moved, with both tooltips side by side.") + '"><i></i><span>Classic</span></button>' +
-        '<button type="button" class="tb-btn" id="bookbtn" data-tip="' + attrEnc("<b>Spellbook</b>Every trainable spell in the beta client, with learn levels.") + '">' + icon("inv_misc_book_11", "wi") + "<span>Spellbook</span></button>" +
+        '<button type="button" class="tb-btn" id="bookbtn" data-tip="' + attrEnc("<b>Spellbook</b>Every trainable spell in the Forever client, with learn levels.") + '">' + icon("inv_misc_book_11", "wi") + "<span>Spellbook</span></button>" +
         (used ? '<button type="button" class="tb-btn danger" id="treset" data-tip="' + attrEnc("<b>Reset talents</b>Refund every point.") + '"><span class="tb-glyph">\u21ba</span><span>Reset</span></button>' : "") +
       "</div></div>" +
       (CMP ? cmpLegend(c) : "") + '<div class="wtrees">';
@@ -981,9 +981,9 @@
         var clamped = have > 0 && idx !== want;
         var extra = (clamped ? " [rank " + (idx + 1) + " text; the client has no rank " + (want + 1) + " text]" : "") +
           (t.cn ? " \u00b7 " + t.cn + "." : "") +
-          (t.from ? " \u00b7 Moved here from " + t.from + " in beta build " + t.added + "." : t.added ? " \u00b7 New in beta build " + t.added + "." : "") +
+          (t.from ? " \u00b7 Moved here from " + t.from + " in build " + t.added + "." : t.added ? " \u00b7 New in build " + t.added + "." : "") +
           (t.was ? " \u00b7 Called " + t.was + " in earlier builds." : "");
-        var how = t.gone ? '<span class="hint lock">' + (t.moved ? "Moved to " + esc(t.moved) : "Removed from the tree") + " in beta build " + esc(t.gone) + ". It stays here so older shared builds still line up.</span>"
+        var how = t.gone ? '<span class="hint lock">' + (t.moved ? "Moved to " + esc(t.moved) : "Removed from the tree") + " in build " + esc(t.gone) + ". It stays here so older shared builds still line up.</span>"
           : pts < gate ? '<span class="hint lock">Needs ' + gate + " points in " + esc(tr.name) + ".</span>"
           : !reqOk ? '<span class="hint lock">Requires ' + esc(t.req) + " maxed." + (t.reqText ? " " + esc(t.reqText) + "." : "") + "</span>"
           : (done && r < t.r) ? '<span class="hint lock mouse-only">No points left; right-click something to take one back.</span><span class="hint lock touch-only">No points left; unlearn something first.</span>'
@@ -1004,7 +1004,7 @@
       var g = tr.talents.filter(function (t) { return t.gone; }).map(function (t) { return t.n + (t.moved ? " (to " + t.moved + ")" : ""); });
       if (g.length) gone.push(tr.name + ": " + g.join(", "));
     });
-    html += '<p class="tfoot">Talent trees from the beta client' + (bld ? ", build " + esc(bld) : "") + "." +
+    html += '<p class="tfoot">Talent trees from the Forever client' + (bld ? ", build " + esc(bld) : "") + "." +
       (gone.length ? " Gone from the trees in later builds: " + esc(gone.join("; ")) + ". An older shared build still opens: points it had in a gone talent are free again, and a moved talent takes its points along." : "") + "</p>";
     return html;
   }
@@ -1494,7 +1494,7 @@
           '<div class="sb-foot"><span>Page ' + (cur.page + 1) + "/" + pages + "</span>" +
           '<button type="button" class="sb-pg" id="bk-prev"' + (cur.page === 0 ? " disabled" : "") + ' aria-label="Previous page">&#9664;</button>' +
           '<button type="button" class="sb-pg" id="bk-next"' + (cur.page >= pages - 1 ? " disabled" : "") + ' aria-label="Next page">&#9654;</button></div></div>' +
-          '<div class="sb-under"><span class="sb-cap">Level ' + (book.level || "?") + " " + esc(book.race || "") + " " + esc(CLASS_LABEL[k]) + ", beta client</span>" +
+          '<div class="sb-under"><span class="sb-cap">Level ' + (book.level || "?") + " " + esc(book.race || "") + " " + esc(CLASS_LABEL[k]) + ", Forever client</span>" +
           '<button type="button" class="sb-cmp' + (window.FORGE_LVLCAP ? " on" : "") + '" id="bk-lvl" aria-pressed="' + (window.FORGE_LVLCAP ? "true" : "false") + '"><i></i>' + (window.FORGE_LVLCAP ? "Up to level " + cap : "Every level") + "</button>" +
           (CMP && book.cmp ? bookTally() : "") +
           (book.cmp ? '<button type="button" class="sb-cmp' + (CMP ? " on" : "") + '" id="bk-cmp" aria-pressed="' + CMP + '"><i></i>Compare to Classic</button>' : "") +
@@ -1605,7 +1605,7 @@
       ["Tracking and Feign pulls", ["HUNTER"]]
     ]
   };
-  // Does the class's spellbook in the beta client contain the spell?
+  // Does the class's spellbook in the Forever client contain the spell?
   function bookHas(clsKey, names) {
     var ci = CLASS_ORDER.indexOf(clsKey);
     var book = ci >= 0 && DATA.classes[ci].book;
@@ -1633,7 +1633,7 @@
       return '<span class="cchip good" style="--cc:' + cc(g[1]) + '">' + esc(g[0]) + "</span>";
     }).concat((cov.unseen || []).map(function (g) {
       return '<span class="cchip unseen" style="--cc:' + cc(g[1]) + '" ' +
-        dt(g[0], "The class is here, but this spell is not in its spellbook in the beta client.") + ">" + esc(g[0]) + "</span>";
+        dt(g[0], "The class is here, but this spell is not in its spellbook in the Forever client.") + ">" + esc(g[0]) + "</span>";
     })).concat(cov.miss.map(function (m) {
       return '<span class="cchip ' + missTone + '">' + esc(m) + "</span>";
     })).join("");
@@ -1824,7 +1824,7 @@
         var use = null;
         try { use = (rawB && parseCode(rawB[1])) || null; } catch (e) { use = null; }
         if (!use) { try { use = parseCode(localStorage.getItem("forge3")); } catch (e) {} }
-        if (use) { cap = use.cap || 30; S = clampToData(use) || S; }
+        if (use) { cap = use.cap || 60; S = clampToData(use) || S; }
         render();
         if (S.lg) loadLegacy().then(function (d) { S.lg = LegacyWindow(d, { code: S.lg }).code(); render(); });
       }

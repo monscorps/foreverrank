@@ -18,7 +18,7 @@ import collections, csv, datetime, json, os, re, sys
 
 csv.field_size_limit(1 << 30)
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BUILD = sys.argv[1] if len(sys.argv) > 1 else "1.60.1.70291"
+BUILD = sys.argv[1] if len(sys.argv) > 1 else "1.60.1.70862"
 OUT = os.path.join(ROOT, "codex", "pvp.json")
 BLIZZ = "https://worldofwarcraft.blizzard.com/en-us/news/24303316"
 # Blizzard's rank rewards (How PvP Progression in World of Warcraft: Forever Works, 2026-10-07)

@@ -150,7 +150,7 @@
     var html = '<div class="cxm-head loot-head"><b id="cxm-title">' + esc(d.name) + "</b>" +
       (d.levels ? '<span class="lvlchip">Levels ' + d.levels[0] + "\u2013" + d.levels[1] + "</span>" : "") + (d.new ? '<span class="lt-new">New in Forever</span>' : "") + "</div>" +
       '<p class="loot-sub">' + [n.bosses + (n.bosses === 1 ? " boss" : " bosses"), n.drops + " drops", n.quests ? n.quests + " quest rewards" : ""].filter(Boolean).join(" \u00b7 ") +
-      ". Recorded by players in the beta, " + esc(lootSrcText(d.src)) + ". Bosses and drops can still change." +
+      ". Recorded by players in the beta and since launch, " + esc(lootSrcText(d.src)) + ". Bosses and drops can still change." +
       (d.bosses.concat(d.quests || []).some(function (b) { return (b.items || []).some(function (i) { return LOOTITEMS[i] && LOOTITEMS[i].est === "classic"; }); })
         ? " Items marked Classic stats are on these lists, but nobody has seen their Forever numbers yet: the stats shown are WoW Classic's." : "") + "</p>";
     function here(ids) { return ids.filter(function (i) { return !absent(i) && LOOTITEMS[i]; }); }
@@ -286,16 +286,16 @@
         meta: "Soul Engraving \u00b7 " + (s[2] ? s[2].charAt(0) + s[2].slice(1).toLowerCase() : "class unsorted"), topic: "souls", text: (s[0] + " " + s[1] + " " + (s[2] || "")).toLowerCase() });
     });
   }
-  var SRC_LABEL = { client: "Beta client", sod: "SoD wiring", classic: "Classic text", basic: "General", classiconly: "Not in Forever" };
+  var SRC_LABEL = { client: "Game client", sod: "SoD wiring", classic: "Classic text", basic: "General", classiconly: "Not in Forever" };
   // The client builds the spellbook and set files were read from, when the files say (spellbook.json build, sets.json build).
   var BOOK_BUILD = "", SET_BUILD = "", BOOK_PRICE = {};
   function onBuild(b) { return b ? ", build " + b : ""; }
   function srcTip(src) {
     return {
-      client: "Tooltip read from the beta client's spell data" + onBuild(BOOK_BUILD) + ".",
+      client: "Tooltip read from the game client's spell data" + onBuild(BOOK_BUILD) + ".",
       sod: "Season of Discovery wiring in the client: class-masked but with no Forever learn level yet. May change before launch.",
       classic: "Classic placeholder text: the Forever tooltip has not been read yet.",
-      basic: "A general spell every class has, from the beta client" + onBuild(BOOK_BUILD) + ".",
+      basic: "A general spell every class has, from the game client" + onBuild(BOOK_BUILD) + ".",
       classiconly: "A Classic spell the Forever client's spellbook does not list: cut, renamed, or learned another way."
     }[src] || "";
   }
@@ -314,13 +314,13 @@
     });
     (sb.talents || []).forEach(function (t) {
       IDX.push({ kind: "talent", cat: "talent", sub: t.c, name: t.n, icon: t.icon || "inv_misc_questionmark", q: "unknown",
-        cls: t.c, lvlKey: 10 + (t.row - 1) * 5, tl: t, side: "Beta client",
+        cls: t.c, lvlKey: 10 + (t.row - 1) * 5, tl: t, side: "Game client",
         meta: [t.c, t.tree + " tree", "Tier " + t.row, t.r + (t.r === 1 ? " rank" : " ranks"), VERDICT[t.s] || "", t.seen ? "seen in game" : ""].filter(Boolean).join(" \u00b7 "),
         text: (t.n + " " + t.c + " " + t.tree + " " + (t.d || "")).toLowerCase() });
     });
     (sb.racials || []).forEach(function (r) {
       IDX.push({ kind: "racial", cat: "racial", sub: r.race, name: r.n, icon: r.icon || "inv_misc_questionmark", q: "unknown",
-        lvlKey: 1, rc: r, side: racialSrc(r) === "demo" ? "BlizzCon demo" : "Beta client",
+        lvlKey: 1, rc: r, side: racialSrc(r) === "demo" ? "BlizzCon demo" : "Game client",
         meta: [r.race, r.kind === "active" ? "Active racial" : "Passive racial", r.seen ? "seen in game" : ""].filter(Boolean).join(" \u00b7 "),
         text: (r.n + " " + r.race + " " + (r.d || "")).toLowerCase() });
     });
@@ -370,7 +370,7 @@
     (rc.recipes || []).forEach(function (cr) {
       var made = cr.m ? rcItem(cr.m) : null;
       IDX.push({ kind: "craft", cat: "craft", sub: cr.p, name: cr.n, icon: cr.i || PROF_ICON[cr.p] || "inv_misc_questionmark", q: made ? made.q : "common",
-        cr: cr, era: cr.e, cls: cr.cls, side: cr.e === "sod" ? "SoD-era data" : cr.e === "retail" ? "Retail-era data" : "Beta client",
+        cr: cr, era: cr.e, cls: cr.cls, side: cr.e === "sod" ? "SoD-era data" : cr.e === "retail" ? "Retail-era data" : "Game client",
         meta: [cr.p + (cr.sk && !cr.cl ? " " + cr.sk : ""), cr.at || "", cr.k > 1 ? "makes " + cr.k : "", cr.nw ? "New" : "",
           cr.by ? rcItem(cr.by[0]).name : cr.auto ? "comes with the profession" : cr.cl ? "Classic trainer: skill " + cr.sk : ""].filter(Boolean).join(" \u00b7 "),
         text: [cr.n, cr.p, cr.at || "", reagentText(cr), (cr.by || []).map(function (i) { return rcItem(i).name; }).join(" "), cr.fx || ""].join(" ").toLowerCase() });
@@ -439,7 +439,7 @@
     PV = pv;
     (pv.ranks || []).forEach(function (r) {
       IDX.push({ kind: "pvprank", cat: "pvp", sub: "Rank", name: "Rank " + r.r + ": " + rankName(r), icon: r.icon || "inv_bannerpvp_02", q: "unknown", rk: r, href: "#pvp",
-        side: "Beta client", meta: [fmtN(r.pts) + " rank points", r.reward ? "Blizzard: " + r.reward : "", r.lp ? "Legacy Point" : ""].filter(Boolean).join(" \u00b7 "),
+        side: "Game client", meta: [fmtN(r.pts) + " rank points", r.reward ? "Blizzard: " + r.reward : "", r.lp ? "Legacy Point" : ""].filter(Boolean).join(" \u00b7 "),
         text: ["rank " + r.r, r.a, r.h, r.reward || "", "pvp honor rank"].join(" ").toLowerCase() });
     });
   }
@@ -464,7 +464,7 @@
     }).join("");
     box.innerHTML = '<div class="factgrid">' + cards.map(function (c) { return '<div class="factc"><p>' + c + "</p></div>"; }).join("") + "</div>" +
       '<ul class="rk-list">' + rows + "</ul>" +
-      '<p class="rk-small">Rank names, rank points, weeks, the Honor cap and Legacy Points: beta client' + esc(onBuild(pv.build)) +
+      '<p class="rk-small">Rank names, rank points, weeks, the Honor cap and Legacy Points: game client' + esc(onBuild(pv.build)) +
       ". Reading the client's curves as each rank's bar and as weeks of a season is our inference. Rewards per rank are " +
       '<a href="' + esc(pv.rewardsSrc) + '" rel="noopener">Blizzard\'s, from Oct 7</a>; the seals, sets and vendors behind them are server data.</p>';
   }
@@ -521,7 +521,7 @@
     else if (cr.fx) html += '<section class="loot-boss"><h4>What it does</h4><p class="lr-none">' + esc(cr.fx) + "</p></section>";
     html += '<section class="loot-boss"><h4>Reagents</h4><div class="lr-grid">' + (cr.r || []).map(function (r) { return itemRowFor(r[0], "\u00d7" + r[1]); }).join("") + "</div></section>";
     if (cr.by) html += '<section class="loot-boss"><h4>Taught by</h4><div class="lr-grid">' + cr.by.map(function (i) { return itemRowFor(i); }).join("") + "</div></section>";
-    html += '<p class="loot-foot">Recipe, reagents, station and the yellow and grey skill-ups from the beta client' + esc(onBuild(RC && RC.build)) +
+    html += '<p class="loot-foot">Recipe, reagents, station and the yellow and grey skill-ups from the game client' + esc(onBuild(RC && RC.build)) +
       (cr.cl ? "; the trainer's skill is Classic's, from the CMaNGOS Classic database" : "") +
       (cr.e ? ". " + (cr.e === "sod" ? "Season of Discovery" : "Retail-era") + " data on the branch: it may not be in Forever" : "") +
       (cr.rs ? ". The spell is Season of Discovery's; an item new in Forever teaches it" : "") +
@@ -557,18 +557,18 @@
       if (t.d) h += "<p>" + esc(t.d) + (t.r > 1 ? " (rank 1 of " + t.r + ")" : "") + "</p>";
       // the client's talent-point sources: one point a level from 10, plus one per rank of the Legacy perk Talented
       h += '<p class="sbt-note">Tier ' + t.row + " needs " + (t.row - 1) * 5 + " points in the tree: level " + e.lvlKey + " at the earliest, up to 5 levels sooner with the Legacy perk Talented.</p>";
-      if (t.added) h += '<p class="sbt-note">' + (t.from ? "Moved here from " + esc(t.from) : "New") + " in beta build " + esc(t.added) + ".</p>";
-      if (t.gone) h += '<p class="sbt-note">Removed from the tree in beta build ' + esc(t.gone) + ".</p>";
+      if (t.added) h += '<p class="sbt-note">' + (t.from ? "Moved here from " + esc(t.from) : "New") + " in build " + esc(t.added) + ".</p>";
+      if (t.gone) h += '<p class="sbt-note">Removed from the tree in build ' + esc(t.gone) + ".</p>";
       if (t.was) h += '<p class="sbt-note">Called ' + esc(t.was) + " in earlier builds.</p>";
       if (t.note) h += '<p class="sbt-note">' + esc(t.note) + "</p>";
       if (t.seen) h += '<p class="sbt-note">Seen in game: a level ' + t.seen + " " + esc(t.c) + " in players' games had it.</p>";
-      h += '<p class="sbt-src">Talent text from the beta client' + esc(onBuild(BOOK_BUILD)) + ".</p>";
+      h += '<p class="sbt-src">Talent text from the game client' + esc(onBuild(BOOK_BUILD)) + ".</p>";
     } else if (e.kind === "racial") {
       if (e.rc.d) h += "<p>" + esc(e.rc.d) + "</p>";
       if (e.rc.seen) h += '<p class="sbt-note">Seen in game: a ' + esc(e.rc.race) + " in players' games had it.</p>";
       h += '<p class="sbt-src">' + (racialSrc(e.rc) === "demo"
         ? "Text read from BlizzCon demo footage (talentsforever.com export, CC BY 4.0); not re-read from the client yet."
-        : "Racial text from the beta client" + esc(onBuild(BOOK_BUILD)) + ".") + "</p>";
+        : "Racial text from the game client" + esc(onBuild(BOOK_BUILD)) + ".") + "</p>";
     } else if (e.kind === "itemset") {
       var st = e.st;
       h += '<ul class="sbt-pieces">' + st.pieces.map(function (pc) {
@@ -582,14 +582,14 @@
           (b.fx ? "" : b.fx0 ? ' <i class="sbt-int">internal name: the client\'s text has a number it fills with 0</i>' : ' <i class="sbt-int">internal name, no tooltip text in the client</i>') +
           ' <i class="sbt-era sbt-era-' + b.era + '">' + ERA_LABEL[b.era] + "</i></p>";
       });
-      h += '<p class="sbt-src">Item set tables from the beta client' + esc(onBuild(SET_BUILD)) + ". Era per bonus read from spell ID bands.</p>";
+      h += '<p class="sbt-src">Item set tables from the game client' + esc(onBuild(SET_BUILD)) + ". Era per bonus read from spell ID bands.</p>";
     } else if (e.kind === "craft") {
       var cr = e.cr;
       h += "<p>" + esc(cr.m ? "Makes " + rcItem(cr.m).name + (cr.k > 1 ? " (" + cr.k + ")" : "") + "." : cr.fx || "") + "</p>";
       h += '<p class="sbt-note">Reagents: ' + esc(reagentText(cr)) + ".</p>";
       if (cr.at) h += '<p class="sbt-note">' + esc(near(cr.at)) + "</p>";
       h += '<p class="sbt-note">' + esc(craftLearn(cr)) + (cr.c ? " " + esc(craftColours(cr)) : "") + "</p>";
-      h += '<p class="sbt-src">Recipe from the beta client' + esc(onBuild(RC && RC.build)) + (cr.cl ? "; the trainer's skill is Classic's (CMaNGOS)" : "") +
+      h += '<p class="sbt-src">Recipe from the game client' + esc(onBuild(RC && RC.build)) + (cr.cl ? "; the trainer's skill is Classic's (CMaNGOS)" : "") +
         (cr.rs ? "; the spell is Season of Discovery's, taught by an item new in Forever" : "") + ". Click for each reagent's tooltip.</p>";
     } else if (e.kind === "rare" && e.dun) {
       var lb = e.lb, got = lb.items.filter(function (i) { return !absent(i) && ITEMBYID[i]; }).map(function (i) { return ITEMBYID[i].name; });
@@ -600,13 +600,13 @@
       if (rr.sub || rr.ty) h += "<p>" + esc([rr.sub ? "<" + rr.sub + ">" : "", rr.fam ? rr.fam + (rr.tame ? ", tameable by hunters" : "") : rr.ty || ""].filter(Boolean).join(" ")) + "</p>";
       h += '<p class="sbt-note">Spawn points: ' + esc(spots(rr)) + (rr.more ? ", and " + rr.more + " more" : "") + ".</p>";
       if (rr.rs) h += '<p class="sbt-note">Respawns ' + esc(respawn(rr.rs)) + " after a kill, in Classic.</p>";
-      h += '<p class="sbt-src">Classic data (CMaNGOS): it may have moved, changed or gone in Forever. Points drawn on the beta client\'s maps' + esc(onBuild(RS && RS.build)) + ".</p>";
+      h += '<p class="sbt-src">Classic data (CMaNGOS): it may have moved, changed or gone in Forever. Points drawn on the game client\'s maps' + esc(onBuild(RS && RS.build)) + ".</p>";
     } else if (e.kind === "pvprank") {
       var rk = e.rk;
       h += "<p>" + fmtN(rk.pts) + " rank points fill this rank" + (rk.week ? "; open from week " + rk.week + " of a season" : "") + ".</p>";
       if (rk.reward) h += '<p class="sbt-note">Reward, per Blizzard: ' + esc(rk.reward) + ".</p>";
       if (rk.lp) h += '<p class="sbt-note">Reaching it pays a Legacy Point.</p>';
-      h += '<p class="sbt-src">Rank, points, week and Legacy Point from the beta client' + esc(onBuild(PV && PV.build)) + "; reading its curves as points per rank and weeks is ours. Rewards from Blizzard's Oct 7 post.</p>";
+      h += '<p class="sbt-src">Rank, points, week and Legacy Point from the game client' + esc(onBuild(PV && PV.build)) + "; reading its curves as points per rank and weeks is ours. Rewards from Blizzard's Oct 7 post.</p>";
     }
     return h;
   }
@@ -1166,7 +1166,7 @@
         "<b>" + esc(sys.t) + "</b><span>" + sys.facts.length + " facts</span></button>";
     }).join("") + "</div>";
     if (PAGE === "db") section("systems", "Systems", sysHtml);
-    if (PAGE === "db") section("pvp", "PvP ranks", '<p class="board-sub">The honor ladder as the beta client defines it. Search a rank by name above; Blizzard\'s rewards sit beside each one.</p>' +
+    if (PAGE === "db") section("pvp", "PvP ranks", '<p class="board-sub">The honor ladder as the game client defines it. Search a rank by name above; Blizzard\'s rewards sit beside each one.</p>' +
       '<div id="pvpbox"><p class="board-sub">Loading the rank table\u2026</p></div>');
 
     // Hero stat band: the Codex counts itself.

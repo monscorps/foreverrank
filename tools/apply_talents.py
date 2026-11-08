@@ -18,6 +18,9 @@ What moves, and the rule for each:
            its slot so shared build links (?b=, positional) still decode, but
            it takes no points (and the Forge hides it when a live talent now
            sits in its square)
+  ranks    follow TraitNodeEntry MaxRanks: every rank text is the client's at the new
+           count ("ranks~" flags a rank value the client stores without a curve; the
+           talent is marked est, and the Forge says its numbers are estimates)
   row/col  follow TraitNode PosX/PosY (600 per row and per column)
   moved    a talent whose node now sits in another spec: the old slot gets
            gone=<build> and moved=<tree>, and a copy with from=<old tree> and
@@ -134,16 +137,37 @@ def run(old_b, new_b, write=False):
                     t["gone"] = new_b
                     log.append(("gone", tag, "node %s left the class tree" % no))
                     continue
-                # text
                 maxr = t.get("r", 1)
                 descs = t.get("desc") or []
+                # ranks: the node's MaxRanks changed (the live build, 70862, reads Precision at 3 ranks, the beta's 5):
+                # every rank text is the client's at the new count, as the old texts could only be wrong. A rank value
+                # with no curve behind it is flagged as the new talents' are ("ranks~"), and the talent marked est
+                ranked = False
+                nr = tn.ranks.get((nw, sp)) if nw else None
+                if nr and nr != maxr:
+                    try:
+                        fresh = [new.talent_game_text(sp, k, nr) for k in range(1, nr + 1)]
+                    except Exception as e:
+                        fresh = None
+                        log.append(("ranks?", tag, "%d -> %d ranks, but the resolver cannot render it (%s); write the texts by hand" % (maxr, nr, e)))
+                    if fresh is not None:
+                        pts = new.def_points.get(new.talent_def(sp)) or {}
+                        loose = sorted(i + 1 for i in new.eff.get(sp, {}) if i not in pts and re.search(r"\$[smMSo]%d" % (i + 1), new.spell.get(sp, {}).get("Description_lang", "")))
+                        log.append(("ranks", tag, "%d -> %d ranks" % (maxr, nr)))
+                        if loose:
+                            log.append(("ranks~", tag, "effect %s has no rank curve: check the rank values against Blizzard's notes" % ", ".join(map(str, loose))))
+                            t["est"] = True
+                        t["r"], t["desc"], maxr, descs, ranked = nr, fresh, nr, fresh, True
+                # text
                 try:
                     # the site shows a one-rank talent's spell as the game prints it (ranges); older texts showed the middle
-                    exact = all(norm(d) in (norm(old.talent_game_text(sp, r, maxr)), norm(old.talent_text(sp, r, maxr)))
-                                for r, d in enumerate(descs, 1) if d)
+                    exact = not ranked and all(norm(d) in (norm(old.talent_game_text(sp, r, maxr)), norm(old.talent_text(sp, r, maxr)))
+                                               for r, d in enumerate(descs, 1) if d)
                 except Exception:
                     exact = False
-                if exact and descs:
+                if ranked:
+                    pass
+                elif exact and descs:
                     fresh = []
                     for r, d in enumerate(descs, 1):
                         fresh.append(new.talent_game_text(sp, r, maxr) if d else d)

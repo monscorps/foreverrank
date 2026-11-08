@@ -1,6 +1,6 @@
 /* ForgeGear: the inspect-style gear step. Paperdoll slots, a picker per slot,
  * WoW-style item tooltips and a stat panel that totals what is equipped.
- * Items come from plan/items-db.json (the beta client plus server-sent items);
+ * Items come from plan/items-db.json (the game client plus server-sent items);
  * plan/items.json is the small seed shown while the full database loads.
  * window.ForgeItem holds the item helpers the Database (codex) shares. */
 (function () {
@@ -30,7 +30,7 @@
   // ---- Shared item helpers: The Forge and the Database read items the same way ----
   var ARMOR_TYPES = ["Cloth", "Leather", "Mail", "Plate", "Shield"];
   var SCHOOLS = ["Physical", "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane"];
-  // Shield spikes and the Retricutioner chest enchant, from the beta client's spell tables
+  // Shield spikes and the Retricutioner chest enchant, from the game client's spell tables
   // (build 1.60.1.70291): base points and variance of the damage-on-block and damage-shield auras.
   var DEFAULT_ENCHANTS = { note: "Built-in fallback: plan/enchants.json is missing.", enchants: [
     { id: "iron-spike", item: 6042, name: "Iron Shield Spike", slot: "offhand", needs: "Shield", rf: { k: "block", s: "Physical", v: 10, lo: 8, hi: 12, sp: 9784, src: "client" }, stats: {}, skill: ["Blacksmithing", 150], icon: "inv_misc_armorkit_01" },
@@ -42,7 +42,7 @@
   // Paladin and druid reflect numbers from the same client tables; reflect.json overrides them when present. The 6%
   // spell-power ratios are Blizzard's (development notes, 8 October 2026): the client's spell rows carry none.
   var NOTES_COEF = "Blizzard's development notes, 8 October 2026 (the client's spell rows carry no ratio)";
-  var DEFAULT_REFLECT = { note: "Built-in fallback: plan/reflect.json is missing. Numbers from the beta client's SpellEffect table, build 1.60.1.70291.", classes: {
+  var DEFAULT_REFLECT = { note: "Built-in fallback: plan/reflect.json is missing. Numbers from the game client's SpellEffect table, build 1.60.1.70291.", classes: {
     PALADIN: { retAura: [[16, 5, 7294], [26, 8, 10298], [36, 12, 10299], [46, 16, 10300], [56, 20, 10301]], retCoef: 0.06, retCoefSrc: NOTES_COEF,
       holyShield: { talent: "Holy Shield", ranks: [[40, 110, 20925], [50, 153, 20927], [60, 221, 20928]], coef: 0.08, charges: 4, dur: 10, cd: 10, block: 30 },
       redoubt: { talent: "Redoubt" }, eyeForAnEye: { talent: "Eye for an Eye", pct: [5, 10] } } },
@@ -916,11 +916,11 @@
       if (hm) {
         var hpPct = (M.pct.health || 0) + (TP.health || 0), sta = A.stamina;
         var hp = sta == null ? null : Math.round((hm[0] + Math.min(sta, 20) + Math.max(sta - 20, 0) * 10) * (1 + hpPct / 100)) + (t.health || 0) + (TA.health || 0);
-        pools += row("Health", hp == null ? "?" : hp + (hpPct ? '<i class="rx">+' + hpPct + "%</i>" : ""), "Base " + hm[0] + ", the first 20 Stamina add 1 health each and the rest 10 each" + (t.health ? ", plus " + t.health + " from consumables" : "") + ". 10 health per Stamina matches the beta client's gametables; base health and the first-20 rule are Classic 1.12 estimates.", true, "");
+        pools += row("Health", hp == null ? "?" : hp + (hpPct ? '<i class="rx">+' + hpPct + "%</i>" : ""), "Base " + hm[0] + ", the first 20 Stamina add 1 health each and the rest 10 each" + (t.health ? ", plus " + t.health + " from consumables" : "") + ". 10 health per Stamina matches the game client's gametables; base health and the first-20 rule are Classic 1.12 estimates.", true, "");
         if (power === "mana" && hm[1]) {
           var mpPct = (M.pct.mana || 0) + (TP.mana || 0), int = A.intellect;
           var mp = int == null ? null : Math.round((hm[1] + Math.min(int, 20) + Math.max(int - 20, 0) * 15) * (1 + mpPct / 100));
-          pools += row("Mana", mp == null ? "?" : mp + (mpPct ? '<i class="rx">+' + mpPct + "%</i>" : ""), "Base " + hm[1] + " straight from the beta client's gametables (build 1.60.1.69876, not re-checked since); the first 20 Intellect add 1 mana each and the rest 15 each, a Classic rule.", true, "");
+          pools += row("Mana", mp == null ? "?" : mp + (mpPct ? '<i class="rx">+' + mpPct + "%</i>" : ""), "Base " + hm[1] + " straight from the game client's gametables (build 1.60.1.69876, not re-checked since); the first 20 Intellect add 1 mana each and the rest 15 each, a Classic rule.", true, "");
         } else if (M.pct[power]) pools += row("Max " + power, '<i class="rx">+' + M.pct[power] + "%</i>", "Racial bonus to maximum " + power + ".", true, "");
       }
       var wc = M.weaponCrit.filter(function (w) { return weaponMatches(w.when); }).reduce(function (a, w) { return a + w.value; }, 0);
@@ -964,7 +964,7 @@
       var armorItems = (t.armor || 0) + (TA.armor || 0), armorPct = TP.armor || 0;
       var armor = known ? Math.round((armorItems + A.agility * 2) * (1 + armorPct / 100)) : null;
       var aK = ctx.armorK ? ctx.armorK[String(lv)] : null, aDR = armor != null && aK ? r1(100 * armor / (armor + aK)) : null;
-      var def = row("Armor", armor == null ? "+" + armorItems : armor + (armorPct ? '<i class="rx">+' + armorPct + "%</i>" : ""), "Items " + armorItems + (known ? " + Agility x2 (Classic rule)" : "") + (armorPct ? ", talents +" + armorPct + "%" : "") + "." + (aDR != null ? " Cuts physical damage from level " + lv + " enemies by " + aDR + "%, using the beta client's armor table." : ""), true, "");
+      var def = row("Armor", armor == null ? "+" + armorItems : armor + (armorPct ? '<i class="rx">+' + armorPct + "%</i>" : ""), "Items " + armorItems + (known ? " + Agility x2 (Classic rule)" : "") + (armorPct ? ", talents +" + armorPct + "%" : "") + "." + (aDR != null ? " Cuts physical damage from level " + lv + " enemies by " + aDR + "%, using the game client's armor table." : ""), true, "");
       var defPts = (t.defense || 0) + (TA.defense || 0), defB = r1(defPts * 0.04), DEFRULE = " Defense: each point above 5 x your level adds 0.04% to dodge, parry, block and the chance to be missed (Classic rule; Forever's own value is unpublished).";
       def += row("Defense", 5 * lv + defPts + (defPts ? '<i class="rx">+' + defPts + "</i>" : ""), "Base " + 5 * lv + " (5 x level " + lv + "), plus " + bonusTip("defense") + (defPts ? " Worth +" + defB + "% dodge, parry, block and miss." : "") + DEFRULE, true, "");
       var vMiss = 5 + defB, vDodge = 0, vParry = 0, vBlock = 0, avKnown = true;
@@ -1134,7 +1134,7 @@
         return '<div class="rxchip' + (applied ? " on" : "") + '" data-tip="' + attr("<b>" + esc(r.n) + "</b>" + '<span class="it-l">' + (r.kind === "passive" ? "Passive" : "Active") + "</span>" + esc(r.tip || "") + line) + '">' +
           img(r.icon) + "<span><b>" + esc(r.n) + "</b><em>" + esc(r.summary || (r.kind === "active" ? "Active ability" : "")) + "</em></span></div>";
       }).join("");
-      var note = (base ? "Base mana, armor mitigation, rating conversions and 10-health-per-Stamina come from the Forever beta client's gametables, build 1.60.1.69876 (not re-checked since). Base attributes and the crit, dodge, attack power and regen formulas are still WoW Classic 1.12 values for a level " + lv + " " + esc(ctx.raceClass || "") + (ctx.derived ? " (combo new in Forever, derived from " + esc(ctx.derived) + " plus race offsets)" : "") + "." : "Base attributes for this race are unpublished, so formula totals show as ?; bonuses from gear, racials and talents still count.");
+      var note = (base ? "Base mana, armor mitigation, rating conversions and 10-health-per-Stamina come from the Forever client's gametables, beta build 1.60.1.69876 (not re-checked since). Base attributes and the crit, dodge, attack power and regen formulas are still WoW Classic 1.12 values for a level " + lv + " " + esc(ctx.raceClass || "") + (ctx.derived ? " (combo new in Forever, derived from " + esc(ctx.derived) + " plus race offsets)" : "") + "." : "Base attributes for this race are unpublished, so formula totals show as ?; bonuses from gear, racials and talents still count.");
       var overNote = t.__over.length ? '<p class="g2-warn">Not counted, above your level ' + lv + ": " + t.__over.map(function (it) { return esc(it.name) + " (needs " + effReq(it).lvl + (effReq(it).est ? ", estimated" : "") + ")"; }).join(", ") + ".</p>" : "";
       return '<div class="gear2" id="gear"><div class="g2-head"><b>Gear</b><span class="g2-count">' + count + " / " + SLOT_KEYS.length + " equipped</span>" +
         '<span class="g2-db">' + wearable + " Forever items to wear so far</span>" +

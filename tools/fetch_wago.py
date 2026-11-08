@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Pull WoW: Forever beta client tables from wago.tools as CSV.
 
-wago.tools mirrors every Forever beta build (product wow_classic_beta,
-versions 1.60.1.x) and exports any DB2 table as CSV, so a datamine no
+wago.tools mirrors every Forever build (the live game is product wowf
+since launch, 4 November 2026; the beta was wow_classic_beta; versions 1.60.1.x) and exports any DB2 table as CSV, so a datamine no
 longer needs a local client export. Tables land in research/wago/<build>/
 (gitignored: raw Blizzard data stays off the repo, the builders that read
 it live in tools/).
@@ -72,7 +72,11 @@ CLASSIC_TABLES = [
 def builds():
     req = urllib.request.Request("https://wago.tools/api/builds", headers=UA)
     data = json.load(urllib.request.urlopen(req, timeout=60))
-    return [b["version"] for b in data.get("wow_classic_beta", []) if b["version"].startswith("1.60.")]
+    # the live game (product wowf, from launch on 4 November 2026) first, the beta's builds after it
+    out = []
+    for product in ("wowf", "wow_classic_beta"):
+        out += [b["version"] for b in data.get(product, []) if b["version"].startswith("1.60.") and b["version"] not in out]
+    return out
 
 
 def fetch(build, table, force=False):

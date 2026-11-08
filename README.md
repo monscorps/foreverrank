@@ -8,7 +8,7 @@ questing addon for Forever. What it notes in game reaches the site when players
 upload its saved file, by hand or with the optional Windows uploader
 (`uploader/`), and goes into the next QuestBank release and the Database.
 
-Also on the site: the Forge (planner), the Database (datamined beta client),
+Also on the site: the Forge (planner), the Database (datamined game client),
 the Atlas, and /bis/ — best-in-slot lists per class and spec at levels 30 and
 20, every slot ranked by the Forge's own scorer over our item database
 (`node tools/build_bis.mjs` rebuilds bis/bis.json; its header says what a list

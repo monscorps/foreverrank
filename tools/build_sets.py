@@ -36,7 +36,7 @@ from spelltext import Client, _rows
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "codex", "sets.json")
 DB = os.path.join(ROOT, "plan", "items-db.json")
-BUILD = "1.60.1.70291"
+BUILD = "1.60.1.70862"
 QUAL = ["poor", "common", "uncommon", "rare", "epic", "legendary", "artifact", "heirloom"]
 SLOT = {"1": "head", "2": "neck", "3": "shoulder", "4": "shirt", "5": "chest", "6": "waist", "7": "legs",
         "8": "feet", "9": "wrist", "10": "hands", "11": "finger", "12": "trinket", "13": "one-hand",

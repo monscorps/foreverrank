@@ -35,7 +35,7 @@ csv.field_size_limit(1 << 30)
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 sys.path.insert(0, os.path.join(ROOT, "tools", "questbank"))
-BUILD = sys.argv[1] if len(sys.argv) > 1 else "1.60.1.70291"
+BUILD = sys.argv[1] if len(sys.argv) > 1 else "1.60.1.70862"
 ERA = "1.15.9.70003"  # a Classic Era build, for the trainers' teaching spells
 OUT = os.path.join(ROOT, "codex", "recipes.json")
 CMANGOS = os.path.join(ROOT, "research", "cmangos", "ClassicDB.sql.gz")
