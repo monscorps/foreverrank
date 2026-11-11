@@ -5211,9 +5211,14 @@ do
     -- (Lists.lua Candidates). Before, Preventative Measures (95064, level 39, a head at iL 40) and Corpsefeeder's
     -- Carapace (93574, level 45, a cloak at iL 43) were a level 20's best head and back
     do
-      local above = QB:Range()
-      assert(D.SURVEYED[95064] and D.SURVEYED[93574] and D.SURVEYED[95064][1] > 20 + above + 2 and D.SURVEYED[93574][1] > 20 + above + 2,
-        "(the fixture: both quests are the survey's alone, above a level 20's window)")
+      -- (6.4.6) players since picked both up, so they are catalog quests; the fixture is whichever quests the survey
+      -- alone still knows above the window (players' games keep moving quests from D.SURVEYED into D.Q)
+      local above, alone = QB:Range(), 0
+      for id, sv in pairs(D.SURVEYED) do
+        local r = D.Q[id]
+        if sv[1] > 20 + above + 2 and (not r or math.floor(r[10] / 65536) % 2 == 1) then alone = alone + 1 end
+      end
+      assert(alone > 0, "(the fixture: some quests are the survey's alone, above a level 20's window)")
       for _, slot in ipairs({ head, back }) do
         for _, r in ipairs(U:FindRewards("gear", 20, slot.slot.loc)) do
           assert(not r.q.surveyOnly or r.q.lvl <= 20 + above + 2, "a quest the survey alone knows stays within the level window: " .. r.q.name .. " at " .. r.q.lvl)
@@ -10032,12 +10037,20 @@ do
   -- (a) quests no Forever source has rewards for take the Classic database's: Sunken Treasure (666) offers a wand
   -- (4547, item level 40). (6.4.5: quest 600 was the fixture until the launch week's survey read its Forever list, a
   -- third choice with it; the Goblin Igniter stays in it, and in the "2 levels ahead" checks below)
-  local wand
-  for _, id in ipairs(rewardsOf(666)) do if id == 4547 then wand = true end end
-  assert(wand and D.RCLASSIC[666], "quest 666 rewards its wand, from the Classic database")
-  assert(D.RIT[4547] and D.RIT[4547][1] == 40 and D.RIT[4547][2] == 26 and D.RIT[4547][3] == 2 and D.RIT[4547][4] == 19,
-    "Sunken Treasure's wand: a wand, item level 40")
-  lines = {}; owner.env.GameTooltip:ClearLines(); U.RewardLines(owner.env.GameTooltip, QB.Quest.Get(666))
+  -- (6.4.6: the survey read 666 too; players' games keep reading the Classic-only quests, so the fixture is the lowest
+  -- quest still answered by the Classic database alone, with a described reward)
+  local classicQ, classicItem
+  for id in pairs(D.RCLASSIC) do
+    if D.RITEMS[id] and QB.Quest.Get(id) and (not classicQ or id < classicQ) then
+      for _, item in ipairs(rewardsOf(id)) do
+        if D.RIT[item] and D.RIT[item][1] > 0 then classicQ, classicItem = id, item; break end
+      end
+    end
+  end
+  assert(classicQ, "some quest's rewards still come from the Classic database")
+  local it = D.RIT[classicItem]
+  assert(it[1] > 0 and it[2] and it[3] and it[4], "its reward is described: item level, slot, class and subclass")
+  lines = {}; owner.env.GameTooltip:ClearLines(); U.RewardLines(owner.env.GameTooltip, QB.Quest.Get(classicQ))
   assert(table.concat(lines, "\n"):find("Rewards from Classic data", 1, true), "its tooltip says the rewards are Classic data")
   local some
   for id in pairs(D.RITEMS) do if not D.RCLASSIC[id] and QB.Quest.Get(id) then some = id; break end end
@@ -13106,6 +13119,8 @@ do
   for id in pairs(D2.RUNK) do if D2.Q[id] then assert(real[id] == 2, "every catalog quest with no rewards known is asked about: " .. id) end end
   for id in pairs(D2.RCLASSIC) do if D2.Q[id] then assert(real[id] == 2, "every catalog quest with Classic's rewards alone is asked about: " .. id) end end
   assert(S.Decode(S.Encode({ 1, 2, 33, 1057, 99999 }))[5] == 99999 and #S.Encode({ 99999 }) == 4, "the encoding reads back")
+  -- (6.4.6: players' games read quest 10's list since; this test's survey reads it afresh, so the catalog forgets it)
+  D2.RUNK[10], D2.RITEMS[10], D2.REWARD[10] = true, nil, nil
   assert(D2.RUNK[10] and not D2.RITEMS[10], "quest 10's rewards are not known before the survey")
   -- the check: three Forever quests whose items Wowhead lists, asked first
   local CHECK = S.Decode(D2.SURVEY[4])

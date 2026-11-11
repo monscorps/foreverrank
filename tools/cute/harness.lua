@@ -14689,9 +14689,13 @@ do
     assert(get and choose and get < choose and not t:find("Rewards: choose one", 1, true), "You get, then Choose one:\n" .. t)
     t = read(704)
     assert(t:find("Rewards include", 1, true) and not t:find("Choose one", 1, true), "a list that does not say which: Rewards include:\n" .. t)
-    local _, how = QB.Quest.Rewards(QB.Quest.Get(17))
-    assert(how == "catalog" and QB.Data.RCLASSIC and QB.Data.RCLASSIC[17], "quest 17's rewards are the Classic database's")
-    t = read(17)
+    -- (0.9.6: players' games read quest 17's list since, and keep reading the Classic-only ones: the fixture is the
+    -- lowest quest the Classic database alone still answers)
+    local classicQ
+    for id in pairs(QB.Data.RCLASSIC or {}) do if QB.Quest.Get(id) and QB.Data.RITEMS[id] and (not classicQ or id < classicQ) then classicQ = id end end
+    local _, how = QB.Quest.Rewards(QB.Quest.Get(classicQ))
+    assert(classicQ and how == "catalog", "some quest's rewards are the Classic database's: " .. tostring(classicQ))
+    t = read(classicQ)
     assert(t:find("Reward", 1, true) and t:find("Rewards from Classic data (may differ in Forever)", 1, true), "the Classic database's rewards say so:\n" .. t)
     local dimLine
     for _, l in ipairs(L.labels.items) do if l:IsShown() and l:GetText() == "Rewards from Classic data (may differ in Forever)." then dimLine = l end end

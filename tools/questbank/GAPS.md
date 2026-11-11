@@ -7,16 +7,16 @@ players see those quests in Forever. Anything listed here is a quest the addon c
 
 | Check | Forever data | Missing | Classic seed | Missing |
 |---|---|---|---|---|
-| Forever XP multiplier read from its Wowhead Forever page | 2193 | 210 | 1438 | 1436 |
-| Turn-in NPC with a position | 2193 | 76 | 1438 | 7 |
-| Turn-in inside a dungeon (hand in on the way, not on the route) | 2193 | 8 | 1438 | 59 |
-| Quest giver with a position (quests that start from an item don't need one) | 2193 | 126 | 1438 | 12 |
-| Chain known (Wowhead Forever series or the Classic database) | 2193 | 457 | 1438 | 0 |
+| Forever XP multiplier read from its Wowhead Forever page | 2354 | 237 | 1403 | 1401 |
+| Turn-in NPC with a position | 2354 | 87 | 1403 | 7 |
+| Turn-in inside a dungeon (hand in on the way, not on the route) | 2354 | 12 | 1403 | 55 |
+| Quest giver with a position (quests that start from an item don't need one) | 2354 | 134 | 1403 | 11 |
+| Chain known (Wowhead Forever series or the Classic database) | 2354 | 513 | 1403 | 0 |
 
 On 2026-10-01 Blizzard cut dungeon-quest XP: "50% less extra experience beyond normal quest values". Wowhead Forever's pages still show the old multipliers, so every multiplier above x1 is computed as 1 + (read - 1) x 0.5 until they are re-read; the addon says so in the quest tooltip. Hand-ins on 2026-10-02 paid exactly that on every multiplied quest, dungeon-typed or not.
-What the game paid after the cut (players' hand-ins and quest windows on build 70170 or later, flag 512): 344 quests confirmed (within 5% counts as agreement; small differences kept as read: 463 The Greenwarden 825, paid 841, 95647 Lost in the Thicket Things 4900, paid 4998, 98815 Highland Hides 1150, paid 1173), 18 corrected to the game's number: 378 The Fury Runs Deep 2750 -> 5750, 472 Fall of Dun Modr 1000 -> 1200, 661 Hints of a New Plague? 3350 -> 3550, 1050 Mythology of the Titans 3550 -> 8900, 1142 Mortality Wanes 3050 -> 7250, 1360 Reclaimed Treasures 3600 -> 6300, 2924 Essential Artificials 3050 -> 5500, 2929 The Grand Betrayal 2750 -> 4950, 2930 Data Rescue 3650 -> 6550, 2945 Grime-Encrusted Ring 2700 -> 6400, 2947 Return of the Ring 2700 -> 4850, 91732 Good Steel 625 -> 320, 91751 Rough Wolf Pelts 480 -> 700, 98319 Secure the Mountain 180 -> 350, 99127 A Net Disaster 625 -> 480, 99143 Bottles and Baubles 625 -> 480, 99159 Finding Warmth 700 -> 350, 99160 Rime's Wrath 700 -> 525, 0 with no XP in the catalog filled in.
+What the game paid after the cut (players' hand-ins and quest windows on build 70170 or later, flag 512): 521 quests confirmed (within 5% counts as agreement; small differences kept as read: 463 The Greenwarden 825, paid 841, 79948 Defensive Magics 101 280, paid 285, 79950 Demons and You 280, paid 285, 79951 Mummies: A Guide to the Unsavory Undead 280, paid 285, 79952 RwlRwlRwlRwl! 280, paid 285, 94884 An Unsettling Discovery 1700, paid 1650, 95647 Lost in the Thicket Things 4900, paid 4998, 98815 Highland Hides 1150, paid 1173), 27 corrected to the game's number: 378 The Fury Runs Deep 2750 -> 5750, 472 Fall of Dun Modr 1000 -> 1200, 661 Hints of a New Plague? 3350 -> 3550, 709 Solution to Doom 3150 -> 6150, 1050 Mythology of the Titans 3550 -> 8900, 1053 In the Name of the Light 4700 -> 15300, 1142 Mortality Wanes 3050 -> 7250, 1360 Reclaimed Treasures 3600 -> 6300, 2240 The Hidden Chamber 3900 -> 6850, 2278 The Platinum Discs 4200 -> 8200, 2398 The Lost Dwarves 240 -> 550, 2924 Essential Artificials 3050 -> 5500, 2929 The Grand Betrayal 2750 -> 4950, 2930 Data Rescue 3650 -> 6550, 2945 Grime-Encrusted Ring 2700 -> 6400, 2947 Return of the Ring 2700 -> 4850, 3523 Scourge of the Downs 290 -> 675, 3525 Extinguishing the Idol 4250 -> 10100, 3636 Bring the Light 4300 -> 10200, 6626 A Host of Evil 3450 -> 8200, 91732 Good Steel 625 -> 320, 91751 Rough Wolf Pelts 480 -> 700, 98319 Secure the Mountain 180 -> 350, 99127 A Net Disaster 625 -> 480, 99143 Bottles and Baubles 625 -> 480, 99159 Finding Warmth 700 -> 350, 99160 Rime's Wrath 700 -> 525, 0 with no XP in the catalog filled in.
 
-Readings taken under a temporary +3% XP buff on the player (the game's number times 1.03, give or take one: 390 shows 401) count as the game's number: 179 readings on 145 quests.
+Readings taken under a temporary +3% XP buff on the player (the game's number times 1.03, give or take one: 390 shows 401) count as the game's number: 296 readings on 261 quests.
 
 Dungeon quests nobody has read take their dungeon's multiplier when the read ones agree (as read; before the cut unless marked): Blackfathom Deeps x3.75, City of Dalaran x2.375 (read after the cut), Ragefire Chasm x3.05, Shadowfang Keep x4.35, The Deadmines x3.75, The Hall of Thanes x3.4, The Stockade x3.2, Wailing Caverns x2.9.
 
@@ -24,24 +24,24 @@ Every quest in the catalog is one the game offers: placeholders (<UNUSED>, <NYI>
 holidays, repeatable turn-ins, raids and battlegrounds are left out. The crafting writs' deliveries stay for the reward finders
 alone (174 quests: 150 of Forever's crafting orders, 24 of the Argent Dawn's; no XP, never suggested).
 
-NPC positions: 421 from Wowhead Forever, 1334 from the CMaNGOS spawn table where Wowhead has none.
-Forever redrew Mulgore, Eastern Plaguelands, Redridge and Stormwind: 247 Wowhead coordinates there were in the old
+NPC positions: 421 from Wowhead Forever, 1331 from the CMaNGOS spawn table where Wowhead has none.
+Forever redrew Mulgore, Eastern Plaguelands, Redridge and Stormwind: 250 Wowhead coordinates there were in the old
 Classic frame and were moved to Forever's; 81 were already in Forever's.
-Instant follow-ups planned on the day: 308. Race-limited quests: 418. Quests in mutually exclusive groups: 497.
-Turn-in NPCs found by the name in the quest's objective, where Wowhead links none: 51.
+Instant follow-ups planned on the day: 308. Race-limited quests: 419. Quests in mutually exclusive groups: 497.
+Turn-in NPCs found by the name in the quest's objective, where Wowhead links none: 52.
 Finds (D.FIND): 32 books at 32 places from the guides, 1 locked object from the guides.
-World map icons: objective spots for 1472 quests (1145 from CMaNGOS spawns, 306 from its quest outlines only, 1 from Wowhead Forever's quest pages, 20 from players' games alone; 21 more have players' spots beside those); 53 quests that start from an item show where it drops. 176 quests need a profession or a reputation the addon can't check.
+World map icons: objective spots for 1545 quests (1145 from CMaNGOS spawns, 306 from its quest outlines only, 1 from Wowhead Forever's quest pages, 93 from players' games alone; 27 more have players' spots beside those); 53 quests that start from an item show where it drops. 176 quests need a profession or a reputation the addon can't check.
 
-Seen in Forever by players (227 uploads merged by probe_pull.py, 2026-11-08T12:22:16Z): 448 quests, 23 of them Classic seeds now confirmed.
-Seen in game but not in the catalog (12): 8167 The Battle for Arathi Basin! (left out on purpose by the catalog's filters), 8393 Claiming Arathi Basin (a battleground quest: its giver gives only PvP quests), 8400 Fight for Warsong Gulch (a battleground quest: its giver gives only PvP quests), 91900 A Sealed Crate (left out on purpose by the catalog's filters), 91904 A Sealed Crate (left out on purpose by the catalog's filters), 91905 A Sealed Crate (left out on purpose by the catalog's filters), 96222 Khan Hratha (too little to place: no NPC with a position), 96339 Legacy Reward: Replica Ironforge Air Rifle (left out on purpose by the catalog's filters), 98372 An Unfortunate End (left out on purpose by the catalog's filters), 98895 Darkspear Islands Clash (a battleground quest: its giver gives only PvP quests), 98896 Darkspear Islands Clash (a battleground quest: its giver gives only PvP quests), 99192 A Donation of Silk (left out on purpose by the catalog's filters).
+Seen in Forever by players (245 uploads merged by probe_pull.py, 2026-11-11T08:09:24Z): 623 quests, 59 of them Classic seeds now confirmed.
+Seen in game but not in the catalog (13): 8167 The Battle for Arathi Basin! (left out on purpose by the catalog's filters), 8393 Claiming Arathi Basin (a battleground quest: its giver gives only PvP quests), 8400 Fight for Warsong Gulch (a battleground quest: its giver gives only PvP quests), 91900 A Sealed Crate (left out on purpose by the catalog's filters), 91901 A Sealed Crate (left out on purpose by the catalog's filters), 91904 A Sealed Crate (left out on purpose by the catalog's filters), 91905 A Sealed Crate (left out on purpose by the catalog's filters), 91906 A Sealed Crate (left out on purpose by the catalog's filters), 96339 Legacy Reward: Replica Ironforge Air Rifle (left out on purpose by the catalog's filters), 98372 An Unfortunate End (left out on purpose by the catalog's filters), 98895 Darkspear Islands Clash (a battleground quest: its giver gives only PvP quests), 98896 Darkspear Islands Clash (a battleground quest: its giver gives only PvP quests), 99192 A Donation of Silk (left out on purpose by the catalog's filters).
 
 Every upload so far is one account's growing QuestBank.lua: what follows rests on one witness.
-Added from players' notes alone (flag 16384; required level is the lowest anyone took it at): 78088 A Strange Artifact (level 30, XP unknown, ender known), 78089 Advice From Stormwind (level 30, XP unknown, ender known), 78090 A Second Opinion (level 30, XP unknown, ender known), 78091 Earning Your Salt (level 30, XP unknown, ender known), 78092 It Must Be Destroyed (level 30, XP unknown, ender known), 78093 Return to Delgren (level 30, XP unknown, ender known), 79229 Highway Robbery (level 40, XP unknown, ender known), 79235 On the Lam (level 40, XP unknown, ender known), 79236 Cherry for Your Thoughts? (level 40, XP unknown, ender known), 79242 No Honor Among Thieves (level 40, XP unknown, ender unknown), 79624 Anyone Can Cook (level 40, 1550 XP, ender known), 79677 A Quick Grocery Run (level 40, 3150 XP, ender unknown), 87491 Spark of Freedom (level 30, 2450 XP, ender known), 88756 Bring Back a Bang (level 31, 2550 XP, ender unknown), 92432 An Alarming Request (level 33, 650 XP, ender known), 92457 Starving Arcane (level 33, 9400 XP, ender known), 92458 Heart of Disruption (level 33, 9400 XP, ender known), 92459 Friend of the Kirin Tor (level 33, 270 XP, ender known), 92743 A Conqueror's Crown (level 40, XP unknown, ender known), 92754 A New Need for Shadow Protection (level 35, XP unknown, ender unknown), 92811 Economic Warfare (level 60, XP unknown, ender known), 92818 Big, No, MASSIVE Iron Axes (level 35, XP unknown, ender unknown), 92841 Valley of Bones (level 40, XP unknown, ender known), 92844 Mountain of Bones (level 42, XP unknown, ender known), 92846 Outcast Necromancers (level 40, XP unknown, ender known), 92847 Corrupting Tears (level 42, XP unknown, ender known), 92867 Ground to Keep (level 39, 3000 XP, ender known), 92872 Dutiful Steps (level 38, 2850 XP, ender known), 92873 Proof of Concept (level 41, XP unknown, ender known), 92893 No Mercy for the Weak (level 42, XP unknown, ender known), 92894 Bone Raising (level 40, XP unknown, ender known), 93066 Bristleback Retreat (level 43, XP unknown, ender known), 93072 Long-Term Solutions (level 43, XP unknown, ender known), 93129 Threat of Starvation (level 43, XP unknown, ender known), 93176 My Little Friends (level 35, XP unknown, ender unknown), 93188 Return to Orgrul (level 43, XP unknown, ender known), 93196 Khan Jehn (level 42, XP unknown, ender known), 93224 Carved Centaur Totems (level 40, 2350 XP, ender known), 93226 Buying Friendship: Magram (level 45, XP unknown, ender known), 93227 Buying Friendship: Gelkis (level 45, XP unknown, ender unknown), 93585 This Light of Mine (level 34, XP unknown, ender known), 95534 Strahnbrad Mystery (level 36, 2800 XP, ender known), 95795 Fallen in the Fen (level 31, 6150 XP, ender known), 95809 Heartwoven (level 31, 6150 XP, ender known), 96773 The Coldbringer's Eye (level 41, 8600 XP, ender unknown), 96800 Past Due (level 38, XP unknown, ender known), 97130 Ancient Gurubashi Secrets (level 40, 10450 XP, ender unknown), 97284 Vahlarriel's Vengeance (level 33, 2650 XP, ender known), 98071 Brewer's Trade (level 27, 2200 XP, ender unknown), 98209 Bloom of the Heavens (level 29, 1200 XP, ender known), 98221 From the Ashes (level 28, 2300 XP, ender unknown), 98283 Carnage (level 30, 3050 XP, ender known), 98463 Talk of the Town (level 33, 270 XP, ender known), 98824 Prehistoric Prism (level 31, 6150 XP, ender known).
-Givers and enders filled in from what players' games showed: 78088 ender c3663, 78088 giver o409289, 78089 ender c5492, 78089 giver c3663, 78090 ender c5495, 78090 giver c5492, 78091 ender c5495, 78091 giver c5495, 78092 ender o409311, 78092 giver c5495, 78093 ender c3663, 78093 giver o409315, 79229 ender c11438, 79229 giver o417353, 79235 ender c215643, 79235 giver c11438, 79236 ender c215643, 79236 giver c215643, 79242 giver c215643, 79624 ender c217300, 79677 giver c217300, 87491 ender c1072, 87491 giver c271481, 88756 giver c1073, 92432 ender c269127, 92432 giver c247264, 92456 ender c5502, 92456 giver c5502, 92457 ender c269127, 92457 giver c269127, 92458 ender c269127, 92458 giver c269127, 92459 ender c252085, 92459 giver c269127, 92489 giver c5694, 92743 ender c5398, 92743 giver c5398, 92754 giver c253097, 92811 ender c253139, 92811 giver c253139, 92818 giver c253163, 92841 ender c253136, 92841 giver c5398, 92844 ender c253136, 92844 giver c253136, 92846 ender c253136, 92846 giver c253136, 92847 ender c253136, 92847 giver c253136, 92867 ender c219, 92872 ender c2782, 92872 giver c2782, 92873 ender c253136, 92873 giver c253136, 92893 ender c253136, 92893 giver c253136, 92894 ender c253136, 92894 giver c253136, 93066 ender c253851, 93066 giver c253136, 93072 ender c253851, 93072 giver c253851, 93129 ender c253851, 93129 giver c253851, 93176 giver c217412, 93188 ender c253136, 93188 giver c253851, 93196 ender c254357, 93196 giver c253136, 93224 ender c5396, 93224 giver c5396, 93226 ender c253139, 93226 giver c5396, 93227 giver c5396, 93585 ender c1776, 93585 giver c255597, 95534 ender c2378, 95646 ender c1244, 95646 giver c1244, 95647 giver c1480, 95772 giver c956, 95795 ender c956, 95999 giver o649051, 96773 giver c20735, 96800 ender c264265, 97130 giver c31439, 97279 ender c3159, 97279 giver c3143, 97284 giver c5642, 98071 giver c2705, 98072 giver c2094, 98208 ender c270844, 98208 giver c270844, 98209 giver c270844, 98221 giver c2104, 98245 giver c270637, 98246 giver c270637, 98283 giver c1244, 98293 giver o672330, 98463 ender c2832, 98463 giver c2366, 98575 giver c3143, 98815 ender c2094, 98815 giver c2094, 98824 giver c1077, 99191 giver c276170.
-NPC positions from players' games (the spot where they stood, a few yards off): 249 agree with the catalog within 25 yd (median 3.5 yd); 7 moved to where the game saw them: npc 576 by 40 yd, npc 1481 by 55 yd, npc 1721 by 38 yd, npc 5082 by 106 yd, npc 14842 by 69 yd, npc 15351 by 4015 yd, npc 15991 by 41 yd; 31 placed from the game alone: npc 219, npc 956, npc 2832, npc 3159, npc 5502, npc 20735, npc 31439, npc 215643, npc 217300, npc 217412, npc 247264, npc 252085, npc 253097, npc 253136, npc 253139, npc 253163, npc 253851, npc 254357, npc 255597, npc 264265, npc 269127, npc 270637, npc 270844, npc 271481, npc 276170, object 409289, object 409311, object 409315, object 417353, object 649051, object 672330.
-Quest reward items: wowhead 1994, unknown 704, game survey 444, classic 396, game 334, loot pages 71.
-Quest survey (QuestBank asks the game by quest id, out of combat, a couple a second): 3613 ids on the list (993 new Forever ids, 1100 catalog quests with no Forever rewards known, 1517 other ids in the client's quest table, and 6 Bounty on Garrick Padfoot, 8 A Rogue's Deal, 14 The People's Militia to check the game's answers against Wowhead's lists); 761 quests read by players, 444 of the catalog's took their rewards from it, 73 not in the catalog are in the finders as "Seen in game" (listed at the end); the game never answered about 3311 ids.
-Rewards taken from the dungeon loot pages where Wowhead lists none (71): 704 Agmond's Fate, 709 Solution to Doom, 1048 Into The Scarlet Monastery, 1049 Compendium of the Fallen, 1053 In the Name of the Light, 1139 The Lost Tablets of Will, 1445 The Temple of Atal'Hakkar, 1446 Jammal'an the Prophet, 1475 Into The Temple of Atal'Hakkar, 2240 The Hidden Chamber, 2341 Necklace Recovery, Take 3, 2768 Divino-matic Rod, 2770 Gahz'rilla, 2846 Tiara of the Deep, 3341 Bring the End, 3447 Secret of the Circle, 3525 Extinguishing the Idol, 3528 The God Hakkar, 3636 Bring the Light, 3907 Disharmony of Fire, 4004 The Princess Saved?, 4126 Hurley Blackbreath, 4132 Operation: Death to Angerforge, 4134 Lost Thunderbrew Recipe, 4136 Ribbly Screwspigot, 4201 The Love Potion, 4242 Abandoned Hope, 4263 Incendius!, 4286 The Good Stuff, 4322 Jail Break!, 4363 The Princess's Surprise, 4701 Put Her Down, 4724 The Pack Mistress, 4729 Kibler's Exotic Pets, 4765 Delivery to Ridgewell, 4771 Dawn's Gambit, 4862 En-Ay-Es-Tee-Why, 4866 Mother's Milk, 4867 Urok Doomhowl, 4903 Warlord's Command, 4983 Bijou's Reconnaissance Report, 5081 Maxwell's Mission, 5125 Aurius' Reckoning, 5127 The Demon Forge, 5213 The Active Agent, 5214 The Great Fras Siabi, 5243 Houses of the Holy, 5384 Kirtonos the Herald, 5466 The Lich, Ras Frostwhisper, 5518 The Gordok Ogre Suit, 5526 Shards of the Felvine, 6163 Ramstein, 7028 Twisted Evils, 7046 The Scepter of Celebras, 7067 The Pariah's Instructions, 7201 The Last Element, 7441 Pusillin and the Elder Azj'Tordin, 7498 Garona: A Study on Stealth and Treachery, 7499 Codex of Defense, 7500 The Arcanist's Cookbook, 7501 The Light and How To Swing It, 7502 Harnessing Shadows, 7503 The Greatest Race of Hunters, 7504 Holy Bologna: What the Light Won't Tell You, 7505 Frost Shock and You, 7506 The Emerald Dream..., 7703 Unfinished Gordok Business, 8413 Da Voodoo, 8425 Voodoo Feathers, 8945 Dead Man's Plea, 8949 Falrin's Vendetta.
+Added from players' notes alone (flag 16384; required level is the lowest anyone took it at): 1661 The Tome of Nobility (level 40, XP unknown, ender known), 78088 A Strange Artifact (level 30, XP unknown, ender known), 78089 Advice From Stormwind (level 30, XP unknown, ender known), 78090 A Second Opinion (level 30, XP unknown, ender known), 78091 Earning Your Salt (level 30, XP unknown, ender known), 78092 It Must Be Destroyed (level 30, XP unknown, ender known), 78093 Return to Delgren (level 30, XP unknown, ender known), 79229 Highway Robbery (level 40, 1550 XP, ender known), 79235 On the Lam (level 40, 1550 XP, ender known), 79236 Cherry for Your Thoughts? (level 40, 1550 XP, ender known), 79242 No Honor Among Thieves (level 40, XP unknown, ender unknown), 79624 Anyone Can Cook (level 40, 1550 XP, ender known), 79677 A Quick Grocery Run (level 40, 3150 XP, ender unknown), 87491 Spark of Freedom (level 30, 2450 XP, ender known), 88756 Bring Back a Bang (level 31, 2550 XP, ender unknown), 92432 An Alarming Request (level 33, 650 XP, ender known), 92457 Starving Arcane (level 33, 9400 XP, ender known), 92458 Heart of Disruption (level 33, 9400 XP, ender known), 92459 Friend of the Kirin Tor (level 33, 270 XP, ender known), 92743 A Conqueror's Crown (level 40, 3150 XP, ender known), 92754 A New Need for Shadow Protection (level 35, 2050 XP, ender unknown), 92811 Economic Warfare (level 60, XP unknown, ender known), 92818 Big, No, MASSIVE Iron Axes (level 35, 2050 XP, ender unknown), 92841 Valley of Bones (level 40, 320 XP, ender known), 92844 Mountain of Bones (level 42, 3450 XP, ender known), 92846 Outcast Necromancers (level 40, 2350 XP, ender known), 92847 Corrupting Tears (level 42, 3450 XP, ender known), 92867 Ground to Keep (level 39, 3000 XP, ender known), 92872 Dutiful Steps (level 38, 2850 XP, ender known), 92873 Proof of Concept (level 41, 2450 XP, ender known), 92893 No Mercy for the Weak (level 42, 2550 XP, ender known), 92894 Bone Raising (level 40, 2350 XP, ender known), 92914 Strange Pylons (level 43, 3600 XP, ender known), 93066 Bristleback Retreat (level 43, 3600 XP, ender known), 93072 Long-Term Solutions (level 43, 3600 XP, ender known), 93129 Threat of Starvation (level 43, 1800 XP, ender known), 93176 My Little Friends (level 35, XP unknown, ender unknown), 93188 Return to Orgrul (level 43, 370 XP, ender known), 93196 Khan Jehn (level 42, 3450 XP, ender known), 93224 Carved Centaur Totems (level 40, 2350 XP, ender known), 93226 Buying Friendship: Magram (level 45, 390 XP, ender known), 93227 Buying Friendship: Gelkis (level 45, XP unknown, ender unknown), 93574 Corpsefeeder's Carapace (level 45, 4850 XP, ender known), 93585 This Light of Mine (level 34, XP unknown, ender known), 93644 Tattered Journal (level 45, 3900 XP, ender known), 94613 My Kingdom for a Horse (level 38, 290 XP, ender known), 94614 Freshwater Fiends (level 38, 2850 XP, ender known), 94615 Foal Play (level 38, 1450 XP, ender known), 94617 Coyote Huntin' (level 38, 2850 XP, ender known), 94618 Wheeler's Fleeing Steeds (level 38, 1450 XP, ender known), 94829 What We Lost (level 40, 2350 XP, ender known), 94841 Lost Shipping Crate (level 38, 290 XP, ender known), 94842 Unsavory Plant Food (level 38, 2850 XP, ender known), 94843 From Seed to Sprout (level 38, 2150 XP, ender known), 94858 All That's Left (level 40, 2350 XP, ender known), 94877 Saving Sunnyglade (level 40, 3150 XP, ender known), 94879 Scraps of Knowledge (level 40, 3150 XP, ender known), 94881 Curious Trinkets (level 38, 2850 XP, ender known), 94884 An Unsettling Discovery (level 41, 1700 XP, ender known), 94885 Field Marshal's Log (level 40, 3150 XP, ender known), 94886 The Western Front (level 44, 380 XP, ender known), 94887 Saving Marshal Ryan (level 47, 2100 XP, ender known), 94888 No Soldier Left Behind (level 44, 3750 XP, ender known), 94889 Carving a Path (level 44, 3750 XP, ender known), 94890 Bring Me His Head (level 46, 5050 XP, ender known), 94891 News to Farholde (level 46, 4050 XP, ender known), 94892 Dying Wish (level 47, 4200 XP, ender known), 94893 Delivering Closure (level 47, 4200 XP, ender unknown), 94894 The Twilight Threat (level 45, 4850 XP, ender known), 94907 A Small Favor (level 44, 3750 XP, ender known), 94924 Hunting the Hunters (level 39, 3000 XP, ender known), 94925 A Fur Trade (level 39, 3000 XP, ender known), 94926 Drop the Hammer (level 45, 4850 XP, ender known), 94927 Dunston Checks Out (level 44, 4650 XP, ender known), 94928 A Few Furs for Friz (level 39, 300 XP, ender known), 94931 Stolen Saws (level 38, 2850 XP, ender known), 94961 Biting the Hand (level 40, 2350 XP, ender known), 94963 Biting the Hand (level 40, 3150 XP, ender unknown), 94982 Eye of Mugg (level 45, 11500 XP, ender unknown), 94983 Twilight Mementos (level 42, 10200 XP, ender unknown), 94984 Tome of Twilight (level 44, 11050 XP, ender unknown), 94992 Rescue Roundup (level 38, XP unknown, ender known), 95059 Frazzlespark's Crate (level 36, 280 XP, ender known), 95064 Preventative Measures (level 39, 3000 XP, ender known), 95066 The Rog'mar Situation (level 39, 1500 XP, ender known), 95118 Saltwater Savages (level 41, 3300 XP, ender known), 95119 Unfriendly Competition (level 43, 3600 XP, ender known), 95120 WANTED: Old Rot-Chum (level 42, 4300 XP, ender known), 95121 A Taste of the Sea (level 40, 3150 XP, ender known), 95122 Unchecked Expansion (level 44, 3750 XP, ender known), 95123 A Blast Ye Scurvy Dogs! (level 44, 3750 XP, ender known), 95124 Admiral Lamora (level 45, 3900 XP, ender known), 95156 Stuff 'Em and Stick 'Em (level 37, 2100 XP, ender known), 95165 See Ya, Scallywags! (level 44, 3750 XP, ender known), 95184 The Sharpest of Blades (level 38, 2850 XP, ender unknown), 95219 From Port to Port (level 41, 330 XP, ender unknown), 95254 WANTED: Trapclaw (level 42, 3450 XP, ender known), 95260 Terrors From the Deep (level 42, 360 XP, ender known), 95261 It Takes Guts (level 42, 3450 XP, ender known), 95267 The Monster Surfaces (level 42, 3450 XP, ender known), 95288 Smuggler's Paradise (level 43, 3600 XP, ender known), 95293 Smuggler's Special (level 42, 1700 XP, ender known), 95329 Out in the Field (level 38, 290 XP, ender known), 95330 Love Thy Neighbor (level 37, 290 XP, ender known), 95384 Partial Mystical Notes (level 40, 3150 XP, ender known), 95426 Rog'mar Supplies (level 39, 3000 XP, ender known), 95534 Strahnbrad Mystery (level 36, 2800 XP, ender known), 95561 Apple of My Eye (level 38, 1450 XP, ender known), 95562 Cut Off the Heads (level 41, 3300 XP, ender known), 95603 Bats in the Belfry (level 38, 2150 XP, ender known), 95613 Keeping the Light On (level 38, 2150 XP, ender known), 95615 In Memoriam (level 38, 2150 XP, ender known), 95642 Abominable Magics (level 40, 3150 XP, ender known), 95643 Indiscriminate Purge (level 40, 3150 XP, ender known), 95786 An Acquaintance in Southshore (level 40, 3150 XP, ender known), 95787 Take Two With Water (level 40, 8450 XP, ender known), 95788 Magics of the Drowned City (level 40, 8450 XP, ender known), 95789 Shady Saltseers (level 40, 10450 XP, ender known), 95791 The Saltseer Captain (level 40, 10450 XP, ender known), 95795 Fallen in the Fen (level 31, 6150 XP, ender known), 95798 The Web of Magic (level 40, 2350 XP, ender known), 95799 Findings for the Explorer's League (level 40, 2350 XP, ender known), 95809 Heartwoven (level 31, 6150 XP, ender known), 95912 WANTED: Blademaster Kaijo (level 42, 4300 XP, ender known), 95913 Fit for a Princess (level 38, 2850 XP, ender known), 95943 Foreman's Plight (level 38, 2150 XP, ender known), 95957 Drink Up! (level 38, 290 XP, ender known), 95961 Stepped Out (level 38, 290 XP, ender known), 95975 Her World (level 41, 3300 XP, ender known), 95982 Not My Circus (level 38, 2850 XP, ender unknown), 95983 A Feast for Buzzards (level 38, 700 XP, ender known), 95984 Song of the Strider (level 39, 3000 XP, ender known), 95986 King of the Wild Plains (level 41, 3300 XP, ender known), 95988 Goes Down Smooth (level 38, 2850 XP, ender known), 95991 WANTED: Ghostmaw (level 42, 4300 XP, ender known), 96009 High Stakes (level 38, 2150 XP, ender known), 96010 Fragments of the Pylons (level 41, 2450 XP, ender known), 96015 A Miner Problem (level 43, 3600 XP, ender known), 96018 Powering the Pylons (level 43, 3600 XP, ender unknown), 96063 Gaseous Gold (level 38, 2850 XP, ender known), 96067 Rock 'em and Sock 'em (level 40, 2350 XP, ender known), 96081 Wound Dressings (level 40, 1550 XP, ender known), 96082 Doctor's Orderly (level 40, 1550 XP, ender known), 96083 Clerical Quarantine (level 40, 320 XP, ender known), 96084 Something's in the Water (level 40, 3150 XP, ender known), 96085 Upstream Contamination (level 42, 4300 XP, ender known), 96125 In Need of Relief (level 43, 370 XP, ender known), 96126 An Ogre's Captive (level 44, 3750 XP, ender known), 96222 Khan Hratha (level 42, 4300 XP, ender known), 96770 The Witch Doctor's Head (level 46, 10100 XP, ender unknown), 96771 Vengeance of the Highborne (level 45, 11500 XP, ender unknown), 96773 The Coldbringer's Eye (level 41, 8600 XP, ender known), 96800 Past Due (level 38, 6750 XP, ender known), 97130 Ancient Gurubashi Secrets (level 40, 10450 XP, ender known), 97284 Vahlarriel's Vengeance (level 33, 2650 XP, ender known), 98071 Brewer's Trade (level 27, 2200 XP, ender unknown), 98155 Pristine Pesterhide Pelts (level 29, 2350 XP, ender known), 98209 Bloom of the Heavens (level 29, 1200 XP, ender known), 98221 From the Ashes (level 28, 2300 XP, ender unknown), 98283 Carnage (level 30, 3050 XP, ender known), 98463 Talk of the Town (level 33, 270 XP, ender known), 98824 Prehistoric Prism (level 31, 6150 XP, ender known).
+Givers and enders filled in from what players' games showed: 78088 ender c3663, 78088 giver o409289, 78089 ender c5492, 78089 giver c3663, 78090 ender c5495, 78090 giver c5492, 78091 ender c5495, 78091 giver c5495, 78092 ender o409311, 78092 giver c5495, 78093 ender c3663, 78093 giver o409315, 79229 ender c11438, 79229 giver o417353, 79235 ender c215643, 79235 giver c11438, 79236 ender c215643, 79236 giver c215643, 79242 giver c215643, 79624 ender c217300, 79677 giver c217300, 87491 ender c1072, 87491 giver c271481, 88756 giver c1073, 92432 ender c269127, 92432 giver c247264, 92456 ender c5502, 92456 giver c5502, 92457 ender c269127, 92457 giver c269127, 92458 ender c269127, 92458 giver c269127, 92459 ender c252085, 92459 giver c269127, 92489 giver c5694, 92743 ender c5398, 92743 giver c5398, 92754 giver c253097, 92811 ender c253139, 92811 giver c253139, 92818 giver c253163, 92841 ender c253136, 92841 giver c5398, 92844 ender c253136, 92844 giver c253136, 92846 ender c253136, 92846 giver c253136, 92847 ender c253136, 92847 giver c253136, 92867 ender c219, 92872 ender c2782, 92872 giver c2782, 92873 ender c253136, 92873 giver c253136, 92893 ender c253136, 92893 giver c253136, 92894 ender c253136, 92894 giver c253136, 92914 ender c253471, 92914 giver o577959, 93066 ender c253851, 93066 giver c253136, 93072 ender c253851, 93072 giver c253851, 93129 ender c253851, 93129 giver c253851, 93176 giver c217412, 93188 ender c253136, 93188 giver c253851, 93196 ender c254357, 93196 giver c253136, 93224 ender c5396, 93224 giver c5396, 93226 ender c253139, 93226 giver c5396, 93227 giver c5396, 93574 ender c253527, 93585 ender c1776, 93585 giver c255597, 93644 ender c253471, 94613 ender c258317, 94613 giver c257558, 94614 ender c258317, 94614 giver c258317, 94615 ender c258317, 94615 giver c258317, 94617 ender c258317, 94617 giver c258317, 94618 ender c259254, 94618 giver c258317, 94829 ender c258697, 94829 giver c258697, 94841 ender c255897, 94841 giver o656789, 94842 ender c256438, 94842 giver c256438, 94843 ender c256438, 94843 giver c256438, 94858 ender c258697, 94858 giver c258697, 94877 ender c257558, 94877 giver c257558, 94879 ender c257591, 94879 giver c257591, 94881 ender c257591, 94881 giver c257591, 94884 ender c257591, 94884 giver c256831, 94885 ender c257558, 94886 ender c258023, 94886 giver c257558, 94887 ender c257250, 94887 giver c257558, 94888 ender c258023, 94888 giver c258023, 94889 ender c258023, 94889 giver c258023, 94890 ender c258023, 94890 giver c258023, 94891 ender c257591, 94891 giver c258023, 94892 ender c257558, 94892 giver c257250, 94893 giver c257558, 94894 ender c1748, 94894 giver c257558, 94907 ender c257591, 94907 giver c257591, 94924 ender c259352, 94924 giver c259352, 94925 ender c259352, 94925 giver c259352, 94926 ender c257558, 94927 ender c259352, 94927 giver c259057, 94928 ender c255897, 94928 giver c259352, 94931 ender c256438, 94931 giver c256438, 94961 ender c259158, 94961 giver c259158, 94963 giver c259158, 94982 giver c257558, 94983 giver c258023, 94984 giver c257591, 94992 ender c258317, 94992 giver c259254, 95059 ender c257558, 95059 giver c255897, 95064 ender c259352, 95064 giver c259352, 95066 ender c257558, 95066 giver c259352, 95118 ender c259961, 95118 giver c259961, 95119 ender c259961, 95119 giver c259961, 95120 ender c259961, 95120 giver o628948, 95121 ender c259962, 95121 giver c259962, 95122 ender c259961, 95122 giver c259961, 95123 ender c259961, 95123 giver c259961, 95124 ender c259961, 95124 giver c259961, 95156 ender c260080, 95156 giver c260080, 95165 ender c259961, 95165 giver c259961, 95184 giver c260080, 95219 giver c255897, 95254 ender c259962, 95254 giver o628948, 95260 ender c260231, 95260 giver o629761, 95261 ender c260231, 95261 giver c260231, 95267 ender c260231, 95267 giver c260231, 95288 ender c255897, 95288 giver c255897, 95293 ender c260390, 95293 giver c255897, 95329 ender c259352, 95329 giver c257558, 95330 ender c256438, 95330 giver c259863, 95384 ender c260873, 95426 ender c259352, 95426 giver c259352, 95534 ender c2378, 95561 ender c263089, 95561 giver c263089, 95562 ender c256831, 95562 giver c256831, 95603 ender c262031, 95603 giver c262031, 95613 ender c262031, 95613 giver c262031, 95615 ender c262031, 95615 giver c262031, 95642 ender c256831, 95642 giver c256831, 95643 ender c256831, 95643 giver c256831, 95646 ender c1244, 95646 giver c1244, 95647 giver c1480, 95772 giver c956, 95786 ender c2277, 95786 giver c739, 95787 ender c2277, 95787 giver c2277, 95788 ender c2277, 95788 giver c2277, 95789 ender c773, 95789 giver c773, 95791 ender c773, 95791 giver c773, 95795 ender c956, 95798 ender c252019, 95798 giver c2277, 95799 ender c2916, 95799 giver c2277, 95912 ender c260080, 95912 giver o707245, 95913 ender c263089, 95913 giver c263089, 95943 ender c260070, 95943 giver c260070, 95957 ender c263120, 95957 giver c255894, 95961 ender c263120, 95961 giver c263089, 95975 ender c263089, 95975 giver c263120, 95982 giver c260540, 95983 ender c259352, 95983 giver c263316, 95984 ender c259352, 95984 giver c259352, 95986 ender c259352, 95986 giver c259352, 95988 ender c255894, 95988 giver c255894, 95991 ender c259859, 95991 giver o645166, 95999 giver o649051, 96009 ender c260070, 96009 giver c260070, 96010 ender c253471, 96010 giver c253471, 96015 ender c258023, 96015 giver c258023, 96018 giver c253471, 96063 ender c263367, 96063 giver c263367, 96067 ender c263367, 96067 giver c263367, 96081 ender c263613, 96081 giver c263613, 96082 ender c263613, 96082 giver c263613, 96083 ender c262031, 96083 giver c263613, 96084 ender c262031, 96084 giver c262031, 96085 ender c262031, 96085 giver c262031, 96125 ender c259057, 96125 giver c259352, 96126 ender c259057, 96126 giver c259057, 96222 ender c253066, 96770 giver c20735, 96771 giver c268425, 96773 ender c20735, 96773 giver c20735, 96800 ender c264265, 97130 ender c31439, 97130 giver c31439, 97279 ender c3159, 97279 giver c3143, 97284 giver c5642, 98071 giver c2705, 98072 giver c2094, 98155 giver c11826, 98208 ender c270844, 98208 giver c270844, 98209 giver c270844, 98221 giver c2104, 98245 giver c270637, 98246 giver c270637, 98283 giver c1244, 98293 giver o672330, 98463 ender c2832, 98463 giver c2366, 98575 giver c3143, 98815 ender c2094, 98815 giver c2094, 98824 giver c1077, 99191 giver c276170.
+NPC positions from players' games (the spot where they stood, a few yards off): 284 agree with the catalog within 25 yd (median 3.5 yd); 11 moved to where the game saw them: npc 576 by 40 yd, npc 840 by 213 yd, npc 1481 by 55 yd, npc 1721 by 38 yd, npc 4947 by 81 yd, npc 4967 by 454 yd, npc 4968 by 1405 yd, npc 5082 by 106 yd, npc 14842 by 69 yd, npc 15351 by 4015 yd, npc 15991 by 41 yd; 72 placed from the game alone: npc 219, npc 956, npc 2832, npc 3159, npc 5502, npc 20735, npc 31439, npc 215643, npc 217300, npc 217412, npc 247264, npc 252019, npc 252085, npc 253066, npc 253097, npc 253136, npc 253139, npc 253163, npc 253471, npc 253527, npc 253851, npc 254357, npc 255597, npc 255894, npc 255897, npc 256438, npc 256831, npc 257250, npc 257558, npc 257591, npc 258023, npc 258317, npc 258697, npc 259057, npc 259158, npc 259254, npc 259352, npc 259859, npc 259863, npc 259961, npc 259962, npc 260070, npc 260080, npc 260231, npc 260390, npc 260540, npc 260873, npc 262031, npc 263089, npc 263120, npc 263316, npc 263367, npc 263613, npc 264265, npc 268425, npc 269127, npc 270637, npc 270844, npc 271481, npc 276170, object 409289, object 409311, object 409315, object 417353, object 577959, object 628948, object 629761, object 645166, object 649051, object 656789, object 672330, object 707245.
+Quest reward items: wowhead 1961, game survey 1178, game 510, classic 196, unknown 140, loot pages 66.
+Quest survey (QuestBank asks the game by quest id, out of combat, a couple a second): 2757 ids on the list (902 new Forever ids, 336 catalog quests with no Forever rewards known, 1516 other ids in the client's quest table, and 6 Bounty on Garrick Padfoot, 8 A Rogue's Deal, 14 The People's Militia to check the game's answers against Wowhead's lists); 2127 quests read by players, 1178 of the catalog's took their rewards from it, 220 not in the catalog are in the finders as "Seen in game" (listed at the end); the game never answered about 1945 ids.
+Rewards taken from the dungeon loot pages where Wowhead lists none (66): 704 Agmond's Fate, 1048 Into The Scarlet Monastery, 1049 Compendium of the Fallen, 1139 The Lost Tablets of Will, 1445 The Temple of Atal'Hakkar, 1446 Jammal'an the Prophet, 1475 Into The Temple of Atal'Hakkar, 2341 Necklace Recovery, Take 3, 2768 Divino-matic Rod, 2770 Gahz'rilla, 2846 Tiara of the Deep, 3341 Bring the End, 3447 Secret of the Circle, 3528 The God Hakkar, 3907 Disharmony of Fire, 4004 The Princess Saved?, 4126 Hurley Blackbreath, 4132 Operation: Death to Angerforge, 4134 Lost Thunderbrew Recipe, 4136 Ribbly Screwspigot, 4201 The Love Potion, 4242 Abandoned Hope, 4263 Incendius!, 4286 The Good Stuff, 4322 Jail Break!, 4363 The Princess's Surprise, 4701 Put Her Down, 4724 The Pack Mistress, 4729 Kibler's Exotic Pets, 4765 Delivery to Ridgewell, 4771 Dawn's Gambit, 4862 En-Ay-Es-Tee-Why, 4866 Mother's Milk, 4867 Urok Doomhowl, 4903 Warlord's Command, 4983 Bijou's Reconnaissance Report, 5081 Maxwell's Mission, 5125 Aurius' Reckoning, 5127 The Demon Forge, 5213 The Active Agent, 5214 The Great Fras Siabi, 5243 Houses of the Holy, 5384 Kirtonos the Herald, 5466 The Lich, Ras Frostwhisper, 5518 The Gordok Ogre Suit, 5526 Shards of the Felvine, 6163 Ramstein, 7028 Twisted Evils, 7046 The Scepter of Celebras, 7067 The Pariah's Instructions, 7201 The Last Element, 7441 Pusillin and the Elder Azj'Tordin, 7498 Garona: A Study on Stealth and Treachery, 7499 Codex of Defense, 7500 The Arcanist's Cookbook, 7501 The Light and How To Swing It, 7502 Harnessing Shadows, 7503 The Greatest Race of Hunters, 7504 Holy Bologna: What the Light Won't Tell You, 7505 Frost Shock and You, 7506 The Emerald Dream..., 7703 Unfinished Gordok Business, 8413 Da Voodoo, 8425 Voodoo Feathers, 8945 Dead Man's Plea, 8949 Falrin's Vendetta.
 Quest levels as the game's quest log shows them, where the catalog had another: 472 Fall of Dun Modr 25 -> 30, 92747 Moonbrook Espionage 16 -> 15.
 Sides corrected by what the game showed an Alliance character: 79362 Grant's Shield, 92706 WANTED: Bruuz; 79362's Alliance ender is c268 (Darkshire), the Horde one stays Wowhead's, and Paladins take it as Shamans do.
 Chain steps players' games suggest for quests with no known chain, not taken (the window of the next quest opened at the same NPC within 8 s of a hand-in, which a reopened quest also does): 275>95646, 282>96628, 4641>97279, 484>98815, 92744>92745, 92745>92747, 92747>92748, 92748>92749, 92748>92750, 92750>92751, 92751>92752, 92752>92753, 95809>98282, 96608>96046, 96608>96629, 96628>96608, 99159>99160, 99159>99162.
@@ -50,7 +50,7 @@ Written by hand where no list we read has the quest yet (each fact's source is i
 Blizzard's notes of 2026-10-08: the new Gelkis and Magram quests "beginning with Valley of Bones" need level 35 (was 30), where the catalog had the level players took them at before that build (flag 32768): 92841 Valley of Bones, 92844 Mountain of Bones, 92846 Outcast Necromancers, 92847 Corrupting Tears, 92873 Proof of Concept, 92893 No Mercy for the Weak, 92894 Bone Raising, 93066 Bristleback Retreat, 93072 Long-Term Solutions, 93129 Threat of Starvation, 93188 Return to Orgrul, 93196 Khan Jehn.
 Changed in the 8 October build and not read since, which the tooltip says (Blizzard's notes): 502 Elixir of Pain (its XP), 91282 A Second Home (its level), 91285 Murlocs at the Gates (its level), 91294 Touring the Grounds (its level), 91316 Making Repairs (its level), 91317 The Tarnished (its level), 91858 Diplomatic Incident (its level), 94427 A Lesson in Divinity (its level), 94435 A Lesson in Divinity (its level), 94436 A Lesson in Divinity (its level), 94438 A Lesson in Divinity (its level), 94440 A Lesson in Divinity (its level), 94441 A Lesson in Divinity (its level), 95803 A Token of Good Faith (its level), 96896 A Righteous Cause (its level), 96899 Bandarion Keep (its level), 98545 Leonid's Letter (its level), 99152 As Above, So Below (its level), 99153 The One That Got Away (its level).
 Quests that share one completion bit in the client (QuestV2, build 1.60.1.70291: doing one marks the others done), ruled out against each other: 108 groups, 430 quests; 292 of them weren't paired by the Classic database. Shared since this build: 1516 Call of Earth, 1519 Call of Earth, 92466 Call of Earth, 94373 Call of Earth; 1517 Call of Earth, 1520 Call of Earth, 92467 Call of Earth, 94374 Call of Earth; 1518 Call of Earth, 1521 Call of Earth, 92468 Call of Earth, 94375 Call of Earth. Class taken from same-named twins: 6721 The Hunter's Path, 6722 The Hunter's Path, 92466 Call of Earth, 92467 Call of Earth, 92468 Call of Earth, 94013 Taming the Beast, 97243 Call of Fire.
-Forever quests looked for on 2026-10-08 (lookfor.json, 67): 18 in the catalog (87491 Spark of Freedom, 92432 An Alarming Request, 92456 A Green Sample, 92457 Starving Arcane, 92458 Heart of Disruption, 92459 Friend of the Kirin Tor, 92489 Power Overwhelming, 92754 A New Need for Shadow Protection, 92818 Big, No, MASSIVE Iron Axes, 95795 Fallen in the Fen, 96986 The Grave Knight, 96987 Opportunistic Education, 96988 Source of Power, 97284 Vahlarriel's Vengeance, 98071 Brewer's Trade, 98463 Talk of the Town, 98824 Prehistoric Prism, 99411 Kyle's Gone Missing!); 49 not yet. A quest's level, side, NPCs and XP come from its Wowhead Forever page, which turns scripts away since 2026-10-04, or from players' games: these come in as soon as someone's QuestBank sees them.
+Forever quests looked for on 2026-10-08 (lookfor.json, 67): 19 in the catalog (87491 Spark of Freedom, 92432 An Alarming Request, 92456 A Green Sample, 92457 Starving Arcane, 92458 Heart of Disruption, 92459 Friend of the Kirin Tor, 92489 Power Overwhelming, 92754 A New Need for Shadow Protection, 92818 Big, No, MASSIVE Iron Axes, 95795 Fallen in the Fen, 96986 The Grave Knight, 96987 Opportunistic Education, 96988 Source of Power, 97284 Vahlarriel's Vengeance, 98071 Brewer's Trade, 98155 Pristine Pesterhide Pelts, 98463 Talk of the Town, 98824 Prehistoric Prism, 99411 Kyle's Gone Missing!); 48 not yet. A quest's level, side, NPCs and XP come from its Wowhead Forever page, which turns scripts away since 2026-10-04, or from players' games: these come in as soon as someone's QuestBank sees them.
 
 - 908 Amongst the Ruins: shares its completion bit with 6921 Amongst the Ruins, which the catalog has (the game marks both done together); Wowhead Forever lists it (level 27, needs 25, Ashenvale) with no giver or ender, and no player has met it
 - 909 Baron Aquanis: shares its completion bit with 6922 Baron Aquanis, which the catalog has (the game marks both done together); Wowhead Forever lists it (level 30, needs 25, Ashenvale) with no giver or ender, and no player has met it
@@ -88,7 +88,6 @@ Forever quests looked for on 2026-10-08 (lookfor.json, 67): 18 in the catalog (8
 - 98059 Hillsbrad's Hoard: in the client and on Wowhead's tooltips, no level, side or NPC yet
 - 98069 Stolen Freewind Supplies: in the client and on Wowhead's tooltips, no level, side or NPC yet
 - 98070 Stop the Screeching: in the client and on Wowhead's tooltips, no level, side or NPC yet
-- 98155 Pristine Pesterhide Pelts: in the client and on Wowhead's tooltips, no level, side or NPC yet
 - 98156 Packaged Pristine Pelts: in the client and on Wowhead's tooltips, no level, side or NPC yet
 - 98216 Understanding Our Present: in the client and on Wowhead's tooltips, no level, side or NPC yet
 - 98223 Old Habits: in the client and on Wowhead's tooltips, no level, side or NPC yet
@@ -105,7 +104,7 @@ Forever quests looked for on 2026-10-08 (lookfor.json, 67): 18 in the catalog (8
 Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both have a number, they disagree on 0:
 
 
-## Forever data: multiplier not read (210)
+## Forever data: multiplier not read (237)
 
 - 7 Kobold Camp Cleanup (level 2, Alliance)
 - 15 Investigate Echo Ridge (level 3, Alliance)
@@ -115,9 +114,13 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 179 Dwarven Outfitters (level 1, Alliance)
 - 182 The Troll Cave (level 4, Alliance)
 - 183 The Boar Hunter (level 3, Alliance)
+- 205 Troll Witchery (level 40, Alliance)
+- 207 Kurzen's Mystery (level 38, Alliance)
+- 210 Krazek's Cookery (level 37, Alliance)
 - 213 Hostile Takeover (level 36, both)
 - 233 Coldridge Valley Mail Delivery (level 3, Alliance)
 - 234 Coldridge Valley Mail Delivery (level 4, Alliance)
+- 261 Down the Scarlet Path (level 39, Alliance)
 - 332 Wine Shop Advert (level 2, Alliance)
 - 333 Harlan Needs a Resupply (level 2, Alliance)
 - 334 Package for Thurman (level 2, Alliance)
@@ -136,11 +139,15 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 537 Dark Council (level 40, Alliance)
 - 543 The Perenolde Tiara (level 40, Alliance)
 - 568 The Defense of Grom'gol (level 36, Horde)
+- 574 Special Forces (level 38, Alliance)
 - 577 Some Assembly Required (level 36, both)
+- 578 The Stone of the Tides (level 37, Alliance)
 - 606 Scaring Shaky (level 41, both)
 - 607 Return to MacKinley (level 41, both)
 - 609 Voodoo Dues (level 44, both)
 - 613 Cracking Maury's Foot (level 44, both)
+- 616 The Haunted Isle (level 37, Alliance)
+- 621 Zanzil's Secret (level 44, both)
 - 660 Hints of a New Plague? (level 37, Alliance)
 - 663 Land Ho! (level 35, both)
 - 684 Wanted!  Marez Cowl (level 39, Alliance)
@@ -163,12 +170,24 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 789 Sting of the Scorpid (level 3, Horde)
 - 792 Vile Familiars (level 4, Horde)
 - 916 Webwood Venom (level 4, Alliance)
+- 1052 Down the Scarlet Path (level 40, Alliance)
 - 1133 Journey to Astranaar (level 20, Alliance)
 - 1177 Hungry! (level 36, both)
+- 1204 Mudrock Soup and Bugs (level 38, Alliance)
 - 1252 Lieutenant Paval Reethe (level 40, Alliance)
+- 1258 ... and Bugs (level 40, Alliance)
+- 1259 Lieutenant Paval Reethe (level 40, Alliance)
+- 1267 The Missing Diplomat (level 38, Alliance)
+- 1285 Daelin's Men (level 38, Alliance)
+- 1286 The Deserters (level 38, Alliance)
+- 1287 The Deserters (level 38, Alliance)
+- 1324 The Missing Diplomat (level 38, Alliance)
 - 1392 Noboru the Cudgel (level 39, both)
 - 1396 Encroaching Wildlife (level 37, Alliance)
+- 1448 In Search of The Temple (level 43, Alliance)
 - 1454 The Karnitol Shipwreck (level 39, Alliance)
+- 1455 The Karnitol Shipwreck (level 39, Alliance)
+- 1456 The Karnitol Shipwreck (level 39, Alliance)
 - 1470 Piercing the Veil (level 3, Horde)
 - 1485 Vile Familiars (level 4, Horde)
 - 1499 Vile Familiars (level 4, Horde)
@@ -181,12 +200,15 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 1598 The Stolen Tome (level 4, Alliance)
 - 1599 Beginnings (level 4, Alliance)
 - 1796 Components for the Enchanted Gold Bloodrobe (level 31, both)
+- 2279 The Platinum Discs (level 47, Alliance)
 - 2383 Simple Parchment (level 1, Horde)
 - 2751 Barbaric Battlements (level 32, Horde)
 - 2752 On Iron Pauldrons (level 32, Horde)
 - 2753 Trampled Under Foot (level 36, Horde)
 - 2754 Horns of Frenzy (level 36, Horde)
 - 2755 Joys of Omosh (level 36, Horde)
+- 2769 The Brassbolts Brothers (level 46, Alliance)
+- 2864 Tran'rek (level 45, both)
 - 3065 Simple Tablet (level 1, Horde)
 - 3082 Etched Tablet (level 1, Horde)
 - 3083 Encrypted Tablet (level 1, Horde)
@@ -252,6 +274,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 5261 Eagan Peltskinner (level 2, Alliance)
 - 5361 Family Tree (level 35, Horde)
 - 5441 Lazy Peons (level 4, Horde)
+- 5501 Bone Collector (level 39, both)
 - 5621 Garments of the Moon (level 4, Alliance)
 - 5622 In Favor of Elune (level 4, Alliance)
 - 5623 In Favor of the Light (level 4, Alliance)
@@ -264,6 +287,9 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 5650 Garments of Darkness (level 4, Horde)
 - 5651 In Favor of Darkness (level 4, Horde)
 - 5676 Arcane Feedback (level 20, Alliance)
+- 6027 Book of the Ancients (level 38, both)
+- 6132 Get Me Out of Here! (level 39, both)
+- 6134 Ghost-o-plasm Round Up (level 39, both)
 - 6141 Brother Anton (level 39, Alliance)
 - 6142 Clam Bait (level 35, Horde)
 - 6143 Other Fish to Fry (level 36, Horde)
@@ -318,7 +344,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 98581 Archaic Rune (level 1, Alliance)
 - 98601 A Difficult Path (level 1, Horde)
 
-## Forever data: no turn-in position (76)
+## Forever data: no turn-in position (87)
 
 - 6661 Deeprun Rat Roundup (level 12, Alliance)
 - 6662 Me Brother, Nipsy (level 12, Alliance)
@@ -354,15 +380,24 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 92597 Reading the Ley Lines (level 4, Alliance)
 - 92598 The Gift of Skysight (level 4, Horde)
 - 92727 The Missing Scholar (level 10, Alliance)
+- 92754 A New Need for Shadow Protection (level 35, both)
+- 92818 Big, No, MASSIVE Iron Axes (level 35, both)
 - 93552 Harvesting Windstones (level 4, both)
 - 94373 Call of Earth (level 4, Alliance)
 - 94374 Call of Earth (level 4, Alliance)
 - 94375 Call of Earth (level 4, Alliance)
 - 94414 The Anchors of Zephras (level 2, both)
 - 94502 Call of Water (level 23, Alliance)
+- 94893 Delivering Closure (level 47, both)
 - 94898 Violent Winds (Temp Disabled) (level 11, both)
 - 94901 Hopping Helpers (level 11, both)
 - 94902 Valanaar Vintages (level 11, both)
+- 94963 Biting the Hand (level 40, both)
+- 94982 Eye of Mugg (level 45, both)
+- 94983 Twilight Mementos (level 42, both)
+- 94984 Tome of Twilight (level 44, both)
+- 95184 The Sharpest of Blades (level 38, both)
+- 95219 From Port to Port (level 41, both)
 - 95250 Abominable Creatures (level 21, Alliance)
 - 95647 Lost in the Thicket Things (level 31, Alliance)
 - 95663 Dragonmaw Rumors (level 31, both)
@@ -376,11 +411,13 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 95883 The Tortured Soul (level 23, Horde)
 - 95884 The Offering Stone (level 23, Horde)
 - 95885 The Offering of Blood (level 23, Horde)
+- 95982 Not My Circus (level 38, both)
+- 96018 Powering the Pylons (level 43, both)
 - 96243 Call of Earth (level 10, Alliance)
 - 96395 An Ancient Grudge (level 15, both)
-- 96773 The Coldbringer's Eye (level 41, both)
+- 96770 The Witch Doctor's Head (level 46, both)
+- 96771 Vengeance of the Highborne (level 45, both)
 - 96987 Opportunistic Education (level 33, Horde)
-- 97130 Ancient Gurubashi Secrets (level 40, both)
 - 97263 Your Package Has Arrived (level 2, Alliance)
 - 97538 Pigments for Paints (level 26, Horde)
 - 97583 WRIGGLE. (level 1, Horde)
@@ -397,20 +434,25 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 98601 A Difficult Path (level 1, Horde)
 - 99191 A Donation of Wool (level 60, Alliance)
 
-## Forever data: turned in inside a dungeon (8)
+## Forever data: turned in inside a dungeon (12)
 
 - 1098 Deathstalkers in Shadowfang (level 25, Horde)
 - 1144 Willix the Importer (level 30, both)
 - 1198 In Search of Thaelrid (level 24, Alliance)
+- 2278 The Platinum Discs (level 47, both)
+- 2398 The Lost Dwarves (level 40, Alliance)
 - 2945 Grime-Encrusted Ring (level 34, both)
 - 2952 The Sparklematic 5200! (level 30, both)
+- 3523 Scourge of the Downs (level 37, both)
+- 3525 Extinguishing the Idol (level 37, both)
 - 4605 The Sparklematic 5200! (level 30, both)
 - 4606 The Sparklematic 5200! (level 30, both)
 - 5722 Searching for the Lost Satchel (level 16, Horde)
 
-## Forever data: no quest giver position (126)
+## Forever data: no quest giver position (134)
 
 - 934 Crown of the Earth (level 11, both)
+- 2279 The Platinum Discs (level 47, Alliance)
 - 78307 The Horn of Xelthos (level 23, both)
 - 79624 Anyone Can Cook (level 40, both)
 - 79731 The Troll Scroll (level 35, both)
@@ -459,6 +501,8 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 92910 Harvesting the Harvesters (level 15, Alliance)
 - 93318 WANTED: Vulgara the Insatiable (level 9, both)
 - 93552 Harvesting Windstones (level 4, both)
+- 93574 Corpsefeeder's Carapace (level 45, both)
+- 93644 Tattered Journal (level 45, both)
 - 94373 Call of Earth (level 4, Alliance)
 - 94374 Call of Earth (level 4, Alliance)
 - 94375 Call of Earth (level 4, Alliance)
@@ -475,14 +519,17 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 94823 Confounding Flash (level 10, Alliance)
 - 94825 Confounding Flash (level 10, Alliance)
 - 94826 Confounding Flash (level 10, Alliance)
+- 94885 Field Marshal's Log (level 40, both)
 - 94898 Violent Winds (Temp Disabled) (level 11, both)
 - 94901 Hopping Helpers (level 11, both)
 - 94902 Valanaar Vintages (level 11, both)
+- 94926 Drop the Hammer (level 45, both)
 - 95189 Crest of Lordaeron (level 22, Alliance)
 - 95204 Crest of Lordaeron (level 22, Horde)
 - 95213 Stolen Blasting Powder (level 10, Alliance)
 - 95250 Abominable Creatures (level 21, Alliance)
 - 95328 Whispering Horror Residue (level 10, Horde)
+- 95384 Partial Mystical Notes (level 40, both)
 - 95534 Strahnbrad Mystery (level 36, both)
 - 95663 Dragonmaw Rumors (level 31, both)
 - 95664 Elder Knowledge (level 31, Horde)
@@ -499,11 +546,13 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 95884 The Offering Stone (level 23, Horde)
 - 95885 The Offering of Blood (level 23, Horde)
 - 96138 Merrick's Bow (level 28, Alliance)
+- 96222 Khan Hratha (level 42, both)
 - 96243 Call of Earth (level 10, Alliance)
 - 96391 Underground Map (level 15, Alliance)
 - 96395 An Ancient Grudge (level 15, both)
 - 96630 The Adventurer (level 6, Alliance)
 - 96652 The Adventurer (level 6, Horde)
+- 96800 Past Due (level 38, both)
 - 96876 Ukor's Lost Pack (level 8, Horde)
 - 96877 Halikor's Hoof (level 12, Horde)
 - 96986 The Grave Knight (level 33, Horde)
@@ -537,7 +586,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 98581 Archaic Rune (level 1, Alliance)
 - 98601 A Difficult Path (level 1, Horde)
 
-## Forever data: new in Forever with no chain on Wowhead, planned as a quest on its own (457)
+## Forever data: new in Forever with no chain on Wowhead, planned as a quest on its own (513)
 
 - 490 Bounty: Gnarlpine Furbolg (level 8, Alliance)
 - 5640 Desperate Prayer (level 10, Alliance)
@@ -561,6 +610,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 79094 The Lessons of Ta'zo (level 20, Horde)
 - 79095 The Apothecary's Metaphysical Primer (level 20, Horde)
 - 79097 Baxtan: On Destructive Magics (level 20, both)
+- 79229 Highway Robbery (level 40, both)
 - 79362 Grant's Shield (level 25, both)
 - 79363 Silvia's Sword (level 26, Horde)
 - 79535 Basilisks: Should Petrification be Feared? (level 35, both)
@@ -685,24 +735,32 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 92751 Detonation at a Distance (level 16, Alliance)
 - 92752 Explosive Consultation (level 16, Alliance)
 - 92753 Destruction in Deadmines (level 18, Alliance)
+- 92754 A New Need for Shadow Protection (level 35, both)
+- 92818 Big, No, MASSIVE Iron Axes (level 35, both)
 - 92819 Destruction in Deadmines (level 18, Alliance)
 - 92867 Ground to Keep (level 39, both)
 - 92871 In Service of Zephras (level 11, Horde)
 - 92872 Dutiful Steps (level 38, both)
+- 92873 Proof of Concept (level 41, both)
 - 92880 Return to Valanaar (level 11, both)
+- 92894 Bone Raising (level 40, both)
 - 92909 Harvesting the Harvesters (level 15, Alliance)
 - 92910 Harvesting the Harvesters (level 15, Alliance)
 - 92911 Harvesting the Harvesters (level 15, Alliance)
+- 92914 Strange Pylons (level 43, both)
 - 93159 The Strange Hermit (level 13, both)
 - 93160 The Forest's Bounty (level 13, both)
 - 93165 Mercy Falls on Deaf Ears (level 13, both)
 - 93172 Free the Hollows (level 13, both)
+- 93196 Khan Jehn (level 42, both)
 - 93224 Carved Centaur Totems (level 40, Alliance)
 - 93317 Crab Season (level 9, both)
 - 93318 WANTED: Vulgara the Insatiable (level 9, both)
 - 93319 Pilfered Windstones (level 7, both)
 - 93320 Tower Defense (level 11, both)
 - 93552 Harvesting Windstones (level 4, both)
+- 93574 Corpsefeeder's Carapace (level 45, both)
+- 93644 Tattered Journal (level 45, both)
 - 93735 The Broken Construct (level 9, Horde)
 - 93736 Unwelcome Spirits (level 9, Horde)
 - 93740 Blood for Blood (level 11, Horde)
@@ -731,6 +789,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 94490 Ripped Missive (level 12, both)
 - 94491 The Fate of the Den (level 12, both)
 - 94493 A Sacrifice in Vain (level 11, Alliance)
+- 94613 My Kingdom for a Horse (level 38, both)
 - 94638 Strength and Mercy (level 10, both)
 - 94774 Divine Grace (level 10, Alliance)
 - 94775 Divine Grace (level 10, Alliance)
@@ -745,6 +804,14 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 94824 Confounding Flash (level 10, Alliance)
 - 94825 Confounding Flash (level 10, Alliance)
 - 94826 Confounding Flash (level 10, Alliance)
+- 94829 What We Lost (level 40, both)
+- 94841 Lost Shipping Crate (level 38, both)
+- 94877 Saving Sunnyglade (level 40, both)
+- 94879 Scraps of Knowledge (level 40, both)
+- 94881 Curious Trinkets (level 38, both)
+- 94885 Field Marshal's Log (level 40, both)
+- 94886 The Western Front (level 44, both)
+- 94894 The Twilight Threat (level 45, Alliance)
 - 94896 Aid For The Refugees (level 11, both)
 - 94897 The Fate of a Loved One (level 11, both)
 - 94898 Violent Winds (Temp Disabled) (level 11, both)
@@ -752,15 +819,26 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 94902 Valanaar Vintages (level 11, both)
 - 94911 Child of Nature (level 10, Horde)
 - 94912 Child of Nature (level 10, Alliance)
+- 94926 Drop the Hammer (level 45, both)
+- 94961 Biting the Hand (level 40, both)
+- 94982 Eye of Mugg (level 45, both)
+- 94983 Twilight Mementos (level 42, both)
 - 95034 The Debt (level 24, Horde)
 - 95036 A Moon-Kissed Blade (level 25, Horde)
 - 95041 Data Hoarders (level 10, Alliance)
 - 95042 Seeking the Kor Gem (level 25, Horde)
+- 95059 Frazzlespark's Crate (level 36, both)
 - 95065 Fishin' Time (level 12, Alliance)
 - 95111 An Underrated Talent (level 25, Horde)
+- 95118 Saltwater Savages (level 41, both)
+- 95119 Unfriendly Competition (level 43, both)
+- 95120 WANTED: Old Rot-Chum (level 42, both)
+- 95121 A Taste of the Sea (level 40, both)
 - 95125 Ott's Masterwork (level 25, Horde)
 - 95126 The Moonsilver Blade (level 25, Horde)
 - 95140 Old Fire-Eye (level 26, Horde)
+- 95156 Stuff 'Em and Stick 'Em (level 37, both)
+- 95184 The Sharpest of Blades (level 38, both)
 - 95189 Crest of Lordaeron (level 22, Alliance)
 - 95195 Bloodied Insignia (level 22, Alliance)
 - 95204 Crest of Lordaeron (level 22, Horde)
@@ -769,11 +847,21 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 95214 Stolen Blasting Powder (level 10, Alliance)
 - 95216 The New Plague (level 22, Horde)
 - 95217 The Quarry's Smith (level 10, Alliance)
+- 95219 From Port to Port (level 41, both)
 - 95250 Abominable Creatures (level 21, Alliance)
+- 95254 WANTED: Trapclaw (level 42, both)
+- 95260 Terrors From the Deep (level 42, both)
+- 95293 Smuggler's Special (level 42, both)
 - 95314 That Shadowvale Green Elixir (level 10, Horde)
 - 95328 Whispering Horror Residue (level 10, Horde)
+- 95330 Love Thy Neighbor (level 37, both)
+- 95384 Partial Mystical Notes (level 40, both)
 - 95508 Unwelcome Guests (level 18, Horde)
 - 95534 Strahnbrad Mystery (level 36, both)
+- 95561 Apple of My Eye (level 38, both)
+- 95603 Bats in the Belfry (level 38, both)
+- 95642 Abominable Magics (level 40, both)
+- 95643 Indiscriminate Purge (level 40, both)
 - 95646 Horrors in the Highland (level 31, Alliance)
 - 95647 Lost in the Thicket Things (level 31, Alliance)
 - 95663 Dragonmaw Rumors (level 31, both)
@@ -782,6 +870,8 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 95737 Seeking Caitlin (level 31, both)
 - 95771 A Taste of Darkness (level 10, both)
 - 95772 Songblade Search (level 31, both)
+- 95789 Shady Saltseers (level 40, both)
+- 95791 The Saltseer Captain (level 40, both)
 - 95795 Fallen in the Fen (level 31, both)
 - 95803 A Token of Good Faith (level 12, Horde)
 - 95805 Grace of An'she and Mu'sha (level 4, Horde)
@@ -789,8 +879,16 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 95810 Lost Relic Carry (level 31, Alliance)
 - 95816 Sign Me Up! (level 60, both)
 - 95819 Sign Me Up! (level 60, both)
+- 95912 WANTED: Blademaster Kaijo (level 42, both)
+- 95943 Foreman's Plight (level 38, both)
+- 95982 Not My Circus (level 38, both)
+- 95983 A Feast for Buzzards (level 38, both)
+- 95988 Goes Down Smooth (level 38, both)
+- 95991 WANTED: Ghostmaw (level 42, both)
 - 95998 The Great Outdoors (level 6, Alliance)
 - 95999 WANTED: Incinerator Gar'im (level 25, Alliance)
+- 96010 Fragments of the Pylons (level 41, both)
+- 96015 A Miner Problem (level 43, both)
 - 96031 Camping 101: Leatherworking (level 6, Alliance)
 - 96044 Camping 101: Blacksmithing (level 6, Alliance)
 - 96045 Camping 101: Alchemy (level 6, Alliance)
@@ -802,12 +900,15 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 96057 Camping 101: Tailoring (level 6, Alliance)
 - 96058 Camping 101: Engineering (level 6, Alliance)
 - 96059 Camping 101: Enchanting (level 6, Alliance)
+- 96063 Gaseous Gold (level 38, both)
+- 96081 Wound Dressings (level 40, both)
 - 96102 Camping 101: Tailoring (level 6, Horde)
 - 96130 Chakuyak (level 8, Horde)
 - 96137 Ira's Dagger (level 24, Alliance)
 - 96138 Merrick's Bow (level 28, Alliance)
 - 96139 The Valor Family (level 22, Alliance)
 - 96204 The Windshaper's Wrath (level 22, Horde)
+- 96222 Khan Hratha (level 42, both)
 - 96394 The Restless Dead (level 15, Alliance)
 - 96395 An Ancient Grudge (level 15, both)
 - 96403 Important Heirlooms (level 15, Alliance)
@@ -829,7 +930,10 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 96658 Camping 101: Cooking (level 6, Horde)
 - 96659 The Adventurer (level 6, Horde)
 - 96661 Camping 101: Cooking (level 6, Horde)
+- 96770 The Witch Doctor's Head (level 46, both)
+- 96771 Vengeance of the Highborne (level 45, both)
 - 96773 The Coldbringer's Eye (level 41, both)
+- 96800 Past Due (level 38, both)
 - 96821 Legging It (level 6, Horde)
 - 96822 For Honor (level 6, Horde)
 - 96825 This Fruit Could Bite Back (level 6, Horde)
@@ -884,62 +988,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 97922 Camping 101: Leatherworking (level 6, Alliance)
 - 97923 Camping 101: Mining (level 6, Alliance)
 - 97924 Camping 101: Skinning (level 6, Alliance)
-- 97925 Camping 101: Tailoring (level 6, Alliance)
-- 97927 Camping 101: Alchemy (level 6, Horde)
-- 97928 Camping 101: Blacksmithing (level 6, Horde)
-- 97929 Camping 101: Enchanting (level 6, Horde)
-- 97930 Camping 101: Engineering (level 6, Horde)
-- 97931 Camping 101: First Aid (level 6, Horde)
-- 97932 Camping 101: Fishing (level 6, Horde)
-- 97933 Camping 101: Herbalism (level 6, Horde)
-- 97934 Camping 101: Leatherworking (level 6, Horde)
-- 97935 Camping 101: Mining (level 6, Horde)
-- 97936 Camping 101: Skinning (level 6, Horde)
-- 97937 Camping 101: Tailoring (level 6, Horde)
-- 97938 Camping 101: Alchemy (level 6, Alliance)
-- 97939 Camping 101: Blacksmithing (level 6, Alliance)
-- 97940 Camping 101: Enchanting (level 6, Alliance)
-- 97941 Camping 101: Engineering (level 6, Alliance)
-- 97942 Camping 101: First Aid (level 6, Alliance)
-- 97943 Camping 101: Fishing (level 6, Alliance)
-- 97944 Camping 101: Herbalism (level 6, Alliance)
-- 97946 Camping 101: Leatherworking (level 6, Alliance)
-- 97948 Camping 101: Mining (level 6, Alliance)
-- 97949 Camping 101: Skinning (level 6, Alliance)
-- 97950 Camping 101: Tailoring (level 6, Alliance)
-- 97951 Camping 101: Alchemy (level 6, Horde)
-- 97952 Camping 101: Blacksmithing (level 6, Horde)
-- 97953 Camping 101: Enchanting (level 6, Horde)
-- 97954 Camping 101: Engineering (level 6, Horde)
-- 97955 Camping 101: First Aid (level 6, Horde)
-- 97956 Camping 101: Fishing (level 6, Horde)
-- 97957 Camping 101: Herbalism (level 6, Horde)
-- 97958 Camping 101: Leatherworking (level 6, Horde)
-- 97959 Camping 101: Mining (level 6, Horde)
-- 97960 Camping 101: Skinning (level 6, Horde)
-- 97961 Camping 101: Tailoring (level 6, Horde)
-- 97963 Camping 101: Alchemy (level 6, both)
-- 97964 Camping 101: Blacksmithing (level 6, both)
-- 97965 Camping 101: First Aid (level 6, both)
-- 97967 Camping 101: Fishing (level 6, both)
-- 97968 Camping 101: Herbalism (level 6, both)
-- 97969 Camping 101: Leatherworking (level 6, both)
-- 97970 Camping 101: Mining (level 6, both)
-- 97971 Camping 101: Skinning (level 6, both)
-- 97972 Camping 101: Tailoring (level 6, Horde)
-- 97973 Camping 101: Tailoring (level 6, Alliance)
-- 97977 Nature's Call (level 3, Alliance)
-- 97979 The Goddess Provides (level 1, Alliance)
-- 98013 Swelling Forces (level 20, Alliance)
-- 98021 Journey to Sentinel Hill (level 13, Alliance)
-- 98024 Journey to the Crossroads (level 13, Horde)
-- 98025 WANTED: Jai'vhanel (level 13, Alliance)
-- 98028 Baron Marinous (level 21, Alliance)
-- 98042 It's All Fun and Games Until... (level 17, Alliance)
-- 98067 Eyes of the Sentinels (level 11, Alliance)
-- 98071 Brewer's Trade (level 27, Alliance)
-- 98093 Field to Clear (level 23, Horde)
-- and 57 more
+- and 113 more
 
 ## Classic seed: no turn-in position (7)
 
@@ -951,18 +1000,14 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 7636 Stave of the Ancients (level 60, both)
 - 8597 Draconic for Dummies (level 60, both)
 
-## Classic seed: turned in inside a dungeon (59)
+## Classic seed: turned in inside a dungeon (55)
 
 - 2200 Back to Uldaman (level 42, Alliance)
 - 2201 Find the Gems (level 43, Alliance)
-- 2278 The Platinum Discs (level 47, both)
 - 2284 Necklace Recovery, Take 2 (level 41, Horde)
-- 2398 The Lost Dwarves (level 40, Alliance)
 - 3373 The Essence of Eranikus (level 55, both)
 - 3446 Into the Depths (level 51, both)
 - 3447 Secret of the Circle (level 51, both)
-- 3523 Scourge of the Downs (level 37, both)
-- 3525 Extinguishing the Idol (level 37, both)
 - 3802 Dark Iron Legacy (level 52, both)
 - 3981 Commander Gor'shak (level 52, Horde)
 - 4003 The Royal Rescue (level 59, Horde)
@@ -1013,19 +1058,28 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 8949 Falrin's Vendetta (level 60, both)
 - 8950 The Instigator's Enchantment (level 60, both)
 
-## Surveyed in game, not in the catalog (299)
+## Surveyed in game, not in the catalog (793)
 
 - 259 <UNUSED> (no level): a placeholder
+- 614 The Captain's Chest (level 47; Bloodband Bracers 11469, Freebooter's Armband 270100): in the finders as seen in game
+- 620 The Monogrammed Sash (level 50): no item rewards
 - 708 The Black Box (level 40): no item rewards
+- 734 This Is Going to Be Hard (level 42): no item rewards
+- 777 This Is Going to Be Hard (level 42): no item rewards
 - 807 <UNUSED> (level 11): a placeholder
 - 820 <UNUSED> (level 9): a placeholder
+- 856 <UNUSED> (level 12): a placeholder
 - 946 <UNUSED> (no level): a placeholder
+- 975 Cache of Mau'ari (level 60; Cache of Mau'ari 12384): in the finders as seen in game
+- 988 <UNUSED> (level 20): a placeholder
+- 989 <UNUSED> (level 22): a placeholder
 - 1156 <NYI> <TXT> speak to alchemist pestlezugg (level 58): a placeholder
 - 1271 Feast at the Blue Recluse (level 37; Moist Towelette 5951): in the finders as seen in game
 - 1277 <nyi> <TXT> The Centaur Hoofprints (level 40): a placeholder
 - 1278 <nyi> <TXT> The Grim Totem Clan (level 45): a placeholder
 - 1279 <nyi> <TXT>The Centaur Hoofprints (no level): a placeholder
 - 1280 <nyi> <TXT>The Centaur Hoofprints (no level): a placeholder
+- 1288 Vimes's Report (level 38): no item rewards
 - 1291 <nyi> <TXT> Centaur Hoofprints (no level): a placeholder
 - 1292 <nyi><TXT> Centaur Hoofprints (no level): a placeholder
 - 1293 <nyi> <TXT> Centaur Hoofprints (no level): a placeholder
@@ -1036,42 +1090,118 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 1298 <nyi> <TXT> Thrall's Dirty Work (no level): a placeholder
 - 1299 <nyi> <TXT> Thrall's Dirty Work (no level): a placeholder
 - 1300 <nyi> <TXT> Lorn Grim Totem (no level): a placeholder
+- 1422 Threat From the Sea (level 45): no item rewards
 - 1460 <UNUSED> (level 37): a placeholder
 - 1461 <UNUSED> (level 37): a placeholder
 - 1559 Flash Bomb Recipe (level 37; Schematic: Flash Bomb 6672): in the finders as seen in game
 - 1657 Stinking Up Southshore (level 60; Hallow's End Pumpkin Treat 20557): in the finders as seen in game
 - 1658 Crashing the Wickerman Festival (level 60; Hallow's End Pumpkin Treat 20557): in the finders as seen in game
+- 1662 <UNUSED> (level 40): a placeholder
+- 1663 <UNUSED> (level 40): a placeholder
+- 1664 <UNUSED> (level 40): a placeholder
+- 2662 Noggenfogger Elixir (level 49; Noggenfogger Elixir 8529): in the finders as seen in game
+- 2868 <TXT> The Shriveled Heart (level 50): a placeholder
+- 3064 <NYI> <TXT> Pirate Hats (level 45): a placeholder
+- 3450 An Easy Pickup (level 52): no item rewards
+- 3451 Signal for Pickup (level 52; Standard Issue Flare Gun 10444): in the finders as seen in game
+- 3622 <UNUSED> (level 41): a placeholder
 - 3629 Goblin Engineering (level 47): no item rewards
+- 3631 Summon Felsteed (level 40): no item rewards
 - 3911 The Last Element (level 54; Lagrave's Seal 12038): in the finders as seen in game
+- 4002 The Eastern Kingdoms (level 54): no item rewards
+- 4487 Summon Felsteed (level 40): no item rewards
+- 4488 Summon Felsteed (level 40): no item rewards
+- 4489 Summon Felsteed (level 40): no item rewards
 - 4541 <NYI> <TXT> (no level): a placeholder
+- 4734 Egg Freezing (level 60; Eggscilloscope 12144): in the finders as seen in game
+- 4764 Doomrigger's Clasp (level 60): no item rewards
+- 4766 Mayara Brightwing (level 60): no item rewards
+- 4768 The Darkstone Tablet (level 60; Swiftfoot Treads 15861, Blinkstrike Armguards 15860): in the finders as seen in game
+- 4769 Vivian Lagrave and the Darkstone Tablet (level 60): no item rewards
 - 4905 <UNUSED> (no level): a placeholder
+- 4974 For The Horde! (level 60; Mark of Tyranny 13966, Eye of the Beast 13968, Blackhand's Breadth 13965): in the finders as seen in game
+- 5058 Mrs. Dalson's Diary (level 55): no item rewards
+- 5102 General Drakkisath's Demise (level 60; Mark of Tyranny 13966, Eye of the Beast 13968, Blackhand's Breadth 13965): in the finders as seen in game
 - 5669 <NYI> A Blessing of Light (level 15): a placeholder
 - 5670 <NYI> A Blessing of Light (level 15): a placeholder
 - 5671 <NYI> A Blessing of Light (level 15): a placeholder
 - 5686 <NYI> The Light Protects You (level 25): a placeholder
 - 5687 <NYI> The Light Protects You (level 25): a placeholder
+- 5721 The Battle of Darrowshire (level 60; Tea with Sugar 15723): in the finders as seen in game
+- 5887 Salve via Hunting (level 55; Cenarion Plant Salve 11516): in the finders as seen in game
+- 5888 Salve via Mining (level 55; Cenarion Plant Salve 11516): in the finders as seen in game
+- 5889 Salve via Gathering (level 55; Cenarion Plant Salve 11516): in the finders as seen in game
+- 5890 Salve via Skinning (level 55; Cenarion Plant Salve 11516): in the finders as seen in game
+- 5891 Salve via Disenchanting (level 55; Cenarion Plant Salve 11516): in the finders as seen in game
+- 6187 Order Must Be Restored (level 60; Gorewood Bow 16996, Stormrager 16997, Sacred Protector 16998): in the finders as seen in game
+- 6402 Stormwind Rendezvous (level 60): no item rewards
+- 6403 The Great Masquerade (level 60): no item rewards
+- 6501 The Dragon's Eye (level 60): no item rewards
+- 6502 Drakefire Amulet (level 60; Drakefire Amulet 16309): in the finders as seen in game
 - 6843 Da Foo (no level): no level
 - 6963 Stolen Winter Veil Treats (level 60): no item rewards
 - 7042 Stolen Winter Veil Treats (level 60): no item rewards
 - 7069 <UNUSED> (no level): a placeholder
+- 7081 Alterac Valley Graveyards (level 60): no item rewards
+- 7102 Towers and Bunkers (level 60): no item rewards
+- 7122 Capture a Mine (level 60): no item rewards
+- 7141 The Battle of Alterac (level 60): no item rewards
+- 7142 The Battle for Alterac (level 60): no item rewards
+- 7241 In Defense of Frostwolf (level 60): no item rewards
+- 7261 The Sovereign Imperative (level 60): no item rewards
+- 7601 What Niby Commands (level 50): no item rewards
+- 7652 A Blue Light Bargain (level 60): no item rewards
+- 7653 Imperial Plate Belt (level 60; Plans: Imperial Plate Belt 12688): in the finders as seen in game
+- 7657 Imperial Plate Helm (level 60; Plans: Imperial Plate Helm 12701): in the finders as seen in game
+- 7659 Imperial Plate Shoulders (level 60; Plans: Imperial Plate Shoulders 12687): in the finders as seen in game
+- 7741 Praise from the Emerald Circle <NYI> <TXT> (level 59; Emerald Circle 19065): a placeholder
+- 7790 River Ends (level 57): no item rewards
+- 7841 Message to the Wildhammer (level 48): no item rewards
+- 7842 Another Message to the Wildhammer (level 48): no item rewards
+- 7843 The Final Message to the Wildhammer (level 50; Owlbeast Hide Gloves 19119): in the finders as seen in game
 - 7869 test quest - do not use (no level): a placeholder
 - 7870 test quest2 - do not use (no level): a placeholder
+- 7872 Vanquish the Invaders! (level 45): no item rewards
+- 7875 Quell the Silverwing Usurpers (level 45): no item rewards
 - 8149 Honoring a Hero (level 60; For the Light! 20009): in the finders as seen in game
 - 8150 Honoring a Hero (level 60; The Horde's Hellscream 20010): in the finders as seen in game
+- 8152 Rapid Escape (level 57): no item rewards
+- 8154 Arathi Basin Resources! (level 45): no item rewards
+- 8160 Cut Arathor Supply Lines (level 45): no item rewards
+- 8169 The Battle for Arathi Basin! (level 45): no item rewards
 - 8230 Collin's Test Quest (no level): a placeholder
 - 8247 <UNUSED> (no level): a placeholder
 - 8248 <UNUSED> (no level): a placeholder
+- 8249 Junkboxes Needed (level 60; Dusksteel Throwing Knife 20086): in the finders as seen in game
 - 8322 Rotten Eggs (level 60): no item rewards
+- 8367 For Great Honor (level 60): no item rewards
+- 8369 Invaders of Alterac Valley (level 60): no item rewards
+- 8371 Concerted Efforts (level 60): no item rewards
 - 8373 The Power of Pine (level 60; Hallow's End Pumpkin Treat 20557): in the finders as seen in game
+- 8375 Remember Alterac Valley! (level 60): no item rewards
 - 8393 Claiming Arathi Basin (level 39): no item rewards
+- 8394 Claiming Arathi Basin (level 49): no item rewards
+- 8395 Claiming Arathi Basin (level 59): no item rewards
 - 8400 Fight for Warsong Gulch (level 39): no item rewards
+- 8401 Fight for Warsong Gulch (level 49): no item rewards
+- 8402 Fight for Warsong Gulch (level 59): no item rewards
+- 8403 Fight for Warsong Gulch (level 60): no item rewards
 - 8409 Ruined Kegs (level 60; Hallow's End Pumpkin Treat 20557): in the finders as seen in game
 - 8427 Battle of Warsong Gulch (level 39): no item rewards
 - 8428 Battle of Warsong Gulch (level 49): no item rewards
 - 8429 Battle of Warsong Gulch (level 59): no item rewards
 - 8430 Battle of Warsong Gulch (level 60): no item rewards
 - 8436 Conquering Arathi Basin (level 39): no item rewards
+- 8437 Conquering Arathi Basin (level 49): no item rewards
+- 8438 Conquering Arathi Basin (level 59): no item rewards
+- 8439 Conquering Arathi Basin (level 60): no item rewards
 - 8458 <UNUSED> (level 33): a placeholder
+- 8746 Metzen the Reindeer (level 60; Preserved Holly 21213): in the finders as seen in game
+- 8762 Metzen the Reindeer (level 60; Preserved Holly 21213): in the finders as seen in game
+- 8769 A Ticking Present (level 40; Ticking Present 21327): in the finders as seen in game
+- 8868 Elune's Blessing (level 60; Elune's Lantern 21540, Lunar Festival Fireworks Pack 21640, Solid Stone 7912): in the finders as seen in game
+- 9121 The Dread Citadel - Naxxramas (level 60): no item rewards
+- 9665 Bolstering Our Defenses (level 60): no item rewards
 - 63769 [DNT] Holiday Quests Tracker (no level): a placeholder
 - 78676 The Eye of Bhossca (level 35): no item rewards
 - 78699 The Eye of Bhossca (level 35; Ruby-Adorned Blade 277246): in the finders as seen in game
@@ -1091,6 +1221,14 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 79492 Metzen the Reindeer (level 60; item 213121): in the finders as seen in game
 - 79495 Metzen the Reindeer (level 60; item 213121): in the finders as seen in game
 - 79678 Taste Testing (level 40; Shawarmageddon 213105): in the finders as seen in game
+- 79939 The Broken Hammer (level 40): no item rewards
+- 79940 A Lost Brother (level 40): no item rewards
+- 79945 Orders from the Grand Crusader (level 40): no item rewards
+- 79946 A Brother In Need (level 40): no item rewards
+- 79970 Aeonas the Vindicated (level 40; Pauldrons of Vindication 277236): in the finders as seen in game
+- 80324 The Mad King (level 40): no item rewards
+- 80411 The Talisman of Kazdor (level 50): no item rewards
+- 80526 Fool Me Twice (level 50): no item rewards
 - 81570 Jarl Needs a Blade (level 35; Reedknot Ring 9622, Artisan's Trousers 5016): in the finders as seen in game
 - 81730 Duskwood Mission I: Defeat Worgen (level 27): no item rewards
 - 81731 Duskwood Mission II: Defeat Ogres (level 27): no item rewards
@@ -1110,20 +1248,176 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 81745 Duskwood Mission XVI: Rescue Kroll Mountainshade (level 27): no item rewards
 - 81746 Duskwood Mission XVII: Rescue Alara Grovemender (level 27): no item rewards
 - 81747 Duskwood Mission XVIII: Rescue Elenora Marshwalker (level 27): no item rewards
+- 81768 Ashenvale Mission I: Defeat Satyrs (level 42): no item rewards
+- 81769 Ashenvale Mission II: Defeat Treants (level 42): no item rewards
+- 81770 Ashenvale Mission III: Defeat Dragonkin (level 42): no item rewards
+- 81771 Ashenvale Mission IV: Dragon Intelligence (level 42): no item rewards
+- 81772 Ashenvale Mission V: Satyr Intelligence (level 42): no item rewards
+- 81773 Ashenvale Mission VI: Treant Intelligence (level 42): no item rewards
+- 81774 Ashenvale Mission VII: Recover Dreamengine (level 42): no item rewards
+- 81775 Ashenvale Mission VIII: Recover Azsharan Prophecy (level 42): no item rewards
+- 81776 Ashenvale Mission IX: Recover Dream-Touched Dragonegg (level 42): no item rewards
+- 81777 Ashenvale Mission X: Dreamroot (level 42): no item rewards
+- 81778 Ashenvale Mission XI: Fool's Gold Dust (level 42): no item rewards
+- 81779 Ashenvale Mission XII: Dream-Infused Dragonscale (level 42): no item rewards
+- 81780 Ashenvale Mission XIII: Defeat Larsera (level 42): no item rewards
+- 81781 Ashenvale Mission XIV: Defeat Zalius (level 42): no item rewards
+- 81782 Ashenvale Mission XV: Defeat Shredder 9000 (level 42): no item rewards
+- 81783 Ashenvale Mission XVI: Rescue Alyssian Windcaller (level 42): no item rewards
+- 81784 Ashenvale Mission XVII: Rescue Doran Dreambough (level 42): no item rewards
+- 81785 Ashenvale Mission XVIII: Rescue Maseara Autumnmoon (level 42): no item rewards
+- 81790 Materials of Significance (level 53): no item rewards
+- 81900 The Burning Beast (level 54): no item rewards
+- 81917 Chains That Bind (level 54): no item rewards
+- 81919 Brought to Heel (level 54; Infernal Lasso 219345): in the finders as seen in game
+- 81924 Wisdom of the Guardians (level 50; item 219326): in the finders as seen in game
 - 82084 A Lesson in Literacy (level 45; Personal Spellbook 221344): in the finders as seen in game
 - 82208 Greater Friend of the Library (level 45; Truthseeker's Bow 277254, Crest of Elucidation 277258, Researcher's Night Light 277260): in the finders as seen in game
+- 83934 Show Me the Money! (level 60): no item rewards
+- 84135 Beach Bot (level 60): no item rewards
+- 84137 Mechanical Romance (level 60): no item rewards
+- 84147 An Earnest Proposition (level 60; item 226796, item 226788, item 226782, item 226775): in the finders as seen in game
+- 84152 An Earnest Proposition (level 60; item 226830): in the finders as seen in game
+- 84154 An Earnest Proposition (level 60; item 226865, item 226863): in the finders as seen in game
+- 84155 An Earnest Proposition (level 60; item 226775, item 226782, item 226788, item 226796): in the finders as seen in game
+- 84156 An Earnest Proposition (level 60; item 226885): in the finders as seen in game
+- 84157 An Earnest Proposition (level 60; item 226929): in the finders as seen in game
+- 84158 An Earnest Proposition (level 60; item 226949, item 226953): in the finders as seen in game
+- 84160 An Earnest Proposition (level 60; item 227001, item 227009, item 227017): in the finders as seen in game
+- 84162 An Earnest Proposition (level 60; item 226863, item 226865): in the finders as seen in game
+- 84318 Oi! (level 57): no item rewards
+- 84330 A Wee Bit O' Necromancy (level 59): no item rewards
+- 86577 A Sampling of Putrescence (level 55): no item rewards
+- 86611 Stag Lord's Bauble (level 55): no item rewards
+- 86612 Stag Lord's Bauble (level 55): no item rewards
+- 86615 Treaty Obligations (level 51): no item rewards
+- 86616 Repurposed Totems (level 48): no item rewards
+- 86620 Fledgling Rescue (level 51): no item rewards
+- 86746 The Legashi Threat (level 53): no item rewards
+- 86752 Report to Rageroar (level 53): no item rewards
 - 86757 Slowing the Orc Advance (level 30): no item rewards
+- 86777 Master Feardred (level 53; Feardred's Cleansed Amulet 259892, Rageroar's Best Club 260166, Adventurer's Lost Boots 260167): in the finders as seen in game
+- 86791 Missing Blackmaw Scouts (level 53): no item rewards
+- 86792 Thinning Their Forces (level 54): no item rewards
+- 86799 Encroaching Corruption (level 53): no item rewards
+- 86804 An Unlikely Source (level 53): no item rewards
+- 86925 Toil and Trouble (level 53): no item rewards
+- 86926 Felfire Burn, Cauldron Bubble (level 53): no item rewards
+- 87295 Deflective Surface (level 52): no item rewards
 - 87318 Hearts of the Lost (level 33): no item rewards
+- 87451 Memories of Rockard (level 55; Stonard Stompers 281259, Ancestral Waistcord 281260): in the finders as seen in game
+- 87492 Uncanny Crystal (level 55): no item rewards
+- 87494 Microcrystal Contamination (level 55; Crystal-flecked Cord 281261, Crystal-flecked Waistguard 281262): in the finders as seen in game
 - 88757 Accessories of the Lost (level 33): no item rewards
 - 88758 Sentiments of the Lost (level 33; Essene's Hope 281258): in the finders as seen in game
+- 88807 Slay the Spitelash (level 48): no item rewards
+- 88809 Preserving Eldarath (level 52): no item rewards
+- 88812 Reclaiming Ravencrest (level 55): no item rewards
+- 88813 The Head of the Serpent (level 55; Prelate's Orb 260208, Truesong's Hammer 260209): in the finders as seen in game
+- 88821 Making Contact (level 51): no item rewards
+- 88857 Saving a Sentinel (level 47): no item rewards
+- 88884 Highborne Tablets (level 52): no item rewards
+- 88917 Slithering Looters (level 52): no item rewards
+- 89001 Home on the Range (level 48): no item rewards
+- 89013 Gettin' Buzzed (level 48; item 290333, Recipe: Potion of Beast Slaying 250999, Potion of Beast Slaying 250955): in the finders as seen in game
+- 89015 Deadliest Catch (level 56; A Bigger Shield 260210, Panic Hands 260211, Bad Hat 260212): in the finders as seen in game
+- 89037 Murloc Thieves (level 52; Scout's Dagger 260180, Sentinel's Plate 260181, Elunar Belt 260182): in the finders as seen in game
+- 89038 A Monumental Task (level 55): no item rewards
+- 89053 Your Final Reward (level 55; Highborne Memory Crystal 260201, Highborne Research Tablet 260205, Staff of Archmage Selwyn 260207): in the finders as seen in game
+- 89228 Winter Frontier Fishery (level 48): no item rewards
+- 89470 Ill Tidings (level 55): no item rewards
+- 90487 Ancient Allies (level 56): no item rewards
+- 90647 The Staff of the Mountain (level 57): no item rewards
+- 90702 Disturbed Grave (level 58): no item rewards
+- 90750 More Work? (level 55): no item rewards
+- 90854 Leather for Inclement Weather (level 57; Forgotten Trompers 274719, Abandoned Boots 274720, Pattern: Tooled Leather Armor 252877, Pattern: Supple Scorpid Vest 252933): in the finders as seen in game
+- 90865 Eyes of the Watchers (level 58): no item rewards
+- 91488 Home on the Range (level 48): no item rewards
+- 91497 Seals of the Sin'dorei (level 53): no item rewards
+- 91500 An Explosive Gambit (level 55): no item rewards
+- 91531 Revenge Exacted (level 55; Pyrestone Orb 10709, Belgrom's Hammer 11120, item 287075): in the finders as seen in game
+- 91538 Sin'dorei Tome of Summoning (level 55): no item rewards
+- 91547 Sin'dorei Tome of Summoning (level 55): no item rewards
+- 91548 Vek'zol (level 55; Darkblade 260186, Headdress of the Damned 260195, Belt of Shadows 260196): in the finders as seen in game
+- 91568 Long Walks on the Beach (level 51): no item rewards
+- 91569 Blue Gold (level 53): no item rewards
+- 91607 Pay Dirt! (level 53; Big Bag o' Gold 243299): in the finders as seen in game
+- 91608 Gettin' Buzzed (level 48; item 290333, Recipe: Potion of Beast Slaying 250999, Potion of Beast Slaying 250955): in the finders as seen in game
+- 91610 Winter Frontier Fishery (level 48; Deep-Sea Waders 259890): in the finders as seen in game
+- 91611 Deadliest Catch (level 56; A Bigger Shield 260210, Panic Hands 260211, Bad Hat 260212): in the finders as seen in game
+- 91685 Ley of the Land (level 54; Assassin's Dagger 260172, Honor Guard's Plate 260178, Barkwoven Belt 260179): in the finders as seen in game
+- 91688 To the Summit of Eternity (level 59): no item rewards
+- 91696 Open Season (level 58; Scented Runewood Brooch 269741): in the finders as seen in game
+- 91697 Meet the Elders (level 57): no item rewards
+- 91698 Barkskin Breakout (level 58): no item rewards
+- 91734 Remote Contact (level 52): no item rewards
+- 91735 Remote Contact (level 52): no item rewards
+- 91737 Remote Contact (level 52): no item rewards
+- 91754 Rub Some Dirt In It (level 56): no item rewards
+- 91755 Leaves to Ligatures (level 56): no item rewards
+- 91770 Bark Bite (level 56; Heavy Runecloth Bandage 14530): in the finders as seen in game
+- 91794 Flags of Our Forebears (level 59; Demonbane Blade 275742, item 287077): in the finders as seen in game
+- 91877 Demon Hunter's Hunter (level 55): no item rewards
+- 91881 The Western Post (level 57): no item rewards
+- 91882 The Grand Alliance (level 55): no item rewards
+- 91883 Spear of the Skylord (level 59): no item rewards
+- 91923 Celastrus the Bitter (level 57; Brush Cutter 274265, Weed Whacker 274270, Deadhead Blade 274271): in the finders as seen in game
+- 91952 The Source of the Corruption (level 55): no item rewards
+- 92008 Premiere Parts (level 56): no item rewards
+- 92009 Crate Expectations (level 56): no item rewards
+- 92011 Rubble Rummage (level 58; Power Recycler 275688): in the finders as seen in game
+- 92014 Fox Hole (level 57; Foxtail Ward 275633): in the finders as seen in game
+- 92015 Area Denial Skunks (level 56): no item rewards
+- 92016 Rootwork (level 60): no item rewards
+- 92017 Cleansing Winds (level 59): no item rewards
+- 92020 Hol'anyee's Big Book of Big Lizards (level 55): no item rewards
+- 92064 Tree Free (level 56): no item rewards
+- 92066 The Twin Bears (level 55; Guidance of Ursoc 279891, Wisdom of Ursol 279892): in the finders as seen in game
+- 92069 Claws That Rend, Tusks that Gore (level 58; item 260213, item 260214, item 260215): in the finders as seen in game
+- 92070 A Lost Memento (level 55; item 279893): in the finders as seen in game
+- 92100 Anywhere But Here (level 58): no item rewards
+- 92101 Lifted by Legacy (level 58): no item rewards
+- 92102 Praise (level 58): no item rewards
+- 92111 Of Friend and Fur (level 57): no item rewards
+- 92147 Highfeather Helper (level 58): no item rewards
+- 92169 Paying Back the Pact (level 59): no item rewards
+- 92171 Taking to New Heights (level 58): no item rewards
+- 92317 Stolen Life (level 58): no item rewards
+- 92328 Siegecraft (level 56): no item rewards
+- 92329 Drum Up Trouble (level 60; Copper Plated Pipe 275701, Glaive Thrower Muffler 275700, Yaely's Mending Tool 275698): in the finders as seen in game
+- 92335 Ashes of the Legion Ascent (level 59): no item rewards
+- 92343 Get to the Roots of It (level 55): no item rewards
+- 92344 Get to the Roots of It (level 55): no item rewards
+- 92345 Beneath Nordrassil (level 55): no item rewards
+- 92346 Beneath Nordrassil (level 55): no item rewards
+- 92433 Now We're Cooking (level 57; Recipe: Steaming Stag Steak 250179, Steaming Stag Steak 250071): in the finders as seen in game
 - 92434 Blood in the Streets (level 34): no item rewards
+- 92446 Head Scratcher (level 60; Elderwild Construction Hammer 281586, Greatflank Flayer 281587, Nature's Cull 281588): in the finders as seen in game
+- 92449 Blight No More (level 58; Greaves of Mourning 275438): in the finders as seen in game
+- 92500 A Bit of the Sky (level 58): no item rewards
 - 92519 Ward Restocking (level 36): no item rewards
 - 92521 The Demon Tower (no level): no level
+- 92533 Twisted Tools (level 60; Reforged Spear 275645, Cleansed Ritual Kris 275647, Purified Gnarlybark Staff 275648): in the finders as seen in game
+- 92591 Final Death (level 59; Lichbane 275347): in the finders as seen in game
+- 92592 Final Death (level 59; Lichbane 275347): in the finders as seen in game
+- 92593 Avalanche of Corruption (level 59): no item rewards
+- 92594 Kindling, Kinda (level 56): no item rewards
+- 92609 Feathers in Flight (level 57; Cremation Longbow 275441): in the finders as seen in game
+- 92612 Aid from Moonglade (level 58): no item rewards
+- 92702 Branch Out (level 56): no item rewards
 - 92707 The Giant in the Den (level 33): no item rewards
 - 92755 Mysterious Mysticism (level 35; Formula: Enchant Bracer - Lesser Agility 249486, Formula: Enchant Bracer - Lesser Healing Power 249489): in the finders as seen in game
 - 92814 I Need a Tailor (level 35; Pattern: Stormcloth Gloves 254682, Pattern: Silk Reagent Bag 253974): in the finders as seen in game
 - 92817 Leather Technique (level 35; Pattern: Mystic Thick Armor Kit 252833, Pattern: Blue Suede Armor 252883): in the finders as seen in game
-- 92914 Strange Pylons (level 43): no item rewards
+- 92833 Ve'han's Fall (level 60): no item rewards
+- 92842 A Cousin Abroad (level 55): no item rewards
+- 92858 WANTED: Ohk'zi (level 43; Staff of Brutal Cunning 277253): in the finders as seen in game
+- 92859 Shroud of the Winter Wilds (level 60; Potion of Winterspring Shrouding 281234): in the finders as seen in game
+- 92878 Lost for Words (level 43; Shabby Spaulders 277220, Cross-Stitched Cord 277216, Grimtotem Naturalist's Tunic 277221): in the finders as seen in game
+- 92959 The Dying Ancients (level 56; Sunderbark Vigil 276754): in the finders as seen in game
+- 92960 Siphoned Ephemeral Essence (level 59): no item rewards
+- 93016 A Brief History Lesson (level 43): no item rewards
+- 93030 The Knight of Mourning (level 58): no item rewards
 - 93034 Valley of Bones (level 38): no item rewards
 - 93035 Ravaging Ravagers (level 38): no item rewards
 - 93037 Outing Outcasts (level 40): no item rewards
@@ -1134,114 +1428,276 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 93062 Bone Burying (level 42): no item rewards
 - 93122 Checking Things Out (level 43): no item rewards
 - 93125 Going Home (level 43): no item rewards
+- 93127 Summit Sentries (level 60; Whitemane's Plateau 275666, Summit Drape 275668): in the finders as seen in game
 - 93128 Khan Jehn (level 42; Abandoned Ferocity 271801, Thrice-Damned Effigy 271805, Bludgeon of Betrayed Virtues 271802): in the finders as seen in game
+- 93163 Heart of the Obliterator (level 50): no item rewards
 - 93173 (UNUSED) The Rusty Gadget (level 11): a placeholder
 - 93174 The Malfunctioning Construct (level 13): no item rewards
+- 93197 Mending Communications (level 58): no item rewards
 - 93225 Carved Centaur Totems (level 40): no item rewards
+- 93269 Top of the Post (level 58; Hyjal Postal Satchel 260307, Hyjal Postal Clasp 260308): in the finders as seen in game
+- 93341 Forlorn Gardens (level 43): no item rewards
+- 93362 What They've Done to My Peonies (level 43): no item rewards
+- 93383 Contents Under Pressure (level 57; Rocket Pilot Gloves 275715, Rocketeer Leggings 275721, Rusty Propeller Blade 275729): in the finders as seen in game
+- 93394 Meeting the Magister (level 43): no item rewards
+- 93404 Rot and Regret (level 49; Overgrown Cuffs 272186, Thornplated Cord 272187): in the finders as seen in game
+- 93406 Unfrozen Deliveries (level 56): no item rewards
+- 93407 A Thorn in the Paw (level 60): no item rewards
+- 93422 Blackthorne Blackout (level 60): no item rewards
 - 93429 Blood of My Blood (level 35): no item rewards
 - 93430 Taking the Bait Back (level 35): no item rewards
 - 93443 Lost Shipping Crate (level 36): no item rewards
+- 93444 Bait the Beast (level 60; Ghansurok Hide Tunic 275708, Chimaera Wing Cape 275711): in the finders as seen in game
+- 93450 Phantasmal Problems (level 42): no item rewards
 - 93464 The Visiting Mage (level 38): no item rewards
 - 93465 Notes on Draenethyst (level 40): no item rewards
-- 93574 Corpsefeeder's Carapace (level 45; Corpsefeeder's Shedding 271810, Clacking Carapace Spaulders 271811, Discarded Circlet 271812): in the finders as seen in game
-- 93644 Tattered Journal (level 45): no item rewards
+- 93510 Wake Memories (level 58): no item rewards
+- 93546 Spectral Iron Ore (level 42): no item rewards
+- 93547 A Thorny Solution (level 60; Bramblebark Barrier 275649): in the finders as seen in game
+- 93567 Ends Meet (level 58): no item rewards
+- 93568 Partially Digested Collar (level 45): no item rewards
+- 93584 Cult Closure (level 60): no item rewards
+- 93594 Word of the Woods (level 43): no item rewards
+- 93601 Passing the Blame (level 45): no item rewards
+- 93604 Agamaggan's Blood (level 45): no item rewards
+- 93606 Not on Squealing Terms (level 45; Forlorn Necklace 260247, Rejected Roses 271618): in the finders as seen in game
+- 93609 Forlorn Necklace (level 45; Amulet of Vengeance 272184, Amulet of Forgiveness 272185): in the finders as seen in game
+- 93615 Kits and Cats (level 57; Claw of Shalla'kal 276338): in the finders as seen in game
+- 93617 Prey and Predator (level 57; Cured Staghide Leggings 276339): in the finders as seen in game
 - 93663 Lost in Transit (level 35): no item rewards
 - 93678 Abridged Notes on Draenethyst (level 40): no item rewards
+- 93679 Visions of Another (level 55): no item rewards
 - 93680 Key to the City (level 33): no item rewards
+- 93684 The Found One (level 55): no item rewards
+- 93685 To Serve Kum'isha (level 55): no item rewards
 - 93689 Friend of the Kirin Tor (level 33): no item rewards
+- 93747 Violence Into Verdure (level 56): no item rewards
+- 93759 The Bounty of Nature (level 56; Ketharas' Hyjal Stew 262433): in the finders as seen in game
+- 93773 The Pact (level 58): no item rewards
 - 93786 A Message in Blood (level 36): no item rewards
 - 93787 Food for the Taking (level 36): no item rewards
-- 94613 My Kingdom for a Horse (level 38): no item rewards
-- 94614 Freshwater Fiends (level 38): no item rewards
-- 94615 Foal Play (level 38): no item rewards
-- 94617 Coyote Huntin' (level 38): no item rewards
-- 94618 Wheeler's Fleeing Steeds (level 38): no item rewards
+- 93788 Borrowed Blades (level 38): no item rewards
+- 93825 Barkbound Blessings (level 57): no item rewards
+- 93826 Deal Dread to Deadwood (level 57): no item rewards
+- 93827 Windswept Wards (level 58): no item rewards
+- 93828 Herbs of the Hollow (level 57): no item rewards
+- 93830 Water of Hyjal (level 57): no item rewards
+- 93831 Sweetpaw Jam (level 57; Sweetpaw Jam 267341): in the finders as seen in game
+- 93832 Shatter the Stonewatchers (level 58): no item rewards
+- 93833 Wicked Wisdom (level 57): no item rewards
+- 93834 Burrow Beetles (level 57; Major Rejuvenation Potion 18253): in the finders as seen in game
+- 93952 Balance Through Strength (level 57): no item rewards
+- 93971 Farholde Scouting Report (level 45; item 275040, item 275041): in the finders as seen in game
+- 93976 The Goblin Trader (level 36): no item rewards
+- 94479 One Person's Trash (level 56): no item rewards
+- 94480 A Gift From Our Enemies (level 36): no item rewards
+- 94481 A Serving of Strength (level 38): no item rewards
+- 94483 Show Them How It's Done (level 39): no item rewards
+- 94504 Barkskin Beginnings (level 57): no item rewards
+- 94532 Gnoll Infestation (level 38): no item rewards
+- 94533 Snargl's Snout (level 40; Bristlepelt Vest 274942, Gnoll Crusher Leggings 274943, Bloodsnout Striker 274944, Gnollblood Robe 274946): in the finders as seen in game
+- 94535 Bristle Hills Bandits (level 38): no item rewards
+- 94556 Jom-jom's Escape (level 42; Jom-jom's Gabbar 274952, Clobrok's Block Rock 274955): in the finders as seen in game
+- 94668 Bloodmaster's Ring (level 41): no item rewards
+- 94669 Pay to Play (level 41): no item rewards
+- 94670 Bloodmaster's Ring (level 41): no item rewards
+- 94672 Encroaching Twilight (level 41): no item rewards
 - 94678 Gnoll Infestation (level 38): no item rewards
 - 94679 Snargl's Snout (level 40; Gnollhide Tunic 274938, Southern Watch Leggings 274939, Unbalanced Fighting Stick 274940, Bristle Hills Mystic Robe 274941): in the finders as seen in game
+- 94680 Twilight Missives (level 41): no item rewards
+- 94727 Digging for Answers (level 40): no item rewards
+- 94733 Our Ogre Friend (level 41): no item rewards
+- 94734 A Boar's Delight (level 41): no item rewards
+- 94737 A Treat for a Friend (level 41): no item rewards
+- 94739 Bloodmaster's Ring (level 42): no item rewards
+- 94744 The Wayward Warrior (level 43): no item rewards
+- 94745 Carving a Path (level 44): no item rewards
+- 94748 Break Their Chains (level 44): no item rewards
+- 94768 Bring Me His Head (level 46; Cloak of the Cult 275050, Twilight Barrier 275051): in the finders as seen in game
+- 94782 The Western Post (level 57): no item rewards
 - 94789 Call of Air (level 30; Air Totem 5178): in the finders as seen in game
-- 94841 Lost Shipping Crate (level 38): no item rewards
-- 94842 Unsavory Plant Food (level 38): no item rewards
+- 94832 Belle's Ring (level 58): no item rewards
+- 94857 If a Tree Falls, and No One Hears... (level 39): no item rewards
+- 94861 Helping Hands (level 39; Curly's Chopper 274928, Hurley's Felling Axe 274929): in the finders as seen in game
 - 94872 Buying Friendship: Magram (level 45): no item rewards
 - 94873 Buying Friendship: Gelkis (level 45): no item rewards
-- 94877 Saving Sunnyglade (level 40; Neophyte's Wand 274919, Twilight Carver 274920): in the finders as seen in game
-- 94879 Scraps of Knowledge (level 40): no item rewards
-- 94881 Curious Trinkets (level 38): no item rewards
-- 94885 Field Marshal's Log (level 40): no item rewards
-- 94887 Saving Marshal Ryan (level 47): no item rewards
-- 94888 No Soldier Left Behind (level 44): no item rewards
-- 94889 Carving a Path (level 44): no item rewards
 - 94895 Lost Shipping Crate (level 38): no item rewards
-- 94907 A Small Favor (level 44): no item rewards
 - 94923 Hats Off (level 38): no item rewards
-- 94924 Hunting the Hunters (level 39): no item rewards
-- 94925 A Fur Trade (level 39): no item rewards
-- 94928 A Few Furs for Friz (level 39): no item rewards
-- 94931 Stolen Saws (level 38): no item rewards
-- 94961 Biting the Hand (level 40): no item rewards
-- 94963 Biting the Hand (level 40): no item rewards
+- 94929 Deliver the Second Shipment (level 38): no item rewards
+- 94930 Lost Shipping Crate (level 38): no item rewards
+- 94962 Bloodmaster's Ring (level 42): no item rewards
+- 94964 Bloodmaster's Ring (level 43): no item rewards
+- 94965 Bloodmaster's Ring (level 44; Superior Healing Potion 3928, Superior Mana Potion 13443): in the finders as seen in game
+- 94968 Eye of Mugg (level 45; item 279852, item 279480, item 279853): in the finders as seen in game
+- 94969 Krol'dok No More! (level 42): no item rewards
+- 94971 A Paladin's Steed (level 40): no item rewards
+- 94972 Tome of Twilight (level 44; item 279859, item 279860): in the finders as seen in game
+- 94973 Krol'dok Moulding (level 41): no item rewards
+- 94974 Key Ingredients (level 41; Krol'dok Compound Key 267089): in the finders as seen in game
+- 94975 A Token of Vengeance (level 42; item 267090): in the finders as seen in game
+- 94980 Krol'dok Moulding (level 41): no item rewards
+- 94981 Key Ingredients (level 41; Krol'dok Compound Key 267089): in the finders as seen in game
+- 94997 Lingering Essence (level 42): no item rewards
+- 94998 Curios of Curiosity (level 42; item 279850): in the finders as seen in game
 - 94999 Eyes for the Watchman (level 36): no item rewards
-- 95059 Frazzlespark's Crate (level 36): no item rewards
-- 95064 Preventative Measures (level 39; Farholde Horns 274959, Brute Slayer Band 274961): in the finders as seen in game
-- 95118 Saltwater Savages (level 41): no item rewards
-- 95119 Unfriendly Competition (level 43): no item rewards
-- 95120 WANTED: Old Rot-Chum (level 42; Rot-Covered Harpoon 274963): in the finders as seen in game
-- 95121 A Taste of the Sea (level 40; Recipe: Briny Seafood Stew 274972): in the finders as seen in game
+- 95006 Stolen Power (level 58): no item rewards
+- 95026 Blight No More (level 58; Plaguecrusher Greaves 276341): in the finders as seen in game
+- 95027 Feathers in Flight (level 57; Blunderflame Bone Bow 275439): in the finders as seen in game
+- 95033 On the Other Side (level 41): no item rewards
+- 95062 Frazzlespark's Crate (level 36): no item rewards
+- 95063 Bloodmaster's Ring (level 45; Bloodmaster's Ring 275043, Bloodsport Band 275044, Ogre Horn Ring 275045): in the finders as seen in game
+- 95107 Deeproar Down (level 58; Staff of the Deeproar 275291, Barkskin Scepter 275293, Deadwood Boomstick 275296): in the finders as seen in game
+- 95108 Mystic Mix (level 58): no item rewards
 - 95141 Report to Rog'mar (level 38): no item rewards
+- 95143 Finding Tan'jani (level 38): no item rewards
 - 95144 Overseas Delivery (level 38): no item rewards
 - 95147 The Lost Scout (level 37): no item rewards
 - 95148 Southern Watch Gnoll Report (level 37): no item rewards
-- 95156 Stuff 'Em and Stick 'Em (level 37): no item rewards
-- 95184 The Sharpest of Blades (level 38): no item rewards
-- 95254 WANTED: Trapclaw (level 42; Undermine Clam Chowder 16766): in the finders as seen in game
-- 95261 It Takes Guts (level 42): no item rewards
+- 95162 Paletusk Harvesting (level 41; Recipe: Plain Ol' Paletusk 274977): in the finders as seen in game
+- 95163 Drive Them Back (level 40): no item rewards
+- 95183 Step One: Rock (level 41): no item rewards
+- 95194 Our Man in Theramore (level 53): no item rewards
+- 95196 Watch Yer Back (level 53): no item rewards
+- 95198 The Return of the King? (level 53): no item rewards
+- 95218 More of the Same (level 56): no item rewards
+- 95248 To the Summit of Eternity (level 59): no item rewards
+- 95262 The Secret Prison (level 53): no item rewards
+- 95263 Somber News (level 53): no item rewards
+- 95264 Shaw Needs To Know (level 53; item 279833, item 279831, item 279474): in the finders as seen in game
+- 95273 Water of Hyjal (level 59; Shallow Bindings 275390, Murkborn Girdle 275434): in the finders as seen in game
+- 95278 It Is Time, Brother... (level 45): no item rewards
+- 95283 The Missing Kor'kron (level 53): no item rewards
+- 95284 The Elite of the Elite (level 53): no item rewards
+- 95285 Right Place, Wrong Time (level 53): no item rewards
+- 95294 Smuggler's Bargain (level 42): no item rewards
 - 95295 I Know a Guy (level 40): no item rewards
+- 95296 Shipping and Handling (level 40): no item rewards
+- 95309 No Orc Left Behind (level 53): no item rewards
+- 95312 Coming to Collect (level 40): no item rewards
+- 95315 The Riverglades Report (level 38): no item rewards
+- 95316 The Experimental Method (level 57; Crowfeather Tunic 275832, Bristlecone Cloak 275833): in the finders as seen in game
+- 95317 Notation, Notation, Notation (level 57): no item rewards
+- 95318 Taste of Ash (level 57; Acolyte Blade 275836): in the finders as seen in game
+- 95319 Crystalline Collection (level 57): no item rewards
+- 95320 A Curious Question (level 57): no item rewards
+- 95321 Tazzik's Dues (level 40): no item rewards
 - 95322 Get the Goods (level 40): no item rewards
 - 95325 We've Been Robbed! (level 40): no item rewards
-- 95330 Love Thy Neighbor (level 37): no item rewards
-- 95384 Partial Mystical Notes (level 40; Dudd's Second-Favorite Wand 277256): in the finders as seen in game
+- 95326 The Big Payback (level 39): no item rewards
+- 95327 All's Well That Ends Well (level 40): no item rewards
+- 95331 REUSE ME (level 45): a placeholder
+- 95378 The Hydra's Head (level 58): no item rewards
+- 95379 A Revenge So Sweet (level 58): no item rewards
+- 95380 A Prolific Source (level 57): no item rewards
+- 95383 Shipping and Handling (level 40): no item rewards
 - 95385 Torn Mystical Scroll (level 43; Dudd's Thinkin' Cap 277211): in the finders as seen in game
-- 95426 Rog'mar Supplies (level 39): no item rewards
+- 95417 The Purple Ones (level 40): no item rewards
+- 95418 Spread the Word (level 40): no item rewards
+- 95420 Land of Giants (level 40): no item rewards
+- 95424 Might Makes Right (level 41): no item rewards
+- 95425 Unworthy Champion (level 42): no item rewards
+- 95427 Twilight No More! (level 41): no item rewards
+- 95428 Clugfist's Decree (level 41): no item rewards
+- 95431 Rumblings of Discontent (level 41): no item rewards
+- 95432 Rise Up! (level 43): no item rewards
+- 95433 Death to the Executioner (level 46; Thud Hammer 275011): in the finders as seen in game
+- 95454 The Honor of the Kor'kron (level 53): no item rewards
+- 95472 Consolation Prize (level 40; Sweat-Stained Shirt 270334): in the finders as seen in game
+- 95483 Thrall Needs to Know (level 53; item 279831, item 279833, item 279474): in the finders as seen in game
 - 95511 Your First Feline Friend (level 40; Reins of the Striped Nightsaber 8629, Reins of the Striped Frostsaber 8631, Reins of the Spotted Frostsaber 8632, Reins of the Striped Dawnsaber 274706): in the finders as seen in game
-- 95603 Bats in the Belfry (level 38): no item rewards
-- 95613 Keeping the Light On (level 38): no item rewards
-- 95615 In Memoriam (level 38; Sacristan Band 274915, Verger Greaves 274916, Warding Candle 274918): in the finders as seen in game
+- 95555 Corrupted Nature (level 50): no item rewards
+- 95568 Seeds for a New Season (level 56): no item rewards
+- 95569 Hope for Hatchlings (level 56): no item rewards
+- 95599 The Old Key (level 42): no item rewards
+- 95601 The Purple Ones (level 40): no item rewards
+- 95602 Sickening Lights (level 40): no item rewards
+- 95611 Rites of Respect (level 56; Staghide Drape 274035): in the finders as seen in game
 - 95682 Open the Maw (level 31; Knife-Polishing Rag 271740, Dirt-Heavy Bracers 271732, Bloody Map 271745): in the finders as seen in game
 - 95748 The Gurubashi Legends of Old (level 40): no item rewards
+- 95753 Challenge of the Desert Wolf (level 45): no item rewards
+- 95766 Fine Feathered Friend (level 56): no item rewards
 - 95770 Locating the Lost City (level 40): no item rewards
 - 95773 Enemies in the Water (level 37): no item rewards
 - 95775 The Drowned City (level 40): no item rewards
 - 95776 The Only Good Brinescale... (level 38; Tidesoaked Leggings 279888, Naga Priestess's Mantle 279889): in the finders as seen in game
-- 95786 An Acquaintance in Southshore (level 40): no item rewards
-- 95789 Shady Saltseers (level 40; Rusted Troll War Belt 279882, Saltseer's Helm 279930): in the finders as seen in game
-- 95791 The Saltseer Captain (level 40; Mutinous Cuffs 279883, South Seas Shroud 279884): in the finders as seen in game
+- 95792 Clear 'em Out (level 42): no item rewards
+- 95793 Stemming the Demon Tide (level 59): no item rewards
 - 95817 Rotgath Stonebeard (level 60): no item rewards
 - 95818 A Quick Craft (level 60; Alchemy Sign 270877, Blacksmithing Sign 270878, Enchanting Sign 270880, Engineering Sign 270881, Leatherworking Sign 270882, Tailoring Sign 270883): in the finders as seen in game
 - 95820 Karolek (level 60): no item rewards
 - 95821 A Quick Craft (level 60; Alchemy Sign 270877, Blacksmithing Sign 270878, Enchanting Sign 270880, Engineering Sign 270881, Leatherworking Sign 270882, Tailoring Sign 270883): in the finders as seen in game
-- 95912 WANTED: Blademaster Kaijo (level 42; Bladewind 276102, item 287072): in the finders as seen in game
-- 95943 Foreman's Plight (level 38): no item rewards
-- 95982 Not My Circus (level 38): no item rewards
-- 95983 A Feast for Buzzards (level 38): no item rewards
-- 95984 Song of the Strider (level 39): no item rewards
-- 95986 King of the Wild Plains (level 41): no item rewards
-- 95991 WANTED: Ghostmaw (level 42; Crocskin Waders 274962): in the finders as seen in game
-- 96015 A Miner Problem (level 43; Twilight Mine Light 275028): in the finders as seen in game
+- 95882 WANTED: Scoutmaster Vargas (level 43; Scoutmaster's Eyepatch 276105): in the finders as seen in game
+- 95924 Panic at the Digsite (level 60; item 279903, item 279905): in the finders as seen in game
+- 95925 Mapping the Way Forward (level 60; item 279908, item 279910, item 279912): in the finders as seen in game
+- 95926 The Dark Crystal (level 60; item 279908, item 279910, item 279912): in the finders as seen in game
+- 95928 Crystalline Elements (level 60; item 279904, item 279906): in the finders as seen in game
+- 95934 Proof of Profit (level 42): no item rewards
+- 95935 Hail the Dragonslayer (level 43): no item rewards
+- 95936 Hail the Dragonslayer (level 43): no item rewards
+- 95951 Fetch 'n' Fletch (level 38): no item rewards
+- 95955 Stick 'Em (level 39): no item rewards
+- 95992 WANTED: Ghostmaw (level 42; Crocskin Waders 274962): in the finders as seen in game
+- 96003 Drawing Down the Malevolent (level 60; Depleted Eye of Influence 275630): in the finders as seen in game
 - 96016 The Tempest's Weapons (level 40; Lightning's Grasp 280607, Tidebringer's Claw 280605, Rage of the Storm 280604, Elementalist's Guard 280696): in the finders as seen in game
-- 96125 In Need of Relief (level 43): no item rewards
+- 96025 As the Crow Flies (level 59): no item rewards
+- 96026 Step Two: More Rock (level 41; Plans: Mithril Warhammer 251460): in the finders as seen in game
+- 96060 Tempered Expectations (level 42; Phantasmal Shiv 272181, Spectral Magister's Commission 272180, Greatsword of Great Pasts 272179): in the finders as seen in game
+- 96076 In Demand - Ancient Elven Curiosities (level 60; Undermine Satchel 271994): in the finders as seen in game
+- 96077 Belle's Ring (level 58; Thomas's Ring 273800): in the finders as seen in game
+- 96078 A Tale Spun Around the Fire (level 40; item 279885, item 279886, item 279887, Translated Tale of I'lalai 270312, Tale of I'lalai in Zandali 270313): in the finders as seen in game
+- 96103 A Feast for Buzzards (level 38): no item rewards
+- 96104 Song of the Strider (level 39): no item rewards
+- 96105 King of the Wild Plains (level 41): no item rewards
+- 96107 Feathers for Fletching (level 40): no item rewards
+- 96108 Poison Tips (level 40): no item rewards
+- 96109 A Hunter's Quiver (level 40; Matriarch Quiver 274926): in the finders as seen in game
+- 96131 An Oldstone But An Old Friend (level 58): no item rewards
 - 96135 Heed My Call (level 40): no item rewards
 - 96136 Call of Air (level 35; Air Totem 5178): in the finders as seen in game
-- 96222 Khan Hratha (level 42; Kolkar Marauder Chain 6773, Traitor's Finger 6774, Kolkar Hunter's Belt 6788, Ceremonial Centaur Blanket 6789, Carved Centaur Totem 254432): in the finders as seen in game
+- 96145 Past Wing and Claw (level 58): no item rewards
+- 96209 The Ancient, Orokai (level 58): no item rewards
 - 96241 Talkin' bout Toxins, Mon (level 29): no item rewards
+- 96252 Tarnished Treasures (level 58; Highfeather Bangle 275831): in the finders as seen in game
+- 96255 Amalgamated Marrow (level 58): no item rewards
 - 96259 Defending the Dead (level 29): no item rewards
 - 96260 Stronger than Steel (level 29; Spidersilk Sack 276892, Spidersilk Pouch 276891, Crystal Thread Cloak 273654): in the finders as seen in game
 - 96261 The Broodmother (level 30; Transformative Cocoon 276895): in the finders as seen in game
+- 96262 Prickly Pinecones (level 57): no item rewards
 - 96264 Elemental Aid (level 33): no item rewards
 - 96294 A Darker Truth (level 30): no item rewards
+- 96296 Fetid Corruption (level 58): no item rewards
+- 96302 Arch Absolution (level 60): no item rewards
+- 96303 Memory Mist (level 60): no item rewards
+- 96321 The Dying God (level 58): no item rewards
+- 96322 A Revenge Now Bitter (level 58; Felflick's Fire Flicker 275837, Dirtwalker Pendant 275838): in the finders as seen in game
+- 96332 A Little Payback (level 53; item 279824, item 279826, item 279829): in the finders as seen in game
+- 96334 Blood Red Bandanas (level 53; item 279448, item 279473): in the finders as seen in game
+- 96335 The Man in the Iron Chains (level 53): no item rewards
+- 96337 More Valuable Than Gold (level 53): no item rewards
 - 96339 Legacy Reward: Replica Ironforge Air Rifle (level 60; Holstered Replica Ironforge Air Rifle 276236): in the finders as seen in game
+- 96369 Bad News for Folkar (level 53): no item rewards
+- 96377 State Secrets (level 53): no item rewards
+- 96381 A Bit of Wet Work (level 53; item 279825, item 279826, item 279829): in the finders as seen in game
 - 96383 Legacy Reward: Spectral Bear Cub (level 60; Spectral Bear Cub 277714): in the finders as seen in game
+- 96435 A Fitting End (level 58): no item rewards
+- 96438 Battle at the Mannoroc Coven (level 40): no item rewards
+- 96449 Aeonas's Secret Refuge (level 40): no item rewards
+- 96476 In Search of Aeonas (level 53): no item rewards
+- 96494 Gathering Storm (level 59): no item rewards
+- 96550 Battle Recall (level 58): no item rewards
+- 96558 Soldier's Solace (level 60; Kanai's Knife 274383, Toy Soldier 274386, Illegible Dogtags 274384, Fishing Trip 274800): in the finders as seen in game
+- 96559 Supply Drop (level 57): no item rewards
+- 96603 Unstable Magic (level 60): no item rewards
+- 96609 A Taste of Home (level 52; Shimmerwine Shanker 276903, Shimmerwine Spirits 276904, Everlasting Silvermoon Shimmerwine 276896): in the finders as seen in game
+- 96616 Herbs for the Bruised and Weary (level 57): no item rewards
+- 96622 A Rest Without Pain (level 57; Manual: Major Healing Potion 255729): in the finders as seen in game
+- 96666 Burrow Bonding (level 57): no item rewards
+- 96674 Ewe Wandered Off (level 56; Wool-Stitched Waistband 275827): in the finders as seen in game
 - 96735 Toast!? (no level): no level
-- 96771 Vengeance of the Highborne (level 45): no item rewards
+- 96772 The Dragon's Journal (level 53): no item rewards
 - 96774 Ancient Gurubashi Idol (level 40): no item rewards
+- 96775 Zum'rah's Head (level 46): no item rewards
+- 96776 An'she's Radiance (level 51): no item rewards
 - 96779 Syndicate Sabotage (level 24): no item rewards
 - 96781 What's the Big Idea? (level 36): no item rewards
 - 96782 Covert Extraction (level 36): no item rewards
@@ -1249,48 +1705,119 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 96784 Master of Disguise (level 36): no item rewards
 - 96785 Ain't No Telling (level 36): no item rewards
 - 96786 The Syndicate Sting (level 36): no item rewards
+- 96796 Woods Workshop (level 56): no item rewards
+- 96797 The Orphan (level 54): no item rewards
+- 96798 Into the Darkness (level 54): no item rewards
+- 96799 A Heavy Responsibility (level 54): no item rewards
+- 96811 Escaping the Shadows (level 54): no item rewards
+- 96812 Thicker Than Water (level 54; Denric's Dog Tags 276900, Uncle's Heroism 276901, Youngster's First Bow 276902): in the finders as seen in game
+- 96830 Farsight Guided (level 57): no item rewards
+- 96833 Venom Maws (level 56): no item rewards
+- 96912 Field of Honor: Week 1 (level 60): no item rewards
+- 96930 The Capricious Corvid (level 58): no item rewards
+- 96931 Heading Up the Mountain (level 58): no item rewards
+- 96939 The Balance of Life and Death (level 58): no item rewards
+- 96957 Bone Sweet Bone (level 58): no item rewards
+- 96959 Blademaster's Bonfires (level 59): no item rewards
+- 96964 A Clever Creature (level 59): no item rewards
+- 96971 To Outfox a Demon (level 59): no item rewards
+- 96978 Violent Venison (level 57): no item rewards
+- 96979 Sacred Refreshment (level 57): no item rewards
+- 96982 Your First Riding Kodo (level 40; White Kodo 275993, Brown Kodo 15290, Gray Kodo 15277): in the finders as seen in game
+- 96983 Yashiro's Windwalk (level 60; Polished Doomguard Edge 276335, Yashiro's Spirit Bead 276336): in the finders as seen in game
 - 96984 Heart of Disruption (level 33; Battle Spaulders 279842, Enchanted Sandals 279843, Striking Staff 279844): in the finders as seen in game
+- 96989 Your First Riding Raptor (level 40; Whistle of the Emerald Raptor 8588, Whistle of the Turquoise Raptor 8591, Whistle of the Violet Raptor 8592): in the finders as seen in game
+- 96991 Trail Assist (level 59): no item rewards
+- 96992 Resupply (level 57): no item rewards
+- 96994 Your First Riding Wolf (level 40; Horn of the Brown Wolf 5668, Horn of the Dire Wolf 5665, Horn of the Timber Wolf 1132, Horn of the Black Wolf 1041): in the finders as seen in game
+- 96996 Your First Riding Galestrider (level 40; Empyrean Galestrider 269681, Umber Galestrider 274930, Stormy Galestrider 269683): in the finders as seen in game
 - 96997 A Steed in Death as They Were in Life (level 40; Blue Skeletal Horse 13332, Red Skeletal Horse 13331, Brown Skeletal Horse 13333, Black Skeletal Horse 276063): in the finders as seen in game
+- 96998 Tribal Colors (level 58): no item rewards
+- 96999 Wrap Return (level 58; Nimble Gloves 277215, Feathered Cuffs 277222): in the finders as seen in game
+- 97000 Grain of Memory (level 57): no item rewards
+- 97001 Sawyer's Legacy (level 57): no item rewards
+- 97009 Maerion's Misery (level 59): no item rewards
+- 97010 Blind Vengeance (level 59; Thaelemaches' Talisman 276337): in the finders as seen in game
+- 97017 Your First Riding Ram (level 40; Brown Ram 5872, Gray Ram 5864, White Ram 5873): in the finders as seen in game
+- 97018 Learning to Ride (level 40): no item rewards
+- 97022 Report to Danitha (level 40): no item rewards
+- 97045 Your First Horse (level 40; Brown Horse Bridle 5656, Chestnut Mare Bridle 5655, Pinto Bridle 2414): in the finders as seen in game
+- 97046 Your First Mechanostrider (level 40; Red Mechanostrider 8563, Blue Mechanostrider 8595, Green Mechanostrider 13321, Unpainted Mechanostrider 13322): in the finders as seen in game
 - 97047 The Cook in the Cage (level 38): no item rewards
 - 97048 Returning to Port (level 38; Kurzen Headshrinker's Cinch 277224, Jailer's Discarded Chain 277232, Crusty Cuffs 277214): in the finders as seen in game
+- 97049 Essence of Seeping Slimes (level 60; item 279932, item 279902): in the finders as seen in game
 - 97074 Learning to Ride (level 40): no item rewards
+- 97168 Material Assistance (level 60): no item rewards
+- 97170 Learning to Ride (level 40): no item rewards
+- 97171 Your First Horse (level 40; Brown Horse Bridle 5656, Chestnut Mare Bridle 5655, Pinto Bridle 2414, Black Stallion Bridle 2411): in the finders as seen in game
+- 97173 Blackmaw Magic (level 59): no item rewards
+- 97174 A Worthy Endeavor (level 60): no item rewards
+- 97188 Learning to Ride (level 40): no item rewards
+- 97194 Learning to Ride (level 40): no item rewards
 - 97196 The Coldbringer's Eye (level 41): no item rewards
+- 97197 Fragment of the Firelands (level 55): no item rewards
+- 97198 Blackmaw Magic (level 59): no item rewards
 - 97200 Learning to Ride (level 40): no item rewards
 - 97203 Learning to Ride (level 40): no item rewards
+- 97204 Learning to Ride (level 40): no item rewards
+- 97205 Learning to Ride (level 40): no item rewards
 - 97265 Hate the Hatefury (level 33; Aka'rai's Tattered Vestments 277514, Dagger of Deals 277515): in the finders as seen in game
 - 97287 Shrewd Negotiations (level 33): no item rewards
+- 97319 A Cousin Abroad (level 55): no item rewards
+- 97327 Blackmaw Pouches (level 60): no item rewards
 - 97328 Anything of Value (level 35): no item rewards
 - 97329 Where's the Key? (level 35): no item rewards
 - 97331 Zimmix's Great Escape (level 35): no item rewards
 - 97332 Twice Misplaced Trust (level 41; Refunded Ring 278017, Renegotiated Ring 278018, Apology Ring 278019, Jug of Badlands Bourbon 2595): in the finders as seen in game
+- 97378 Mirrorscale (level 50; Mantle of Scaleslaying 281275, Pauldrons of Scaleslaying 281276, Shoulders of Scaleslaying 281277, Shoulderplates of Scaleslaying 281278): in the finders as seen in game
 - 97386 The Offense of Grom'gol (level 44; Mauler's Mutton 277979, Ogre Bone 277980, Souvenir Ogre Tooth 277981): in the finders as seen in game
+- 97405 Noise Complaints (level 44; Mauler's Mutton 277979, Ogre Bone 277980, Souvenir Ogre Tooth 277981): in the finders as seen in game
 - 97420 Reduce, Reuse, Reconcile (level 36): no item rewards
+- 97446 Your First Riding Kodo (level 40; White Kodo 275993, Brown Kodo 15290, Gray Kodo 15277, Lavender Kodo 277960): in the finders as seen in game
+- 97447 An Earnest Proposition (level 60; item 227001, item 227009, item 227017): in the finders as seen in game
 - 97453 Weed Whacked (level 38): no item rewards
+- 97490 Halt the Hail (level 60; Hailgiant's Fists 281279, Mountain Climbers 281280, Frost's Whisper Pendant 281281): in the finders as seen in game
 - 97530 Dunemaul Dues (level 47; A Little Somethin' 281282): in the finders as seen in game
 - 97534 Gritty Business (level 45): no item rewards
+- 97536 Gnomish Garbage (level 45): no item rewards
 - 97539 Silky Sutures (level 36): no item rewards
+- 97540 Oasis (level 50): no item rewards
+- 97617 Safety Checks (level 40): no item rewards
+- 97663 Supplies and Studies (level 40): no item rewards
+- 97821 Mirage Mirror (level 42; Mirage Mirror 277844): in the finders as seen in game
+- 97884 Armory of Sunnyglade (level 40; Tome of Tremayne Family Blacksmithing Techniques 280943): in the finders as seen in game
 - 97985 Thundering Hearts (level 33): no item rewards
+- 97986 Argent Arbiter (level 57): no item rewards
+- 97987 Stormwind's High Order (level 57; High Order Pendant 281286, Shen'dorei Signet 281288): in the finders as seen in game
+- 97988 Orgrimmar's Windshapers (level 57; Windshaper Pendant 281287, Shen'dorei Signet 281288): in the finders as seen in game
 - 98027 Gleaming Crescent Necklace (level 26; Replica Crescent Necklace 281290): in the finders as seen in game
 - 98059 Hillsbrad's Hoard (level 27): no item rewards
 - 98069 Stolen Freewind Supplies (level 30): no item rewards
 - 98070 Stop the Screeching (level 30): no item rewards
 - 98096 Sisters In Duty (level 47): no item rewards
-- 98155 Pristine Pesterhide Pelts (level 29): no item rewards
+- 98109 Bleeding Edge (level 57): no item rewards
 - 98156 Packaged Pristine Pelts (level 29; Pelt Pants 281295): in the finders as seen in game
+- 98166 Your First Horse (level 40; Brown Horse Bridle 5656, Chestnut Mare Bridle 5655, Pinto Bridle 2414): in the finders as seen in game
 - 98192 Skin Careful, Skin Sharp (level 43): no item rewards
+- 98203 Witch Doctor Ti'ik (level 49; Ti'ik's Tattered Trousers 281298, Profane Ritual Robes 281299, Sacrificial Shackles 281301): in the finders as seen in game
+- 98205 Whelps are the Worst! (level 44; Whelpscale Necklace 281302, Bleached Scale Vest 281303): in the finders as seen in game
+- 98215 Dragon Scales, Post Burnt Tails (level 44): no item rewards
 - 98216 Understanding Our Present (level 31; Prospector's Signet 281304, Excavation Cloak 281305): in the finders as seen in game
 - 98223 Old Habits (level 31; Flamescarred Spellbook 281306, Dragonmaw Buckler 281307): in the finders as seen in game
 - 98230 This Land Was Their Land (level 29): no item rewards
+- 98231 Active Ingredient (level 44): no item rewards
 - 98233 Sword in the Slime (level 42; Jameson's Backup Sword 281308): in the finders as seen in game
 - 98291 Death to the Dragonmaw (level 30): no item rewards
 - 98297 Stopping the Cycle (level 34; Fallen Dragon's Scepter 281312, Trusty Sword 281313, Subdued Dragon's Fang 281314): in the finders as seen in game
 - 98300 Word to Ironforge (level 34): no item rewards
 - 98310 Gleaning Our Future (level 32; Golem War Cloak 281319, Rune-Etched Ring 281320, Giantstone Medallion 281321): in the finders as seen in game
 - 98313 For Further Study (level 32): no item rewards
+- 98325 Blood and Thunder (level 60): no item rewards
 - 98338 REUSE ME (level 33): a placeholder
 - 98417 Vengeful Trail (level 28): no item rewards
 - 98418 Shared Fury (level 30): no item rewards
 - 98471 Message from the Supreme Magister (level 35): no item rewards
+- 98477 Unstable Magic (level 60): no item rewards
 - 98823 Earthen Echo (level 31; Heavehammer 271766, Healer's Staff 271767, Furs of the Earthen Ring 271719): in the finders as seen in game
 - 98887 Conflict at Darkspear Islands (level 39): no item rewards
 - 98889 Conflict at Darkspear Islands (level 49): no item rewards
@@ -1312,5 +1839,17 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 98913 Theramore Basic Care Package (level 39; Theramore Basic Care Package 285168): in the finders as seen in game
 - 98914 Theramore Standard Care Package (level 49; Theramore Standard Care Package 285169): in the finders as seen in game
 - 98915 Theramore Advanced Care Package (level 60; Theramore Advanced Care Package 285170): in the finders as seen in game
+- 99187 The Reliquary of Tyr (level 58; item 286408): in the finders as seen in game
 - 99192 A Donation of Silk (level 60): no item rewards
+- 99193 A Donation of Mageweave (level 60): no item rewards
+- 99194 A Donation of Runecloth (level 60): no item rewards
 - 99197 A Donation of Silk (level 60): no item rewards
+- 99198 A Donation of Mageweave (level 60): no item rewards
+- 99199 A Donation of Runecloth (level 60): no item rewards
+- 99205 Swift as the Wind (level 60): no item rewards
+- 99207 Swift as the Wind (level 60): no item rewards
+- 99208 Swift as the Wind (level 60): no item rewards
+- 99257 A Heart of Crystal (level 43): no item rewards
+- 99258 Mana Mania (level 43): no item rewards
+- 99326 Your First Horse (level 40; Brown Horse Bridle 5656, Chestnut Mare Bridle 5655, Pinto Bridle 2414): in the finders as seen in game
+- 99435 The Great Masquerade (level 60): no item rewards
