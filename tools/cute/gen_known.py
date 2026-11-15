@@ -74,7 +74,8 @@ BETA_CAP = 30
 # research/wago, no encounter, no LFG row): their instance ids are unknown, so they cannot be keyed and are left to the
 # guild (rule 2 adds an instance once two members entered it). The selftest fails once one of them joins, so the
 # list never outlives the client
-AWAITED = ("The Drowned City", "Krol'dok Stronghold", "Alcaz Prison", "Blackmaw Hold", "Shaper's Terrace")
+# (the live build 70862 gave all five their Map rows and encounters: none awaited now)
+AWAITED = ()
 # DungeonEncounter difficulties of a dungeon run: 0 (any) and 1 (normal). The same bosses also sit under the Season
 # of Discovery raids' difficulties (Blackfathom Deeps and Gnomeregan at 198 and 201, the Sunken Temple at 201 and
 # 215); players' loot records in the beta name the 0 and 1 rows (2910-2916 in Blackfathom Deeps, 2768-2772 in
@@ -1395,7 +1396,7 @@ def selftest(src, seed, report, text):
             want = "%s %d %d %d wings %s quests %d awaited %s" % (seed["build"], len(seed["dungeons"]), counts(seed)["bosses"], len(xp), ",".join(
                 "%d=%d" % (mid, len(d["wings"])) for mid, d in sorted(seed["dungeons"].items()) if d["wings"]),
                 counts(seed)["quests"], ", ".join("%s %d-%d" % (d["name"], d["min"], d["max"]) for d in seed["awaited"]))
-            check(r.returncode == 0 and r.stdout.strip() == want, "Lua reads the file as %r, not %r: %s" % (r.stdout.strip(), want, r.stderr.strip()))
+            check(r.returncode == 0 and r.stdout.strip() == want.strip(), "Lua reads the file as %r, not %r: %s" % (r.stdout.strip(), want.strip(), r.stderr.strip()))  # (no awaited names: no trailing space)
             # a name with UTF-8, a quote, a backslash and a digit after an escape comes back byte for byte
             name = "König \"Grün\" \\ é1"
             r = subprocess.run([lua, "-e", "io.write(%s)" % lua_str(name)], capture_output=True)

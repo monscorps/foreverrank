@@ -2171,7 +2171,7 @@ function UI.Report(q, reason)
   list[#list + 1] = { id = q.id, r = reason, at = time and time() or 0, b = QB.Data.BUILD, lvl = QB.state.level,
                       m = QB.Plain(QB.API.MapID()), wx = me and math.floor(me.wx) or nil, wy = me and math.floor(me.wy) or nil }
   while #list > 100 do table.remove(list, 1) end
-  QB:Print(string.format("Noted for %s: %s. It is kept in your saved file, QuestBank.lua, and not sent anywhere.", q.name, reason:lower()))
+  QB:Print(string.format("Noted for %s: %s. It is kept in your saved file, QuestBank.lua, and not sent anywhere.", QB.Link.Format(q), reason:lower()))
 end
 function UI.ReportMenu(q)
   local items = {}
@@ -3767,7 +3767,7 @@ function UI:CreateSettingsView(parent)
   end)
   tooltip(v.guideTracker, function(tip)
     tip:AddLine("Hide the game's quest tracker with the step frame", GOLD[1], GOLD[2], GOLD[3])
-    tip:AddLine("While the step frame shows, the game's own quest list at the right of the screen is out of sight. It comes back as soon as you untick this or the step frame goes. Never changed in a fight.", 1, 1, 1, true)
+    tip:AddLine("Off, the game's own quest list at the right of the screen stays, and the step frame sits beside it. On, that list is out of sight while the step frame shows, and comes back as soon as you untick this or the step frame goes. Never changed in a fight.", 1, 1, 1, true)
   end)
   v.guideScale = button(p, "100%", 70)
   v.guideScale:SetPoint("TOPLEFT", LEFT + 28, y0 - 136)

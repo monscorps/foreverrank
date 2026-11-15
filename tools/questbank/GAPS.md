@@ -1,6 +1,6 @@
 # QuestBank data gaps
 
-Written by `gen_data.py` on every run from the inputs it had (Wowhead Forever read 2026-09-29, Forever client 1.60.1.70291,
+Written by `gen_data.py` on every run from the inputs it had (Wowhead Forever read 2026-09-29, Forever client 1.60.1.70862,
 CMaNGOS Classic database). The catalog covers levels 1 to 60. Wowhead Forever only knows the quests its players have met,
 which stops near the beta's level cap; the Classic database seeds the rest, labelled "Classic only" in the addon until
 players see those quests in Forever. Anything listed here is a quest the addon can't fully plan yet.
@@ -10,7 +10,7 @@ players see those quests in Forever. Anything listed here is a quest the addon c
 | Forever XP multiplier read from its Wowhead Forever page | 2354 | 237 | 1403 | 1401 |
 | Turn-in NPC with a position | 2354 | 87 | 1403 | 7 |
 | Turn-in inside a dungeon (hand in on the way, not on the route) | 2354 | 12 | 1403 | 55 |
-| Quest giver with a position (quests that start from an item don't need one) | 2354 | 134 | 1403 | 11 |
+| Quest giver with a position (quests that start from an item don't need one) | 2354 | 133 | 1403 | 11 |
 | Chain known (Wowhead Forever series or the Classic database) | 2354 | 513 | 1403 | 0 |
 
 On 2026-10-01 Blizzard cut dungeon-quest XP: "50% less extra experience beyond normal quest values". Wowhead Forever's pages still show the old multipliers, so every multiplier above x1 is computed as 1 + (read - 1) x 0.5 until they are re-read; the addon says so in the quest tooltip. Hand-ins on 2026-10-02 paid exactly that on every multiplied quest, dungeon-typed or not.
@@ -49,14 +49,14 @@ Chain steps players' games suggest for quests with no known chain, not taken (th
 Written by hand where no list we read has the quest yet (each fact's source is in gen_data.py): 99411 Kyle's Gone Missing! (level 7 and needs 5 from ForeverChanges' quest list, giver unknown, XP unknown).
 Blizzard's notes of 2026-10-08: the new Gelkis and Magram quests "beginning with Valley of Bones" need level 35 (was 30), where the catalog had the level players took them at before that build (flag 32768): 92841 Valley of Bones, 92844 Mountain of Bones, 92846 Outcast Necromancers, 92847 Corrupting Tears, 92873 Proof of Concept, 92893 No Mercy for the Weak, 92894 Bone Raising, 93066 Bristleback Retreat, 93072 Long-Term Solutions, 93129 Threat of Starvation, 93188 Return to Orgrul, 93196 Khan Jehn.
 Changed in the 8 October build and not read since, which the tooltip says (Blizzard's notes): 502 Elixir of Pain (its XP), 91282 A Second Home (its level), 91285 Murlocs at the Gates (its level), 91294 Touring the Grounds (its level), 91316 Making Repairs (its level), 91317 The Tarnished (its level), 91858 Diplomatic Incident (its level), 94427 A Lesson in Divinity (its level), 94435 A Lesson in Divinity (its level), 94436 A Lesson in Divinity (its level), 94438 A Lesson in Divinity (its level), 94440 A Lesson in Divinity (its level), 94441 A Lesson in Divinity (its level), 95803 A Token of Good Faith (its level), 96896 A Righteous Cause (its level), 96899 Bandarion Keep (its level), 98545 Leonid's Letter (its level), 99152 As Above, So Below (its level), 99153 The One That Got Away (its level).
-Quests that share one completion bit in the client (QuestV2, build 1.60.1.70291: doing one marks the others done), ruled out against each other: 108 groups, 430 quests; 292 of them weren't paired by the Classic database. Shared since this build: 1516 Call of Earth, 1519 Call of Earth, 92466 Call of Earth, 94373 Call of Earth; 1517 Call of Earth, 1520 Call of Earth, 92467 Call of Earth, 94374 Call of Earth; 1518 Call of Earth, 1521 Call of Earth, 92468 Call of Earth, 94375 Call of Earth. Class taken from same-named twins: 6721 The Hunter's Path, 6722 The Hunter's Path, 92466 Call of Earth, 92467 Call of Earth, 92468 Call of Earth, 94013 Taming the Beast, 97243 Call of Fire.
+Quests that share one completion bit in the client (QuestV2, build 1.60.1.70862: doing one marks the others done), ruled out against each other: 108 groups, 430 quests; 292 of them weren't paired by the Classic database. Shared since this build: 1516 Call of Earth, 1519 Call of Earth, 92466 Call of Earth, 94373 Call of Earth; 1517 Call of Earth, 1520 Call of Earth, 92467 Call of Earth, 94374 Call of Earth; 1518 Call of Earth, 1521 Call of Earth, 92468 Call of Earth, 94375 Call of Earth. Class taken from same-named twins: 6721 The Hunter's Path, 6722 The Hunter's Path, 92466 Call of Earth, 92467 Call of Earth, 92468 Call of Earth, 94013 Taming the Beast, 97243 Call of Fire.
 Forever quests looked for on 2026-10-08 (lookfor.json, 67): 19 in the catalog (87491 Spark of Freedom, 92432 An Alarming Request, 92456 A Green Sample, 92457 Starving Arcane, 92458 Heart of Disruption, 92459 Friend of the Kirin Tor, 92489 Power Overwhelming, 92754 A New Need for Shadow Protection, 92818 Big, No, MASSIVE Iron Axes, 95795 Fallen in the Fen, 96986 The Grave Knight, 96987 Opportunistic Education, 96988 Source of Power, 97284 Vahlarriel's Vengeance, 98071 Brewer's Trade, 98155 Pristine Pesterhide Pelts, 98463 Talk of the Town, 98824 Prehistoric Prism, 99411 Kyle's Gone Missing!); 48 not yet. A quest's level, side, NPCs and XP come from its Wowhead Forever page, which turns scripts away since 2026-10-04, or from players' games: these come in as soon as someone's QuestBank sees them.
 
 - 908 Amongst the Ruins: shares its completion bit with 6921 Amongst the Ruins, which the catalog has (the game marks both done together); Wowhead Forever lists it (level 27, needs 25, Ashenvale) with no giver or ender, and no player has met it
 - 909 Baron Aquanis: shares its completion bit with 6922 Baron Aquanis, which the catalog has (the game marks both done together); Wowhead Forever lists it (level 30, needs 25, Ashenvale) with no giver or ender, and no player has met it
-- 999 When Dreams Turn to Nightmares: Wowhead Forever lists it (level 25, needs 10, Wailing Caverns) with no giver, ender or XP, and no player has met it; the client's quest table (QuestV2, build 1.60.1.70291) has no row for it, which alone doesn't rule it out (108 quests in the catalog have none either)
-- 1005 What Lurks Beyond: Wowhead Forever lists it (level 20, needs 10, Shadowfang Keep) with no giver, ender or XP, and no player has met it; the client's quest table (QuestV2, build 1.60.1.70291) has no row for it, which alone doesn't rule it out (108 quests in the catalog have none either)
-- 1500 Waking Naralex: Wowhead Forever lists it (level 25, needs 10, Wailing Caverns) with no giver, ender or XP, and no player has met it; the client's quest table (QuestV2, build 1.60.1.70291) has no row for it, which alone doesn't rule it out (108 quests in the catalog have none either)
+- 999 When Dreams Turn to Nightmares: Wowhead Forever lists it (level 25, needs 10, Wailing Caverns) with no giver, ender or XP, and no player has met it; the client's quest table (QuestV2, build 1.60.1.70862) has no row for it, which alone doesn't rule it out (108 quests in the catalog have none either)
+- 1005 What Lurks Beyond: Wowhead Forever lists it (level 20, needs 10, Shadowfang Keep) with no giver, ender or XP, and no player has met it; the client's quest table (QuestV2, build 1.60.1.70862) has no row for it, which alone doesn't rule it out (108 quests in the catalog have none either)
+- 1500 Waking Naralex: Wowhead Forever lists it (level 25, needs 10, Wailing Caverns) with no giver, ender or XP, and no player has met it; the client's quest table (QuestV2, build 1.60.1.70862) has no row for it, which alone doesn't rule it out (108 quests in the catalog have none either)
 - 3366 The Glowing Shard: shares its completion bit with 6981 The Glowing Shard, which the catalog has (the game marks both done together); Wowhead Forever lists it (level 25, needs 15, Wailing Caverns) with no giver or ender, and no player has met it
 - 86757 Slowing the Orc Advance: in the client and on Wowhead's tooltips, no level, side or NPC yet
 - 87318 Hearts of the Lost: in the client and on Wowhead's tooltips, no level, side or NPC yet
@@ -449,10 +449,9 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 4606 The Sparklematic 5200! (level 30, both)
 - 5722 Searching for the Lost Satchel (level 16, Horde)
 
-## Forever data: no quest giver position (134)
+## Forever data: no quest giver position (133)
 
 - 934 Crown of the Earth (level 11, both)
-- 2279 The Platinum Discs (level 47, Alliance)
 - 78307 The Horn of Xelthos (level 23, both)
 - 79624 Anyone Can Cook (level 40, both)
 - 79731 The Troll Scroll (level 35, both)

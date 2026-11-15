@@ -4998,11 +4998,11 @@ do
     assert(ts:find("Step frame", 1, true) and ts:find("Direction arrow", 1, true), "the step frame's and the arrow's rows are the Quests section's:\n" .. ts)
     -- 6.1.1: the game's quest tracker out of sight while the step frame shows (QuestBank's Guide section has the same)
     local trk = boxOf(rone, "Hide the game's quest tracker with the step frame")
-    assert(trk and trk:GetChecked() and rone.env.CuteQuestDB.settings.guide.hideTracker == true, "the tracker's row, on:\n" .. ts)
+    assert(trk and not trk:GetChecked() and rone.env.CuteQuestDB.settings.guide.hideTracker == false, "the tracker's row, off (6.4.7):\n" .. ts)
     click(trk)
-    assert(rone.env.CuteQuestDB.settings.guide.hideTracker == false, "unticked: the engine's setting off")
+    assert(rone.env.CuteQuestDB.settings.guide.hideTracker == true, "ticked: the engine's setting on")
     click(boxOf(rone, "Hide the game's quest tracker with the step frame"))
-    assert(rone.env.CuteQuestDB.settings.guide.hideTracker == true, "ticked again")
+    assert(rone.env.CuteQuestDB.settings.guide.hideTracker == false, "unticked again")
     -- the arrow's row writes the engine's setting and shows or hides the arrow
     click(boxOf(rone, "Direction arrow"))
     assert(rone.env.CuteQuestDB.settings.arrow == false and rone.env.QuestBankArrow and not rone.env.QuestBankArrow:IsShown(), "the arrow's row: off")
@@ -11500,7 +11500,7 @@ do
     c.C.UI:Open("settings", "quests")
     local say, trk = row(SAY), row(TRACKER)
     assert(say and not say:GetChecked() and s.sayXP ~= true, "the Say XP row, off by default:\n" .. texts(c))
-    assert(trk and trk:GetChecked() and s.guide.hideTracker == true, "the tracker's row, on:\n" .. texts(c))
+    assert(trk and not trk:GetChecked() and s.guide.hideTracker == false, "the tracker's row, off (6.4.7):\n" .. texts(c))
     -- off: a hand-in says nothing; ticked: the engine's sayXP on, and the hand-in's line said
     local n0 = #c.chat
     fire(c, "QUEST_TURNED_IN", next(c.o.log), 450); tick(c, 1)
@@ -11512,9 +11512,9 @@ do
     click(row(SAY))
     assert(s.sayXP == false, "unticked: off again")
     click(row(TRACKER))
-    assert(s.guide.hideTracker == false, "the tracker's row unticked: the engine's setting off")
+    assert(s.guide.hideTracker == true, "the tracker's row ticked: the engine's setting on")
     click(row(TRACKER))
-    assert(s.guide.hideTracker == true, "and on again")
+    assert(s.guide.hideTracker == false, "and off again")
     -- nine rows at most (a Check, a Choice, a Step or an Edit is a row): the design's eight (section 7, with "Backdrop
     -- behind the step frame", windows W21) and this round's Say XP
     local n = 0

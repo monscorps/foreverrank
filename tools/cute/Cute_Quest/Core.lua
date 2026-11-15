@@ -3,7 +3,7 @@
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
 if QB.dormant then return end
-QB.version = "6.4.6"
+QB.version = "6.4.7"
 -- the engine, for a host that runs beside QuestBank and must not run a second one (Cute_Quest reads this table
 -- instead of its own copy while QuestBank is loaded); QuestBank itself never reads it
 QuestBankAPI = QB
@@ -1355,7 +1355,7 @@ local DEFAULTS = {
   finderAhead = false,
   -- the Guide (6.0, Guide.lua and StepFrame.lua): on, the step frame shown, unlocked, at scale 1 where it was dragged.
   -- welcome: "fresh" asks the auto choice in the step frame once; "ask" asks a 5.x save whether to guide (QB.Migrate600)
-  guide = { on = true, frame = true, locked = false, scale = 1, hideTracker = true },
+  guide = { on = true, frame = true, locked = false, scale = 1, hideTracker = false },
   minimapGivers = true, -- a ! on the minimap for every quest you can take now (Minimap.lua)
   mapLowLevel = false, -- (6.1.1) quests the game counts as trivial (grey): their ! on the world map, the Map page and the minimap
   wholeRoute = false, -- (6.1.1) the strokes on to the stops after the one the arrow leads to (Minimap.lua, MapPage.lua): one at a time
@@ -1384,7 +1384,14 @@ function QB:Settings()
     end
   end
   -- (6.1.1's new switch inside a table a save already has: the default)
-  if type(s.guide) == "table" and s.guide.hideTracker == nil then s.guide.hideTracker = true end
+  if type(s.guide) == "table" and s.guide.hideTracker == nil then s.guide.hideTracker = false end
+  -- (6.4.7) 6.1.1 to 6.4.6 hid the game's quest tracker with the step frame, on by default: the owner, back on 6.1.0 for
+  -- it, "6.2.0 has a bug where it blocks that objective list". Every save takes the game's tracker back once; the switch
+  -- stays in Settings and the step frame's menu for those who want it out of sight
+  if s.v647 == nil then
+    s.v647 = true
+    if type(s.guide) == "table" then s.guide.hideTracker = false end
+  end
   -- (the windows round) a new install draws the quest icons at the game's own size: half-size art beside the game's
   -- full-size pins looked soft ("icons on map are scuffed as they are wrong size"); a save keeps the size it has
   if fresh then s.mapIconPct = 100 end
@@ -1710,14 +1717,20 @@ QB.SAY = { accept = "QuestBank: %s - accepted", complete = "QuestBank: %s - comp
 -- the one chat line 6.0 adds: after the welcome card's Done (StepFrame.lua), once a character; nothing else of the
 -- Guide, the step frame, the tooltips or the minimap prints
 QB.WELCOME = "QuestBank is guiding you. /qb opens the full window; right-click the step frame for its options."
-function QB:Announce(kind, title)
+-- (6.4.7) the quest is the game's own link where the client has one (GetQuestLink: a quest in your log), as Questie
+-- posts them: the party clicks it for the quest; else its name, plain
+function QB:Announce(kind, title, id)
   if kind == "accept" and self:Opt("sayAccept") ~= true then return end
   if kind == "complete" and self:Opt("sayComplete") ~= true then return end
   local channel = (IsInGroup and LE_PARTY_CATEGORY_INSTANCE and IsInGroup(LE_PARTY_CATEGORY_INSTANCE)) and "INSTANCE_CHAT"
     or ((IsInRaid and IsInRaid()) and "RAID") or ((IsInGroup and IsInGroup()) and "PARTY") or nil
   if not channel or not SendChatMessage then return end
-  local clean = tostring(title or "a quest"):gsub("|", ""):sub(1, 200)
-  pcall(SendChatMessage, string.format(QB.SAY[kind] or QB.SAY.complete, clean), channel)
+  local said = tostring(title or "a quest"):gsub("|", ""):sub(1, 200)
+  if id and GetQuestLink then
+    local ok, l = pcall(GetQuestLink, id)
+    if ok and type(l) == "string" and l:find("|Hquest:", 1, true) then said = l end
+  end
+  pcall(SendChatMessage, string.format(QB.SAY[kind] or QB.SAY.complete, said), channel)
 end
 
 ----------------------------------------------------------------------------
@@ -1855,7 +1868,7 @@ local function trackRemovals(s)
         -- (said only when asked for since the review round: "Say quest XP in chat", sayXP, the step frame's menu; and
         -- then in a quiet host too, as the hand-in's line is: the player's own ask, the merge review)
         if QB.loggedIn and QB:Settings().sayXP == true then
-          QB:Print(string.format("%s left your log without a hand-in%s. The route no longer counts it.", title,
+          QB:Print(string.format("%s left your log without a hand-in%s. The route no longer counts it.", QB.Link.Format(q or { id = id, name = title }),
             value and (" (worth about " .. QB.Comma(value) .. " XP)") or ""))
         end
       end
@@ -1943,16 +1956,16 @@ function QB:ReadState()
   local inLog = {}
   for _, e in ipairs(s.logOrder) do
     inLog[e.id] = true
-    if not firstRead and not QB.wasInLog[e.id] and QB.loggedIn then QB:Announce("accept", e.title) end
+    if not firstRead and not QB.wasInLog[e.id] and QB.loggedIn then QB:Announce("accept", e.title, e.id) end
     local before = QB.wasComplete[e.id]
     if e.complete and before == false and QB.loggedIn then
       local q = Q.Get(e.id)
       local value = q and QB.Model.XpAt(q, s.level)
       if QB:Settings().sayXP == true then -- (asked for: sayXP, as the hand-in's line, in a quiet host too)
-        QB:Print(string.format("%s is complete%s%s.", e.title, QB:Banking() and ": banked" or ", hand it in",
+        QB:Print(string.format("%s is complete%s%s.", QB.Link.Format(q or { id = e.id, name = e.title }), QB:Banking() and ": banked" or ", hand it in",
           value and value > 0 and (", worth about " .. QB.Comma(value) .. " XP " .. QB:OnTheDay()) or ""))
       end
-      QB:Announce("complete", e.title)
+      QB:Announce("complete", e.title, e.id)
     end
     QB.wasComplete[e.id] = e.complete and true or false
   end

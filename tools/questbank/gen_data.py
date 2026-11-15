@@ -43,7 +43,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "QuestBank", "Data.lua")
 REPO = os.path.dirname(os.path.dirname(HERE))
 RAW = os.path.join(REPO, "research", "questbank")
-BUILD = "1.60.1.70291"
+BUILD = "1.60.1.70862"
 READ = "2026-09-29"
 
 
@@ -227,12 +227,52 @@ DUNGEON = {  # area: (lfg icon, zone, entrance)
     # (D.NPC), no coordinate of its own yet
     16919: ("dungeon", "Ironforge", (1455, 39.4, 55.4)),
     1176: ("zulfarak", "Tanaris", None), 2100: ("maraudon", "Desolace", None),
+    # the Classic database files Uldaman's and Zul'Farrak's quests under the outdoor area (1517, 978), not the instance's
+    978: ("zulfarak", "Tanaris", None), 1517: ("uldaman", "Badlands", None),
     # Wowhead files the Sunken Temple quests under area 1417; 1477 is the instance's own row
     1417: ("sunkentemple", "Swamp of Sorrows", None), 1477: ("sunkentemple", "Swamp of Sorrows", None),
     1584: ("blackrockdepths", "Searing Gorge", None), 1583: ("blackrockspire", "Burning Steppes", None),
     2557: ("diremaul", "Feralas", None), 2017: ("stratholme", "Eastern Plaguelands", None),
     2057: ("scholomance", "Western Plaguelands", None),
 }
+# (6.4.7) the entrances the table above leaves None come from the client: an instance's Map row keeps where a corpse
+# goes on its outer map (Corpse_0/1 on CorpseMapID), which is the way in; Travel.locate puts that world point on the
+# zone's map. Read, not listed: a dungeon Forever moves moves with its build. Ruins of Lordaeron has no corpse map yet
+# (players' objective spots stand in). The owner's ask: 274 dungeon quests said "entrance not known yet"
+
+
+def _entrances_from_client():
+    by_name = {}
+    for r in csv.DictReader(open(os.path.join(REPO, "research", "wago", BUILD, "Map.csv"), encoding="utf-8")):
+        if r["InstanceType"] == "1" and int(r["CorpseMapID"]) >= 0:
+            by_name[r["MapName_lang"]] = (int(r["CorpseMapID"]), float(r["Corpse_0"]), float(r["Corpse_1"]))
+    filled, missing = [], []
+    for area, (lfg, where, ent) in list(DUNGEON.items()):
+        if ent:
+            continue
+        name = AREAS.get(area)
+        row = by_name.get(name) or by_name.get({"Sunken Temple": "Sunken Temple", "The Stockade": "Stormwind Stockade",
+                                                "Scarlet Monastery": "Scarlet Monastery"}.get(name, ""))
+        if not row:
+            # the area's name is not the instance's: match on the words both share
+            for n, v in by_name.items():
+                if name and (n in name or name in n):
+                    row = v
+                    break
+        if not row:
+            missing.append(name)
+            continue
+        at = TR.locate(row[0], row[1], row[2])
+        if not at:
+            missing.append(name)
+            continue
+        DUNGEON[area] = (lfg, where, at)
+        filled.append("%s (%d %.1f,%.1f)" % (name, at[0], at[1], at[2]))
+    print("dungeon entrances from the client's Map table: %d placed (%s)%s" % (
+        len(filled), "; ".join(filled), ("; none for " + ", ".join(sorted(set(missing)))) if missing else ""))
+
+
+_entrances_from_client()
 ZONE_ICON = {"Stranglethorn Vale": "achievement_zone_stranglethorn_01", "Swamp of Sorrows": "achievement_zone_swampsorrows_01",
              "Stonetalon Mountains": "achievement_zone_stonetalon_01", "Silverpine Forest": "achievement_zone_silverpine_01",
              "Stormwind City": "spell_arcane_teleportstormwind", "Orgrimmar": "spell_arcane_teleportorgrimmar",
@@ -313,7 +353,7 @@ CLASSIC = set()
 # (264011 and on, quests 94004 and 94212-94360, from the Sealed Apprentice's, Journeyman's, Expert's, Artisan's and
 # Craftsman's Writs: "a pending crafting order intercepted in transit"). No XP and no giver, so nothing plans them; the
 # catalog keeps them (flag 131072, a turn-in) for the reward finders alone. WRIT[quest id] = (writ item, its name)
-ITEMS_BUILD = "1.60.1.70338"
+ITEMS_BUILD = "1.60.1.70862"
 WRIT = {}
 for _r in csv.DictReader(open(os.path.join(REPO, "research", "wago", ITEMS_BUILD, "ItemSparse.csv"), encoding="utf-8")):
     if (_r.get("Display_lang") or "").startswith("Craftsman's Writ") and int(_r.get("StartQuestID") or 0) > 0:
@@ -3093,7 +3133,8 @@ lines.append('D.ALPHA = "%s"' % ALPHA)
 # the step-by-step arrow (Travel.lua): every flight on its own, the rides between docks, the islands you cannot walk to,
 # and where a hearthstone lands
 FLY = {fac: "".join(ALPHA[a - 1] + ALPHA[b - 1] + enc(m) for a, b, m in TR.flights_for(fac)) for fac in ("A", "H")}
-assert len(FLY["A"]) == 588 and len(FLY["H"]) == 612, "flights changed: A %d, H %d" % (len(FLY["A"]) // 4, len(FLY["H"]) // 4)
+# (the live build 70862 dropped the beta's Booty Bay <-> Grom'gol Alliance path: 145 Alliance flights, 153 Horde)
+assert len(FLY["A"]) == 580 and len(FLY["H"]) == 612, "flights changed: A %d, H %d" % (len(FLY["A"]) // 4, len(FLY["H"]) // 4)
 lines.append("-- flights, 4 characters each: from and to (the D.HUB index i as D.ALPHA:sub(i, i)), minutes (tenths, base 64, as D.DIST)")
 lines.append("D.FLY = " + lua(FLY))
 LINK = TR.links()

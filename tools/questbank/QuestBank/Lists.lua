@@ -363,7 +363,7 @@ questClick = function(q, st, which)
     QB.API.SetWaypoint(target.m, target.x, target.y, target.n, nil, QB.Model.NpcPlace(target.idx, QB.faction), about)
   elseif not target and q.surveyOnly then
     -- a quest the survey alone knows: no NPC to point at, and it says so
-    QB:Print(string.format("Who gives %s isn't known yet. The game told %s its rewards, not where it starts.", q.name, host()))
+    QB:Print(string.format("Who gives %s isn't known yet. The game told %s its rewards, not where it starts.", QB.Link.Format(q), host()))
   end
 end
 
@@ -426,7 +426,7 @@ function UI.SkipQuest(q)
   QB:SetSkipped(q.id, true)
   -- (the launch audit: the menu's own words, Route it again, which a host's player finds where the quest is; never
   -- "Right-click it in QuestBank", which a Cute player has no window of)
-  QB:Print(string.format("Skipped %s: out of your route for good. Right-click it again and choose Route it again (or Shift-click its pin on the map).", q.name))
+  QB:Print(string.format("Skipped %s: out of your route for good. Right-click it again and choose Route it again (or Shift-click its pin on the map).", QB.Link.Format(q)))
   if UI.frame and UI.frame:IsShown() then UI:Refresh() end
   if QB.state.log[q.id] then
     UI:ShowMenu("Skipped: " .. UI.Short(q.name, 22), { { "Keep it in my quest log", function() end },
@@ -441,7 +441,7 @@ function UI.RouteAgain(q)
   local st = QB:Status(q)
   local pick = not (QB.state.log[q.id] or st.bag) and st.code ~= "done" and st.code ~= "wrong"
   if pick then QB:SetAdded(q.id, true) end
-  QB:Print(string.format(pick and "%s is back in your route (on your pick-up list)." or "%s is back in your route.", q.name))
+  QB:Print(string.format(pick and "%s is back in your route (on your pick-up list)." or "%s is back in your route.", QB.Link.Format(q)))
   if UI.frame and UI.frame:IsShown() then UI:Refresh() end
 end
 
@@ -465,7 +465,7 @@ function UI.Abandon(q)
     local idx = GetQuestLogIndexByID(q.id)
     ok = idx and idx > 0 and pcall(SelectQuestLogEntry, idx) and pcall(SetAbandonQuest) and pcall(AbandonQuest) or false
   end
-  QB:Print(ok and ("Abandoned " .. q.name .. ".") or ("The game would not abandon " .. q.name .. " from here: use its quest log."))
+  QB:Print(ok and ("Abandoned " .. QB.Link.Format(q) .. ".") or ("The game would not abandon " .. QB.Link.Format(q) .. " from here: use its quest log."))
 end
 
 -- what the finder looks for among the quests you could still take

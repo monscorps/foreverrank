@@ -1140,7 +1140,8 @@ local function newClient(o)
     local function bad(why) c.chatErrors[#c.chatErrors + 1] = why; error(why) end
     if not (type(msg) == "string" and #msg > 0 and #msg <= 255) then bad("chat message empty or over 255 bytes") end
     if msg:find("[\r\n]") then bad("chat message with a line break") end
-    if msg:find("|") then bad("chat message with an escape code") end
+    -- (6.4.7: the game's own quest and item links are chat's, as players and Questie post them; any other escape is a leak)
+    if msg:find("|") and msg:gsub("|c%x%x%x%x%x%x%x%x|H[%a]+:[^|]*|h%[[^%]]*%]|h|r", ""):find("|") then bad("chat message with an escape code") end
     if not (chatType == "PARTY" or chatType == "RAID" or chatType == "GUILD" or chatType == "INSTANCE_CHAT") then bad("posted to " .. tostring(chatType)) end
     if chatType == "GUILD" and not o.guild then bad("posted to a guild you're not in") end
     if chatType ~= "GUILD" and not o.group then bad("posted to a group you're not in") end
@@ -2044,8 +2045,12 @@ do
   local s2 = stroke[2]
   local len2 = math.sqrt((s2.__stop[3] - s2.__start[3]) ^ 2 + (s2.__stop[4] - s2.__start[4]) ^ 2)
   assert(math.abs(len2 - (math.sqrt(28 * 28 + 21 * 21) - 24)) < 0.05, "stop to stop: a gap at both pins: " .. len2)
-  local ex, ey = stroke[3].__stop[3], stroke[3].__stop[4]
-  assert(stroke[3].__shown and math.sqrt(ex * ex + ey * ey) < 70 and ex > 60 and math.abs(ey) < 0.01, string.format("the stroke to the far stop ends at the edge (%s, %s)", ex, ey))
+  -- (the stroke to the far stop is softened where it crosses another quest's icon, in spans: the last span ends at the
+  -- edge; the live build's data put a marker on its way)
+  local last = 3
+  for i = 4, #stroke do if stroke[i].__shown then last = i end end
+  local ex, ey = stroke[last].__stop[3], stroke[last].__stop[4]
+  assert(stroke[last].__shown and math.sqrt(ex * ex + ey * ey) < 70 and ex > 60 and math.abs(ey) < 0.01, string.format("the stroke to the far stop ends at the edge (%s, %s)", ex, ey))
   -- QuestTrail's rim: an objective out of reach is gone (400 yards west at 200), one inside fades over its last width
   -- (195 yards east: 68 px of 70, an 18 px pin)
   local D = QB.Data
@@ -2654,7 +2659,8 @@ do
   assert(U.tab == 4 and not U.views[7]:IsShown(), "toggled back to the Party page")
   local rc = DM.Find("Ragefire")
   DM.Open(rc)
-  assert(U.tab == 7 and not f.floors[2]:IsShown() and not f.entrance:IsShown(), "Ragefire: one floor (no buttons), no entrance known")
+  -- (6.4.7: the entrance is the client's, from the instance's corpse map: the button shows)
+  assert(U.tab == 7 and not f.floors[2]:IsShown() and f.entrance:IsShown(), "Ragefire: one floor (no buttons), the entrance button")
   -- a loot row's second line: slot and kind, never a hole (a table.concat over a nil was a Lua error in 5.2)
   for _, b in ipairs(QB.Data.DMAP.d2437.bosses) do DM.ShowBoss(b) end
   local chat0 = #owner.chat
@@ -6166,10 +6172,10 @@ do
   set.sayAccept, set.sayComplete = true, true
   table.insert(owner.log, { 15, 0 })
   owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(owner, 1)
-  assert(#owner.said == said + 1 and owner.said[#owner.said][1] == "QuestBank: Quest 15 - accepted" and owner.said[#owner.said][2] == "PARTY", "a new quest in the log is said in party chat: " .. tostring(owner.said[#owner.said] and owner.said[#owner.said][1]))
+  assert(#owner.said == said + 1 and owner.said[#owner.said][1] == "QuestBank: |cffffff00|Hquest:15:20|h[Quest 15]|h|r - accepted" and owner.said[#owner.said][2] == "PARTY", "a new quest in the log is said in party chat: " .. tostring(owner.said[#owner.said] and owner.said[#owner.said][1]))
   for _, e in ipairs(owner.log) do if e[1] == 15 then e[2] = 1 end end
   owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(owner, 1)
-  assert(#owner.said == said + 2 and owner.said[#owner.said][1] == "QuestBank: Quest 15 - completed", "and so is a quest turning complete: " .. tostring(owner.said[#owner.said][1]))
+  assert(#owner.said == said + 2 and owner.said[#owner.said][1] == "QuestBank: |cffffff00|Hquest:15:20|h[Quest 15]|h|r - completed", "and so is a quest turning complete: " .. tostring(owner.said[#owner.said][1]))
   for _ = 1, 2 do for i, e in ipairs(owner.log) do if e[1] == 7 or e[1] == 15 then table.remove(owner.log, i) break end end end
   -- not grouped: nothing is sent, and nothing is tried against a channel you're not in
   owner.o.group = false
@@ -7683,7 +7689,8 @@ do
       assert(a and b and a ~= b and a <= #hubs and b <= #hubs and min > 0, fac .. " flight " .. (e + 3) / 4 .. " decodes to two hubs")
     end
   end
-  assert(#D.FLY.A == 588 and #D.FLY.H == 612, "147 Alliance and 153 Horde flights: " .. #D.FLY.A / 4 .. ", " .. #D.FLY.H / 4)
+  -- (the live build 70862 dropped the beta's Booty Bay <-> Grom'gol Alliance path)
+  assert(#D.FLY.A == 580 and #D.FLY.H == 612, "145 Alliance and 153 Horde flights: " .. #D.FLY.A / 4 .. ", " .. #D.FLY.H / 4)
   assert(#D.LINK == 11, "eleven rides (6.1.1: the Southshore ferry): " .. #D.LINK)
   for _, l in ipairs(D.LINK) do
     for e = 4, 5 do assert(l[e][1] == 0 or l[e][1] == 1, l[2] .. " to " .. l[e][7] .. " ends on a continent") end
@@ -7986,7 +7993,8 @@ do
   local plan = TV.Route(here(), toGz, TV.Opts("pin"))
   assert(has(plan, "fly"), "never read: the flights all count: " .. kinds(plan))
   local n, total, read = TV.Known("A", 0)
-  assert(n == total and total == 18 and not read, "and the count says so: " .. n .. " of " .. total)
+  -- (17 since the live build 70862: the beta's Grom'gol node no longer serves the Alliance)
+  assert(n == total and total == 17 and not read, "and the count says so: " .. n .. " of " .. total)
   local set = c.QB:Settings()
   set.arrowMode, set.arrowPin = "pin", { name = "Gadgetzan", c = toGz.c, wx = toGz.wx, wy = toGz.wy }
   local way = TV.WayLines()
@@ -8542,7 +8550,7 @@ do
   lines = {}; F.__scripts.OnEnter(F)
   local tip = table.concat(lines, "\n")
   assert(tip:find("|A:flightmaster:14:14|a Fly to Lakeshire | ", 1, true) and tip:find("Walk to Lakeshire | %d+ min") and tip:find("About %d+ min in all%.")
-    and tip:find("Flight paths on Eastern Kingdoms: 2 of 18 known", 1, true) and lines[#lines - 1]:find("^Click: the Route page")
+    and tip:find("Flight paths on Eastern Kingdoms: 2 of 17 known", 1, true) and lines[#lines - 1]:find("^Click: the Route page")
     and lines[#lines]:find("^Shift%-click: the waypoint in chat"), "the tooltip lists the steps (a waypoint: Shift-click last): " .. tip)
   sheet("Arrow: at the flight master")
   -- on the way there, the arrow points at it; the minimap pins it and draws the line to it
@@ -13246,7 +13254,7 @@ do
     and t:find("As the game told QuestBank.", 1, true), t)
   local said = #c.chat
   row.__scripts.OnClick(row, "LeftButton")
-  assert(#c.chat == said + 1 and c.chat[#c.chat]:find("Who gives Shimmerwine Shakedown isn't known yet", 1, true), "no waypoint: it says so")
+  assert(#c.chat == said + 1 and c.chat[#c.chat]:find("Who gives |cffc6af8d|Haddon:QuestBank:quest:", 1, true) and c.chat[#c.chat]:find("[Shimmerwine Shakedown]|h|r isn't known yet", 1, true), "no waypoint: it says so")
   U.findMode, U.gearSlot = "xp", nil
   -- the item's own tooltip names the quest
   lines = {}; Q2.Link.ItemTip(c.env.GameTooltip, { id = 276903 })
@@ -14776,7 +14784,7 @@ end)()
     settle(c)
     assert(QB:IsSkipped(q.id) and QB:IsCut(q.id), "skipped: out of the route for good")
     for _, l in ipairs(QB.routePlan.legs or {}) do for _, row in ipairs(l.rows) do assert(row.q.id ~= q.id, "not in the route") end end
-    assert(said(c):find("Skipped " .. q.name, 1, true), "said so: " .. said(c))
+    assert(said(c):find("Skipped |cffc6af8d|Haddon:QuestBank:quest:" .. q.id .. "|h[" .. q.name .. "]|h|r", 1, true), "said so, the quest a link: " .. said(c))
     -- the follow-up: keep it in the log, or also abandon it, asked again in the game's words
     local keep, also
     for _, b in ipairs(Mn.items) do
@@ -17592,6 +17600,8 @@ end)()
     local c = newClient({ name = "Tamsin", level = 24, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1,
       race = "Human", log = { { 2040, 0 }, { 391, 0 } }, done = {}, world = { 0, -8833, 479 }, map = 1453, bagSlots = {}, bind = "Stormwind" })
     c.QB.UI.Candidates = function() return {} end -- (no fill: the two quests alone make the route)
+    -- (6.4.7: the client gave the Stockade its entrance; this test keeps the no-entrance wording alive, so it takes it away)
+    for _, cat in ipairs(c.QB.Data.CAT) do if cat.key == "d717" then cat.entrance = nil end end
     login(c)
     local QB, G, T, A = c.QB, c.QB.Guide, c.QB.Target, c.QB.Arrow
     c.objectives = { [2040] = { { text = "Gnoam Sprecklesprocket: 0/1", type = "monster", finished = false, numFulfilled = 0, numRequired = 1 } },
@@ -17860,9 +17870,10 @@ end)()
     local env, QB = c.env, c.QB
     local SF, T = QB.StepFrame, env.ObjectiveTrackerFrame
     local n0 = #c.chat
+    QB:Settings().guide.hideTracker = true -- (6.4.7: a choice, no longer the default)
     QB:Settings().welcome = nil; SF.Apply(); SF.Refresh()
     local f = env.QuestBankStep
-    assert(T:GetAlpha() == 0, "the tracker out of sight by default")
+    assert(T:GetAlpha() == 0, "the tracker out of sight, as chosen")
     assert(f.note and f.note:IsShown() and f.note:GetText():find("quest tracker is hidden", 1, true) and f.note:GetText():find("Right-click", 1, true),
       "the first time: the frame says where it went: " .. tostring(f.note and f.note:GetText()))
     assert(QB:Settings().guide.trackerTold == true, "told once, for good")
@@ -17893,6 +17904,7 @@ end)()
     -- a fresh install's welcome card first: the note's minute starts once the steps show, not under the card
     local w = char("Welcomed", "WARRIOR", "Warrior", 1, {}, { level = 5 })
     local WSF = w.QB.StepFrame
+    w.QB:Settings().guide.hideTracker = true -- (6.4.7: a choice, no longer the default)
     WSF.Apply()
     local wf = w.env.QuestBankStep
     assert(wf.card and wf.card:IsShown() and w.env.ObjectiveTrackerFrame:GetAlpha() == 0, "the welcome card up, the tracker out of sight")
@@ -18298,9 +18310,10 @@ end)()
   -- frame is its menu, and the note is told once it shows
   ENGCASES[#ENGCASES + 1] = { "the tracker's note: a right-click on it is the menu; a reload under the welcome card keeps it to tell", function()
     local w = char("Reloader", "WARRIOR", "Warrior", 1, {}, { level = 5 })
+    w.QB:Settings().guide.hideTracker = true -- (6.4.7: a choice, no longer the default)
     w.QB.StepFrame.Apply()
     local wf = w.env.QuestBankStep
-    assert(wf.card and wf.card:IsShown() and w.env.ObjectiveTrackerFrame:GetAlpha() == 0, "a fresh install: the welcome card up, the tracker out of sight")
+    assert(wf.card and wf.card:IsShown() and w.env.ObjectiveTrackerFrame:GetAlpha() == 0, "a fresh install that chose it: the welcome card up, the tracker out of sight")
     assert(not w.QB:Settings().guide.trackerTold, "not told yet: the note has not shown")
     -- a /reload before the card is answered: the note still to tell
     local d = char("Reloader", "WARRIOR", "Warrior", 1, {}, { level = 5, saved = w.env.QuestBankDB })
@@ -18825,8 +18838,10 @@ end)()
     local T = env.ObjectiveTrackerFrame
     s.welcome = nil; SF.Apply() -- (the welcome card answered: the frame shows the steps)
     assert(env.QuestBankStep and env.QuestBankStep:IsShown(), "the step frame shows")
-    assert(s.guide.hideTracker == true, "the setting: on by default")
-    assert(T:GetAlpha() == 0 and T:IsShown(), "the tracker out of sight by its alpha, never hidden, moved or reparented")
+    -- (6.4.7) off by default: the game's tracker stays, the frame beside it; on, out of sight
+    assert(s.guide.hideTracker == false and T:GetAlpha() == 1, "the setting: off by default, the game's tracker as it was")
+    s.guide.hideTracker = true; SF.Apply()
+    assert(T:GetAlpha() == 0 and T:IsShown(), "on: the tracker out of sight by its alpha, never hidden, moved or reparented")
     -- the game puts a managed frame's alpha back (AnimInManagedFrames, UpdateFrameAlphaState): out of sight again
     T:SetAlpha(1)
     assert(T:GetAlpha() == 0, "the game's SetAlpha(1): out of sight again")
@@ -18855,9 +18870,15 @@ end)()
     assert(T:GetAlpha() == 1, "the Guide off: the tracker back")
     s.guide.on = true; SF.Apply()
     assert(T:GetAlpha() == 0, "on again: out of sight")
-    -- a save from 6.1.0 has no such setting: it gets the default
+    -- a save from 6.1.0 has no such setting: it gets the default; a 6.4.6 save that had it on goes back to the game's
+    -- tracker once (6.4.7), and keeps a choice made after
     local old = char("Brenna", "WARRIOR", "Warrior", 1, {}, { level = 5, saved = { settings = { v544 = true, v600 = true, guide = { on = true, frame = true, locked = false, scale = 1 } } } })
-    assert(old.QB:Settings().guide.hideTracker == true and old.env.ObjectiveTrackerFrame:GetAlpha() == 0, "a 6.1.0 save: on, out of sight")
+    assert(old.QB:Settings().guide.hideTracker == false and old.env.ObjectiveTrackerFrame:GetAlpha() == 1, "a 6.1.0 save: off, the tracker as it was")
+    local was = char("Brenna", "WARRIOR", "Warrior", 1, {}, { level = 5, saved = { settings = { v544 = true, v600 = true, guide = { on = true, frame = true, locked = false, scale = 1, hideTracker = true } } } })
+    assert(was.QB:Settings().v647 == true and was.QB:Settings().guide.hideTracker == false, "a 6.4.6 save with it on: the game's tracker back, once")
+    was.QB:Settings().guide.hideTracker = true
+    local again = char("Brenna", "WARRIOR", "Warrior", 1, {}, { level = 5, saved = was.env.QuestBankDB })
+    assert(again.QB:Settings().guide.hideTracker == true, "chosen after: kept")
   end }
 
   -- B. "it won't let me minimize my quest list in game": the step frame's default place is the top's middle
@@ -20063,7 +20084,7 @@ end)()
     UI:Open(5); UI:Refresh()
     local v = UI.views[5]
     assert(v.sayXP and v.sayXP.label:GetText() == "Say XP after each hand-in" and not v.sayXP:GetChecked() and QB:Settings().sayXP ~= true, "the Say XP row, off")
-    assert(v.guideTracker:GetChecked() and v.guideTracker.label:GetText() == "Hide the game's quest tracker with the step frame", "the tracker's row, on: " .. v.guideTracker.label:GetText())
+    assert(not v.guideTracker:GetChecked() and v.guideTracker.label:GetText() == "Hide the game's quest tracker with the step frame", "the tracker's row, off (6.4.7): " .. v.guideTracker.label:GetText())
     local function turnIn(id, xp) c.ev(QB.eventFrame, "QUEST_TURNED_IN", id, xp); tick(c, 1) end
     assert(said(c, function() turnIn(7, 450) end) == "", "off: a hand-in says nothing")
     v.sayXP:SetChecked(true); v.sayXP.__scripts.OnClick(v.sayXP)
@@ -20080,10 +20101,10 @@ end)()
     v.sayXP:SetChecked(false); v.sayXP.__scripts.OnClick(v.sayXP)
     assert(QB:Settings().sayXP == false and said(c, function() turnIn(15, 450) end) == "", "unticked: quiet again")
     -- the tracker's row writes the setting
-    v.guideTracker:SetChecked(false); v.guideTracker.__scripts.OnClick(v.guideTracker)
-    assert(QB:Settings().guide.hideTracker == false, "the tracker's row unticked")
     v.guideTracker:SetChecked(true); v.guideTracker.__scripts.OnClick(v.guideTracker)
-    assert(QB:Settings().guide.hideTracker == true, "and on again")
+    assert(QB:Settings().guide.hideTracker == true, "the tracker's row ticked")
+    v.guideTracker:SetChecked(false); v.guideTracker.__scripts.OnClick(v.guideTracker)
+    assert(QB:Settings().guide.hideTracker == false, "and off again")
     -- under the Guide's rows, above the Map's; nothing clipped
     assert(v.sayXP.__points[1].y < v.tipProgress.__points[1].y and v.sayXP.__points[1].y > v.pins.__points[1].y, "Say XP under the Guide's other rows, above the Map's")
     UI:Refresh()
@@ -20773,7 +20794,7 @@ end)()
     -- Data.lua's own: the client's opening spells, and the guides' day-one seed (a library book, the cage by its key)
     assert(D.OPEN[3366] == 0 and D.OPEN[3365] == 5 and D.OPEN[6477] == 12 and not D.OPEN[2366],
       "D.OPEN: the client's opening spells and the lock type each opens (0, a key's), no gathering")
-    assert(D.LOCKKEY[216523] and D.LOCKKEY[277136] and D.LOCKKEY[2589] and not D.LOCKKEY[6948] and countOf(D.LOCKKEY) == 169,
+    assert(D.LOCKKEY[216523] and D.LOCKKEY[277136] and D.LOCKKEY[2589] and not D.LOCKKEY[6948] and countOf(D.LOCKKEY) == 171, -- (171 at the live build 70862: two keys more than the beta)
       "D.LOCKKEY: the items the client's Lock.csv names as keys")
     local seeded = 0
     for _, r in ipairs(D.FIND[1429] or {}) do
@@ -21659,6 +21680,7 @@ do
   local s, SF, T = c.QB:Settings(), c.QB.StepFrame, c.env.ObjectiveTrackerFrame
   local function near(a, b) return type(a) == "number" and math.abs(a - b) < 1e-4 end
   local f = c.env.QuestBankStep
+  s.guide.hideTracker = true; SF.Apply() -- (6.4.7: a choice, no longer the default)
   assert(f:IsShown() and T:GetAlpha() == 0 and near(T:GetScale(), 0.01), "out of sight: alpha 0 and scale 0.01: " .. T:GetAlpha() .. ", " .. T:GetScale())
   local placed = f.__points[1].x
   -- every method asked of the tracker from here on, by name
@@ -24576,7 +24598,8 @@ end
     QB.Link.Click("addon:QuestBank:quest:99999999")
     UI.QuestClick({ id = 99999998, name = "A Quest Seen", surveyOnly = true, lvl = 5 }, nil, "LeftButton")
     -- (the lines themselves: QuestBank's own chat prefix is its Print's, which a host's Bridge replaces with its own)
-    local said = table.concat(c.chat, "\n", n0 + 1):gsub("|c%x+QuestBank|r ", "")
+    -- (6.4.7: a quest named is QuestBank's link; its escape, which no player reads, names the addon: looked past)
+    local said = table.concat(c.chat, "\n", n0 + 1):gsub("|c%x+QuestBank|r ", ""):gsub("|Haddon:QuestBank:quest:%d+|h", "|H|h")
     assert(said:find("Right-click it again and choose Route it again", 1, true) and said:find("Cute doesn't know quest 99999999", 1, true)
       and said:find("The game told Cute its rewards", 1, true) and not said:find("QuestBank", 1, true), "chat names Cute:\n" .. said)
     local rewards = QB.Quest.Rewards
