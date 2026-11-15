@@ -10,7 +10,7 @@
 -- in Settings > Modules, per character. Nothing leaves the guild's addon channel (and the whispers to the officers that
 -- carry what they keep to themselves, Comm.lua); there is no server.
 local ADDON, C = ...
-C.version = "0.9.7"
+C.version = "0.9.8"
 C.REGVER = 4 -- the stat registry's wire version (informational: a client ignores ids it does not know)
 C.COLOR = "|cffe8b24a"
 
@@ -582,11 +582,26 @@ local function returns(name, n, ...)
   for i = 2, n + 1 do out[#out + 1] = shown(r[i]) end
   return name .. " " .. table.concat(out, ", ")
 end
+-- "Cute 1.2 MB | Cute_Quest 9.8 MB | QuestBank not loaded": the three addons' memory as the game counts it
+-- (UpdateAddOnMemoryUsage first), for /cute diag. The quest engine's catalog is about 4.4 MB of its share and its code
+-- about 2, on any account; /qb memory says what its saved file holds by kind (0.9.8, the owner's 2026-11-15 question)
+function C.MemoryLine()
+  if type(UpdateAddOnMemoryUsage) ~= "function" or type(GetAddOnMemoryUsage) ~= "function" then return "the game didn't say" end
+  pcall(UpdateAddOnMemoryUsage)
+  local parts = {}
+  for _, name in ipairs({ "Cute", "Cute_Quest", "QuestBank" }) do
+    local ok, kb = pcall(GetAddOnMemoryUsage, name)
+    parts[#parts + 1] = (ok and type(kb) == "number" and kb > 0) and string.format("%s %.1f MB", name, kb / 1024) or (name .. " not loaded")
+  end
+  return table.concat(parts, " | ")
+end
+
 function C.Diag()
   local lines = {}
   local function add(s) lines[#lines + 1] = s end
   add(string.format("diag %s: %s | %s | %s | %s | saved as %s", C.version, returns("UnitName", 2, "player"), returns("UnitFullName", 2, "player"),
     returns("GetNormalizedRealmName", 1), returns("GetRealmName", 1), shown(C.Me())))
+  add("diag memory: " .. C.MemoryLine())
   local guid = C.MyGUID()
   add("diag guid: UnitGUID " .. (guid and guid:sub(1, 16) or shown(C.Get(UnitGUID, "player"))))
   -- the guild roster's member for you, as the client gives it and as Cute matched it

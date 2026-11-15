@@ -4357,16 +4357,34 @@ function UI:CreateSettingsView(parent)
     GameTooltip:Show()
   end)
   v.survey:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  -- the walked trails (Walk.lua): where you have walked, for the minimap's trails and the routes' golden paths. The
+  -- saved file's third growing kind (6.4.8: its box, beside the item notes' and the survey's); unticking clears them
+  v.walkRecord = checkRow(p, RIGHT, y0 - 98, "Note where I walk, for the golden paths", 300)
+  v.walkRecord:SetScript("OnClick", function(self)
+    if QB.Walk and QB.Walk.SetOn then QB.Walk.SetOn(self:GetChecked() and true or false) else QB:Settings().walkRecord = self:GetChecked() and true or false end
+    UI:Refresh()
+  end)
+  v.walkRecord:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText("Note where I walk", 1, 1, 1)
+    GameTooltip:AddLine("A point every 15 yards as you walk outdoors, as yards on the continent and nothing else, so the minimap can draw your trails and foreverrank.com can merge everyone's into the routes' golden paths. At most 12,000 points a continent, the oldest going first. Unticking clears what was noted.", nil, nil, nil, true)
+    if QB.Walk and QB.Walk.Count then
+      local pts, trails = QB.Walk.Count()
+      GameTooltip:AddLine(string.format("%s points in %s trails noted so far. /qb memory says what else the saved file holds.", QB.Comma(pts), QB.Comma(trails)), 0.6, 0.8, 1, true)
+    end
+    GameTooltip:Show()
+  end)
+  v.walkRecord:SetScript("OnLeave", function() GameTooltip:Hide() end)
   v.discText = para(p, "GameFontNormal", 12, INK_SOFT, 330)
-  v.discText:SetPoint("TOPLEFT", RIGHT, y0 - 100)
+  v.discText:SetPoint("TOPLEFT", RIGHT, y0 - 126)
   v.discText:SetHeight(72)
-  subhead(RIGHT, y0 - 182, "Sharing and chat")
+  subhead(RIGHT, y0 - 208, "Sharing and chat")
   -- (the final audit) the group gets the same status as the guild and the quest list too (Sync.lua S:Broadcast), in a
   -- raid or an instance group as well: said as the guild row says its own. (merge5) Who sees them as Cute's row has it:
   -- Cute_Quest's copy of the sync takes 1S, 1Q, 1L and 1G on the same prefix from your group (nothing from GUILD).
   -- (the third audit) Each row's tooltip reads the host's flags as it shows, as Sync.lua does when it sends: with Cute
   -- loaded (QB.noRaidSync, QB.noGuildSync) nothing goes to a raid nor to the guild
-  v.shareParty = checkRow(p, RIGHT, y0 - 202, "Share my level, XP and quests with my group", 300)
+  v.shareParty = checkRow(p, RIGHT, y0 - 228, "Share my level, XP and quests with my group", 300)
   v.shareParty:SetScript("OnClick", function(self) QB:Settings().share.party = self:GetChecked() and true or false; UI:Refresh() end)
   v.shareParty:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -4378,7 +4396,7 @@ function UI:CreateSettingsView(parent)
   end)
   v.shareParty:SetScript("OnLeave", function() GameTooltip:Hide() end)
   -- (merge4) the guild hears your status alone (Sync.lua S:Broadcast); the quest list goes to the group only
-  v.shareGuild = checkRow(p, RIGHT, y0 - 228, "Share my level and progress with my guild", 300)
+  v.shareGuild = checkRow(p, RIGHT, y0 - 254, "Share my level and progress with my guild", 300)
   v.shareGuild:SetScript("OnClick", function(self) QB:Settings().share.guild = self:GetChecked() and true or false; UI:Refresh() end)
   v.shareGuild:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -4390,26 +4408,26 @@ function UI:CreateSettingsView(parent)
   v.shareGuild:SetScript("OnLeave", function() GameTooltip:Hide() end)
   -- (greyed while Cute is loaded, RefreshSettingsView: its tooltip says why)
   v.shareGuild:SetMotionScriptsWhileDisabled(true)
-  v.offers = checkRow(p, RIGHT, y0 - 254, "Offer a post during hand-in runs", 300)
+  v.offers = checkRow(p, RIGHT, y0 - 280, "Offer a post during hand-in runs", 300)
   v.offers:SetScript("OnClick", function(self) QB:Settings().post.auto = self:GetChecked() and true or false end)
   v.shareHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 330)
-  v.shareHint:SetPoint("TOPLEFT", RIGHT, y0 - 282)
+  v.shareHint:SetPoint("TOPLEFT", RIGHT, y0 - 308)
   v.shareHint:SetHeight(30)
   v.shareHint:SetText("To your group's QuestBank and Cute users and your guild's QuestBank users, never in chat. Posts go only when you press Post.")
   -- updates: what others on the realm run
-  subhead(RIGHT, y0 - 322, "Updates")
+  subhead(RIGHT, y0 - 348, "Updates")
   v.verText = para(p, "GameFontNormal", 12, INK_SOFT, 330)
-  v.verText:SetPoint("TOPLEFT", RIGHT, y0 - 342)
+  v.verText:SetPoint("TOPLEFT", RIGHT, y0 - 368)
   v.verText:SetHeight(46)
-  v.updates = checkRow(p, RIGHT, y0 - 392, "Tell me when anyone on the realm runs a newer one", 300)
+  v.updates = checkRow(p, RIGHT, y0 - 418, "Tell me when anyone on the realm runs a newer one", 300)
   v.updates:SetScript("OnClick", function(self)
     QB:Settings().updates = self:GetChecked() and true or false
     if QB.Sync and QB.Sync.ApplyVersionSetting then QB.Sync:ApplyVersionSetting() end
   end)
   v.link = button(p, "Copy the download link", 190)
-  v.link:SetPoint("TOPLEFT", RIGHT + 4, y0 - 422)
+  v.link:SetPoint("TOPLEFT", RIGHT + 4, y0 - 448)
   v.link:SetScript("OnClick", function() UI:CopyLink("QuestBank download page", QB.DOWNLOAD) end)
-  yr = y0 - 460
+  yr = y0 - 486
 
   p = page -- (the left column again)
 
@@ -4652,6 +4670,7 @@ function UI:RefreshSettingsView(v)
     if QB.Loot then items = items .. string.format(", %d drop sources", (QB.Loot.Count())) end
   end
 
+  v.walkRecord:SetChecked(set.walkRecord ~= false)
   v.discText:SetText(string.format("Noted in game so far: %d quests, %d quest NPCs, %d chain steps%s. Forever is still being discovered: upload your QuestBank.lua at foreverrank.com/questbank/ and it goes into the next release for everyone.", nq, nn, nc, items))
   v.offers:SetChecked(set.post.auto and true or false)
   v.shareParty:SetChecked(set.share.party and true or false)

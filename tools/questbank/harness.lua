@@ -25404,6 +25404,38 @@ print("problems", len(bp.problems))
     assert(out:find("problems 0\n", 1, true), "a warning, not a problem: the downloads are the last release's:\n" .. out)
   end }
 
+  -- 6.4.8 (the owner, 2026-11-15: "we use a bunch of memory and data, what are the biggest culprits, can we put some
+  -- behind settings"): /qb memory counts the saved file's notes by kind, and the walked trails, the one growing kind
+  -- without a box, get one in Data you share: on by default, off clears them and notes nothing
+  CASES[#CASES + 1] = { "6.4.8: /qb memory counts the saved notes; Note where I walk is a box, off clears the trails", function()
+    local c = char("Hoarder", { group = false, guild = false })
+    local Walk = c.QB.Walk
+    local W = Walk.DB()
+    W[0] = { { 1000, 2000, 1015, 2000, 1030, 2000 }, { 9000, 9000, 9015, 9000 } }
+    W[1] = nil
+    Walk.dirty = true
+    local pts, trails = Walk.Count()
+    assert(pts == 5 and trails == 2, "five points in two trails: " .. pts .. "/" .. trails)
+    local n0 = #c.chat
+    c.env.SlashCmdList.QUESTBANK("memory")
+    local out = said(c, n0)
+    assert(out:find("5 walked points in 2 trails", 1, true) and out:find("surveyed quest", 1, true) and out:find("Settings > Data you share", 1, true),
+      "/qb memory counts by kind and says where the boxes are: " .. out)
+    assert(out:find("didn't say", 1, true), "no GetAddOnMemoryUsage here: said so, not a number: " .. out)
+    -- the box: on by default, next to the item notes' and the survey's
+    c.QB.UI:Open(5)
+    local v = c.QB.UI.views[5]
+    assert(v.walkRecord and v.walkRecord:GetChecked() and v.walkRecord.label:GetText() == "Note where I walk, for the golden paths", "the box, ticked")
+    local tip = tipOf(v.walkRecord)
+    assert(tip:find("5 points in 2 trails noted so far", 1, true), "its tooltip counts: " .. tip)
+    v.walkRecord:SetChecked(false); v.walkRecord.__scripts.OnClick(v.walkRecord)
+    assert(c.QB:Settings().walkRecord == false and next(c.QB.Discover.DB().walk) == nil, "off: the trails cleared")
+    assert(Walk.Note({ c = 0, wx = 1, wy = 1 }) == false, "and nothing noted")
+    v.walkRecord:SetChecked(true); v.walkRecord.__scripts.OnClick(v.walkRecord)
+    assert(c.QB:Settings().walkRecord == true and Walk.Note({ c = 0, wx = 1, wy = 1 }) == true, "on again: noting")
+    assert(c.env.QuestBankDB.settings.walkRecord == true, "the box writes the saved setting")
+  end }
+
   local failed = {}
   for _, case in ipairs(CASES) do
     local ok, err = pcall(case[2])

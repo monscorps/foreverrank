@@ -391,6 +391,17 @@ if E then
         tip:AddLine("Tooltips of the items you loot, carry or see, the spells you know, and which creatures and chests dropped what you loot (by id), and where you found them, with no names in them, so foreverrank.com can list them. Unticking forgets what was noted.", 0.85, 0.85, 0.85, true)
       end)
     col:Check("Learn quests from the game", s.survey ~= false, true, function(on) if E.Survey and E.Survey.SetOn then E.Survey.SetOn(on) else s.survey = on end end)
+    -- (0.9.8) the walked trails, Walk.lua: the saved file's third growing kind, its box as QuestBank's Settings has it;
+    -- off clears them. /qb memory counts every kind
+    col:Check("Note where you walk, for the golden paths", s.walkRecord ~= false, true, function(on) if E.Walk and E.Walk.SetOn then E.Walk.SetOn(on) else s.walkRecord = on end end,
+      nil, function(tip)
+        tip:AddLine("Note where you walk", 1, 1, 1)
+        tip:AddLine("A point every 15 yards as you walk outdoors, as yards on the continent and nothing else, so the minimap can draw your trails and foreverrank.com can merge everyone's into the routes' golden paths. At most 12,000 points a continent, the oldest going first. Unticking clears what was noted.", 0.85, 0.85, 0.85, true)
+        if E.Walk and E.Walk.Count then
+          local pts, trails = E.Walk.Count()
+          tip:AddLine(string.format("%d points in %d trails noted so far. /qb memory says what else the saved file holds.", pts, trails), 0.6, 0.8, 1, true)
+        end
+      end)
     -- (the launch audit) what the group share sends, named: the engine's 1S is your level, XP into it, class and the levels
     -- your plan reaches, its 1Q your quests; to your party or instance group (never a raid under Cute: Bridge.lua's
     -- E.noRaidSync), whatever Who sees what says

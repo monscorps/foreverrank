@@ -133,6 +133,29 @@ local function graph(c)
 end
 Walk.Graph = graph
 
+-- Settings' "Note where I walk" box (UI.lua, Data you share): off clears the trails noted, as the item notes' box
+-- clears its notes (Game.SetOn). Its graph is built again from nothing at the next look
+function Walk.SetOn(yes)
+  QB:Settings().walkRecord = yes and true or false
+  if yes then return end
+  local d = QB.Discover.DB()
+  d.walk = {}
+  last = nil
+  Walk.dirty, G.stale = true, true
+  G.ver = G.ver + 1
+end
+
+-- the points and trails noted on every continent, for /qb memory and the box's tooltip
+function Walk.Count()
+  local pts, trails = 0, 0
+  for _, list in pairs(db()) do
+    if type(list) == "table" then
+      for _, t in ipairs(list) do trails = trails + 1; pts = pts + floor(#t / 2) end
+    end
+  end
+  return pts, trails
+end
+
 -- note where you stand now, when it is a step on from the last point
 function Walk.Note(me)
   if not on() then return false end

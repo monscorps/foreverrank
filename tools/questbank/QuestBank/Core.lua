@@ -3,7 +3,7 @@
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
 if QB.dormant then return end
-QB.version = "6.4.7"
+QB.version = "6.4.8"
 -- the engine, for a host that runs beside QuestBank and must not run a second one (Cute_Quest reads this table
 -- instead of its own copy while QuestBank is loaded); QuestBank itself never reads it
 QuestBankAPI = QB
@@ -2933,6 +2933,38 @@ end
 SLASH_QUESTBANK1 = "/questbank"
 SLASH_QUESTBANK2 = "/qb"
 local slash
+-- /qb memory: what QuestBank holds in the game's memory, and what its saved file holds, by kind. The quest catalog
+-- (Data.lua) is about 4.4 MB of it and the code about 2 MB on any account (measured 2026-11-15, 6.4.8); the rest is
+-- this account's notes, the three kinds that grow each behind a box in Settings > Data you share
+function QB.MemoryReport()
+  local who = QB.ADDON or "QuestBank"
+  local mem = "The game didn't say how much memory " .. who .. " holds"
+  if type(UpdateAddOnMemoryUsage) == "function" and type(GetAddOnMemoryUsage) == "function" then
+    pcall(UpdateAddOnMemoryUsage)
+    local ok, kb = pcall(GetAddOnMemoryUsage, who)
+    if ok and type(kb) == "number" and kb > 0 then
+      mem = string.format("%s holds %.1f MB in memory: the quest catalog is about 4.4 of them, its code about 2", who, kb / 1024)
+    end
+  end
+  local function n(k, one, many) return k == 1 and ("1 " .. one) or (QB.Comma(k) .. " " .. many) end
+  local function cnt(t) local c = 0; if type(t) == "table" then for _ in pairs(t) do c = c + 1 end end; return c end
+  local parts = {}
+  local d = QuestBankDB and QuestBankDB.disc
+  if type(d) == "table" then
+    parts[#parts + 1] = n(cnt(d.survey), "surveyed quest", "surveyed quests")
+    if QB.Game and QB.Game.On() then parts[#parts + 1] = n((QB.Game.Count()), "item tooltip", "item tooltips") end
+    if QB.Loot then parts[#parts + 1] = n((QB.Loot.Count()), "drop source", "drop sources") end
+    if QB.Walk and QB.Walk.Count then
+      local pts, trails = QB.Walk.Count()
+      parts[#parts + 1] = n(pts, "walked point", "walked points") .. " in " .. n(trails, "trail", "trails")
+    end
+    local nq, nn = QB.Discover.Count()
+    parts[#parts + 1] = n(nq, "quest", "quests") .. " and " .. n(nn, "quest NPC", "quest NPCs") .. " noted"
+  end
+  return string.format("%s. Your saved file holds %s. The surveyed quests, the item tooltips and drop sources, and the walked points each have a box in Settings > Data you share: unticking one clears that kind. Quests and NPCs are always noted.",
+    mem, #parts > 0 and table.concat(parts, ", ") or "no notes yet")
+end
+
 SlashCmdList.QUESTBANK = function(msg) QB.Try("/qb " .. tostring(msg or ""), slash, msg) end
 slash = function(msg)
   msg = (msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
@@ -3020,6 +3052,8 @@ slash = function(msg)
       or "They stay in your saved file, QuestBank.lua. Upload it at foreverrank.com/questbank/, or let QuestBank Uploader send it on Windows, and it goes into the next release for everyone."
     QB:Print(string.format("Noted in game so far: %s, %s, %s%s. %s",
       n(nq, "quest", "quests"), n(nn, "quest NPC", "quest NPCs"), n(nc, "chain step", "chain steps"), game, tail))
+  elseif cmd == "memory" or cmd == "mem" then
+    QB:Print(QB.MemoryReport())
   elseif cmd == "survey" and QB.Survey then
     -- what the quest survey has asked the game on this build (Survey.lua); find <text>: the surveyed quests whose title
     -- has the text, with their rewards

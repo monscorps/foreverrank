@@ -2927,7 +2927,8 @@ do
   local out = table.concat(helga.chat, "\n", n0 + 1)
   for _, want in ipairs({ 'UnitName "Helga", "Bluntforce"', 'UnitFullName "Helga", "Bluntforce"', 'GetNormalizedRealmName "Forever"', 'GetRealmName "Forever"',
     "UnitGUID " .. helga.o.guid:sub(1, 16) .. "\n", 'name "Helga Bluntforce" (plain) | memberId ', "your rows 1", '"Helga Bluntforce" (Cute, you)',
-    "diag slot 1: GetInventoryItemID 1234 | link string | GetInventoryItemQuality 2", "diag slot 16: GetInventoryItemID 1240" }) do
+    "diag slot 1: GetInventoryItemID 1234 | link string | GetInventoryItemQuality 2", "diag slot 16: GetInventoryItemID 1240",
+    "diag memory: the game didn't say" }) do -- (0.9.8: the three addons' memory as the game counts it; no counter here)
     assert(out:find(want, 1, true), "/cute diag says " .. want .. ":\n" .. out)
   end
   n0 = #ser.chat
@@ -5011,6 +5012,15 @@ do
     assert(not texts(rone):find("Lock the step frame", 1, true) and not texts(rone):find("Share your level, XP and quests with your group", 1, true), "Quests: no lock row, the party's share in Data you share")
     rone.C.UI:Open("settings", "share")
     assert(texts(rone):find("Share your level, XP and quests with your group", 1, true) and texts(rone):find("foreverrank.com", 1, true), "Data you share: the party's share, the notes for the site:\n" .. texts(rone))
+    -- 0.9.8: the walked trails' box (the saved file's third growing kind): on by default, off clears them through the engine
+    local walk = boxOf(rone, "Note where you walk, for the golden paths")
+    assert(walk and walk:GetChecked() and rone.env.CuteQuestDB.settings.walkRecord ~= false, "the walk box, ticked:\n" .. texts(rone))
+    local disc = rone.env.CuteQuestDB.disc
+    if type(disc) == "table" then disc.walk = { [0] = { { 1, 2, 16, 2 } } } end
+    click(walk)
+    assert(rone.env.CuteQuestDB.settings.walkRecord == false and (type(disc) ~= "table" or next(disc.walk) == nil), "unticked: off, and the trails cleared")
+    click(boxOf(rone, "Note where you walk, for the golden paths"))
+    assert(rone.env.CuteQuestDB.settings.walkRecord == true, "ticked again: on")
     -- the Route tab: the band's summary and run button, the legs numbered; its section with the minimap's rows
     rone.C.UI:Open("route")
     assert(L.page == "route", "the Route tab")
