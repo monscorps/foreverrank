@@ -5072,6 +5072,18 @@ do
     assert(rone.env.CuteQuestDB.settings.mapLowLevel == true, "ticked: the engine's setting on")
     click(boxOf(rone, "Show low-level quests"))
     assert(rone.env.CuteQuestDB.settings.mapLowLevel == false, "and off again")
+    -- 0.9.9: the icons' size, a choice of three (the engine's mapIconPct, QuestBank's Settings button): the game's own
+    -- size on a fresh install; a pick draws the pins again at that scale
+    local full = boxOf(rone, "Game's size")
+    assert(full and full:GetChecked() and boxOf(rone, "Half size") and not boxOf(rone, "Half size"):GetChecked(), "Map: the icons' size, the game's on a fresh install:\n" .. texts(rone))
+    assert(QB.Pins.IconScale() == 1, "the engine draws at the game's size: " .. tostring(QB.Pins.IconScale()))
+    click(boxOf(rone, "Half size"))
+    assert(rone.env.CuteQuestDB.settings.mapIconPct == 50 and QB.Pins.IconScale() == 0.5, "Half size picked: the engine's setting 50, its pins at half: " .. tostring(rone.env.CuteQuestDB.settings.mapIconPct))
+    assert(boxOf(rone, "Half size"):GetChecked() and not boxOf(rone, "Game's size"):GetChecked(), "the choice drawn again: Half size ticked")
+    click(boxOf(rone, "Three quarters"))
+    assert(rone.env.CuteQuestDB.settings.mapIconPct == 75 and QB.Pins.IconScale() == 0.75, "Three quarters: 75")
+    click(boxOf(rone, "Game's size"))
+    assert(rone.env.CuteQuestDB.settings.mapIconPct == 100 and QB.Pins.IconScale() == 1, "and the game's size again")
     rone.C.UI:Open("settings", "camp")
     local rt = texts(rone)
     for _, row in ipairs(QB.Remind.ROWS) do assert(rt:find(row.label, 1, true), "Reminders: the engine's row " .. row.label .. ":\n" .. rt) end

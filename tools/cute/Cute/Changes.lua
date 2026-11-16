@@ -2,6 +2,7 @@
 -- One line per version, newest first: Core.lua prints this version's at the first login on it.
 local _, C = ...
 C.CHANGES = {
+  ["0.9.9"] = "Settings > Map has the quest icons' size: Half size, Three quarters or the Game's size; the pins are drawn again as you pick.",
   ["0.9.8"] = "/cute diag shows the addons' memory; /qb memory counts your saved notes by kind; walked trails get their own box in Data you share.",
   ["0.9.7"] = "The game's quest tracker stays beside the step frame; quests named in chat are links; dungeon entrances read from the game.",
   ["0.9.6"] = "Quest data from levels 32 to 44: 175 more quests, 88 more NPCs, the reward lists of 1,366 more quests and objective spots on 96 more, read from players' games.",

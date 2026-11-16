@@ -2,7 +2,7 @@
 ## Title: |cffe8b24aCute|r Quest
 ## Notes: Cute's quest window (L): the step now, the route, dungeons and gear, with QuestBank's guiding.
 ## Author: Mikal
-## Version: 0.9.8
+## Version: 0.9.9
 ## X-License: GPL-3.0-or-later
 ## X-QuestBank: 6.4.8
 ## Dependencies: Cute

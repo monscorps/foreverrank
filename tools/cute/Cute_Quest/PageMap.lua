@@ -30,6 +30,16 @@ function M.Settings(_, col)
     tip:AddLine("Books, locks, chests and rares that you or other players found, on Cute's map. Never a book's text or where a key leads.", 0.85, 0.85, 0.85, true)
   end)
   col:Check("Our icons on the game's map", s.mapIcons ~= false and s.pins ~= false, true, function(on) icons(s, on); pins(s, on) end)
+  -- (0.9.9) the icons' size against the game's own pins (the engine's Pins.lua mapIconPct, QuestBank's Settings has the
+  -- same button): the game's own size on a fresh install; where a click lands stays the game's size either way
+  local pct = tonumber(s.mapIconPct) or 100
+  local cur = pct <= 50 and "Half size" or pct < 100 and "Three quarters" or "Game's size"
+  col:Choice("Their size", { "Half size", "Three quarters", "Game's size" }, cur, function(v)
+    s.mapIconPct = v == "Half size" and 50 or v == "Three quarters" and 75 or 100
+    if E.Pins and E.Pins.Update then E.Pins:Update() end
+    if E.QuestMap and E.QuestMap.Update then E.QuestMap:Update() end
+  end)
+  col:Note("Our !, ? and route stops on the game's map and on M, drawn at the game's own size or smaller. Where a click lands stays the game's size.")
 end
 
 -- the switch: the engine's map flags with the box (QB.Follow keeps a row's choice across off and on), and the engine's
