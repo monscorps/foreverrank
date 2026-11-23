@@ -25,8 +25,9 @@ function L.Font()
   FONT = (fo and fo.GetFont and fo:GetFont()) or "Fonts\\FRIZQT__.TTF"
   return FONT
 end
--- a line of text over the world: the game's font, outlined, a 1 px shadow
-function L.Text(parent, size, col, width, justify)
+-- a line of text over the world: the game's font, outlined, a 1 px shadow; with lines, it wraps at its width to that
+-- many lines (the last cut with "..." only past them)
+function L.Text(parent, size, col, width, justify, lines)
   local t = parent:CreateFontString(nil, "OVERLAY")
   if GameFontNormal then t:SetFontObject(GameFontNormal) end
   t:SetFont(L.Font(), size or 12, "OUTLINE")
@@ -34,9 +35,21 @@ function L.Text(parent, size, col, width, justify)
   col = col or C.INK
   t:SetTextColor(col[1], col[2], col[3])
   t:SetJustifyH(justify or "CENTER")
-  t:SetWordWrap(false)
+  if lines and lines > 1 then
+    t:SetWordWrap(true)
+    t:SetMaxLines(lines)
+    if t.SetJustifyV then t:SetJustifyV("TOP") end
+  else
+    t:SetWordWrap(false)
+  end
   if width then t:SetWidth(width) end
   return t
+end
+-- a blessing's or Hand's short name for a card's title: "Blessing of Kings" is "Kings" (a name in another language
+-- stays whole)
+function L.Short(name)
+  if type(name) ~= "string" then return name end
+  return (name:gsub("^Greater Blessing of ", ""):gsub("^Blessing of ", ""):gsub("^Hand of ", ""))
 end
 -- text on a panel (the window): no outline
 function L.Label(parent, size, col, justify)
@@ -48,6 +61,14 @@ function L.Label(parent, size, col, justify)
   t:SetJustifyH(justify or "LEFT")
   t:SetWordWrap(false)
   return t
+end
+-- a text's whole width at its font, its box's width aside (GetUnboundedStringWidth; GetStringWidth on a client without
+-- it); 0 where the client can't say
+function L.Width(fs)
+  local get = fs.GetUnboundedStringWidth or fs.GetStringWidth
+  if type(get) ~= "function" then return 0 end
+  local w = A.Plain(A.Call(get, fs))
+  return type(w) == "number" and w or 0
 end
 function L.Fill(parent, layer, col, alpha)
   local t = parent:CreateTexture(nil, layer or "BACKGROUND")

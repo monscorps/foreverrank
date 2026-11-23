@@ -87,9 +87,9 @@ end
 local DPS = { WARRIOR = "melee", ROGUE = "melee", HUNTER = "ranged", MAGE = "caster", WARLOCK = "caster", PRIEST = "caster",
   PALADIN = "melee", SHAMAN = "caster", DRUID = "caster" }
 
--- your own role: Settings, else your talents, else the group's word, else your class's
+-- your own role: this character's choice in Settings, else your talents, else the group's word, else your class's
 function R.MyRole()
-  local s = A.Settings().role
+  local s = A.Char().role
   if s and s ~= "auto" then return s, nil end
   local spec = R.MySpec()
   local assigned = roleAssigned("player")

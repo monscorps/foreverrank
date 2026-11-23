@@ -58,27 +58,36 @@ function S.ReadAuras(unit, names, ids, pool)
       local src = plain(a.sourceUnit)
       e.mine = src == "player"
       e.id = type(id) == "number" and id or nil
-      if type(n) == "string" then names[n] = e end
-      if type(id) == "number" and id > 0 then ids[id] = e end
+      -- (the same aura twice, yours and another's: yours is kept, so a self buff reads as yours)
+      if type(n) == "string" and not (names[n] and names[n].mine) then names[n] = e end
+      if type(id) == "number" and id > 0 and not (ids[id] and ids[id].mine) then ids[id] = e end
     end
   end
   return names, ids, hidden
 end
 
 -- an entry on a unit (its auras as ReadAuras left them): any rank, any rank of its group version, an aura it counts
--- (alsoIds), or the entry's name in the client's language. The aura's record, else nil
+-- (alsoIds), or the entry's name in the client's language. The aura's record, else nil. A self buff of one kind (an
+-- aura, an aspect, an armor) counts only when you cast it: another paladin's Devotion Aura on you is theirs, and yours
+-- is still to put up
 local function nameOn(names, id, fallback)
   local n = L.SpellName(id, fallback)
   return n and names[n] or nil
 end
+local function mine(r) return r and r.mine and r or nil end
+-- one kind of a self buff on you by anyone: its record, else nil (another's aura of that kind: a second one adds nothing)
+function S.KindOn(sp, names, ids)
+  for _, id in ipairs(sp.ranks) do if ids[id] then return ids[id] end end
+  return nameOn(names, sp.ranks[1], sp.name)
+end
 function S.On(entry, names, ids)
   if entry.one then
     for _, sp in ipairs(entry.one) do
-      for _, id in ipairs(sp.ranks) do if ids[id] then return ids[id], sp end end
-      local r = nameOn(names, sp.ranks[1], sp.name)
+      for _, id in ipairs(sp.ranks) do if mine(ids[id]) then return ids[id], sp end end
+      local r = mine(nameOn(names, sp.ranks[1], sp.name))
       if r then return r, sp end
     end
-    for _, id in ipairs(entry.alsoIds or {}) do if ids[id] then return ids[id] end end
+    for _, id in ipairs(entry.alsoIds or {}) do if mine(ids[id]) then return ids[id] end end
     return nil
   end
   for _, id in ipairs(entry.ranks or {}) do if ids[id] then return ids[id] end end

@@ -18,6 +18,8 @@ local PADX, PADT, PADB = 10, 4, 9
 local WORD_Y = SIZE + 6
 local ROW_H = WORD_Y + 13
 local MAX = { camp = 4, mine = 6, pull = 6, group = 6, gear = 3 }
+-- (a group icon's word is a member's name: its column widens to the name, up to WORD_MAX, so twelve letters read whole)
+local WORD_MAX = 84
 local SNOOZE = 600
 local AFTER = 1
 B.SIZE, B.MAX, B.SNOOZE = SIZE, MAX, SNOOZE
@@ -81,6 +83,7 @@ local function away()
   return A.Yes(UnitIsDeadOrGhost, "player") or A.Yes(UnitOnTaxi, "player") or A.Yes(UnitInVehicle, "player")
     or A.Yes(UnitHasVehicleUI, "player") or inCinematic
 end
+B.Away = away -- (Swap for me does nothing while the bar is away: Gear.lua)
 local function instanceKind()
   if type(IsInInstance) ~= "function" then return nil end
   local ok, inside, kind = pcall(IsInInstance)
@@ -243,17 +246,33 @@ local function setClick(b, rec)
 end
 B.SetClick = setClick
 local function tipLine(s, col, wrap) GameTooltip:AddLine(s, col[1], col[2], col[3], wrap) end
+-- a group icon's tooltip beside its open list, never over the names: right of it where the screen has room for the
+-- tooltip, else left of it, else past the list's far end (above it, or below a list that opens downward). The game
+-- clamps its tooltip to the screen, so one put where there is no room would be pushed back over the list
+local function besideList(f)
+  local tt = GameTooltip
+  local need = (plain(call(tt.GetWidth, tt)) or 0) + 8
+  local left, right = plain(call(f.GetLeft, f)), plain(call(f.GetRight, f))
+  local screen = plain(call(UIParent.GetRight, UIParent))
+  tt:ClearAllPoints()
+  if type(left) == "number" and type(right) == "number" and type(screen) == "number" then
+    -- (the list has the bar's scale; the room is counted in the screen's units, as the tooltip's width is)
+    local us = plain(call(UIParent.GetEffectiveScale, UIParent)) or 1
+    local k = (plain(call(f.GetEffectiveScale, f)) or us) / (us > 0 and us or 1)
+    if screen - right * k < need then
+      if left * k >= need then tt:SetPoint("BOTTOMRIGHT", f, "BOTTOMLEFT", -8, 0)
+      elseif f.below then tt:SetPoint("TOP", f, "BOTTOM", 0, -8)
+      else tt:SetPoint("BOTTOM", f, "TOP", 0, 8) end
+      return
+    end
+  end
+  tt:SetPoint("BOTTOMLEFT", f, "BOTTOMRIGHT", 8, 0)
+end
 function B.Tip(owner, rec)
   if not rec or not GameTooltip then return end
-  -- (a group icon's list opens above it: the tooltip goes beside the list, never over it)
   local f = flyouts[owner]
-  if rec.flyout and f and f:IsShown() then
-    GameTooltip:SetOwner(owner, "ANCHOR_NONE")
-    GameTooltip:ClearAllPoints()
-    GameTooltip:SetPoint("BOTTOMLEFT", f, "BOTTOMRIGHT", 8, 0)
-  else
-    GameTooltip:SetOwner(owner, "ANCHOR_TOP")
-  end
+  local beside = rec.flyout and f and f:IsShown()
+  GameTooltip:SetOwner(owner, beside and "ANCHOR_NONE" or "ANCHOR_TOP")
   GameTooltip:SetText(rec.name or "", C.WHITE[1], C.WHITE[2], C.WHITE[3])
   if rec.why then tipLine(rec.why, C.INK, true) end
   if rec.p and rec.p.tip then rec.p.tip(GameTooltip, rec) end
@@ -262,11 +281,15 @@ function B.Tip(owner, rec)
   if rec.flyout then tipLine("Click a name in the list to buff them.", C.DIM, true) end
   tipLine("Right-click: not now, never, settings.", C.DIM, true)
   GameTooltip:Show()
+  -- (placed once its lines are in: its width is known then)
+  if beside then besideList(f) end
 end
 local function onEnter(self) B.Tip(self, self.rec) end
 local function onLeave() if GameTooltip and GameTooltip:GetOwner() then GameTooltip:Hide() end end
 
--- Not now and Never: the parts' own quiet, and the account's list (32 at most)
+-- Not now and Never: the parts' own quiet, and the account's list (32 at most: Settings counts them and shows them all
+-- again)
+B.NEVER_MAX = 32
 local partSnooze, snoozedKeys = {}, {}
 function B.SnoozePart(part)
   partSnooze[part] = A.Now() + SNOOZE
@@ -287,16 +310,21 @@ local function partQuiet(rec)
   return true
 end
 function B.Never(key) return A.Settings().never[key] ~= nil end
+function B.NeverCount()
+  local n = 0
+  for _ in pairs(A.Settings().never) do n = n + 1 end
+  return n
+end
 function B.SetNever(key, name, on)
   local never = A.Settings().never
   if on == false then never[key] = nil
   else
-    local n = 0
-    for _ in pairs(never) do n = n + 1 end
-    if n >= 32 and never[key] == nil then return false end
+    if B.NeverCount() >= B.NEVER_MAX and never[key] == nil then return false end
     never[key] = name or key
   end
   B.Dirty("all")
+  -- (a buff you give the group on Never or back: your hello says so, and the share-out moves it to another buffer)
+  if type(key) == "string" and key:sub(1, 5) == "duty:" and A.Comm then A.Comm.GivesChanged() end
   return true
 end
 local function menuFor(b)
@@ -306,14 +334,20 @@ local function menuFor(b)
   local key, name = rec.never or rec.key, rec.neverName or rec.name or rec.key
   local entries = {
     { "Not now", function() B.SnoozePart(rec.part) end },
-    { "Never: " .. name, function() B.SetNever(key, name) end },
+    -- (the list full: the icon stays, and the chat line says why and where to make room)
+    { "Never: " .. name, function()
+      if not B.SetNever(key, name) then
+        A.Say(B.NEVER_MAX .. " hidden for good already. Settings, Show them all, makes room.")
+      end
+    end },
   }
   if rec.part == "group" then entries[#entries + 1] = { "Blessings and buffers...", function() if A.Window then A.Window.Open("blessings") end end } end
   if rec.part == "gear" then entries[#entries + 1] = { "Biome gear...", function() if A.Window then A.Window.Open("gear") end end } end
   entries[#entries + 1] = { "Settings...", function() if A.Window then A.Window.Open("settings") end end }
   if type(MenuUtil) == "table" and type(MenuUtil.CreateContextMenu) == "function" then
     MenuUtil.CreateContextMenu(b, function(_, root)
-      for _, e in ipairs(entries) do root:CreateButton(e[1], e[2]) end
+      -- (each runs later, from the game's menu, outside the click's A.Safe: wrapped on its own)
+      for _, e in ipairs(entries) do root:CreateButton(e[1], A.Safe(e[2], "bar: menu, " .. e[1])) end
       -- (a provider's own entries: the biome pieces' "Show it in")
       if rec.p and rec.p.menu then
         if root.CreateDivider then root:CreateDivider() end
@@ -379,6 +413,9 @@ local function flyoutOf(b)
   f:SetFrameStrata("DIALOG")
   f:SetSize(150, ROW)
   f:SetPoint("BOTTOM", b, "TOP", 0, 6)
+  -- (a raid's list is four columns, 600 wide, centred on its icon: kept on the screen, as in a fight the bar can't be
+  -- moved to reach names past its edge)
+  f:SetClampedToScreen(true)
   f.bg = L.Fill(f, "BACKGROUND", C.PANEL, 0.92)
   f.bg:SetAllPoints()
   f.rows = {}
@@ -420,6 +457,16 @@ local function layFlyout(b, rec)
   end
   local f = flyoutOf(b)
   attr(b, "hasfly", true)
+  -- (over the icon; under it, past its word, when the bar sits in the screen's top half, so the list has room)
+  local below = false
+  local _, by = bar:GetCenter()
+  local sh, us = plain(call(UIParent.GetHeight, UIParent)), plain(call(UIParent.GetEffectiveScale, UIParent)) or 1
+  if type(by) == "number" and type(sh) == "number" and us > 0 then below = by * (bar:GetEffectiveScale() or 1) / us > sh / 2 end
+  if f.below ~= below then
+    f.below = below
+    f:ClearAllPoints()
+    if below then f:SetPoint("TOP", b, "BOTTOM", 0, -(ROW_H - SIZE + 4)) else f:SetPoint("BOTTOM", b, "TOP", 0, 6) end
+  end
   local n = math.min(#list, 40)
   -- (ten rows a column, the columns side by side: a raid's list stays a short box over the icon)
   local cols = math.ceil(n / PER_COL)
@@ -435,12 +482,15 @@ local function layFlyout(b, rec)
     attr(r, "spell", e.spell)
     attr(r, "unit", e.unit)
     L.Art(r.icon, e.tex or rec.tex)
-    r.icon:SetDesaturated(e.has == true)
+    r.icon:SetDesaturated(e.has == true and not e.low)
     r.name:SetText(e.name or "?")
     r.name:SetTextColor(L.ClassColor(e.class))
     local st, col = "", C.DIM
     if e.dead then st, col = "dead", C.BAD elseif e.off then st, col = "offline", C.DIM
-    elseif e.far then st, col = "far", C.WARN elseif e.has then st, col = "on", C.GOOD else st, col = "missing", C.QUEST end
+    elseif e.far then st, col = "far", C.WARN
+    -- (on, about to end: its time left)
+    elseif e.low and e.left then st, col = string.format("%d:%02d", math.floor(e.left / 60), math.floor(e.left % 60)), C.WARN
+    elseif e.has then st, col = "on", C.GOOD else st, col = "missing", C.QUEST end
     r.state:SetText(st)
     r.state:SetTextColor(col[1], col[2], col[3])
     r.glow:SetShown(e.glow == true)
@@ -449,16 +499,56 @@ local function layFlyout(b, rec)
   end
   for i = n + 1, #f.rows do if f.rows[i]:IsShown() then f.rows[i]:Hide() end end
 end
--- a glow on a member's row (a Hand's restore in a fight: insecure art, allowed there)
+-- a roster change in a fight moves the unit tokens under the rows (raid5 is someone else then), and a row's unit can't
+-- be set again until the fight ends: each shown row names the member its click now reaches, from its unit (insecure
+-- text, allowed there), its state blank (it was the old member's), the row's unit with no one on it greyed
+function B.RenameRows()
+  for _, f in pairs(flyouts) do
+    for _, r in ipairs(f.rows) do
+      local unit = r:IsShown() and r:GetAttribute("unit")
+      -- (decided by who the unit now is, not by the row's words: your own row reads "You", never your name)
+      local guid = type(unit) == "string" and plain(call(UnitGUID, unit)) or nil
+      local me = type(unit) == "string" and A.Yes(UnitIsUnit, unit, "player")
+      local name = type(unit) == "string" and (me and "You" or plain(call(UnitName, unit))) or nil
+      local same
+      if type(guid) == "string" then same = guid == r.member else same = name == r.name:GetText() end
+      if type(unit) == "string" and not same then
+        local ok, _, class = pcall(UnitClass, unit)
+        class = ok and plain(class) or nil
+        if type(name) ~= "string" then
+          r.name:SetText("?"); r.name:SetTextColor(C.DIM[1], C.DIM[2], C.DIM[3]); r.state:SetText("")
+        else
+          r.member = type(guid) == "string" and guid or nil
+          r.name:SetText(name)
+          r.name:SetTextColor(L.ClassColor(type(class) == "string" and class or nil))
+          r.state:SetText("")
+          r.glow:Hide()
+        end
+      end
+    end
+  end
+end
+-- a group icon's gold wash: lit while a member in its own list waits for a Hand's restore (Hands.Glowing), so only
+-- the icon whose list holds them glows, and one restore done leaves another's lit; a hidden icon keeps none
+local function washOf(b)
+  if not b.glowTex then return end
+  local on = false
+  local list = b:IsShown() and b.rec and b.rec.flyout
+  if list and A.Hands then
+    for _, e in ipairs(list) do if e.guid and A.Hands.Glowing(e.guid) then on = true break end end
+  end
+  if b.glowTex:IsShown() ~= on then b.glowTex:SetShown(on) end
+end
+-- a glow on a member's row and its icon's wash (a Hand's restore in a fight: insecure art, allowed there)
 function B.GlowMember(guid, on)
   for _, f in pairs(flyouts) do
     for _, r in ipairs(f.rows) do if r.member == guid then r.glow:SetShown(on) end end
   end
   for _, b in pairs(icons.group) do
-    if b:IsShown() and b.rec and b.rec.flyout then
+    if b.rec and b.rec.flyout then
       for _, e in ipairs(b.rec.flyout) do if e.guid == guid then e.glow = on end end
-      if b.glowTex then b.glowTex:SetShown(on or false) end
     end
+    washOf(b)
   end
 end
 
@@ -485,6 +575,13 @@ local function allowed(rec)
   if B.Snoozed(rec.key) then return false end
   return true
 end
+-- a provider read again on the clock: timed = true, every tick; "own", only while one of its own records counts down
+-- (the group's duties: forty members' states, not re-read for someone else's countdown)
+local function onClockToo(p)
+  if p.timed == true then return true end
+  if p.timed == "own" then for i = 1, p.n do if p.recs[i].timed then return true end end end
+  return false
+end
 local function readAll()
   ctx.t = A.Now()
   ctx.town = A.Yes(IsResting)
@@ -498,7 +595,7 @@ local function readAll()
   for _, p in ipairs(B.list) do
     local want = any
     if not want then for _, g in ipairs(p.groups or {}) do if dirty[g] then want = true break end end end
-    if p.timed and B.clockOn then want = true end
+    if B.clockOn and onClockToo(p) then want = true end
     if want then
       p.n = 0
       if not offPart(p) then
@@ -532,6 +629,32 @@ local function collect()
   if ctx.pull and #shown.pull == 0 then B.PullEnd() end
 end
 local usedBuf = {}
+-- an icon's column: SIZE + GAP; a group icon's as wide as its word (a member's name), up to WORD_MAX, the icon in its
+-- middle and the word that wide, so a name reads whole and never runs under the next icon's
+-- (the column fits the longest name in the icon's own list, not the name it shows now: the next name shown after a
+-- click is another length, and a column following it would shift every icon after it; widths kept by name)
+local nameW, nameN, meter = {}, 0, nil
+local function widthOf(text)
+  local w = nameW[text]
+  if w then return w end
+  if not meter then meter = L.Text(bar, 11, C.INK); meter:Hide() end
+  meter:SetText(text)
+  w = L.Width(meter)
+  if nameN >= 300 then for k in pairs(nameW) do nameW[k] = nil end; nameN = 0 end
+  nameW[text], nameN = w, nameN + 1
+  return w
+end
+local function column(b, which, rec)
+  if which ~= "group" or not b.word then return SIZE + GAP end
+  local widest = L.Width(b.word)
+  for _, e in ipairs(rec and rec.flyout or {}) do
+    if type(e.name) == "string" then widest = math.max(widest, widthOf(e.name)) end
+  end
+  -- (an even width: the icon sits on whole pixels in the middle)
+  local col = math.max(SIZE + GAP, math.min(WORD_MAX, math.ceil((widest + 4) / 2) * 2))
+  if b.word:GetWidth() ~= col then b.word:SetWidth(col) end
+  return col
+end
 local function layPart(container, list, which, startX)
   local used = usedBuf
   for k in pairs(used) do used[k] = nil end
@@ -544,13 +667,15 @@ local function layPart(container, list, which, startX)
     L.Paint(b, rec)
     setClick(b, rec)
     if which == "group" then layFlyout(b, rec) end
+    local col = column(b, which, rec)
     b:ClearAllPoints()
-    b:SetPoint("TOPLEFT", container, "TOPLEFT", x, 0)
+    b:SetPoint("TOPLEFT", container, "TOPLEFT", x + (col - SIZE - GAP) / 2, 0)
     if not b:IsShown() then b:Show() end
-    x = x + SIZE + GAP
+    washOf(b)
+    x = x + col
   end
   for key, b in pairs(icons[which]) do
-    if not used[key] and b:IsShown() then b:Hide(); b.rec = nil; if flyouts[b] then flyouts[b]:Hide() end end
+    if not used[key] and b:IsShown() then b:Hide(); b.rec = nil; washOf(b); if flyouts[b] then flyouts[b]:Hide() end end
   end
   return x
 end
@@ -562,24 +687,26 @@ local function layout()
   end
   local nOwn, nGrp = #ownList, #shown.group
   local wOwn = nOwn > 0 and (nOwn * SIZE + (nOwn - 1) * GAP) or 0
-  local wGrp = nGrp > 0 and (nGrp * SIZE + (nGrp - 1) * GAP) or 0
   local gap = (nOwn > 0 and nGrp > 0) and PART_GAP or 0
-  local w = PADX * 2 + math.max(SIZE, wOwn + gap + wGrp)
-  bar:SetSize(w, PADT + ROW_H + PADB)
   own:ClearAllPoints(); own:SetPoint("TOPLEFT", bar, "TOPLEFT", PADX, -PADT); own:SetSize(math.max(1, wOwn), ROW_H)
-  grp:ClearAllPoints(); grp:SetPoint("TOPLEFT", bar, "TOPLEFT", PADX + wOwn + gap, -PADT); grp:SetSize(math.max(1, wGrp), ROW_H)
   layPart(own, ownList, "own", 0)
-  layPart(grp, shown.group, "group", 0)
+  -- (the group's width once its icons are laid: their columns follow their words)
+  grp:ClearAllPoints(); grp:SetPoint("TOPLEFT", bar, "TOPLEFT", PADX + wOwn + gap, -PADT)
+  local xEnd = layPart(grp, shown.group, "group", 0)
+  local wGrp = nGrp > 0 and (xEnd - GAP) or 0
+  grp:SetSize(math.max(1, wGrp), ROW_H)
+  bar:SetSize(PADX * 2 + math.max(SIZE, wOwn + gap + wGrp), PADT + ROW_H + PADB)
   local any = nOwn + nGrp > 0
   if any and not bar:IsShown() then bar:Show() elseif not any and bar:IsShown() then bar:Hide() end
 end
 local function hideAll() if bar and bar:IsShown() then bar:Hide() end end
 
--- the clock: once a second while a word changes with time (a countdown, a range), a fresh look of the timed providers
+-- the clock: once a second while a word counts down, a fresh look of the timed providers (a range changes on the
+-- group's own 3 s look, Buffs.lua)
 local clock
 local function wantClock()
   for _, l in pairs(shown) do for _, rec in ipairs(l) do if rec.timed then return true end end end
-  return #shown.group > 0
+  return false
 end
 local tickAt = 0
 local function onClock(self, dt)
@@ -691,6 +818,7 @@ function B:Init()
   A.On("PLAYER_STOPPED_MOVING", stopped)
   A.On("PLAYER_REGEN_DISABLED", function() after.gen = after.gen + 1; after.waiting = true; pull.untilT = nil end)
   A.On("PLAYER_REGEN_ENABLED", fightOver)
+  A.On("GROUP_ROSTER_UPDATE", function() if A.Fighting() then B.RenameRows() end end, "bar: rows renamed")
   A.On("READY_CHECK", function() B.StartPull(45, 3) end)
   A.On("READY_CHECK_FINISHED", function() B.PullEnd(10) end)
   A.On("CINEMATIC_START", function() inCinematic = true; B.Dirty("all") end)

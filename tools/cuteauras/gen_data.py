@@ -102,16 +102,19 @@ for cls, entries in CLASS.items():
                 g = ranks(cls, e["group"], need=False)
                 if g:
                     r["group"], r["groupName"], r["groupLevels"] = g, e["group"], [LEVEL.get(x, 0) for x in g]
-                    rg = REAGENT.get(g[-1], 0)
-                    if rg: r["reagent"] = rg
+                    # (each rank its own reagent: Prayer of Fortitude 1 takes a Holy Candle, 2 a Sacred Candle)
+                    rgs = [REAGENT.get(x, 0) for x in g]
+                    if any(rgs): r["groupReagents"] = rgs
+                    if rgs[-1]: r["reagent"] = rgs[-1]
             if e.get("opt"): r["opt"] = True
             if e.get("single"): r["single"] = True
         rows.append(r)
     out[cls] = rows
 lines.append("-- each class's buffs: key, the spell's name, icon, ranks (lowest first) with their levels and the last rank's")
 lines.append("-- duration; other: castable on another player, want: who wants it (all, mana, tank); group: its group version's")
-lines.append("-- ranks (any counts as the buff) and reagent; one: a self buff of which any counts, the first cast; alsoIds: auras")
-lines.append("-- that count too (another aspect, another aura); opt: off until Settings switches it on")
+lines.append("-- ranks (any counts as the buff), the top rank's reagent and each rank's (groupReagents); one: a self buff of which")
+lines.append("-- any counts, the first cast; alsoIds: auras that count too (another aspect, another aura); opt: off until")
+lines.append("-- Settings switches it on")
 lines.append("D.BUFFS = {")
 for cls in sorted(out): lines.append("  %s = { %s }," % (cls, ", ".join(lua(r) for r in out[cls])))
 lines.append("}")
@@ -122,17 +125,36 @@ for key, name, greater in BLESS:
     g = ranks("PALADIN", greater, need=False)
     if g:
         s["group"], s["groupName"], s["groupLevels"] = g, greater, [LEVEL.get(x, 0) for x in g]
-        rg = REAGENT.get(g[-1], 0)
-        if rg: s["reagent"] = rg
+        rgs = [REAGENT.get(x, 0) for x in g]
+        if any(rgs): s["groupReagents"] = rgs
+        if rgs[-1]: s["reagent"] = rgs[-1]
     bless[key] = s
 lines.append("-- the paladin's long blessings and their Greater versions (all members of the target's class)")
 lines.append("D.BLESS = " + lua(bless))
+# a talent that makes a Hand last longer (Guardian's Favor and Freedom): a paladin talent whose text says "the duration of
+# your <Hand> by $/1000;sN sec", its effect N a flat modifier (aura 107) of the duration (misc 1); seconds per rank
+DESC = {int(r["ID"]): r["Description_lang"] for r in rd("Spell.csv")}
+EFFECT = collections.defaultdict(dict)
+for r in rd("SpellEffect.csv"):
+    if r["DifficultyID"] == "0": EFFECT[int(r["SpellID"])][int(r["EffectIndex"])] = r
+def durationMods(name):
+    mods = {}
+    pat = re.compile(r"duration of your " + re.escape(name) + r" by \$/1000;s(\d)")
+    for sid in sorted({x for ln in LINES["PALADIN"] for x in SLA[ln]}):
+        m = pat.search(DESC.get(sid, ""))
+        e = m and EFFECT[sid].get(int(m.group(1)) - 1)
+        if e and e["EffectAura"] == "107" and e["EffectMiscValue_0"] == "1":
+            mods[sid] = int(float(e["EffectBasePointsF"])) // 1000
+    return mods
 hands = {}
 for key, name in HANDS:
     s = spell("PALADIN", name)
     s["durs"] = [dur(x) for x in s["ranks"]]
+    mods = durationMods(name)
+    if mods: s["mods"] = mods
     hands[key] = s
-lines.append("-- the short blessings that take a paladin's long one off its target (one blessing per paladin per target)")
+lines.append("-- the short blessings that take a paladin's long one off its target (one blessing per paladin per target);")
+lines.append("-- mods: a talent that makes it last longer, [talent's spell] = seconds a rank")
 lines.append("D.HANDS = " + lua(hands))
 res = {}
 for cls, name in RES.items():
@@ -144,10 +166,53 @@ lines.append("D.RES = " + lua(res))
 # the camp: QuestBank's tables as gen_data.py made them, the Cooking Fire items (an Iron Oven, Cookie's Feast) and the
 # blueprints, which craft a camp item for a cook, a tailor, ...
 qbdata = open(os.path.join(REPO, "tools", "questbank", "QuestBank", "Data.lua"), encoding="utf-8").read().split("\n")
+ITEMCLS = {int(r["ID"]): (int(r["ClassID"]), int(r["SubclassID"])) for r in rd("Item.csv")}
+USE = {}
+for r in rd("ItemEffect.csv"):
+    if r["TriggerType"] == "0": USE[r["ID"]] = int(r["SpellID"])
+ITEMUSE = {}  # an item's use spell (its first on-use effect)
+for r in rd("ItemXItemEffect.csv"):
+    sid = USE.get(r["ItemEffectID"])
+    if sid: ITEMUSE.setdefault(int(r["ItemID"]), sid)
+# what a food's Well Fed raises, as D.CONSUME's words (Buffs.lua fits them to your role), from its text: "" for a
+# profession's skill or a zone's speed alone (nothing for a fight); a text not listed here stops the run
+FOOD_WORDS = [("Attack Power", "ap"), ("Spell Damage", "spell"), ("Healing Power", "heal"), ("Critical Strike", "crit"),
+              ("Strength", "str"), ("Agility", "agi"), ("Stamina", "sta"), ("Intellect", "int"), ("Spirit", "spi"), ("Armor", "armor")]
+FOOD_NONE = re.compile(r"^\+\d+ (Fishing|Herbalism) [Ss]kill|movement speed while in ")
+def foodWords(g):
+    if g == "Well Fed": return None
+    if FOOD_NONE.search(g): return ""
+    out, rest = [], g
+    for text, w in FOOD_WORDS:
+        if text in rest: out.append(w); rest = rest.replace(text, "")
+    if not out: sys.exit("D.FOOD: no words for the text %r (add it to FOOD_WORDS or FOOD_NONE)" % g)
+    return " ".join(out)
 for want in ("D.CAMP = ", "D.FOOD = "):
     row = next((l for l in qbdata if l.startswith(want)), None)
     if not row: sys.exit("QuestBank's Data.lua has no " + want.strip())
+    if want == "D.FOOD = ":
+        # (QuestBank's foods from the items' Use lines, less a recipe that teaches one (Item class 9: Recipe: Westfall
+        # Stew carries the stew's Use line, and its click learns the recipe), each with its words, w)
+        kept = []
+        for iid, body in re.findall(r"\[(\d+)\]=\{([^{}]*)\}", row):
+            cs = ITEMCLS.get(int(iid))
+            if cs and cs[0] != 0: continue
+            g = re.search(r'g="([^"]*)"', body)
+            ws = foodWords(g.group(1)) if g else None
+            kept.append("[%s]={%s%s}" % (iid, body, "" if ws is None else ',w="%s"' % ws))
+        row = "D.FOOD = {" + ",".join(kept) + "}"
+        lines.append("-- the foods that make you Well Fed: n, g (what it gives), i (icon), w: what it raises (D.CONSUME's words; \"\"")
+        lines.append("-- a profession's skill or a zone's speed alone)")
     lines.append(row)
+# the sellers of Simple Wood and Flint and Tinder (QuestBank's D.CAMP_SELL, from the CMaNGOS Classic database, GPL-3.0):
+#   {npc id, name, continent, world x, world y, uiMap, x, y, goods (1 Simple Wood, 2 Flint and Tinder), side (1 Alliance,
+#    2 Horde, 3 both)}; Classic data, Forever may have moved some
+at = next((i for i, l in enumerate(qbdata) if l.startswith("D.CAMP_SELL = {")), None)
+if at is None: sys.exit("QuestBank's Data.lua has no D.CAMP_SELL")
+end = next(i for i in range(at, len(qbdata)) if qbdata[i].startswith("}"))
+lines.append("-- who sells Simple Wood and Flint and Tinder: {npc, name, continent, world x, world y, uiMap, x, y, goods (1 wood, 2 flint),")
+lines.append("-- side (1 Alliance, 2 Horde, 3 both)}; the CMaNGOS Classic database's (GPL-3.0), which Forever may have moved")
+lines.extend(qbdata[at:end + 1])
 ITEMS = json.load(open(os.path.join(REPO, "plan", "items-db.json"), encoding="utf-8"))["items"]
 byName = {}
 for it in ITEMS: byName.setdefault(it["name"], it)
@@ -159,6 +224,8 @@ for it in ITEMS:
         prof, lvl = (sk.rsplit(" ", 1) + ["0"])[:2] if sk else (None, "0")
         g = "the most advanced cooking recipes" if "advanced cooking" in use else ("Stamina food for the camp" if "Stamina" in use else None)
         cookfire[int(it["id"])] = {"n": it["name"], "p": prof, "s": int(lvl) if lvl.isdigit() else 0, "i": it.get("icon"), "g": g}
+        # (its use spell: placing one spends the camp features' shared hour, as a feature's does)
+        if ITEMUSE.get(int(it["id"])): cookfire[int(it["id"])]["sp"] = ITEMUSE[int(it["id"])]
     if it["name"].startswith("Blueprint: "):
         m = re.search(r"Craft (?:an? )?([^.]+)\.", use)
         product = m and m.group(1).strip() or it["name"][len("Blueprint: "):]
@@ -169,13 +236,58 @@ for it in ITEMS:
         if prof: e["p"], e["s"] = prof, int(lvl) if lvl.isdigit() else 0
         if made: e["makes"] = int(made["id"])
         blueprint[int(it["id"])] = e
-lines.append("-- the camp items that need a Cooking Fire (any campfire counts): no buff, a cook's tool or a feast")
+lines.append("-- the camp items that need a Cooking Fire (any campfire counts): no buff, a cook's tool or a feast; sp: its use spell")
 lines.append("D.COOKFIRE = " + lua(dict(sorted(cookfire.items()))))
 lines.append("-- the blueprints: what each crafts, and the profession and skill the item asks (the tooltip's red line says the rest)")
 lines.append("D.BLUEPRINT = " + lua(dict(sorted(blueprint.items()))))
 stones = sorted(int(it["id"]) for it in ITEMS if re.match(r"^(Minor |Lesser |Greater |Major )?Soulstone$", it["name"]))
 lines.append("-- the soulstones a warlock makes and uses on a friendly target")
 lines.append("D.SOULSTONE = " + lua(stones))
+# the consumables' buffs: what each potion, elixir, flask, scroll (Item class 0, subclass 1 to 4) or juju-like item (class
+# 12) raises, from its use spell's aura effects (SpellEffect) when the aura lasts a minute or more (SpellMisc's duration).
+# Before the pull fits them to your role by these words, the same in every client language. Each word:
+#   str agi sta int spi all (a stat; all of them), ap rap (attack power, ranged), phys spell (physical or spell damage),
+#   dmg (all damage), heal, crit, haste, hit, exp (expertise), mp5 mana (mana regained, more mana), hp (more or regained
+#   health), armor, res (a resistance), absorb, def (defense, dodge, parry)
+# An empty string: the client knows it, and it leaves no lasting stat buff (a healing potion, Water Breathing)
+STAT_OF = {0: "str", 1: "agi", 2: "sta", 3: "int", 4: "spi", -1: "all"}
+def consumeWords(sid):
+    m = MISC.get(sid)
+    if not m or dur(sid) < 60: return []
+    out = []
+    for e in sorted(EFFECT.get(sid, {}).values(), key=lambda x: int(x["EffectIndex"])):
+        if e["Effect"] not in ("6", "35"): continue
+        aura, misc, pts = int(e["EffectAura"]), int(e["EffectMiscValue_0"] or 0), float(e["EffectBasePointsF"] or 0)
+        if pts <= 0: continue  # (a malus, or nothing to raise: no stat buff)
+        w = None
+        if aura in (29, 80): w = STAT_OF.get(misc)                     # a stat, flat or a percent
+        elif aura == 99: w = "ap"
+        elif aura == 124: w = "rap"
+        elif aura == 13: w = "phys" if misc == 1 else ("spell" if misc & 126 else None)
+        elif aura == 79: w = "dmg"
+        elif aura in (135, 136): w = "heal"
+        elif aura in (52, 57, 290): w = "crit"
+        elif aura == 193: w = "haste"
+        elif aura in (54, 55): w = "hit"
+        elif aura == 240: w = "exp"
+        elif aura in (85, 110) and misc == 0: w = "mp5"
+        elif aura == 418 and misc == 0: w = "mana"
+        elif aura in (34, 133, 161): w = "hp"
+        elif aura in (22, 674): w = "armor" if misc == 1 else "res"
+        elif aura == 69: w = "absorb"
+        elif aura in (47, 49) or (aura == 30 and misc == 95): w = "def"
+        if w and w not in out: out.append(w)
+    return out
+consume = {}
+for r in rd("ItemXItemEffect.csv"):
+    cs = ITEMCLS.get(int(r["ItemID"]))
+    sid = USE.get(r["ItemEffectID"])
+    if not cs or not sid: continue
+    ws = consumeWords(sid)
+    if cs[0] == 0 and 1 <= cs[1] <= 4: consume[sid] = " ".join(ws)
+    elif cs[0] == 12 and ws: consume[sid] = " ".join(ws)
+lines.append("-- the consumables' buffs by their use spell: what each raises (words, see gen_data.py), \"\" for none lasting a minute")
+lines.append("D.CONSUME = " + lua(dict(sorted(consume.items()))))
 # Forever's biomes (build 71037 onward): an effect gated by an area group (SpellCastingRequirements.RequiredAreasID), its
 # words "in Snowy areas", "in Forest and Grassland areas". Each biome: its area group's areas (their names are asked of the
 # client at login, so any language matches the zone text), the spells gated by it or naming it, and the items known to
@@ -208,6 +320,15 @@ for g, c in groupWords.items():
     if n >= 1 and len(c) == 1: GROUP[g] = k
 AGM = collections.defaultdict(list)
 for r in rd("AreaGroupMember.csv"): AGM[r["AreaGroupID"]].append(int(r["AreaID"]))
+# each area's zone: its top-level ancestor (AreaTable's ParentAreaID walked up). A subzone counts only inside its own
+# zone: the outdoor "Dire Maul" in Feralas (2577) is not the Dire Maul instance (2557) that a biome lists
+PARENT = {int(r["ID"]): int(r["ParentAreaID"] or 0) for r in rd("AreaTable.csv")}
+def zoneOf(a):
+    seen = set()
+    while PARENT.get(a, 0) and a not in seen:
+        seen.add(a)
+        a = PARENT[a]
+    return a
 biomes = []
 for key, name, _ in BIOME_WORDS:
     e = {"key": key, "name": name}
@@ -215,6 +336,9 @@ for key, name, _ in BIOME_WORDS:
     if groups:
         e["groups"] = [int(g) for g in groups]
         e["areas"] = sorted({a for g in groups for a in AGM[g]})
+        # (a subzone's zone; a zone, or an instance, has none)
+        zones = {a: zoneOf(a) for a in e["areas"] if zoneOf(a) != a}
+        if zones: e["zones"] = dict(sorted(zones.items()))
     biomes.append(e)
 # the spells: gated by a biome's group, or naming a biome (the doubled and tripled ones), with what they reference
 def refs(sid):
@@ -254,7 +378,8 @@ for it in ITEMS:
             for w in m.groups():
                 if w and w in WORD2KEY: ks.add(WORD2KEY[w])
     if ks: bitems[int(it["id"])] = sorted(set(bitems.get(int(it["id"]), [])) | ks)
-lines.append("-- Forever's biomes: key, name, the client's area groups and their areas (zones and subzones by AreaTable id)")
+lines.append("-- Forever's biomes: key, name, the client's area groups and their areas (zones and subzones by AreaTable id);")
+lines.append("-- zones: a subzone's own zone (its top-level area), the only zone it counts in")
 lines.append("D.BIOMES = { " + ", ".join(lua(b) for b in biomes) + " }")
 lines.append("-- the spells gated by a biome's area group (their aura shows only there: proof of where you stand)")
 lines.append("D.BIOME_GATED = " + lua(dict(sorted(gated.items()))))
@@ -265,4 +390,5 @@ lines.append("D.BIOME_ITEMS = " + lua(dict(sorted(bitems.items()))))
 print("biomes", [(b["key"], len(b.get("areas", []))) for b in biomes], "spells", len(bspells), "gated", len(gated), "items", len(bitems))
 lines.append("return D")
 open(OUT, "w", encoding="utf-8").write("\n".join(lines) + "\n")
-print("wrote", OUT, "classes", len(out), "blueprints", len(blueprint), "cookfire", len(cookfire), "soulstones", stones)
+print("wrote", OUT, "classes", len(out), "blueprints", len(blueprint), "cookfire", len(cookfire), "soulstones", stones,
+      "consumables", len(consume), "with a buff", sum(1 for v in consume.values() if v))

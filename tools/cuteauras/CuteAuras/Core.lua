@@ -34,24 +34,76 @@ function A.Now() return GetTime and GetTime() or 0 end
 function A.Fighting() return InCombatLockdown and InCombatLockdown() or false end
 
 ----------------------------------------------------------------------------
--- errors: a part's error stops that part's call alone and lands in /cauras errors (20 kept), never a Lua error popup
+-- errors: a part's error stops that part's call alone and lands in /cauras errors, never a Lua error popup (the game's
+-- own is hidden while scriptErrors is off, so an error that escaped would show nowhere). One error a message: an
+-- OnUpdate's error comes every frame, so a repeat counts up on its first line instead of pushing the others out. The
+-- last 20 kinds are kept in CuteAurasDB.errors (from PLAYER_LOGIN on), so a tester's /reload or logout keeps them
+-- for the owner; a new version starts a clean list. A wrapped call answers nothing, so a menu's callback wrapped in
+-- it still closes its menu (MenuUtil reads a callback's answer as what the menu does next)
 ----------------------------------------------------------------------------
+local MAX_ERRORS = 20
 A.errors = {}
+local seenError = {}
+local function now() return type(time) == "function" and time() or 0 end
+local function noteError(where, err)
+  local msg = (where or "?") .. ": " .. ((issecret and issecret(err)) and "(a secret value)" or tostring(err))
+  local list = A.errors
+  local e = seenError[msg]
+  if e then
+    e.n = (e.n or 1) + 1
+    e.last = now()
+    return
+  end
+  if #list >= MAX_ERRORS then
+    local gone = table.remove(list, 1)
+    if type(gone) == "table" then seenError[gone.msg] = nil end
+  end
+  e = { msg = msg, n = 1, first = now(), v = A.version }
+  e.last = e.first
+  list[#list + 1] = e
+  seenError[msg] = e
+  if A.debug and DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage("|cffff6060Cute Auras|r " .. msg) end
+end
 function A.Safe(fn, where)
   return function(...)
     local ok, err = pcall(fn, ...)
-    if not ok then
-      local list = A.errors
-      if #list >= 20 then table.remove(list, 1) end
-      list[#list + 1] = (where or "?") .. ": " .. tostring(err)
-      if A.debug and DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage("|cffff6060Cute Auras|r " .. list[#list]) end
-    end
-    return ok
+    if not ok then noteError(where, err) end
   end
+end
+-- the saved list: this version's errors from before, then the ones caught since the files loaded
+local function keepErrors()
+  local saved = type(CuteAurasDB.errors) == "table" and CuteAurasDB.errors or {}
+  local list = {}
+  for k in pairs(seenError) do seenError[k] = nil end
+  for _, e in ipairs(saved) do
+    if type(e) == "table" and type(e.msg) == "string" and e.v == A.version and not seenError[e.msg] then
+      list[#list + 1] = e
+      seenError[e.msg] = e
+    end
+  end
+  for _, e in ipairs(A.errors) do
+    local had = seenError[e.msg]
+    if had then had.n = (had.n or 1) + (e.n or 1); had.last = e.last
+    else list[#list + 1] = e; seenError[e.msg] = e end
+  end
+  while #list > MAX_ERRORS do seenError[table.remove(list, 1).msg] = nil end
+  CuteAurasDB.errors = list
+  A.errors = list
+end
+-- how many kinds and how many times in all
+function A.ErrorCount()
+  local total = 0
+  for _, e in ipairs(A.errors) do total = total + (e.n or 1) end
+  return #A.errors, total
+end
+function A.ClearErrors()
+  for i = #A.errors, 1, -1 do A.errors[i] = nil end
+  for k in pairs(seenError) do seenError[k] = nil end
 end
 
 ----------------------------------------------------------------------------
--- settings: CuteAurasDB.settings, account-wide; CuteAurasDB.chars[GUID], this character's (meals learned, habits)
+-- settings: CuteAurasDB.settings, account-wide; CuteAurasDB.chars[GUID], this character's (meals learned, habits, your
+-- role, Swap for me, the group saved over a reload)
 ----------------------------------------------------------------------------
 A.DEFAULTS = {
   on = true,                -- the bar
@@ -67,9 +119,9 @@ A.DEFAULTS = {
   sound = true,
   blessings = true,         -- paladins: blessings shared out by Cute Auras
   greater = true,           -- Greater blessings for three or more of a class, with Symbol of Kings
-  role = "auto",            -- your role: auto, tank, healer, melee, ranged, caster
   blueprints = true,        -- blueprints you can use, at a fire
   features = true,          -- camp items you can place at the fire near you
+  minimap = true,           -- the minimap button
   consume = "instance",     -- potions, elixirs, flasks, scrolls you keep up, and Well Fed: "always" (out of town),
                             -- "instance" (dungeons and raids), "pull" (the ready check only), "off"
 }
@@ -83,6 +135,9 @@ function A.Settings()
   copyDefaults(s, A.DEFAULTS)
   if type(s.never) ~= "table" then s.never = {} end
   if type(s.opt) ~= "table" then s.opt = {} end
+  -- (your role is each character's, A.Char().role: an old account-wide one is let go, since which character chose it
+  -- can't be told, so no alt announces another's role)
+  s.role = nil
   return s
 end
 local meGUID
@@ -179,6 +234,7 @@ function A.Part(name, part)
 end
 A.On("PLAYER_LOGIN", function()
   A.Settings()
+  keepErrors()
   for _, p in ipairs(A.parts) do
     if p.Init then A.Safe(function() p:Init() end, p.name .. ": start")() end
   end
@@ -186,16 +242,18 @@ A.On("PLAYER_LOGIN", function()
 end)
 
 ----------------------------------------------------------------------------
--- the chat line: Cute Auras' own word in the chat frame, for the slash commands' replies alone
+-- the chat line: Cute Auras' own word in the chat frame, for the slash commands' replies and what a click can't show
+-- (Move's and Test's way back, a full Never list)
 ----------------------------------------------------------------------------
 function A.Say(msg)
   if DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage("|cffff9ad5Cute Auras|r " .. tostring(msg)) end
 end
 
 -- /cauras (and /cuteauras): the window; move: the pieces' handles; test: sample alerts; grid: the blessings;
--- diag: what the client answers; errors: the last errors
+-- minimap: the minimap button shown or hidden; diag: what the client answers; errors: the last errors (errors clear:
+-- forget them)
 SLASH_CUTEAURAS1, SLASH_CUTEAURAS2 = "/cauras", "/cuteauras"
-SlashCmdList.CUTEAURAS = function(msg)
+SlashCmdList.CUTEAURAS = A.Safe(function(msg)
   msg = (type(msg) == "string" and msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
   if msg == "move" then if A.Settings_ then A.Settings_.Move(true) end
   elseif msg == "test" then if A.Alerts then A.Alerts.Test() end
@@ -203,7 +261,14 @@ SlashCmdList.CUTEAURAS = function(msg)
   elseif msg == "diag" then if A.Diag then A.Diag() end
   elseif msg == "errors" then
     if #A.errors == 0 then A.Say("No errors.") end
-    for _, e in ipairs(A.errors) do A.Say(e) end
+    for _, e in ipairs(A.errors) do A.Say(e.msg .. ((e.n or 1) > 1 and (" (" .. e.n .. " times)") or "")) end
+  elseif msg == "errors clear" then A.ClearErrors(); A.Say("Errors cleared.")
   elseif msg == "refresh" then if A.Bar then A.Bar.Refresh() end
+  elseif msg == "minimap" then
+    local s = A.Settings()
+    s.minimap = s.minimap == false
+    if A.Minimap then A.Minimap.Update() end
+    A.Say(s.minimap and "Minimap button shown." or "Minimap button hidden. /cauras minimap shows it again.")
+    if A.Window then A.Window.Refresh() end
   else if A.Window then A.Window.Open("settings") end end
-end
+end, "slash command")

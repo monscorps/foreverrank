@@ -1,10 +1,11 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- The alerts overlay: warnings you can place and size, apart from the bar. Each alert is a card: a game icon (with a
--- countdown's sweep and its seconds in big type), a title in white or the member's class colour, a line under it, a bar
--- at its left in its kind's colour, and a pulse as it comes. Cards stack downward from the overlay's top; the secure
--- rebuff card (Rebuff.lua) takes the top while it shows. A card works in a fight: it is plain art, never the game's
--- secure button (that one is Rebuff's alone). Right-click a card: dismiss it.
---   Alerts.Show(key, spec)  spec = { icon, title, text, class, color, expires, duration, sound, onClick, keep }
+-- countdown's sweep and its seconds in big type), a title in white or the member's class colour, a line under it (two
+-- lines at most), a bar at its left in its kind's colour, and a pulse as it comes. Cards stack downward from the
+-- overlay's top; the secure cards (Hands' restore, Rebuff's rebuff) take the top while they show. A card works in a
+-- fight: it is plain art, never the game's secure button. Right-click a card: dismiss it (onDismiss runs first).
+-- "Alerts on screen" off: no card at all, the secure ones too.
+--   Alerts.Show(key, spec)  spec = { icon, title, text, tip, class, color, expires, duration, sound, onClick, onDismiss, keep }
 --   Alerts.Hide(key)
 local _, A = ...
 local Al = A.Part("Alerts", { cards = {}, order = {} })
@@ -14,6 +15,16 @@ local C = L.C
 local SIZES = { small = 36, normal = 48, big = 64 }
 function Al.IconSize() return SIZES[A.Settings().alertSize or "normal"] or 48 end
 local GAP = 6
+Al.GAP = GAP
+-- a card's type: Small is smaller words too (two lines still, so a name and its line read whole), Big bigger
+local FONTS = { small = { 12, 10 }, normal = { 14, 11 }, big = { 16, 12 } }
+function Al.Fonts() local f = FONTS[A.Settings().alertSize or "normal"] or FONTS.normal; return f[1], f[2] end
+-- a card's height: the icon's, or the title and two lines of text where that is more
+function Al.CardHeight()
+  local t, x = Al.Fonts()
+  return math.max(Al.IconSize() + 8, 6 + (t + 2) + 3 + 2 * (x + 2) + 4)
+end
+function Al.On() return A.Settings().alerts ~= false end
 
 local anchor
 local function scale()
@@ -30,7 +41,10 @@ local function place()
   if type(pos) == "table" and tonumber(pos.x) and tonumber(pos.y) then
     anchor:SetPoint("TOP", UIParent, "BOTTOMLEFT", pos.x / k, pos.y / k)
   else
-    anchor:SetPoint("TOP", UIParent, "CENTER", 0, 230 / k)
+    -- (the default: 230 over the centre, and never less than 290 under the screen's top, below the game's error lines
+    -- (UIErrorsFrame, 122 to 182) and its raid warnings (RaidWarningFrame, 182 to 282) on a short screen or a big UI scale)
+    local h = tonumber(UIParent:GetHeight()) or 768
+    anchor:SetPoint("TOP", UIParent, "CENTER", 0, math.min(230, h / 2 - 290) / k)
   end
 end
 Al.Place = place
@@ -41,12 +55,12 @@ function Al.Anchor()
   anchor:SetFrameStrata("HIGH")
   anchor:SetClampedToScreen(true)
   anchor:SetMovable(true)
-  -- (Move mode's handle: a box with its name, dragged out of a fight)
+  -- (Move mode's handle: a box with its name at its top, dragged out of a fight; the window's Done goes under the name)
   anchor.box = L.Fill(anchor, "BACKGROUND", C.PINK, 0.18)
   anchor.box:SetAllPoints()
   anchor.box:Hide()
   anchor.label = L.Text(anchor, 12, C.WHITE)
-  anchor.label:SetPoint("CENTER")
+  anchor.label:SetPoint("TOP", 0, -10)
   anchor.label:SetText("Cute Auras alerts")
   anchor.label:Hide()
   place()
@@ -78,39 +92,56 @@ local function newCard()
   f.big = L.Text(f.icon, 20, C.WHITE)
   f.big:SetPoint("CENTER", f.icon, "CENTER", 0, 0)
   f.title = L.Text(f, 14, C.WHITE, 190, "LEFT")
-  f.text = L.Text(f, 11, C.INK, 190, "LEFT")
+  f.text = L.Text(f, 11, C.INK, 190, "LEFT", 2)
   f.glow = f:CreateTexture(nil, "OVERLAY")
   f.glow:SetColorTexture(1, 1, 1, 1)
   f.glow:SetAlpha(0)
   f:SetScript("OnClick", function(self, button)
-    if button == "RightButton" then Al.Hide(self.key) return end
     local spec = self.spec
+    if button == "RightButton" then
+      if spec and spec.onDismiss then A.Safe(spec.onDismiss, "alerts: dismiss")(self) end
+      Al.Hide(self.key)
+      return
+    end
     if spec and spec.onClick then A.Safe(spec.onClick, "alerts: click")(self) end
   end)
   f:SetScript("OnEnter", function(self)
     local spec = self.spec
-    if not (spec and GameTooltip) then return end
-    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:SetText(spec.title or "", C.WHITE[1], C.WHITE[2], C.WHITE[3])
-    if spec.text then GameTooltip:AddLine(spec.text, C.INK[1], C.INK[2], C.INK[3], true) end
-    if spec.tip then GameTooltip:AddLine(spec.tip, C.DIM[1], C.DIM[2], C.DIM[3], true) end
-    GameTooltip:AddLine("Right-click: dismiss.", C.DIM[1], C.DIM[2], C.DIM[3], true)
-    GameTooltip:Show()
+    if spec then Al.Tip(self, spec.title, spec.text, spec.tip, "Right-click: dismiss.") end
   end)
-  f:SetScript("OnLeave", function() if GameTooltip and GameTooltip:GetOwner() then GameTooltip:Hide() end end)
+  f:SetScript("OnLeave", Al.Untip)
   return f
 end
--- a card's size and parts for the overlay's icon size
+-- a card's tooltip, the art cards' and the secure ones' alike: its whole title and line (a card cuts them only past its
+-- room), a tip, what a click does
+function Al.Tip(owner, title, text, tip, how)
+  if not GameTooltip then return end
+  GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+  GameTooltip:SetText(title or "", C.WHITE[1], C.WHITE[2], C.WHITE[3])
+  if text and text ~= "" then GameTooltip:AddLine(text, C.INK[1], C.INK[2], C.INK[3], true) end
+  if tip then GameTooltip:AddLine(tip, C.DIM[1], C.DIM[2], C.DIM[3], true) end
+  if how then GameTooltip:AddLine(how, C.DIM[1], C.DIM[2], C.DIM[3], true) end
+  GameTooltip:Show()
+end
+function Al.Untip() if GameTooltip and GameTooltip:GetOwner() then GameTooltip:Hide() end end
+-- a card's size and parts for the overlay's icon size, the three kinds alike: the icon at the left, the title at the
+-- card's top, the line under it (a secure card's own: shaped out of a fight only)
+function Al.ShapeCard(f, s)
+  f:SetSize(s + 210, Al.CardHeight())
+  local t, x = Al.Fonts()
+  f.title:SetFont(L.Font(), t, "OUTLINE")
+  f.text:SetFont(L.Font(), x, "OUTLINE")
+  f.icon:SetSize(s, s)
+  f.icon:ClearAllPoints(); f.icon:SetPoint("LEFT", f, "LEFT", 7, 0)
+  f.title:ClearAllPoints(); f.title:SetPoint("TOPLEFT", f, "TOPLEFT", s + 16, -6)
+  f.text:ClearAllPoints(); f.text:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 0, -3)
+end
 local function shape(f)
   local s = Al.IconSize()
   if f.size == s then return end
   f.size = s
-  f:SetSize(s + 210, s + 8)
-  f.icon:SetSize(s, s)
-  f.icon:ClearAllPoints(); f.icon:SetPoint("LEFT", f, "LEFT", 7, 0)
+  Al.ShapeCard(f, s)
   f.big:SetFont(L.Font(), math.floor(s * 0.42), "OUTLINE")
-  f.title:ClearAllPoints(); f.title:SetPoint("TOPLEFT", f.icon, "TOPRIGHT", 9, -math.floor(s * 0.08))
-  f.text:ClearAllPoints(); f.text:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 0, -3)
   f.glow:ClearAllPoints(); f.glow:SetAllPoints(f.icon)
 end
 Al.Shape = shape
@@ -137,11 +168,12 @@ end
 ----------------------------------------------------------------------------
 local clock
 local function layout()
+  -- (the art cards under the secure ones shown: Hands' restore at the top, Rebuff's card under it or at the top)
   local top = 0
   local rb = A.Rebuff and A.Rebuff.button
-  if rb and rb:IsShown() then top = (rb:GetHeight() or 0) + GAP end
+  if rb and rb:IsShown() then top = top + (rb:GetHeight() or 0) + GAP end
   local hb = A.Hands and A.Hands.button
-  if hb and hb:IsShown() then top = 2 * ((hb:GetHeight() or 0) + GAP) end
+  if hb and hb:IsShown() then top = top + (hb:GetHeight() or 0) + GAP end
   for _, key in ipairs(Al.order) do
     local f = Al.cards[key]
     if f then
@@ -203,7 +235,7 @@ end
 Al.Sound = sound
 
 function Al.Show(key, spec)
-  if A.Settings().alerts == false then return nil end
+  if not Al.On() then return nil end
   local f = Al.cards[key]
   local fresh = not f
   if not f then
@@ -228,20 +260,25 @@ function Al.Clear() for key in pairs(Al.cards) do remove(key) end end
 function Al.Restyle()
   for _, f in pairs(Al.cards) do f.size = nil; paint(f, f.spec) end
   if A.Rebuff and A.Rebuff.Restyle then A.Rebuff.Restyle() end
+  if A.Hands and A.Hands.Refresh then A.Hands.Refresh() end
   layout()
 end
 
--- /cauras test: four cards as they come in play, for placing and sizing the overlay
+-- /cauras test: the three cards as they come in play, their words as the game's own make them (long names: a card
+-- that fits these fits play), for placing and sizing the overlay
 function Al.Test()
+  if not Al.On() then A.Say("Alerts are off: tick Alerts on screen in Settings first.") return end
   local t = A.Now()
-  local D = A.Data
-  Al.Show("test:rebuff", { icon = L.SpellIcon(1243, 135987), title = "Back up: Anna", text = "Power Word: Fortitude. Click to buff them.", class = "MAGE",
-    color = C.GROUP, sound = true, life = 15 })
-  Al.Show("test:hand", { icon = L.SpellIcon(1022, D.HANDS.protection.icon), title = "Blessing of Protection: Bram", class = "WARRIOR",
-    text = "Kings goes back on as it ends.", color = C.PINK, expires = t + 10, duration = 10 })
-  Al.Show("test:restore", { icon = L.SpellIcon(20217, D.BLESS.kings.icon), title = "Kings back on Bram", class = "WARRIOR",
-    text = "Your Blessing of Protection ended.", color = C.QUEST, life = 15 })
-  Al.Show("test:swap", { icon = 134400, title = "Snowy here: Froststrider", text = "Swap in for your boots.", color = C.WHITE, life = 15 })
+  local D, H, Rb = A.Data, A.Hands, A.Rebuff
+  local name = "Bramblewoode"
+  local fort = L.SpellName(1243, "Power Word: Fortitude")
+  local title, text = Rb.Words(name, fort, "cast")
+  Al.Show("test:rebuff", { icon = L.SpellIcon(1243, 135987), title = title, text = text, class = "MAGE", color = C.GROUP, sound = true, life = 15 })
+  title, text = H.HandWords(name, L.SpellName(1022, D.HANDS.protection.name), "kings")
+  Al.Show("test:hand", { icon = L.SpellIcon(1022, D.HANDS.protection.icon), title = title, class = "WARRIOR", text = text, color = C.PINK,
+    expires = t + 10, duration = 10 })
+  title, text = H.RestoreWords(name, "kings", L.SpellName(1022, D.HANDS.protection.name), "fight", true)
+  Al.Show("test:restore", { icon = L.SpellIcon(20217, D.BLESS.kings.icon), title = title, class = "WARRIOR", text = text, color = C.QUEST, life = 15 })
   A.Say("Test alerts for 15 s. /cauras move to place them, Settings to size them.")
 end
 
