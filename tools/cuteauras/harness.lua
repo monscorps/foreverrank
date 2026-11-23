@@ -100,6 +100,7 @@ function newObj(c, kind, template, parent, name)
       elseif k == "GetText" then return self.__text
       elseif k == "SetTexture" then self.__tex = a[1]
       elseif k == "SetColorTexture" then self.__color = { a[1], a[2], a[3], a[4] }
+      elseif k == "SetDesaturated" then self.__desat = a[1] and true or false
       elseif k == "SetTextColor" then self.__textColor = { a[1], a[2], a[3] }
       elseif k == "SetAlpha" then self.__alpha = a[1]
       elseif k == "GetAlpha" then return self.__alpha
@@ -177,7 +178,7 @@ end
 local WORLD
 local CLASS_NAME = { PRIEST = "Priest", PALADIN = "Paladin", MAGE = "Mage", WARRIOR = "Warrior", ROGUE = "Rogue", DRUID = "Druid",
   HUNTER = "Hunter", SHAMAN = "Shaman", WARLOCK = "Warlock" }
-local SPELL_NAMES, SPELL_DESC = {}, {}
+local SPELL_NAMES, SPELL_DESC, SPELL_LEVELS = {}, {}, {}
 local AREA_NAMES = { [1] = "Dun Morogh", [618] = "Winterspring", [12] = "Elwynn Forest", [40] = "Westfall", [10] = "Duskwood", [139] = "Eastern Plaguelands",
   [357] = "Feralas", [2557] = "Dire Maul", [33] = "Stranglethorn Vale", [35] = "Booty Bay", [440] = "Tanaris" }
 
@@ -480,7 +481,8 @@ local function newClient(o)
       local a = x and x.auras and x.auras[i]
       if not a then return nil end
       if c.combat then return { name = secret(), spellId = secret(), applications = secret(), expirationTime = secret(), sourceUnit = secret(), duration = secret() } end
-      return { name = a.name or SPELL_NAMES[a.id] or ("Aura " .. a.id), spellId = a.id, applications = a.n or 1, expirationTime = a.exp or 0,
+      -- (a.secretId: an aura whose spell id the client keeps secret, its name plain)
+      return { name = a.name or SPELL_NAMES[a.id] or ("Aura " .. a.id), spellId = a.secretId and secret() or a.id, applications = a.n or 1, expirationTime = a.exp or 0,
                sourceUnit = a.src, duration = a.dur or 0, icon = 1 }
     end,
     GetUnitAuraBySpellID = function(u, id)
@@ -495,7 +497,23 @@ local function newClient(o)
   env.C_Spell = { GetSpellName = function(id) return SPELL_NAMES[id] end, GetSpellTexture = function(id) return 100000 + (id % 1000) end,
     GetSpellDescription = function(id) return SPELL_DESC[id] or "" end,
     IsSpellInRange = function(id, u) local x = U(u); if not x then return nil end if x.far then return false end return true end,
-    GetSpellCooldown = function() return { startTime = 0, duration = 0 } end }
+    GetSpellCooldown = function() return { startTime = 0, duration = 0 } end,
+    -- (a name looked up in your spellbook: the highest rank of it you know, else its first; an id stays itself; nothing
+    -- for a spell the client lacks)
+    GetSpellIDForSpellIdentifier = function(x)
+      if type(x) == "number" then return x end
+      local best, first
+      for id, n in pairs(SPELL_NAMES) do
+        if n == x then
+          if not first or id < first then first = id end
+          local lv, blv = SPELL_LEVELS[id] or 0, best and (SPELL_LEVELS[best] or 0) or -1
+          if c.known[id] and (lv > blv or (lv == blv and id > best)) then best = id end
+        end
+      end
+      return best or first
+    end,
+    -- (the level a rank is learned at: its SpellLevels' BaseLevel; 0 for one without)
+    GetSpellLevelLearned = function(id) return SPELL_LEVELS[id] or 0 end }
   -- items and bags
   local function item(id) return c.items[id] or {} end
   env.C_Container = {
@@ -722,12 +740,17 @@ do
   D = A.Data
   for _, list in pairs(D.BUFFS) do
     for _, e in ipairs(list) do
-      for _, sp in ipairs(e.one or { e }) do for _, id in ipairs(sp.ranks) do SPELL_NAMES[id] = sp.name end end
-      for _, id in ipairs(e.group or {}) do SPELL_NAMES[id] = e.groupName end
+      for _, sp in ipairs(e.one or { e }) do for i, id in ipairs(sp.ranks) do SPELL_NAMES[id], SPELL_LEVELS[id] = sp.name, sp.levels[i] end end
+      for i, id in ipairs(e.group or {}) do SPELL_NAMES[id], SPELL_LEVELS[id] = e.groupName, e.groupLevels[i] end
     end
   end
-  for _, e in pairs(D.BLESS) do for _, id in ipairs(e.ranks) do SPELL_NAMES[id] = e.name end; for _, id in ipairs(e.group or {}) do SPELL_NAMES[id] = e.groupName end end
-  for _, e in pairs(D.HANDS) do for _, id in ipairs(e.ranks) do SPELL_NAMES[id] = e.name end end
+  for _, e in pairs(D.BLESS) do
+    for i, id in ipairs(e.ranks) do SPELL_NAMES[id], SPELL_LEVELS[id] = e.name, e.levels[i] end
+    for i, id in ipairs(e.group or {}) do SPELL_NAMES[id], SPELL_LEVELS[id] = e.groupName, e.groupLevels[i] end
+  end
+  for _, e in pairs(D.HANDS) do for i, id in ipairs(e.ranks) do SPELL_NAMES[id], SPELL_LEVELS[id] = e.name, e.levels[i] end end
+  -- (Dampen Magic, a mage's habit in the tests: rank 1 at level 12, 2 at 24, as SpellLevels says)
+  SPELL_LEVELS[604], SPELL_LEVELS[8450] = 12, 24
   SPELL_NAMES[1283391], SPELL_NAMES[1229741], SPELL_NAMES[1229739] = "Campfire Nearby", "Camp Benefits", "Welcoming Campfire"
   SPELL_DESC[1306908] = "Movement speed increased by 3% in Snowy areas."
   SPELL_DESC[17538] = "Increases Agility by 25 and chance to get a critical strike by 2% for 1 hour."
@@ -742,9 +765,16 @@ local function member(o)
   o.auras = o.auras or {}
   return o
 end
+-- (every rank a level has learned; of two ids of one level in a list, the first alone: the second is the rank's proc,
+-- Lightning Shield's bolt (26364 after 324), never learned, as IsSpellKnown answers in the game)
 local function knowAll(c, class, level)
   for _, e in ipairs(D.BUFFS[class] or {}) do
-    for _, sp in ipairs(e.one or { e }) do for i, id in ipairs(sp.ranks) do if (sp.levels[i] or 0) <= level then c.known[id] = true end end end
+    for _, sp in ipairs(e.one or { e }) do
+      for i, id in ipairs(sp.ranks) do
+        local lv = sp.levels[i] or 0
+        if lv <= level and (i == 1 or lv ~= (sp.levels[i - 1] or 0)) then c.known[id] = true end
+      end
+    end
     for i, id in ipairs(e.group or {}) do if (e.groupLevels[i] or 0) <= level then c.known[id] = true end end
   end
   if class == "PALADIN" then
@@ -804,9 +834,9 @@ test("solo priest: Inner Fire and Fortitude on yourself, secure clicks set, noth
   local b = icon(c, "group", "duty:fort")
   assert(b and b:GetAttribute("type1") == "spell" and b:GetAttribute("unit") == "player", "the duty icon casts on you")
   assert(b:GetAttribute("spell") == 2791, "the highest Fortitude a level 40 knows (rank 4, 2791): " .. tostring(b:GetAttribute("spell")))
-  -- with the aura on, it goes
+  -- with the aura on, it goes (Inner Fire 4, the highest a level 40 knows: a lower one asks for an Upgrade)
   table.insert(me.auras, { id = 2791, src = "player", exp = c.clock + 3600, dur = 3600 })
-  table.insert(me.auras, { id = 7128, src = "player", exp = c.clock + 600, dur = 600 })
+  table.insert(me.auras, { id = 1006, src = "player", exp = c.clock + 600, dur = 600 })
   fire(c, "UNIT_AURA", "player")
   tick(c, 1)
   assert(not find(shown(c, "group"), "duty:fort") and not find(shown(c, "mine"), "self:innerfire"), "buffed: nothing to do")
@@ -3012,6 +3042,49 @@ test("the Settings tab: every box in the page, none over another, its words whol
       assert(x + b.__points[1][4] + b.__w <= 612, "a choice's option past the page: " .. b.text.__text)
     end
   end
+  -- every piece on the page (the boxes, the headings, the Nevers line, the buttons), with the Nevers line at its
+  -- longest: inside the page, inside its column (left to 306, right from 312), none over another
+  local function allFit(when)
+    local boxes = {}
+    for _, o in ipairs(page.__children) do
+      local pt = o.__points[1]
+      if pt and pt[2] == page and o.__shown then
+        local x, y, w, h, what = pt[4], pt[5], o.__w, o.__h, nil
+        if o.__kind == "FontString" then w, h, what = TEXT_WIDTH(o.__text, o.__size), o.__size + 2, o.__text
+        else what = (o.label and o.label.__text) or (o.text and o.text.__text) or "?" end
+        assert(w > 0 and h > 0, when .. ": a size: " .. what)
+        assert(x >= 0 and x + w <= (x < 312 and 306 or 612) and y <= 0 and y - h >= -444, when .. ": inside its column and the page: " .. what)
+        for _, r in ipairs(boxes) do
+          assert(x >= r.x + r.w or r.x >= x + w or y - h >= r.y or r.y - r.h >= y, when .. ": " .. what .. " over " .. r.what)
+        end
+        boxes[#boxes + 1] = { x = x, y = y, w = w, h = h, what = what }
+      end
+    end
+    return #boxes
+  end
+  local n0 = allFit("nothing hidden")
+  local never = c.A.Settings().never
+  for i = 1, 32 do never["test:" .. i] = "Test " .. i end
+  page:Sync()
+  assert(page.nevers.__text == "32 of 32 hidden for good (right-click, Never)." and page.show:IsShown(), "the Nevers line at its longest")
+  assert(allFit("32 hidden") == n0 + 1, "the Show them all button counted")
+  for i = 1, 32 do never["test:" .. i] = nil end
+  page:Sync()
+  -- Buffs others give you: on by default, under Your buffs and weapon, indented, greyed while that part is off (it
+  -- shows there); the camp's two boxes the same under the camp's
+  local others, yours = widget(page, "Buffs others give you"), widget(page, "Your buffs and weapon")
+  assert(others and others.tick:IsShown() and c.A.Settings().others ~= false, "on by default")
+  assert(others.__points[1][4] == yours.__points[1][4] + 16 and others.__points[1][5] == yours.__points[1][5] - yours.__h, "indented under Your buffs and weapon")
+  c.click(yours)
+  assert(others.__alpha == 0.45, "Your buffs and weapon off: greyed")
+  c.click(yours)
+  assert(others.__alpha == 1, "back")
+  local camp, feat, bp = widget(page, "Camp, food and sleeping bag"), widget(page, "Camp items at the fire near you"), widget(page, "Blueprints you can use")
+  assert(feat.__points[1][4] == 16 and bp.__points[1][4] == 16 and feat.__points[1][5] == camp.__points[1][5] - camp.__h, "the camp's two under it, indented")
+  c.click(camp)
+  assert(feat.__alpha == 0.45 and bp.__alpha == 0.45 and others.__alpha == 1, "camp off: its two greyed")
+  c.click(camp)
+  assert(feat.__alpha == 1 and bp.__alpha == 1, "back")
   -- the minimap button under its own heading, not the group's
   local box = widget(page, "Button on the minimap")
   local heads = {}
@@ -3437,6 +3510,1110 @@ test("Biome gear tab: Never's tooltip says what a click does; the dimmed toggles
   tick(c, 16)
   assert(c.env.CuteAurasWindow:IsShown(), "and back after")
   noErrors(c)
+end)
+
+----------------------------------------------------------------------------
+-- lower ranks (the owner, 2026-11-23: "lower rank buff than ideal for your lvl"): a member's buff at less power than
+-- the rank you give them counts as missing; your own at a lower rank than you know asks for an Upgrade
+----------------------------------------------------------------------------
+-- a priest at 60 who gives Fortitude to a rogue (a twelve-letter name, the widest the tests have) and a warrior; the
+-- rogue carries rank 4 from a priest of level 40, gone since
+local function lowParty()
+  local P = member({ name = "Apri", class = "PRIEST", level = 60, guid = "Player-1-L1" })
+  local R = member({ name = "Wolfwardenmw", class = "ROGUE", level = 60, guid = "Player-1-L2" })
+  local W = member({ name = "Cwar", class = "WARRIOR", level = 60, guid = "Player-1-L3", assigned = "TANK" })
+  local c = client({ me = P, group = { P, R, W }, spec = 56 })
+  knowAll(c, "PRIEST", 60)
+  local function fort(id, src) return { id = id, src = src, exp = c.clock + 3000, dur = 3600 } end
+  P.auras, W.auras, R.auras = { fort(10938, "player") }, { fort(10938, "player") }, { fort(2791, nil) }
+  load(c)
+  tick(c, 12)
+  return c, R, fort
+end
+local function rowOf(fly, name) for _, r in ipairs(fly.rows) do if r:IsShown() and r.name.__text == name then return r end end end
+
+test("low rank: Fortitude 4 on a level 60 rogue is named, Low rank in its row, a click gives rank 6; Prayer 2 is fine; a hidden id never low", function()
+  local c, R, fort = lowParty()
+  local tok = tokenOf(c, R)
+  local rec = find(shown(c, "group"), "duty:fort")
+  assert(rec and rec.count == 1 and rec.word == R.name and rec.class == "ROGUE" and rec.status == nil and rec.lit,
+    "the rogue named, as for a missing buff: " .. tostring(rec and rec.word))
+  local b = icon(c, "group", "duty:fort")
+  assert(b:GetAttribute("spell") == 10938 and b:GetAttribute("unit") == tok, "the icon gives rank 6 to the rogue: " .. tostring(b:GetAttribute("spell")))
+  c.casts = {}
+  c.click(b)
+  assert(c.casts[1] and c.casts[1].spell == 10938 and c.casts[1].unit == tok, "its click casts 10938 on them")
+  assert(rec.why:find("^Rank 4 on them; you give rank 6%."), "the tooltip's ranks: " .. rec.why)
+  c.hover(b)
+  assert(table.concat(c.env.GameTooltip.lines, " "):find("Rank 4 on them; you give rank 6.", 1, true), "said on hover")
+  -- the list: the rogue first, as a missing one; Low rank in the warning colour, the icon not greyed; its click rank 6
+  local fly = c.env[b:GetName() .. "Fly"]
+  local row = rowOf(fly, R.name)
+  assert(row and row == fly.rows[1] and row.state.__text == "Low rank", "Low rank, first: " .. tostring(row and row.state.__text))
+  local warn = c.A.Look.C.WARN
+  assert(row.state.__textColor[1] == warn[1] and row.state.__textColor[3] == warn[3] and row.icon.__desat == false, "the warning colour, not greyed")
+  assert(rowOf(fly, "Cwar").state.__text == "on" and rowOf(fly, "Cwar").icon.__desat == true, "the warrior's rank 6: on, greyed")
+  FITS(row.state, "Low rank"); FITS(row.name, "a twelve-letter name")
+  -- (side by side, their boxes apart: the name's from the icon's right (4 + 16 + 6), the state's to 4 from the row's
+  -- right; any name that fits its box clear of any state)
+  assert(26 + row.name.__w <= row.__w - 4 - row.state.__w,
+    string.format("the name's box (26 to %d) runs into the state's (%d to %d)", 26 + row.name.__w, row.__w - 4 - row.state.__w, row.__w - 4))
+  c.casts = {}
+  c.click(row)
+  assert(c.casts[1] and c.casts[1].spell == 10938 and c.casts[1].unit == tok, "the row's click casts 10938 on them")
+  -- the share-out as it was: the rogue is still yours, no new computation
+  local gen = c.A.Assign.gen
+  assert(#dutyOf(c, "fort").targets == 3, "Fortitude to all three")
+  -- Prayer of Fortitude 2 on them, as strong as rank 6: fine; Prayer 1 at level 60: low, named so
+  R.auras = { fort(21564, nil) }
+  fire(c, "UNIT_AURA", tok); tick(c, 2)
+  assert(not find(shown(c, "group"), "duty:fort"), "Prayer of Fortitude 2: fine")
+  R.auras = { fort(21562, nil) }
+  fire(c, "UNIT_AURA", tok); tick(c, 2)
+  rec = find(shown(c, "group"), "duty:fort")
+  assert(rec and rec.word == R.name and rec.why:find("^Prayer of Fortitude rank 1 on them; you give rank 6%."), "Prayer 1 at 60: low: " .. tostring(rec and rec.why))
+  -- rank 4 whose spell id the client hides: on by its name, never low
+  R.auras = { { id = 2791, secretId = true, exp = c.clock + 3000, dur = 3600 } }
+  fire(c, "UNIT_AURA", tok); tick(c, 2)
+  assert(not find(shown(c, "group"), "duty:fort"), "a hidden spell id: on, never low")
+  -- rank 4 within five minutes of its end: Low rank still, named, no countdown (a click replaces it all the same)
+  R.auras = { { id = 2791, exp = c.clock + 200, dur = 3600 } }
+  fire(c, "UNIT_AURA", tok); tick(c, 2)
+  rec = find(shown(c, "group"), "duty:fort")
+  assert(rec and rec.word == R.name and rec.status == nil and not rec.timed and rowOf(fly, R.name).state.__text == "Low rank",
+    "low rank and ending: " .. tostring(rec and rec.word))
+  assert(c.A.Assign.gen == gen, "the share-out never moved for a rank")
+  noErrors(c)
+end)
+
+test("low rank in a fight: nothing changes, the row still gives rank 6; the bar looks again after it", function()
+  local c, R, fort = lowParty()
+  local tok = tokenOf(c, R)
+  local b = icon(c, "group", "duty:fort")
+  local fly = c.env[b:GetName() .. "Fly"]
+  local row = rowOf(fly, R.name)
+  assert(row and row.state.__text == "Low rank", "out of a fight: Low rank")
+  fight(c, true)
+  tick(c, 1)
+  -- (another priest gives them rank 6 mid-fight: the client hides the auras, the bar holds still)
+  R.auras = { fort(10938, nil) }
+  fire(c, "UNIT_AURA", tok); tick(c, 4)
+  local rec = find(shown(c, "group"), "duty:fort")
+  assert(rec and rec.word == R.name and b:IsShown() and row.state.__text == "Low rank" and b:GetAttribute("spell") == 10938, "in a fight: as it was")
+  c.casts = {}
+  c.hover(b)
+  c.click(row)
+  assert(c.casts[1] and c.casts[1].spell == 10938 and c.casts[1].unit == tok, "the row's click in a fight: rank 6 on them")
+  fight(c, false)
+  tick(c, 3)
+  assert(not find(shown(c, "group"), "duty:fort"), "after the fight: rank 6 on them, nothing owed")
+  noErrors(c)
+end)
+
+test("low rank blessings: Might 5 on the warrior you give Might is low while you know 7; a Greater Might as strong is fine", function()
+  local PAL = member({ name = "Apal", class = "PALADIN", level = 60, guid = "Player-1-N1" })
+  local WAR = member({ name = "Bwar", class = "WARRIOR", level = 60, guid = "Player-1-N2" })
+  local c = client({ me = PAL, group = { PAL, WAR }, spec = 184 })
+  knowAll(c, "PALADIN", 60)
+  local function aura(id, src) return { id = id, src = src, exp = c.clock + 3000, dur = 3600 } end
+  -- (Might 5 from another paladin, gone since)
+  PAL.auras, WAR.auras = { aura(25291, "player") }, { aura(19837, nil) }
+  load(c)
+  tick(c, 12)
+  assert(c.A.Assign.BlessingOf(PAL.guid, "WARRIOR:melee") == "might", "you give the warrior Might")
+  local tok = tokenOf(c, WAR)
+  local rec = find(shown(c, "group"), "duty:bless:might")
+  assert(rec and rec.count == 1 and rec.word == WAR.name, "the warrior named: " .. tostring(rec and rec.word))
+  assert(rec.why:find("^Rank 5 on them; you give rank 7%."), rec.why)
+  local b = icon(c, "group", "duty:bless:might")
+  assert(b:GetAttribute("spell") == 25291 and b:GetAttribute("unit") == tok, "the click gives Might 7: " .. tostring(b:GetAttribute("spell")))
+  local row = rowOf(c.env[b:GetName() .. "Fly"], WAR.name)
+  assert(row and row.state.__text == "Low rank" and row:GetAttribute("spell") == 25291, "Low rank in the list, its click Might 7")
+  local gen = c.A.Assign.gen
+  -- Greater Blessing of Might 2 (133 attack power, as rank 7): fine, all on; Greater 1 (112): low
+  WAR.auras = { aura(25916, nil) }
+  fire(c, "UNIT_AURA", tok); tick(c, 2)
+  rec = find(shown(c, "group"), "duty:bless:might")
+  assert(rec and rec.word == "All on" and rec.count == nil, "Greater Might 2: fine: " .. tostring(rec and rec.word))
+  WAR.auras = { aura(25782, nil) }
+  fire(c, "UNIT_AURA", tok); tick(c, 2)
+  rec = find(shown(c, "group"), "duty:bless:might")
+  assert(rec and rec.word == WAR.name and rec.why:find("^Greater Blessing of Might rank 1 on them; you give rank 7%."), "Greater 1: low: " .. tostring(rec and rec.why))
+  assert(c.A.Assign.gen == gen and c.A.Assign.BlessingOf(PAL.guid, "WARRIOR:melee") == "might", "the share-out as it was")
+  noErrors(c)
+end)
+
+test("low rank: the group version never weaker than the single rank: Holy Candles alone, or Prayer 2 not trained, give Fortitude 6 one by one until the icon clears; Greater Might 1 under Might 7 too", function()
+  -- a level 60 priest, four level 60s without Fortitude, Holy Candles alone (Prayer of Fortitude 2 takes a Sacred Candle)
+  local P = member({ name = "Apri", class = "PRIEST", level = 60, guid = "Player-1-V1" })
+  local list = { P }
+  for i = 2, 5 do list[i] = member({ name = "V" .. i, class = i % 2 == 0 and "WARRIOR" or "ROGUE", level = 60, guid = "Player-1-V" .. i }) end
+  local c = client({ me = P, group = list, spec = 56 })
+  knowAll(c, "PRIEST", 60)
+  local function fort(id, src) return { id = id, src = src, exp = c.clock + 3000, dur = 3600 } end
+  c.items[17028], c.items[17029] = { name = "Holy Candle" }, { name = "Sacred Candle" }
+  c.bags = { { id = 17028, bag = 0, slot = 1, count = 20 } }
+  P.auras = { fort(10938, "player") }
+  load(c)
+  tick(c, 12)
+  local b = icon(c, "group", "duty:fort")
+  local rec = find(shown(c, "group"), "duty:fort")
+  assert(rec and rec.count == 4 and b:GetAttribute("spell") == 10938,
+    "Holy Candles alone: Fortitude 6, never Prayer 1 (56 Stamina under 70): " .. tostring(b and b:GetAttribute("spell")))
+  -- (Prayer 1 on all four from before: each a lower rank, each given Fortitude 6, one click each, and the icon clears)
+  for i = 2, 5 do list[i].auras = { fort(21562, nil) } end
+  for u in pairs(c.units) do fire(c, "UNIT_AURA", u) end
+  tick(c, 2)
+  rec = find(shown(c, "group"), "duty:fort")
+  assert(rec and rec.count == 4 and rec.why:find("^Prayer of Fortitude rank 1 on them; you give rank 6%.") and rec.clickWord == "buff " .. rec.word,
+    "Prayer 1 on them: low, a click buffs one: " .. tostring(rec and rec.why))
+  for n = 1, 4 do
+    c.casts = {}
+    c.click(b)
+    local cast = c.casts[1]
+    assert(cast and cast.spell == 10938, "click " .. n .. ": Fortitude 6, never Prayer 1 again: " .. tostring(cast and cast.spell))
+    c.units[cast.unit].auras = { fort(10938, "player") }
+    fire(c, "UNIT_AURA", cast.unit); tick(c, 2)
+  end
+  assert(not find(shown(c, "group"), "duty:fort"), "four clicks, all at rank 6: the icon gone")
+  -- Sacred Candles: Prayer of Fortitude 2, as strong as rank 6, for the four with Prayer 1 again
+  for i = 2, 5 do list[i].auras = { fort(21562, nil) } end
+  c.bags[2] = { id = 17029, bag = 0, slot = 2, count = 5 }
+  fire(c, "BAG_UPDATE_DELAYED")
+  for u in pairs(c.units) do fire(c, "UNIT_AURA", u) end
+  tick(c, 2)
+  assert(b:GetAttribute("spell") == 21564, "a Sacred Candle: Prayer of Fortitude 2: " .. tostring(b:GetAttribute("spell")))
+  -- Prayer 2 not trained (a book): Fortitude 6 again, candles or not
+  c.known[21564] = nil
+  fire(c, "SPELLS_CHANGED"); tick(c, 2)
+  assert(b:GetAttribute("spell") == 10938, "Prayer 1 the only one known: Fortitude 6: " .. tostring(b:GetAttribute("spell")))
+  noErrors(c)
+  -- a paladin who knows Might 7 (133) and Greater Might 1 (112) alone, three warriors: Might 7, one at a time
+  local PAL = member({ name = "Apal", class = "PALADIN", level = 60, guid = "Player-1-V6" })
+  local ws = { PAL }
+  for i = 2, 4 do ws[i] = member({ name = "W" .. i, class = "WARRIOR", level = 60, guid = "Player-1-V" .. (5 + i) }) end
+  local d = client({ me = PAL, group = ws, spec = 184 })
+  knowAll(d, "PALADIN", 60)
+  d.known[25782], d.known[25916] = true, true
+  d.items[21177] = { name = "Symbol of Kings" }
+  d.bags = { { id = 21177, bag = 0, slot = 1, count = 20 } }
+  PAL.auras = { { id = 25291, src = "player", exp = d.clock + 3000, dur = 3600 } }
+  load(d)
+  tick(d, 12)
+  local pb = icon(d, "group", "duty:bless:might")
+  assert(pb and pb:GetAttribute("spell") == 25916, "Greater Might 2 known: the three warriors' Greater: " .. tostring(pb and pb:GetAttribute("spell")))
+  d.known[25916] = nil
+  fire(d, "SPELLS_CHANGED"); tick(d, 2)
+  assert(pb:GetAttribute("spell") == 25291, "Greater Might 1 alone, 112 under 133: Might 7: " .. tostring(pb:GetAttribute("spell")))
+  for i = 2, 4 do ws[i].auras = { { id = 25782, exp = d.clock + 3000, dur = 3600 } } end
+  for u in pairs(d.units) do fire(d, "UNIT_AURA", u) end
+  tick(d, 2)
+  local prec = find(shown(d, "group"), "duty:bless:might")
+  assert(prec and prec.count == 3 and pb:GetAttribute("spell") == 25291, "Greater Might 1 on them: low, Might 7 on one, never Greater 1 again")
+  noErrors(d)
+end)
+
+test("low rank: a party of mixed levels: the group version for those it gives full power, on one of them (Prayer 2 on a 60, then Fortitude 5 on the 45; Greater Might 2 the same); three 45s still get Prayer 1", function()
+  -- a level 60 priest (Fortitude on already), a level 45 listed first, then three level 60s, none with Fortitude
+  local function party(levels, bags, known)
+    local P = member({ name = "Apri", class = "PRIEST", level = 60, guid = "Player-1-Q1" })
+    local list = { P }
+    for i, lv in ipairs(levels) do list[i + 1] = member({ name = "Q" .. i .. "x" .. lv, class = "WARRIOR", level = lv, guid = "Player-1-Q" .. (i + 1) }) end
+    local c = client({ me = P, group = list, spec = 56 })
+    knowAll(c, "PRIEST", 60)
+    for id, v in pairs(known or {}) do c.known[id] = v or nil end
+    c.items[17028], c.items[17029] = { name = "Holy Candle" }, { name = "Sacred Candle" }
+    c.bags = bags
+    P.auras = { { id = 10938, src = "player", exp = c.clock + 3000, dur = 3600 } }
+    load(c)
+    tick(c, 12)
+    return c, list
+  end
+  local HOLY, SACRED = { id = 17028, bag = 0, slot = 1, count = 20 }, { id = 17029, bag = 0, slot = 2, count = 20 }
+  local function clickOf(c)
+    c.casts = {}
+    c.click(icon(c, "group", "duty:fort"))
+    local cast = c.casts[1]
+    return cast and cast.spell, cast and c.units[cast.unit]
+  end
+  local function land(c, who, id)
+    for _, m in ipairs(who) do m.auras = { { id = id, exp = c.clock + 3000, dur = 3600 } } end
+    for u in pairs(c.units) do fire(c, "UNIT_AURA", u) end
+    tick(c, 2)
+  end
+  -- both candles: Prayer 2 on a 60 (the 45 is too low for it), then Fortitude 5 on the 45
+  local c, list = party({ 45, 60, 60, 60 }, { HOLY, SACRED })
+  local spell, at = clickOf(c)
+  assert(spell == 21564 and at and at.level == 60, "Prayer of Fortitude 2 on a 60, never Prayer 1 on the 45: " .. tostring(spell) .. " on " .. tostring(at and at.name))
+  land(c, { list[3], list[4], list[5] }, 21564)
+  local rec = find(shown(c, "group"), "duty:fort")
+  assert(rec and rec.count == 1 and rec.word == list[2].name, "the 45 left: " .. tostring(rec and rec.word))
+  spell, at = clickOf(c)
+  assert(spell == 10937 and at == list[2], "then Fortitude 5 on the 45: " .. tostring(spell))
+  noErrors(c)
+  -- Prayer 1 the only group rank known, Holy Candles: Prayer 1 would be low on the three 60s: one at a time, the 45 first
+  c, list = party({ 45, 60, 60, 60 }, { HOLY }, { [21564] = false })
+  spell, at = clickOf(c)
+  assert(spell == 10937 and at == list[2], "Fortitude 5 on the 45, never Prayer 1: " .. tostring(spell))
+  noErrors(c)
+  -- three 45s and a 60, Holy Candles: Prayer 1 serves the three; on all four, the 60 alone is low after
+  c, list = party({ 45, 45, 45, 60 }, { HOLY })
+  spell, at = clickOf(c)
+  assert(spell == 21562 and at and at.level == 45, "Prayer of Fortitude 1 on a 45: " .. tostring(spell) .. " on " .. tostring(at and at.name))
+  land(c, { list[2], list[3], list[4], list[5] }, 21562)
+  rec = find(shown(c, "group"), "duty:fort")
+  assert(rec and rec.count == 1 and rec.word == list[5].name and rec.why:find("^Prayer of Fortitude rank 1 on them; you give rank 6%."),
+    "the 60 alone low: " .. tostring(rec and rec.word) .. " " .. tostring(rec and rec.why))
+  noErrors(c)
+  -- a paladin giving warriors Might: a 45 first, three 60s: Greater Might 2 on a 60, never Greater 1 on the 45
+  local PAL = member({ name = "Apal", class = "PALADIN", level = 60, guid = "Player-1-Q6" })
+  local ws = { PAL, member({ name = "R45", class = "WARRIOR", level = 45, guid = "Player-1-Q7" }) }
+  for i = 3, 5 do ws[i] = member({ name = "R" .. i, class = "WARRIOR", level = 60, guid = "Player-1-Q" .. (5 + i) }) end
+  local d = client({ me = PAL, group = ws, spec = 184 })
+  knowAll(d, "PALADIN", 60)
+  d.known[25782], d.known[25916] = true, true
+  d.items[21177] = { name = "Symbol of Kings" }
+  d.bags = { { id = 21177, bag = 0, slot = 1, count = 20 } }
+  PAL.auras = { { id = 25291, src = "player", exp = d.clock + 3000, dur = 3600 } }
+  load(d)
+  tick(d, 12)
+  local pb = icon(d, "group", "duty:bless:might")
+  local u = pb and pb:GetAttribute("unit")
+  assert(pb and pb:GetAttribute("spell") == 25916 and d.units[u] and d.units[u].level == 60,
+    "Greater Might 2 on a 60: " .. tostring(pb and pb:GetAttribute("spell")) .. " on " .. tostring(u))
+  noErrors(d)
+end)
+
+test("low rank: a member with none is buffed before one with a lower rank, as the buffs from others order theirs", function()
+  local c, R, fort = lowParty()
+  local W
+  for _, m in pairs(c.units) do if m.name == "Cwar" then W = m end end
+  local tok = tokenOf(c, W)
+  W.auras = {}
+  fire(c, "UNIT_AURA", tok); tick(c, 2)
+  local rec = find(shown(c, "group"), "duty:fort")
+  assert(rec and rec.count == 2 and rec.word == "Cwar", "the warrior with none first, not the rogue with rank 4: " .. tostring(rec and rec.word))
+  assert(rec.why == "1 member is missing it. 1 member has a lower rank.", rec.why)
+  local b = icon(c, "group", "duty:fort")
+  assert(b:GetAttribute("unit") == tok and b:GetAttribute("spell") == 10938, "its click buffs the warrior")
+  -- (the warrior buffed: the rogue's lower rank next)
+  W.auras = { fort(10938, "player") }
+  fire(c, "UNIT_AURA", tok); tick(c, 2)
+  rec = find(shown(c, "group"), "duty:fort")
+  assert(rec and rec.word == R.name and rec.why:find("^Rank 4 on them; you give rank 6%."), "then the rogue: " .. tostring(rec and rec.word))
+  noErrors(c)
+end)
+
+test("Upgrade: Inner Fire 5 on you and rank 6 learned asks for rank 6, on each of the learning events; the word fits", function()
+  local me = member({ name = "Upri", class = "PRIEST", level = 60 })
+  local c = client({ me = me })
+  knowAll(c, "PRIEST", 60)
+  c.known[10952] = nil
+  local function rank5() me.auras = { { id = 10951, src = "player", exp = c.clock + 600, dur = 600 } }; fire(c, "UNIT_AURA", "player"); tick(c, 1) end
+  rank5()
+  load(c)
+  tick(c, 1)
+  assert(not find(shown(c, "mine"), "self:innerfire"), "rank 5, the highest known: nothing")
+  for _, ev in ipairs({ "SPELLS_CHANGED", "LEARNED_SPELL_IN_TAB", "PLAYER_LEVEL_UP" }) do
+    c.known[10952] = nil
+    rank5()
+    assert(not find(shown(c, "mine"), "self:innerfire"), ev .. ": rank 5 known at most, nothing")
+    c.known[10952] = true
+    tick(c, 1)
+    assert(not find(shown(c, "mine"), "self:innerfire"), ev .. ": not before the game says")
+    fire(c, ev); tick(c, 1)
+    local rec = find(shown(c, "mine"), "self:innerfire")
+    assert(rec and rec.word == "Upgrade" and rec.click.spell == 10952 and rec.click.unit == "player", ev .. ": Upgrade to rank 6: " .. tostring(rec and rec.word))
+    assert(rec.why == "Rank 5 on you; you know rank 6." and rec.lit, rec.why)
+  end
+  local b = icon(c, "own", "self:innerfire")
+  assert(b:IsShown() and b:GetAttribute("spell") == 10952 and b:GetAttribute("unit") == "player", "the secure button casts rank 6 on you")
+  FITS(b.word, "Upgrade under its icon")
+  -- (its column as wide as the word: the next icon, the group's first, never under it)
+  local g = c.env.CuteAurasBarGroup
+  local first
+  for _, x in pairs(g.__children) do if x.word and x:IsShown() and (not first or x.__points[1][4] < first.__points[1][4]) then first = x end end
+  assert(first, "a group icon beside it")
+  local ownX, grpX = c.env.CuteAurasBarOwn.__points[1][4], g.__points[1][4]
+  assert(ownX + b.__points[1][4] + 16 + b.word.__w / 2 <= grpX + first.__points[1][4] + 16 - first.word.__w / 2, "Upgrade runs under the next icon's word")
+  c.casts = {}
+  c.click(b)
+  assert(c.casts[1] and c.casts[1].spell == 10952, "the click casts 10952")
+  me.auras = { { id = 10952, src = "player", exp = c.clock + 600, dur = 600 } }
+  fire(c, "UNIT_AURA", "player"); tick(c, 1)
+  assert(not find(shown(c, "mine"), "self:innerfire"), "rank 6 on: nothing")
+  -- (gone, the same icon asks Buff again in its own column)
+  me.auras = {}
+  fire(c, "UNIT_AURA", "player"); tick(c, 1)
+  assert(find(shown(c, "mine"), "self:innerfire").word == "Buff" and b:IsShown() and b.word.__w == 38, "Buff, its column back to 38: " .. b.word.__w)
+  noErrors(c)
+end)
+
+test("Upgrade: a habit on you at a lower rank than you know, cast by its name; another's or a hidden id never", function()
+  SPELL_NAMES[604], SPELL_NAMES[8450] = "Dampen Magic", "Dampen Magic"
+  local me = member({ name = "Hab", class = "MAGE", level = 30 })
+  local c = client({ me = me, db = { chars = { ["Player-1-Hab"] = { habitByName = true, habit = { ["Dampen Magic"] = { id = 604, hits = 3, miss = 0 } } } } } })
+  c.known[604] = true
+  local function on(t) me.auras = { t }; fire(c, "UNIT_AURA", "player"); tick(c, 1) end
+  me.auras = { { id = 604, src = "player", exp = c.clock + 600, dur = 600 } }
+  load(c)
+  tick(c, 1)
+  assert(not find(shown(c, "mine"), "habit:Dampen Magic"), "rank 1, the highest known: nothing")
+  c.known[8450] = true
+  fire(c, "LEARNED_SPELL_IN_TAB"); tick(c, 1)
+  local rec = find(shown(c, "mine"), "habit:Dampen Magic")
+  assert(rec and rec.word == "Upgrade" and rec.click.spell == "Dampen Magic" and rec.click.unit == "player", "Upgrade, by the name: " .. tostring(rec and rec.word))
+  local b = icon(c, "own", "habit:Dampen Magic")
+  assert(b:GetAttribute("spell") == "Dampen Magic", "the secure button casts the name: the game's highest rank")
+  FITS(b.word, "Upgrade under the habit")
+  -- (the click casts rank 2 over rank 1 while it is still on: the habit follows the rank on you, so a rank 3 learned
+  -- within the same ten minutes asks Upgrade again)
+  c.click(b)
+  assert(c.casts[#c.casts] and c.casts[#c.casts].spell == "Dampen Magic", "the click cast it by name")
+  on({ id = 8450, src = "player", exp = c.clock + 600, dur = 600 })
+  assert(not find(shown(c, "mine"), "habit:Dampen Magic"), "rank 2 cast over rank 1: nothing")
+  SPELL_NAMES[8451], SPELL_LEVELS[8451] = "Dampen Magic", 36
+  c.known[8451] = true
+  fire(c, "LEARNED_SPELL_IN_TAB"); tick(c, 1)
+  rec = find(shown(c, "mine"), "habit:Dampen Magic")
+  assert(rec and rec.word == "Upgrade", "rank 3 learned, rank 2 on: Upgrade again: " .. tostring(rec and rec.word))
+  c.known[8451], SPELL_NAMES[8451], SPELL_LEVELS[8451] = nil, nil, nil
+  fire(c, "LEARNED_SPELL_IN_TAB"); tick(c, 1)
+  assert(not find(shown(c, "mine"), "habit:Dampen Magic"), "rank 2, the highest known again: nothing")
+  -- another mage's rank 1 on you, or yours whose spell id the client hides: nothing to ask
+  on({ id = 604, src = nil, exp = c.clock + 600, dur = 600 })
+  assert(not find(shown(c, "mine"), "habit:Dampen Magic"), "another's rank 1: not yours to upgrade")
+  on({ id = 604, src = "player", secretId = true, exp = c.clock + 600, dur = 600 })
+  assert(not find(shown(c, "mine"), "habit:Dampen Magic"), "a hidden spell id: never lower")
+  on({ id = 8450, src = "player", exp = c.clock + 600, dur = 600 })
+  assert(not find(shown(c, "mine"), "habit:Dampen Magic"), "rank 2 on: nothing")
+  SPELL_NAMES[604], SPELL_NAMES[8450] = nil, nil
+  noErrors(c)
+end)
+
+test("Upgrade: a habit's name on you from an elixir or a piece of gear (Water Breathing) is no rank of it; a level not told is never lower", function()
+  -- (the shaman's Water Breathing, 131, learned at 22; the elixir's aura 7178 has no level (0), a piece of gear's 11789 20)
+  SPELL_NAMES[131], SPELL_NAMES[7178], SPELL_NAMES[11789] = "Water Breathing", "Water Breathing", "Water Breathing"
+  SPELL_LEVELS[131], SPELL_LEVELS[11789] = 22, 20
+  local me = member({ name = "Wsha", class = "SHAMAN", level = 40 })
+  local c = client({ me = me, db = { chars = { ["Player-1-Wsha"] = { habitByName = true, habit = { ["Water Breathing"] = { id = 131, hits = 3, miss = 0 } } } } } })
+  knowAll(c, "SHAMAN", 40)
+  c.known[131] = true
+  local function on(t) me.auras = { t }; fire(c, "UNIT_AURA", "player"); tick(c, 1) end
+  -- (the elixir drunk: its aura yours)
+  me.auras = { { id = 7178, src = "player", exp = c.clock + 1800, dur = 1800 } }
+  load(c)
+  tick(c, 1)
+  assert(not find(shown(c, "mine"), "habit:Water Breathing"), "an elixir's Water Breathing: no Upgrade")
+  assert(c.A.Spells.Lower(7178, 131) == false and c.A.Spells.Lower(131, 7178) == false, "a level not told (0) is never lower, nor higher")
+  on({ id = 11789, src = "player", exp = 0, dur = 0 })
+  assert(not find(shown(c, "mine"), "habit:Water Breathing"), "a piece of gear's Water Breathing (level 20): no Upgrade")
+  on({ id = 131, src = "player", exp = c.clock + 600, dur = 600 })
+  assert(not find(shown(c, "mine"), "habit:Water Breathing"), "your own on: nothing")
+  -- (a second rank, made up for the test: Water Breathing has one) the elixir's aura first, your rank 1 too: yours is
+  -- the one weighed, its Upgrade asked
+  SPELL_NAMES[99131], SPELL_LEVELS[99131] = "Water Breathing", 40
+  c.known[99131] = true
+  me.auras = { { id = 7178, src = "player", exp = c.clock + 1800, dur = 1800 }, { id = 131, src = "player", exp = c.clock + 600, dur = 600 } }
+  fire(c, "LEARNED_SPELL_IN_TAB"); fire(c, "UNIT_AURA", "player"); tick(c, 1)
+  local rec = find(shown(c, "mine"), "habit:Water Breathing")
+  assert(rec and rec.word == "Upgrade", "the elixir's aura and your rank 1, rank 2 known: your rank's Upgrade: " .. keysOf(shown(c, "mine")))
+  SPELL_NAMES[131], SPELL_NAMES[7178], SPELL_NAMES[11789], SPELL_NAMES[99131] = nil, nil, nil, nil
+  SPELL_LEVELS[131], SPELL_LEVELS[11789], SPELL_LEVELS[99131] = nil, nil, nil
+  noErrors(c)
+end)
+
+test("Upgrade: its own Never (a lower rank kept on purpose): the Buff still asked when it is gone; Never on the Buff hides both", function()
+  local me = member({ name = "Upri", class = "PRIEST", level = 60 })
+  local c = client({ me = me })
+  knowAll(c, "PRIEST", 60)
+  local function on(t) me.auras = t; fire(c, "UNIT_AURA", "player"); tick(c, 1) end
+  local function never(b, text)
+    c.A.Bar.Menu(b)
+    local chose = false
+    for _, e in ipairs(c.menus[#c.menus]) do if e.text == text then e.fn(); chose = true end end
+    assert(chose, "the menu has " .. text)
+    tick(c, 1)
+  end
+  me.auras = { { id = 10951, src = "player", exp = c.clock + 600, dur = 600 } }
+  load(c)
+  tick(c, 1)
+  assert(find(shown(c, "mine"), "self:innerfire").word == "Upgrade", "rank 5 on, rank 6 known: Upgrade")
+  never(icon(c, "own", "self:innerfire"), "Never: Upgrade Inner Fire")
+  local set = c.A.Settings().never
+  assert(set["up:Inner Fire"] and set["buff:innerfire"] == nil and not find(shown(c, "mine"), "self:innerfire"), "its own key (the spell's), the Upgrade gone")
+  on({})
+  local rec = find(shown(c, "mine"), "self:innerfire")
+  assert(rec and rec.word == "Buff", "Inner Fire gone: Buff still asked: " .. tostring(rec and rec.word))
+  -- Never on the Buff: nothing of Inner Fire, its Upgrade neither
+  set["up:Inner Fire"] = nil
+  never(icon(c, "own", "self:innerfire"), "Never: Inner Fire")
+  assert(set["buff:innerfire"] and not find(shown(c, "mine"), "self:innerfire"), "Never: Inner Fire")
+  on({ { id = 10951, src = "player", exp = c.clock + 600, dur = 600 } })
+  assert(not find(shown(c, "mine"), "self:innerfire"), "rank 5 on: no Upgrade either")
+  noErrors(c)
+  -- a habit the same: Never: Upgrade Dampen Magic keeps its Buff
+  SPELL_NAMES[604], SPELL_NAMES[8450] = "Dampen Magic", "Dampen Magic"
+  local mg = member({ name = "Hab", class = "MAGE", level = 30 })
+  local d = client({ me = mg, db = { chars = { ["Player-1-Hab"] = { habitByName = true, habit = { ["Dampen Magic"] = { id = 604, hits = 3, miss = 0 } } } } } })
+  d.known[604], d.known[8450] = true, true
+  mg.auras = { { id = 604, src = "player", exp = d.clock + 600, dur = 600 } }
+  load(d)
+  tick(d, 1)
+  assert(find(shown(d, "mine"), "habit:Dampen Magic").word == "Upgrade", "rank 1 on, rank 2 known: Upgrade")
+  d.A.Bar.Menu(icon(d, "own", "habit:Dampen Magic"))
+  local chose = false
+  for _, e in ipairs(d.menus[#d.menus]) do if e.text == "Never: Upgrade Dampen Magic" then e.fn(); chose = true end end
+  assert(chose, "the menu has Never: Upgrade Dampen Magic")
+  tick(d, 1)
+  assert(d.A.Settings().never["up:Dampen Magic"] and not find(shown(d, "mine"), "habit:Dampen Magic"), "the Upgrade gone, its own key")
+  mg.auras = {}
+  fire(d, "UNIT_AURA", "player"); tick(d, 1)
+  rec = find(shown(d, "mine"), "habit:Dampen Magic")
+  assert(rec and rec.word == "Buff", "Dampen Magic gone: Buff still asked: " .. tostring(rec and rec.word))
+  SPELL_NAMES[604], SPELL_NAMES[8450] = nil, nil
+  noErrors(d)
+end)
+
+test("Upgrade: Lightning Shield's ranks counted as the game does (a proc spell shares each rank's name and level): rank 6 on, 7 known; the Buff casts 7", function()
+  local me = member({ name = "Lsha", class = "SHAMAN", level = 60 })
+  local c = client({ me = me })
+  knowAll(c, "SHAMAN", 60)
+  assert(c.known[10432] and not c.known[26363], "the trainer's rank known, never its proc")
+  local function on(t) me.auras = t; fire(c, "UNIT_AURA", "player"); tick(c, 1) end
+  me.auras = { { id = 10431, src = "player", exp = c.clock + 600, dur = 600 } }
+  load(c)
+  tick(c, 1)
+  local rec = find(shown(c, "mine"), "self:shield")
+  assert(rec and rec.word == "Upgrade" and rec.click.spell == 10432, "rank 6 on: Upgrade to 10432: " .. tostring(rec and rec.click and rec.click.spell))
+  assert(rec.why == "Rank 6 on you; you know rank 7.", rec.why)
+  on({ { id = 10432, src = "player", exp = c.clock + 600, dur = 600 } })
+  assert(not find(shown(c, "mine"), "self:shield"), "rank 7 on: nothing")
+  on({})
+  rec = find(shown(c, "mine"), "self:shield")
+  assert(rec and rec.word == "Buff" and rec.click.spell == 10432, "none on: the Buff casts rank 7: " .. tostring(rec and rec.click and rec.click.spell))
+  noErrors(c)
+end)
+
+test("Upgrade: its Never names one spell and hides that one: Never: Upgrade Frost Armor still asks Ice Armor's, and the account's warlock its Demon Armor's", function()
+  local me = member({ name = "Upmag", class = "MAGE", level = 40 })
+  local c = client({ me = me })
+  knowAll(c, "MAGE", 40)
+  local function aura(id, dur) return { id = id, src = "player", exp = c.clock + dur - 100, dur = dur } end
+  local function on(id) me.auras = { aura(1461, 3600), aura(id, 1800) }; fire(c, "UNIT_AURA", "player"); tick(c, 1) end
+  -- (Arcane Intellect 3 on, the most a 40 knows; Frost Armor 2, rank 3 known)
+  me.auras = { aura(1461, 3600), aura(7300, 1800) }
+  load(c)
+  tick(c, 1)
+  local rec = find(shown(c, "mine"), "self:armor")
+  assert(rec and rec.word == "Upgrade" and rec.click.spell == 7301, "Frost Armor 2 on: Upgrade to 3: " .. tostring(rec and rec.word))
+  c.A.Bar.Menu(icon(c, "own", "self:armor"))
+  local chose = false
+  for _, e in ipairs(c.menus[#c.menus]) do if e.text == "Never: Upgrade Frost Armor" then e.fn(); chose = true end end
+  assert(chose, "the menu has Never: Upgrade Frost Armor")
+  tick(c, 1)
+  assert(c.A.Settings().never["up:Frost Armor"] and not find(shown(c, "mine"), "self:armor"), "the Upgrade gone, by the spell's key")
+  on(7302)
+  rec = find(shown(c, "mine"), "self:armor")
+  assert(rec and rec.word == "Upgrade" and rec.click.spell == 7320 and rec.neverName == "Upgrade Ice Armor",
+    "Ice Armor 1 on, 2 known: its own Upgrade still asked: " .. tostring(rec and rec.word))
+  noErrors(c)
+  -- the account's warlock (Nevers are the account's): Demon Armor 4 on, 5 known
+  local wl = member({ name = "Uplock", class = "WARLOCK", level = 60 })
+  local d = client({ me = wl, db = c.env.CuteAurasDB })
+  knowAll(d, "WARLOCK", 60)
+  wl.auras = { { id = 11734, src = "player", exp = d.clock + 1700, dur = 1800 } }
+  load(d)
+  tick(d, 1)
+  rec = find(shown(d, "mine"), "self:armor")
+  assert(d.A.Settings().never["up:Frost Armor"] and rec and rec.word == "Upgrade" and rec.click.spell == 11735,
+    "the warlock's Demon Armor 4: Upgrade, the mage's Never not theirs: " .. tostring(rec and rec.word))
+  noErrors(d)
+end)
+
+----------------------------------------------------------------------------
+-- buffs others give you (the owner, 2026-11-23: "nnotified when u are missing buff from others"): in yours, greyed, the
+-- giver's name under it, after 30 s out of a fight, at once at a ready check
+----------------------------------------------------------------------------
+-- a level 60 mage running Cute Auras (Arcane Intellect and Ice Armor on: nothing of its own to ask; Divine Spirit on,
+-- unless o.noSpirit), a priest who doesn't, a warrior tank (o.noTank: none); o.priest: the priest's fields, o.more:
+-- more members (a party: five at most)
+local function fromParty(o)
+  o = o or {}
+  local M = member({ name = "Amag", class = "MAGE", level = 60, guid = "Player-1-F1" })
+  local P = member({ name = "Bprie", class = "PRIEST", level = 60, guid = "Player-1-F2" })
+  for k, v in pairs(o.priest or {}) do P[k] = v end
+  local W = member({ name = "Cwar", class = "WARRIOR", level = 60, guid = "Player-1-F3", assigned = "TANK" })
+  local group = { M, P }
+  if not o.noTank then group[3] = W end
+  for _, x in ipairs(o.more or {}) do group[#group + 1] = x end
+  assert(#group <= 5, "a party of five at most")
+  local c = client({ me = M, group = group, spec = 8 })
+  knowAll(c, "MAGE", 60)
+  M.auras = { { id = 10157, src = "player", exp = c.clock + 3500, dur = 3600 }, { id = 10220, src = "player", exp = c.clock + 1700, dur = 1800 } }
+  if not o.noSpirit then M.auras[3] = { id = 27841, exp = c.clock + 3500, dur = 3600 } end
+  load(c)
+  return c, M, P, W
+end
+local function fromKeys(c)
+  local t = {}
+  for _, r in ipairs(shown(c, "mine")) do if r.key:find("^from:") then t[#t + 1] = r.key .. "=" .. tostring(r.word) end end
+  return table.concat(t, ",")
+end
+local function tipOf(c, b) c.hover(b); return c.env.GameTooltip.lines end
+
+test("from others: a priest not running Cute Auras, Fortitude missing 30 s: greyed, the priest's name, no click; gone as it lands", function()
+  local c, M, P = fromParty()
+  tick(c, 29)
+  assert(fromKeys(c) == "", "not before 30 s: " .. fromKeys(c))
+  tick(c, 2)
+  local rec = find(shown(c, "mine"), "from:fort")
+  assert(rec and rec.word == "Bprie" and rec.class == "PRIEST" and rec.status == nil and rec.lit == false and rec.click == nil,
+    "Fortitude, the priest named: " .. fromKeys(c))
+  assert(fromKeys(c) == "from:fort=Bprie", "Fortitude alone (Divine Spirit on): " .. fromKeys(c))
+  local b = icon(c, "own", "from:fort")
+  assert(b and b:IsShown() and b.icon.__desat == true and b.icon.__alpha < 1, "its icon greyed")
+  assert(b.word.__text == "Bprie" and b.word.__textColor[1] == 1 and b.word.__textColor[2] == 1, "the name in its class colour")
+  FITS(b.word, "the giver's name")
+  assert(b:GetAttribute("type1") == nil and b:GetAttribute("spell") == nil, "no secure action: not a buff you cast")
+  c.casts = {}
+  c.click(b)
+  assert(#c.casts == 0, "a click casts nothing")
+  local lines = tipOf(c, b)
+  assert(lines[1] == "Power Word: Fortitude" and lines[2] == "Missing. Bprie can give it.", "the tooltip: " .. tostring(lines[2]))
+  for _, l in ipairs(lines) do assert(not l:find("^Click"), "no click line: " .. l) end
+  -- (after your own buffs: an Upgrade or a Buff of yours stands before it; Ice Armor removed, not a hole the read stops at)
+  table.remove(M.auras, 2)
+  fire(c, "UNIT_AURA", "player"); tick(c, 1)
+  local mine = shown(c, "mine")
+  assert(mine[1].key == "self:armor" and mine[2].key == "from:fort", "yours first: " .. keysOf(mine))
+  table.insert(M.auras, 2, { id = 10220, src = "player", exp = c.clock + 1700, dur = 1800 })
+  -- the priest buffs you: gone at once; it ends: 30 s again
+  M.auras[#M.auras + 1] = { id = 10938, exp = c.clock + 3600, dur = 3600 }
+  fire(c, "UNIT_AURA", "player"); tick(c, 1)
+  assert(fromKeys(c) == "", "on you: gone: " .. fromKeys(c))
+  table.remove(M.auras)
+  fire(c, "UNIT_AURA", "player"); tick(c, 20)
+  assert(fromKeys(c) == "", "its wait started again: " .. fromKeys(c))
+  tick(c, 12)
+  assert(fromKeys(c) == "from:fort=Bprie", "30 s later: " .. fromKeys(c))
+  noErrors(c)
+end)
+
+test("from others: a ready check shows it at once; the giver offline, dead or out of sight: nothing, the wait again after", function()
+  local c, M, P = fromParty()
+  tick(c, 5)
+  fire(c, "READY_CHECK"); tick(c, 4)
+  local rec = find(shown(c, "mine"), "from:fort")
+  assert(rec and rec.word == "Bprie", "at a ready check, at once: " .. fromKeys(c))
+  assert(tipOf(c, icon(c, "own", "from:fort"))[2] == "Missing. Bprie can give it.", "its line")
+  fire(c, "READY_CHECK_FINISHED"); tick(c, 12)
+  tick(c, 30)
+  assert(fromKeys(c) == "from:fort=Bprie", "missing 30 s: " .. fromKeys(c))
+  local tok = tokenOf(c, P)
+  P.online = false
+  fire(c, "UNIT_CONNECTION", tok); tick(c, 1)
+  assert(fromKeys(c) == "", "the priest offline: nothing: " .. fromKeys(c))
+  P.online = true
+  fire(c, "UNIT_CONNECTION", tok); tick(c, 2)
+  assert(fromKeys(c) == "", "back online: they get their 30 s: " .. fromKeys(c))
+  tick(c, 30)
+  assert(fromKeys(c) == "from:fort=Bprie", "then named: " .. fromKeys(c))
+  P.dead = true
+  fire(c, "UNIT_FLAGS", tok); tick(c, 1)
+  assert(fromKeys(c) == "", "the priest dead: nothing: " .. fromKeys(c))
+  P.dead = false
+  fire(c, "UNIT_FLAGS", tok); tick(c, 31)
+  assert(fromKeys(c) == "from:fort=Bprie", "alive, 30 s on: " .. fromKeys(c))
+  -- (out of sight fires no event: the 5 s look sees it)
+  P.visible = false
+  tick(c, 6)
+  assert(fromKeys(c) == "", "out of sight: nothing: " .. fromKeys(c))
+  P.visible = nil
+  noErrors(c)
+end)
+
+test("from others: nothing in a fight; 30 s out of it again after; nothing dead, on a taxi, or with the setting off", function()
+  local c, M, P = fromParty()
+  tick(c, 20)
+  fight(c, true)
+  tick(c, 40)
+  assert(fromKeys(c) == "", "in a fight: nothing: " .. fromKeys(c))
+  fight(c, false)
+  tick(c, 3)
+  assert(fromKeys(c) == "", "out of it: its 30 s start again: " .. fromKeys(c))
+  tick(c, 30)
+  assert(fromKeys(c) == "from:fort=Bprie", "30 s out of the fight: " .. fromKeys(c))
+  -- shown, then a fight: your part hides with it, and no read changes it
+  fight(c, true); tick(c, 1)
+  assert(not c.env.CuteAurasBarOwn:IsShown(), "in a fight your part is hidden")
+  fight(c, false); tick(c, 3)
+  assert(fromKeys(c) == "", "after it: the wait again")
+  tick(c, 30)
+  assert(fromKeys(c) == "from:fort=Bprie", "back: " .. fromKeys(c))
+  -- dead, on a taxi: nothing, and the wait again after
+  M.dead = true
+  fire(c, "PLAYER_DEAD"); tick(c, 1)
+  assert(fromKeys(c) == "" and not c.env.CuteAurasBar:IsShown(), "dead: nothing")
+  M.dead = false
+  fire(c, "PLAYER_ALIVE"); tick(c, 2)
+  assert(fromKeys(c) == "", "alive: the wait again: " .. fromKeys(c))
+  c.taxi = true
+  tick(c, 40); c.A.Bar.Dirty("all"); tick(c, 1)
+  assert(fromKeys(c) == "", "on a taxi: nothing")
+  c.taxi = false
+  c.A.Bar.Dirty("all"); tick(c, 31)
+  assert(fromKeys(c) == "from:fort=Bprie", "off the taxi, 30 s: " .. fromKeys(c))
+  -- Settings, Buffs others give you: off hides them all
+  c.A.Window.Open("settings")
+  local page = c.A.Window.pages.settings
+  local box = widget(page, "Buffs others give you")
+  assert(box and box.tick:IsShown(), "on by default")
+  c.click(box); tick(c, 1)
+  assert(c.A.Settings().others == false and fromKeys(c) == "", "off: nothing: " .. fromKeys(c))
+  tick(c, 40)
+  assert(fromKeys(c) == "", "off stays off")
+  c.click(box); tick(c, 1)
+  assert(fromKeys(c) == "", "on again: its 30 s first")
+  tick(c, 31)
+  assert(fromKeys(c) == "from:fort=Bprie", "on again: " .. fromKeys(c))
+  noErrors(c)
+end)
+
+test("from others: the share-out's priest is named (every client the same), not the first priest by GUID; never yourself", function()
+  local M = member({ name = "Amag", class = "MAGE", level = 60, guid = "Player-1-S4" })
+  local P1 = member({ name = "Bnoca", class = "PRIEST", level = 60, guid = "Player-1-S1" })
+  local P2 = member({ name = "Cpri", class = "PRIEST", level = 60, guid = "Player-1-S2" })
+  local P3 = member({ name = "Dpri", class = "PRIEST", level = 60, guid = "Player-1-S3" })
+  local group = { M, P1, P2, P3 }
+  local cm = client({ me = M, group = group, spec = 8 })
+  local c2 = client({ me = P2, group = group, spec = 56 })
+  local c3 = client({ me = P3, group = group, spec = 56 })
+  knowAll(cm, "MAGE", 60); knowAll(c2, "PRIEST", 60); knowAll(c3, "PRIEST", 60)
+  M.auras = { { id = 10157, src = "player", exp = cm.clock + 3500, dur = 3600 }, { id = 10220, src = "player", exp = cm.clock + 1700, dur = 1800 } }
+  load(cm); load(c2); load(c3)
+  tickAll(34)
+  for _, c in ipairs({ cm, c2, c3 }) do
+    assert(c.A.Assign.GiverOf("fort", M.guid) == P2.guid and c.A.Assign.GiverOf("fort", P3.guid) == P2.guid, "every client: Cpri gives Fortitude")
+  end
+  local rec = find(shown(cm, "mine"), "from:fort")
+  assert(rec and rec.word == "Cpri", "the share-out's priest, not Bnoca (first by GUID, no Cute Auras): " .. fromKeys(cm))
+  assert(find(shown(cm, "mine"), "from:spirit").word == "Cpri", "Divine Spirit from Cpri too: " .. fromKeys(cm))
+  local line = tipOf(cm, icon(cm, "own", "from:fort"))[2]
+  assert(line == "Missing. Cpri gives it (shared out by Cute Auras).", line)
+  -- the giver's own client: its own Fortitude is its duty, never a reminder; the other priest's names Cpri
+  assert(not find(shown(c2, "mine"), "from:fort") and find(shown(c2, "group"), "duty:fort"), "never yourself: " .. fromKeys(c2))
+  assert(find(shown(c3, "mine"), "from:fort").word == "Cpri", "the other priest is reminded of Cpri: " .. fromKeys(c3))
+  -- (Shadow Protection: never, until a priest running Cute Auras switches it on and so announces it)
+  assert(not find(shown(cm, "mine"), "from:shadow"), "no Shadow Protection")
+  c2.A.Settings().opt.shadow = true; c2.A.Comm.GivesChanged()
+  tickAll(34)
+  assert(fromKeys(cm) == "from:fort=Cpri,from:shadow=Cpri,from:spirit=Cpri", "announced: Shadow Protection asked too: " .. fromKeys(cm))
+  for _, c in ipairs({ cm, c2, c3 }) do noErrors(c) end
+end)
+
+test("from others: the share-out's paladin for your blessing (a lower rank too); no Blessing from one without it then", function()
+  local M = member({ name = "Amag", class = "MAGE", level = 60, guid = "Player-1-K1" })
+  local NP = member({ name = "Bnopal", class = "PALADIN", level = 60, guid = "Player-1-K2" })
+  local PAL = member({ name = "Cpal", class = "PALADIN", level = 60, guid = "Player-1-K3" })
+  local group = { M, NP, PAL }
+  local cm = client({ me = M, group = group, spec = 8 })
+  local cp = client({ me = PAL, group = group, spec = 594 })
+  knowAll(cm, "MAGE", 60); knowAll(cp, "PALADIN", 60)
+  M.auras = { { id = 10157, src = "player", exp = cm.clock + 3500, dur = 3600 }, { id = 10220, src = "player", exp = cm.clock + 1700, dur = 1800 } }
+  load(cm); load(cp)
+  tickAll(34)
+  assert(cm.A.Assign.BlesserOf("MAGE:caster", "wisdom") == PAL.guid, "the share-out: Wisdom to the mage from Cpal")
+  assert(fromKeys(cm) == "from:bless:wisdom=Cpal", "Wisdom from Cpal; no Blessing from Bnopal while the share-out gives one: " .. fromKeys(cm))
+  local b = icon(cm, "own", "from:bless:wisdom")
+  local lines = tipOf(cm, b)
+  assert(lines[1] == "Blessing of Wisdom" and lines[2] == "Missing. Cpal gives it (shared out by Cute Auras).", tostring(lines[2]))
+  -- Wisdom 4 from another paladin, gone since: a lower rank than Cpal's 6; Greater Wisdom 2, as strong: fine
+  M.auras[3] = { id = 19853, exp = cm.clock + 3000, dur = 3600 }
+  fire(cm, "UNIT_AURA", "player"); tickAll(2)
+  assert(tipOf(cm, b)[2] == "Rank 4 on you; Cpal gives rank 6 (shared out by Cute Auras).", "the lower rank, at once (it was waiting already)")
+  M.auras[3] = { id = 25918, exp = cm.clock + 3000, dur = 3600 }
+  fire(cm, "UNIT_AURA", "player"); tickAll(2)
+  assert(fromKeys(cm) == "", "Greater Wisdom 2: fine: " .. fromKeys(cm))
+  -- the paladin's own client: its blessing is its duty, never a reminder
+  for _, r in ipairs(shown(cp, "mine")) do assert(not r.key:find("^from:bless"), "never yourself: " .. r.key) end
+  noErrors(cm); noErrors(cp)
+end)
+
+test("from others: never named for what they opted out of: a priest's Fortitude on Never, a paladin's blessings off", function()
+  local M = member({ name = "Amag", class = "MAGE", level = 60, guid = "Player-1-N2" })
+  local P = member({ name = "Bpri", class = "PRIEST", level = 60, guid = "Player-1-N3" })
+  local PAL = member({ name = "Apal", class = "PALADIN", level = 60, guid = "Player-1-N1" })
+  local group = { M, P, PAL }
+  local cm = client({ me = M, group = group, spec = 8 })
+  local cp = client({ me = P, group = group, spec = 56, db = { settings = { never = { ["duty:fort"] = "Power Word: Fortitude" } } } })
+  local cl = client({ me = PAL, group = group, spec = 594, db = { settings = { blessings = false } } })
+  knowAll(cm, "MAGE", 60); knowAll(cp, "PRIEST", 60); knowAll(cl, "PALADIN", 60)
+  M.auras = { { id = 10157, src = "player", exp = cm.clock + 3500, dur = 3600 }, { id = 10220, src = "player", exp = cm.clock + 1700, dur = 1800 } }
+  load(cm); load(cp); load(cl)
+  tickAll(34)
+  assert(not cm.A.Assign.Shared("fort") and cm.A.Assign.Shared("spirit") and #cm.A.Assign.paladins == 0, "Fortitude and the blessings not announced, Divine Spirit is")
+  assert(fromKeys(cm) == "from:spirit=Bpri", "their choices kept: no Fortitude, no Blessing asked of them: " .. fromKeys(cm))
+  noErrors(cm); noErrors(cp); noErrors(cl)
+end)
+
+test("from others: a warrior is never asked for Arcane Intellect or Wisdom, a hand-set Wisdom too; Fortitude still", function()
+  local W = member({ name = "Awar", class = "WARRIOR", level = 60, guid = "Player-1-W1" })
+  local M = member({ name = "Bmag", class = "MAGE", level = 60, guid = "Player-1-W2" })
+  local PAL = member({ name = "Cpal", class = "PALADIN", level = 60, guid = "Player-1-W3" })
+  local P = member({ name = "Dprie", class = "PRIEST", level = 60, guid = "Player-1-W4" })
+  local group = { W, M, PAL, P }
+  local cw = client({ me = W, group = group })
+  -- (the paladin gives Wisdom alone: Kings and Might on Never)
+  local cp = client({ me = PAL, group = group, spec = 594, db = { settings = { never = { ["duty:bless:kings"] = "Kings", ["duty:bless:might"] = "Might" } } } })
+  knowAll(cw, "WARRIOR", 60); knowAll(cp, "PALADIN", 60)
+  load(cw); load(cp)
+  tickAll(12)
+  assert(cw.A.Comm.peers[PAL.guid] and cw.A.Comm.peers[PAL.guid].knownText == "wisdom:6", "the paladin gives Wisdom alone: " .. tostring(cw.A.Comm.peers[PAL.guid] and cw.A.Comm.peers[PAL.guid].knownText))
+  -- the paladin sets Wisdom for warriors by hand: the share-out's word, still never asked of a warrior
+  cp.A.Assign.Set(PAL.guid, "WARRIOR:melee", "wisdom")
+  tickAll(34)
+  assert(cw.A.Assign.BlesserOf("WARRIOR:melee", "wisdom") == PAL.guid, "the warrior's bucket: Wisdom from Cpal")
+  assert(fromKeys(cw) == "from:fort=Dprie", "Fortitude alone, never Arcane Intellect or Wisdom: " .. fromKeys(cw))
+  noErrors(cw); noErrors(cp)
+end)
+
+test("from others: rank 3 Fortitude on a level 60 with a level 60 priest: Rank 3 on you; a priest of 30 gives no more; Prayer 2 is fine", function()
+  local function fort(c, id) return { id = id, exp = c.clock + 3000, dur = 3600 } end
+  local c, M = fromParty()
+  M.auras[#M.auras + 1] = fort(c, 1245)
+  fire(c, "UNIT_AURA", "player"); tick(c, 31)
+  local rec = find(shown(c, "mine"), "from:fort")
+  assert(rec and rec.word == "Bprie" and rec.lit == false, "a lower rank counts: " .. fromKeys(c))
+  assert(tipOf(c, icon(c, "own", "from:fort"))[2] == "Rank 3 on you; Bprie can give rank 6.", "its line")
+  M.auras[#M.auras] = fort(c, 21564)
+  fire(c, "UNIT_AURA", "player"); tick(c, 1)
+  assert(fromKeys(c) == "", "Prayer of Fortitude 2, as strong as rank 6: fine: " .. fromKeys(c))
+  M.auras[#M.auras] = fort(c, 21562)
+  fire(c, "UNIT_AURA", "player"); tick(c, 31)
+  assert(tipOf(c, icon(c, "own", "from:fort"))[2] == "Prayer of Fortitude rank 1 on you; Bprie can give rank 6.", "Prayer 1 at 60: low")
+  noErrors(c)
+  -- a priest of 30 knows rank 3 at most: nothing more to give
+  local d, M2 = fromParty({ priest = { level = 30 } })
+  M2.auras[#M2.auras + 1] = fort(d, 1245)
+  fire(d, "UNIT_AURA", "player"); tick(d, 40)
+  assert(fromKeys(d) == "", "a level 30 priest gives rank 3 at most: " .. fromKeys(d))
+  -- (and with none on, rank 3 is theirs to give: named)
+  table.remove(M2.auras)
+  fire(d, "UNIT_AURA", "player"); tick(d, 31)
+  assert(fromKeys(d) == "from:fort=Bprie", "none on: the level 30 priest: " .. fromKeys(d))
+  noErrors(d)
+  -- rank 3 on, the level 30 priest first by GUID and a level 60 one after: the one who gives more is named
+  local H = member({ name = "Hprie", class = "PRIEST", level = 60, guid = "Player-1-F9" })
+  local e, M3 = fromParty({ priest = { level = 30 }, more = { H } })
+  M3.auras[#M3.auras + 1] = fort(e, 1245)
+  fire(e, "UNIT_AURA", "player"); tick(e, 31)
+  assert(fromKeys(e) == "from:fort=Hprie" and tipOf(e, icon(e, "own", "from:fort"))[2] == "Rank 3 on you; Hprie can give rank 6.", "the level 60 priest: " .. fromKeys(e))
+  noErrors(e)
+end)
+
+test("from others: a tank is asked for Thorns by a druid without Cute Auras; Earth Shield only from a shaman running it", function()
+  local W = member({ name = "Awar", class = "WARRIOR", level = 60, guid = "Player-1-T1", assigned = "TANK" })
+  local DR = member({ name = "Wolfwardenmw", class = "DRUID", level = 60, guid = "Player-1-T2" })
+  local SH = member({ name = "Csha", class = "SHAMAN", level = 60, guid = "Player-1-T3" })
+  local group = { W, DR, SH }
+  local cw = client({ me = W, group = group })
+  knowAll(cw, "WARRIOR", 60)
+  -- (Mark of the Wild on: Thorns, a tank's, the one asked)
+  W.auras = { { id = 9885, exp = cw.clock + 3500, dur = 3600 } }
+  load(cw)
+  tick(cw, 31)
+  assert(fromKeys(cw) == "from:thorns=Wolfwardenmw", "Thorns from the druid; no Earth Shield from a shaman without Cute Auras (a rune, not a level's): " .. fromKeys(cw))
+  -- the shaman runs Cute Auras and has Earth Shield: the share-out's, named
+  local cs = client({ me = SH, group = group, spec = 374 })
+  knowAll(cs, "SHAMAN", 60)
+  load(cs)
+  tickAll(34)
+  assert(cw.A.Assign.GiverOf("earthshield", W.guid) == SH.guid, "the share-out gives the tank's Earth Shield to the shaman")
+  assert(fromKeys(cw) == "from:earthshield=Csha,from:thorns=Wolfwardenmw", "Earth Shield from the shaman running it: " .. fromKeys(cw))
+  -- (a twelve-letter name, the game's longest, whole under its icon, its column clear of the one before)
+  local a, b = icon(cw, "own", "from:earthshield"), icon(cw, "own", "from:thorns")
+  FITS(b.word, "a twelve-letter giver")
+  assert(a.__points[1][4] + 16 + a.word.__w / 2 <= b.__points[1][4] + 16 - b.word.__w / 2, "the two names side by side, none under the other")
+  noErrors(cw); noErrors(cs)
+end)
+
+test("from others: three at most, missing first; Never hides one (a from: key of the 32) and the next shows; a paladin without it: one Blessing", function()
+  local D1 = member({ name = "Edru", class = "DRUID", level = 60, guid = "Player-1-F5" })
+  local PA = member({ name = "Gpal", class = "PALADIN", level = 60, guid = "Player-1-F7" })
+  local PB = member({ name = "Fpal", class = "PALADIN", level = 60, guid = "Player-1-F6" })
+  local function fort(c, id) return { id = id, exp = c.clock + 3000, dur = 3600 } end
+  local c, M, P = fromParty({ more = { D1, PA, PB }, noSpirit = true, noTank = true })
+  -- (Fortitude 3 on: low, after the missing ones)
+  M.auras[#M.auras + 1] = fort(c, 1245)
+  fire(c, "UNIT_AURA", "player"); tick(c, 31)
+  -- missing: Mark of the Wild, Divine Spirit (trained in Forever: a level 60 priest without Cute Auras can give it), a
+  -- blessing; low: Fortitude. Four to show, three at most: the low one cut
+  assert(fromKeys(c) == "from:motw=Edru,from:spirit=Bprie,from:bless=Fpal", "three, missing first, by key, then blessings: " .. fromKeys(c))
+  local bl = find(shown(c, "mine"), "from:bless")
+  assert(bl.name == "Blessing" and bl.tex == c.A.Look.SpellIcon(19742, 135970), "Blessing, Wisdom's icon (a mage's first wish)")
+  assert(tipOf(c, icon(c, "own", "from:bless"))[2] == "No blessing on you. Fpal can give one.", "its line")
+  -- the priest runs Cute Auras: the share-out's answer is the same priest, the same three
+  local cp = client({ me = P, group = c.o.group, spec = 56 })
+  knowAll(cp, "PRIEST", 60)
+  load(cp)
+  tickAll(34)
+  assert(c.A.Assign.Shared("spirit") and c.A.Assign.GiverOf("spirit", c.o.me.guid) == P.guid, "the share-out gives you Divine Spirit from the priest")
+  assert(fromKeys(c) == "from:motw=Edru,from:spirit=Bprie,from:bless=Fpal", "three, missing first, the low Fortitude cut: " .. fromKeys(c))
+  -- Never on Mark of the Wild: its key from:motw, counted; the low Fortitude takes its place
+  local n0 = c.A.Bar.NeverCount()
+  c.A.Bar.Menu(icon(c, "own", "from:motw"))
+  for _, e in ipairs(c.menus[#c.menus]) do if e.text == "Never: Mark of the Wild" then e.fn() end end
+  tick(c, 1)
+  assert(c.A.Settings().never["from:motw"] and c.A.Bar.NeverCount() == n0 + 1, "a from: key, counted in the 32")
+  assert(fromKeys(c) == "from:spirit=Bprie,from:bless=Fpal,from:fort=Bprie", "Never hides it, the next shows: " .. fromKeys(c))
+  -- a blessing on you (Kings, any paladin's): no Blessing
+  M.auras[#M.auras + 1] = { id = 20217, exp = c.clock + 3000, dur = 3600 }
+  fire(c, "UNIT_AURA", "player"); tick(c, 1)
+  assert(not find(shown(c, "mine"), "from:bless"), "a blessing on: no Blessing: " .. fromKeys(c))
+  noErrors(c)
+end)
+
+test("from others: a group refresh (a member's aura, a member offline, the 3 s look) reads none of your auras; your own change does", function()
+  local c, M, P = fromParty()
+  tick(c, 31)
+  assert(fromKeys(c) == "from:fort=Bprie", "named: " .. fromKeys(c))
+  local ua = c.env.C_UnitAuras
+  local get, mine = ua.GetAuraDataByIndex, 0
+  ua.GetAuraDataByIndex = function(u, ...) if u == "player" then mine = mine + 1 end return get(u, ...) end
+  fire(c, "UNIT_AURA", "player"); tick(c, 1)
+  assert(mine > 0, "your own change: read")
+  mine = 0
+  local tok = tokenOf(c, P)
+  fire(c, "UNIT_AURA", tok); tick(c, 1)
+  tick(c, 4)
+  P.online = false
+  fire(c, "UNIT_CONNECTION", tok); tick(c, 1)
+  assert(fromKeys(c) == "", "the group refresh read it again: the priest offline, nothing: " .. fromKeys(c))
+  assert(mine == 0, "group refreshes read your auras " .. mine .. " times")
+  ua.GetAuraDataByIndex = get
+  noErrors(c)
+end)
+
+test("from others: a giver out of sight from the start, back in sight with no event: the 5 s look sees them, named 30 s on", function()
+  local W = member({ name = "Awar", class = "WARRIOR", level = 60, guid = "Player-1-Z1" })
+  local P = member({ name = "Bprie", class = "PRIEST", level = 60, guid = "Player-1-Z2", visible = false })
+  local c = client({ me = W, group = { W, P } })
+  load(c)
+  tick(c, 40)
+  assert(fromKeys(c) == "", "out of sight: nothing: " .. fromKeys(c))
+  P.visible = nil
+  tick(c, 29)
+  assert(fromKeys(c) == "", "back in sight: its 30 s first: " .. fromKeys(c))
+  tick(c, 7)
+  assert(fromKeys(c) == "from:fort=Bprie", "named within 5 s of its 30: " .. fromKeys(c))
+  noErrors(c)
+end)
+
+test("from others: the priest who gives the strongest rank is named, not a level 30 first by GUID; of equal ranks, the first by GUID", function()
+  local H = member({ name = "Hprie", class = "PRIEST", level = 60, guid = "Player-1-F9" })
+  local G = member({ name = "Gprie", class = "PRIEST", level = 60, guid = "Player-1-F8" })
+  local c = fromParty({ priest = { level = 30 }, more = { H, G } })
+  tick(c, 31)
+  assert(fromKeys(c) == "from:fort=Gprie", "a level 60, the first by GUID of the two, not Bprie (30, first of all): " .. fromKeys(c))
+  assert(tipOf(c, icon(c, "own", "from:fort"))[2] == "Missing. Gprie can give it.", "its line")
+  -- (Gprie out of sight: Hprie, the other 60, at the next look)
+  G.visible = false
+  tick(c, 6)
+  assert(fromKeys(c) == "from:fort=Hprie", "Gprie out of sight: Hprie: " .. fromKeys(c))
+  noErrors(c)
+end)
+
+test("from others: after the consumables; a full bar cuts the greyed ones, never food or an elixir you can use", function()
+  local D1 = member({ name = "Edru", class = "DRUID", level = 60, guid = "Player-1-F5" })
+  local c = fromParty({ more = { D1 }, noSpirit = true })
+  local food = 12218
+  c.items[food] = { name = "Monster Omelet", classID = 0, subID = 5, spell = 433 }
+  c.bags = { { id = food, bag = 0, slot = 1, count = 10 } }
+  local habits = {}
+  for i, x in ipairs({ { 13447, 17535 }, { 9179, 11396 }, { 13454, 17539 } }) do
+    c.items[x[1]] = { name = "Elixir " .. i, classID = 0, subID = 2, spell = x[2] }
+    c.bags[#c.bags + 1] = { id = x[1], bag = 0, slot = i + 1, count = 3 }
+    habits[x[1]] = { hits = 2, miss = 0, spell = x[2] }
+  end
+  c.A.Char().consume = habits
+  c.instance = "party"
+  fire(c, "ZONE_CHANGED_NEW_AREA"); fire(c, "BAG_UPDATE_DELAYED")
+  tick(c, 31)
+  local mine = shown(c, "mine")
+  local nFood, nUse, nFrom = 0, 0, 0
+  for _, r in ipairs(mine) do
+    if r.key == "food" then nFood = nFood + 1 elseif r.key:find("^consume") then nUse = nUse + 1 elseif r.key:find("^from:") then nFrom = nFrom + 1 end
+  end
+  assert(#mine == 6 and nFood == 1 and nUse == 3 and nFrom == 2, "six: food, three elixirs, then two of the three from others: " .. keysOf(mine))
+  assert(mine[1].key == "food" and mine[6].key:find("^from:"), "the greyed ones last: " .. keysOf(mine))
+  noErrors(c)
+end)
+
+test("from others: Not now just after a fight stays quiet when a reminder of another's buff ends its wait; ten minutes on, both back", function()
+  local c, M = fromParty()
+  -- (Ice Armor gone: a Buff of yours to dismiss; Divine Spirit, after it, kept on: removed, not a hole the aura read stops at)
+  table.remove(M.auras, 2)
+  fire(c, "UNIT_AURA", "player"); tick(c, 31)
+  assert(find(shown(c, "mine"), "self:armor") and fromKeys(c) == "from:fort=Bprie", "both: " .. keysOf(shown(c, "mine")))
+  fight(c, true); tick(c, 5)
+  fight(c, false); tick(c, 3)
+  assert(find(shown(c, "mine"), "self:armor") and fromKeys(c) == "", "after the fight: your Buff; Fortitude waits again: " .. keysOf(shown(c, "mine")))
+  c.A.Bar.Menu(icon(c, "own", "self:armor"))
+  local chose = false
+  for _, e in ipairs(c.menus[#c.menus]) do if e.text == "Not now" then e.fn(); chose = true end end
+  assert(chose, "the menu has Not now")
+  tick(c, 1)
+  assert(#shown(c, "mine") == 0, "Not now: your part quiet")
+  tick(c, 35)
+  assert(#shown(c, "mine") == 0, "Fortitude's wait over: still quiet, the Buff you dismissed not back: " .. keysOf(shown(c, "mine")))
+  -- (a ready check within the ten minutes: Fortitude shows at once, as a ready check says; the Buff you put off stays off)
+  tick(c, 200)
+  fire(c, "READY_CHECK"); tick(c, 4)
+  assert(fromKeys(c) == "from:fort=Bprie" and not find(shown(c, "mine"), "self:armor"),
+    "a ready check: Fortitude, not your Buff: " .. keysOf(shown(c, "mine")))
+  fire(c, "READY_CHECK_FINISHED"); tick(c, 12)
+  assert(fromKeys(c) == "from:fort=Bprie" and not find(shown(c, "mine"), "self:armor"),
+    "after it: still Fortitude alone: " .. keysOf(shown(c, "mine")))
+  tick(c, 600)
+  assert(find(shown(c, "mine"), "self:armor") and fromKeys(c) == "from:fort=Bprie", "ten minutes on: both back: " .. keysOf(shown(c, "mine")))
+  noErrors(c)
+end)
+
+test("from others: the Blessing's icon is one its paladin can give: Kings for a tank (trained at 20 in Forever); Might when they are too low for it or Wisdom", function()
+  local W = member({ name = "Awar", class = "WARRIOR", level = 60, guid = "Player-1-U1", assigned = "TANK" })
+  -- (a level 60 paladin without Cute Auras: Kings is trained at 20 in Forever, not a talent, so theirs)
+  local PAL = member({ name = "Bpal", class = "PALADIN", level = 60, guid = "Player-1-U2" })
+  local c = client({ me = W, group = { W, PAL } })
+  knowAll(c, "WARRIOR", 60)
+  load(c)
+  tick(c, 31)
+  local rec = find(shown(c, "mine"), "from:bless")
+  assert(rec and rec.word == "Bpal" and rec.tex == c.A.Look.SpellIcon(20217, 135995), "a tank (Kings, Might): Kings' icon: " .. tostring(rec and rec.tex))
+  noErrors(c)
+  -- a level 18 paladin: no Kings yet (20), Might
+  local W2 = member({ name = "Dwar", class = "WARRIOR", level = 60, guid = "Player-1-U5", assigned = "TANK" })
+  local PAL2 = member({ name = "Epal", class = "PALADIN", level = 18, guid = "Player-1-U6" })
+  local e = client({ me = W2, group = { W2, PAL2 } })
+  knowAll(e, "WARRIOR", 60)
+  load(e)
+  tick(e, 31)
+  rec = find(shown(e, "mine"), "from:bless")
+  assert(rec and rec.word == "Epal" and rec.tex == e.A.Look.SpellIcon(19740, 135906), "a level 18 paladin (Kings at 20): Might's icon: " .. tostring(rec and rec.tex))
+  noErrors(e)
+  local M = member({ name = "Amag", class = "MAGE", level = 60, guid = "Player-1-U3" })
+  local P2 = member({ name = "Cpal", class = "PALADIN", level = 12, guid = "Player-1-U4" })
+  local d = client({ me = M, group = { M, P2 }, spec = 8 })
+  knowAll(d, "MAGE", 60)
+  M.auras = { { id = 10157, src = "player", exp = d.clock + 3500, dur = 3600 }, { id = 10220, src = "player", exp = d.clock + 1700, dur = 1800 } }
+  load(d)
+  tick(d, 31)
+  rec = find(shown(d, "mine"), "from:bless")
+  assert(rec and rec.word == "Cpal" and rec.tex == d.A.Look.SpellIcon(19740, 135906), "a level 12 paladin (Wisdom at 14): Might's icon: " .. tostring(rec and rec.tex))
+  noErrors(d)
+end)
+
+test("from others: your part off, then on: the waits start again (a buff that came and went, a ready check, while it was off)", function()
+  local c, M = fromParty()
+  tick(c, 31)
+  assert(fromKeys(c) == "from:fort=Bprie", "named: " .. fromKeys(c))
+  c.A.Window.Open("settings")
+  local box = widget(c.A.Window.pages.settings, "Your buffs and weapon")
+  c.click(box); tick(c, 1)
+  assert(c.A.Settings().mine == false and fromKeys(c) == "", "your part off: " .. fromKeys(c))
+  -- Fortitude lands while it is off, and ends
+  M.auras[#M.auras + 1] = { id = 10938, exp = c.clock + 3600, dur = 3600 }
+  fire(c, "UNIT_AURA", "player"); tick(c, 60)
+  table.remove(M.auras)
+  fire(c, "UNIT_AURA", "player"); tick(c, 5)
+  c.click(box); tick(c, 1)
+  assert(c.A.Settings().mine ~= false and fromKeys(c) == "", "on again: its 30 s first, not the wait from before: " .. fromKeys(c))
+  tick(c, 30)
+  assert(fromKeys(c) == "from:fort=Bprie", "30 s on: " .. fromKeys(c))
+  -- a ready check while it is off ends no wait after
+  c.click(box); tick(c, 1)
+  fire(c, "READY_CHECK"); tick(c, 4)
+  fire(c, "READY_CHECK_FINISHED"); tick(c, 12)
+  c.click(box); tick(c, 1)
+  assert(fromKeys(c) == "", "on again after a ready check: its 30 s first: " .. fromKeys(c))
+  tick(c, 31)
+  assert(fromKeys(c) == "from:fort=Bprie", "30 s on: " .. fromKeys(c))
+  noErrors(c)
+end)
+
+-- (a warrior owes no buff: no duty, so no 3 s look of the group's part; only the reminders' own 5 s look sees a giver
+-- walk out of sight and back, which fires no event)
+test("from others: a warrior's reminder: its priest (no Cute Auras) out of sight and back, no event: gone, then named again", function()
+  local W = member({ name = "Awar", class = "WARRIOR", level = 60, guid = "Player-1-Y1" })
+  local P = member({ name = "Bprie", class = "PRIEST", level = 60, guid = "Player-1-Y2" })
+  local c = client({ me = W, group = { W, P } })
+  knowAll(c, "WARRIOR", 60)
+  load(c)
+  tick(c, 31)
+  assert(#c.A.Assign.duties == 0, "a warrior owes nothing: no 3 s look")
+  assert(fromKeys(c) == "from:fort=Bprie", "named: " .. fromKeys(c))
+  P.visible = false
+  tick(c, 6)
+  assert(fromKeys(c) == "", "out of sight, no event: gone within 5 s: " .. fromKeys(c))
+  P.visible = nil
+  tick(c, 36)
+  assert(fromKeys(c) == "from:fort=Bprie", "back in sight, no event: named again: " .. fromKeys(c))
+  noErrors(c)
+end)
+
+test("from others: a warrior's reminder: its priest running Cute Auras out of sight and back, no event: gone, then named again", function()
+  local W = member({ name = "Awar", class = "WARRIOR", level = 60, guid = "Player-1-Y3" })
+  local P = member({ name = "Bprie", class = "PRIEST", level = 60, guid = "Player-1-Y4" })
+  local group = { W, P }
+  local cw = client({ me = W, group = group })
+  local cp = client({ me = P, group = group, spec = 56 })
+  knowAll(cw, "WARRIOR", 60); knowAll(cp, "PRIEST", 60)
+  load(cw); load(cp)
+  tickAll(34)
+  assert(#cw.A.Assign.duties == 0, "a warrior owes nothing: no 3 s look")
+  assert(cw.A.Assign.Shared("fort") and fromKeys(cw) == "from:fort=Bprie", "the share-out's priest named: " .. fromKeys(cw))
+  P.visible = false
+  tickAll(6)
+  assert(fromKeys(cw) == "", "out of sight, no event: gone within 5 s: " .. fromKeys(cw))
+  P.visible = nil
+  tickAll(40)
+  assert(fromKeys(cw) == "from:fort=Bprie", "back in sight, no event: named again: " .. fromKeys(cw))
+  noErrors(cw); noErrors(cp)
+end)
+
+test("from others: a level 40 takes Fortitude 5 at most (rank 6 lands on 50 and up): rank 5 on is never asked again, rank 4 asks for 5, either way", function()
+  local M = member({ name = "Amag", class = "MAGE", level = 40, guid = "Player-1-X1" })
+  local P = member({ name = "Bprie", class = "PRIEST", level = 60, guid = "Player-1-X2" })
+  local group = { M, P }
+  local c = client({ me = M, group = group, spec = 8 })
+  knowAll(c, "MAGE", 40)
+  local function aura(id, src) return { id = id, src = src, exp = c.clock + 3000, dur = 3600 } end
+  -- (Arcane Intellect 3 and Ice Armor 2, the most a level 40 knows; Divine Spirit 3, the most that lands on a 40)
+  M.auras = { aura(1461, "player"), { id = 7320, src = "player", exp = c.clock + 1700, dur = 1800 }, aura(14819), aura(10937) }
+  load(c)
+  tick(c, 40)
+  assert(fromKeys(c) == "", "Fortitude 5 on a level 40, a priest of 60 without Cute Auras: nothing asked: " .. fromKeys(c))
+  M.auras[4] = aura(2791)
+  fire(c, "UNIT_AURA", "player"); tick(c, 31)
+  assert(fromKeys(c) == "from:fort=Bprie", "Fortitude 4: rank 5 is theirs to give: " .. fromKeys(c))
+  local line = tipOf(c, icon(c, "own", "from:fort"))[2]
+  assert(line == "Rank 4 on you; Bprie can give rank 5.", line)
+  -- the priest runs Cute Auras (no Fortitude of their own: their duty shows, its list with the mage)
+  P.auras = {}
+  local cp = client({ me = P, group = group, spec = 56 })
+  knowAll(cp, "PRIEST", 60)
+  load(cp)
+  tickAll(12)
+  line = tipOf(c, icon(c, "own", "from:fort"))[2]
+  assert(line == "Rank 4 on you; Bprie gives rank 5 (shared out by Cute Auras).", line)
+  local b = icon(cp, "group", "duty:fort")
+  local fly = cp.env[b:GetName() .. "Fly"]
+  assert(rowOf(fly, "Amag") and rowOf(fly, "Amag").state.__text == "Low rank", "the priest's list: rank 4 on the 40 is low")
+  M.auras[4] = aura(10937)
+  fire(c, "UNIT_AURA", "player"); fire(cp, "UNIT_AURA", tokenOf(cp, M)); tickAll(40)
+  assert(fromKeys(c) == "", "Fortitude 5, the share-out's priest of 60: nothing asked: " .. fromKeys(c))
+  assert(rowOf(fly, "Amag").state.__text == "on", "the priest's list: rank 5 on the 40 is on, not Low rank: " .. rowOf(fly, "Amag").state.__text)
+  noErrors(c); noErrors(cp)
 end)
 
 print(string.format("OK (%d scenarios)", passed))

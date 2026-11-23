@@ -5,10 +5,11 @@
 --              minutes of it running out; forgotten once asked for twice ten minutes and not cast), 8 at most; never
 --              Righteous Fury
 --   weapon     your weapon's poison, oil, stone or imbue, by habit per weapon item (QuestBank's, ported)
+--   from       a buff a member gives that you lack or carry at a lower rank: greyed, the giver's name, no click
 --   duty       the group's part: one icon a buff you owe (Assign.lua), its count the members missing it or with it about
 --              to end, its word the next one's name (the shortest time left when it is only ending); a click buffs them
---              (the group version for three or more of a subgroup or class, with that rank's reagent); a hover lists
---              them all, each a click
+--              (the group version for three or more of a subgroup or class it gives full power, with that rank's
+--              reagent); a hover lists them all, each a click
 --   soulstone  a warlock carrying a soulstone, no healer with one: on the first healer online and in sight (the k-th
 --              warlock the k-th), greyed while out of range
 --   pull       Before the pull: food, the flasks, elixirs and scrolls you carry and lack, your habits
@@ -70,6 +71,17 @@ local function castOne(e, names, ids)
   end
   return nil
 end
+-- yours on you at a lower rank than you know of that kind (Inner Fire 5, rank 6 learned): the highest rank you know,
+-- else nil. By the aura's spell id: one the client hid is never a lower rank
+local function upgradeOf(sp, on)
+  local id = on and on.id
+  if type(id) ~= "number" then return nil end
+  local at
+  for i, x in ipairs(sp.ranks) do if x == id then at = i end end
+  if not at then return nil end
+  for r = #sp.ranks, at + 1, -1 do if S.Knows(sp.ranks[r]) then return sp.ranks[r] end end
+  return nil
+end
 B.Add({ key = "self", part = "mine", order = 100, groups = { "mine" },
   read = function(add, ctx)
     local names, ids, hidden = A.Camp.Mine()
@@ -79,6 +91,19 @@ B.Add({ key = "self", part = "mine", order = 100, groups = { "mine" },
         local on, sp = S.On(e, names, ids)
         if on then
           if sp then seen[e.key] = sp.name end
+          -- (its own Never, "Never: Upgrade Lightning Shield": a lower rank kept on purpose, the Buff when it is gone
+          -- still asked; Never on the Buff hides both. Keyed by the spell its words name, not the kind: Frost Armor's
+          -- leaves Ice Armor's, and the account's warlock's Demon Armor, asked)
+          local up = sp and not B.Never("buff:" .. e.key) and upgradeOf(sp, on)
+          if up then
+            local rec = add()
+            rec.key = "self:" .. e.key
+            rec.tex, rec.lit = L.SpellIcon(up, sp.icon), true
+            B.Click(rec, "spell", up, "player")
+            rec.never, rec.neverName = "up:" .. sp.name, "Upgrade " .. sp.name
+            rec.name, rec.word, rec.clickWord = L.SpellName(up, sp.name), "Upgrade", "cast it"
+            rec.why = "Rank " .. S.RankOf(sp, on.id) .. " on you; you know rank " .. S.RankOf(sp, up) .. "."
+          end
         else
           local id, sp2 = castOne(e, names, ids)
           if id then
@@ -185,6 +210,10 @@ local function watchHabits()
         if e then e.hits, e.miss, e.at = (e.hits or 0) + 1, 0, stamp() end
       end
       if type(e) == "table" then e.id = id end
+    elseif onMine[n] ~= id then
+      -- (another rank cast over it while on, an Upgrade's click: the habit's rank is the one on you now)
+      onMine[n] = id
+      if type(h[n]) == "table" then h[n].id = id end
     end
   end
   -- (not cast again within two minutes of running out: no hit, and no miss either; a miss is a reminder ignored)
@@ -201,7 +230,22 @@ B.Add({ key = "habit", part = "mine", order = 105, groups = { "mine" },
     local n = 0
     for name, e in pairs(h) do
       local id = type(e) == "table" and e.id or nil
-      if type(id) == "number" and (e.hits or 0) >= 2 and not names[name] and not ids[id] and S.Knows(id) and n < HABIT_MAX then
+      local on = type(id) == "number" and (names[name] or ids[id]) or nil
+      -- (yours on you at a lower rank than you know: Upgrade, by the name, which the game casts at its highest rank. The
+      -- habit's own rank alone, the one last seen on you (e.id): an elixir's or a piece of gear's aura of the same name,
+      -- Water Breathing, is no rank of it)
+      -- (its own Never, as yours: "Never: Upgrade Dampen Magic" keeps the Buff when it is gone)
+      local own = type(id) == "number" and ids[id] or nil
+      local best = own and own.mine and (e.hits or 0) >= 2 and n < HABIT_MAX and not B.Never("buff:" .. name) and S.ByName(name) or nil
+      if best and S.Lower(id, best) then
+        n = n + 1
+        local rec = add()
+        rec.key = "habit:" .. name
+        rec.tex, rec.lit = L.SpellIcon(best, 134400), true
+        B.Click(rec, "spell", name, "player")
+        rec.never, rec.neverName = "up:" .. name, "Upgrade " .. name
+        rec.name, rec.word, rec.why, rec.clickWord = name, "Upgrade", "On you at a lower rank than you know.", "cast it"
+      elseif type(id) == "number" and (e.hits or 0) >= 2 and not on and S.Knows(id) and n < HABIT_MAX then
         -- (asked for ten minutes out of town and not cast: a miss; two, forgotten. In town the clock waits)
         local at = habitAsked[name]
         if ctx.town then at = nil
@@ -309,10 +353,11 @@ B.Add({ key = "weapon", part = "mine", order = 110, groups = { "mine" },
 })
 
 ----------------------------------------------------------------------------
--- the group's part: the buffs you owe, read out of a fight from each member's auras
-----------------------------------------------------------------------------
 -- each unit's auras, kept until that unit's own UNIT_AURA (Bf.Stale), a roster change, a fight's end or 15 s: a raid's
--- forty are read again only as they change, not on every refresh (a read hidden by the client is never kept)
+-- forty are read again only as they change, not on every refresh (a read hidden by the client is never kept). The
+-- group's part reads its members here, and the buffs others give you read yours here: a group refresh never reads
+-- yours again (Camp.Mine reads them, and runs its watchers, on every refresh)
+----------------------------------------------------------------------------
 local AURA_KEEP = 15
 local unitNames, unitIds, unitPools, unitHidden, unitReadAt = {}, {}, {}, {}, {}
 local function auras(unit)
@@ -339,11 +384,226 @@ function Bf.Stale(unit)
     unitReadAt.player = nil
   end
 end
+
+----------------------------------------------------------------------------
+-- buffs others give you (the owner, 2026-11-23: "notified when u are missing buff from others"): one a member of your
+-- group gives that is not on you, or is on you at less power than they give at your level, for 30 s out of a fight (at
+-- once at a ready check), while that member is online, alive and in sight. In yours, after your own buffs and the
+-- consumables (the bar's six cut these first: they have no click), 3 at most: its icon greyed, the giver's name under it
+-- in their class colour, no click (it is theirs to cast).
+--   who gives it  the buffer the share-out gives you to (Assign.lua: every client's same answer, no message). A buff
+--                 no buffer running Cute Auras gives: a member of its class not running it, online, alive and in sight,
+--                 whose level has learned a rank you lack, the one whose rank is the strongest, the first by GUID of
+--                 those (a rank learned by level only: never a rune's Earth Shield; never Shadow Protection, given only
+--                 by a priest running Cute Auras who switched it on; Divine Spirit and Kings are trained in Forever, by
+--                 level, not talents as in Classic)
+--   blessings     the paladin the share-out gives your class and role each blessing; with none from the share-out and
+--                 no blessing on you at all, one "Blessing" naming a paladin not running Cute Auras
+--   who wants it  the share-out's own rules: As.Wants (a mana bar for Arcane Intellect and Divine Spirit, a tank for
+--                 Thorns) and the blessings' wishes (never Wisdom without a mana bar)
+----------------------------------------------------------------------------
+local FROM_WAIT, FROM_MAX, FROM_LOOK = 30, 3, 5
+local fromSince = {}       -- [key] = since when it is missing with someone to give it (out of a fight, not away)
+local fromSeen = {}        -- [key] = true: missing at this read (the other waits are let go)
+local fromAsked = {}       -- [key] = true: its wait ended by a ready check
+local fromReady = false    -- a ready check since the last read: every wait ends there
+local fromList, fromPool = {}, {}
+local otherKeys
+-- the rank a giver casts on you: the highest of theirs your level takes (Classic's rule: no more than ten levels under
+-- the rank's own). Theirs: up to the rank they announced (upto), else each rank their level has learned, by level only.
+-- Its id and its place in the ranks (the higher, the stronger)
+local function rankFor(entry, upto, giverLevel, myLevel)
+  for i = math.min(upto or #entry.ranks, #entry.ranks), 1, -1 do
+    local lv = entry.levels and entry.levels[i] or 0
+    if (upto or (lv > 0 and lv <= giverLevel)) and lv <= myLevel + 10 then return entry.ranks[i], i end
+  end
+  return nil
+end
+-- a member who can give you a buff now: not you, online, alive, in sight. The second answer true for one who could but
+-- for sight (coming back into sight fires no event: the 5 s look goes on while they are away)
+local function canGive(m)
+  if m == nil or m.me or not A.Yes(UnitIsConnected, m.unit) or A.Yes(UnitIsDeadOrGhost, m.unit) then return false, false end
+  if type(UnitIsVisible) ~= "function" or A.Yes(UnitIsVisible, m.unit) then return true, false end
+  return false, true
+end
+-- (the next look: at the 30 s mark of the soonest wait, and every 5 s while one waits or shows, or its giver is out of
+-- sight, for a giver walking out of sight or back into it; only this provider is read again)
+local fromWakeAt
+local function fromWake(at, t)
+  if fromWakeAt and fromWakeAt > t and fromWakeAt <= at then return end
+  fromWakeAt = at
+  A.After(at - t + 0.1, function() if fromWakeAt == at then fromWakeAt = nil end; B.Dirty("from") end, "buffs: from others")
+end
+local function fromWipe()
+  for k in pairs(fromSince) do fromSince[k] = nil end
+  for k in pairs(fromAsked) do fromAsked[k] = nil end
+end
+-- its tooltip's line: "Missing. Bprie gives it (shared out by Cute Auras)." (no time: the wait starts again after each
+-- fight and while the giver is away, so it is never how long the buff has been gone)
+local function fromText(rec)
+  local who, e = rec.giverName or "?", rec.entry
+  if rec.low then
+    local r, isGroup = S.RankOf(e, rec.onId)
+    local theirs = isGroup and (L.SpellName(rec.onId, e.groupName) .. " rank " .. r) or ("Rank " .. tostring(r))
+    return theirs .. " on you; " .. who .. (rec.shared and " gives rank " or " can give rank ") .. tostring(S.RankOf(e, rec.best))
+      .. (rec.shared and " (shared out by Cute Auras)." or ".")
+  end
+  local miss = rec.any and "No blessing on you." or "Missing."
+  if rec.any then return miss .. " " .. who .. " can give one." end
+  return miss .. " " .. who .. (rec.shared and " gives it (shared out by Cute Auras)." or " can give it.")
+end
+Bf.FromText = fromText
+-- (quiet: one whose wait ends after Not now on yours stays quiet with it, never bringing back what you put off)
+B.Add({ key = "from", part = "mine", order = 125, groups = { "mine", "group", "from" }, quiet = true,
+  read = function(add, ctx)
+    local As = A.Assign
+    local me = A.Roster.Me()
+    local ready = fromReady
+    fromReady = false
+    if A.Settings().others == false or not ctx.group or not me or B.Away() then fromWipe() return end
+    -- (yours as kept until your own UNIT_AURA: a group refresh, a member's aura or the 3 s look, reads none again)
+    local names, ids, hidden = auras("player")
+    -- (an aura the client hid: what is missing can't be told, the waits kept as they are)
+    if hidden then return end
+    for k in pairs(fromSeen) do fromSeen[k] = nil end
+    for i = #fromList, 1, -1 do fromList[i] = nil end
+    local nextAt, sight = nil, false
+    -- (missing or at less power than best, the rank the giver casts on you: on the list once its wait is over; its giver
+    -- out of sight (unseen): no wait, the 5 s look kept going)
+    local function consider(key, entry, m, best, shared, any, unseen)
+      if B.Never("from:" .. key) then return end
+      local on = not any and S.On(entry, names, ids) or nil
+      local low = on ~= nil and S.Low(entry, on.id, me.level, best)
+      if on and not low then return end
+      if unseen then sight = true return end
+      fromSeen[key] = true
+      local since = fromSince[key] or ctx.t
+      fromSince[key] = since
+      if ready then fromAsked[key] = true end
+      if not fromAsked[key] and ctx.t - since < FROM_WAIT then
+        if not nextAt or since + FROM_WAIT < nextAt then nextAt = since + FROM_WAIT end
+        return
+      end
+      local x = fromPool[#fromList + 1]
+      if not x then x = {}; fromPool[#fromList + 1] = x end
+      x.key, x.entry, x.m, x.best, x.shared, x.any, x.i = key, entry, m, best, shared, any, #fromList + 1
+      x.low, x.onId = low or nil, low and on.id or nil
+      fromList[#fromList + 1] = x
+    end
+    -- the buffs given to others, in a fixed order
+    if not otherKeys then
+      otherKeys = {}
+      for key in pairs(As.OTHER) do otherKeys[#otherKeys + 1] = key end
+      table.sort(otherKeys)
+    end
+    for _, key in ipairs(otherKeys) do
+      local e = As.OTHER[key]
+      if As.Wants(e, me) then
+        if As.Shared(key) then
+          local g = As.GiverOf(key, me.guid)
+          local m = g and A.Roster.ByGUID(g) or nil
+          local can, unseen = canGive(m)
+          local k = (can or unseen) and As.KnownOf(m)
+          local best = k and (k[key] or 0) > 0 and rankFor(e, k[key], nil, me.level) or nil
+          if best then consider(key, e, m, best, true, nil, unseen) end
+        elseif not e.opt then
+          -- (the one whose rank is the strongest, then the first by GUID: a level 30 priest is never named over a 60)
+          local on = S.On(e, names, ids)
+          local pick, pickBest, pickAt, away, awayBest
+          for _, m in ipairs(A.Roster.members) do
+            if m.class == e.class and not A.Comm.Running(m.guid) then
+              local best, at = rankFor(e, nil, m.level, me.level)
+              if best and (not on or S.Low(e, on.id, me.level, best)) then
+                local can, unseen = canGive(m)
+                if can and (not pick or at > pickAt or (at == pickAt and m.guid < pick.guid)) then pick, pickBest, pickAt = m, best, at
+                elseif unseen then away, awayBest = m, best end
+              end
+            end
+          end
+          if pick then consider(key, e, pick, pickBest, false)
+          elseif away then consider(key, e, away, awayBest, false, nil, true) end
+        end
+      end
+    end
+    -- the blessings: the share-out's for your class and role, else one from a paladin not running Cute Auras
+    local bucket, given = As.Bucket(me), false
+    for _, bk in ipairs(As.BLESS_KEYS) do
+      local pg = As.BlesserOf(bucket, bk)
+      if pg then
+        given = true
+        local m = A.Roster.ByGUID(pg)
+        local can, unseen = false, false
+        if m and (bk ~= "wisdom" or me.mana) then can, unseen = canGive(m) end
+        local k = (can or unseen) and As.KnownOf(m)
+        local best = k and (k[bk] or 0) > 0 and rankFor(D.BLESS[bk], k[bk], nil, me.level) or nil
+        if best then consider("bless:" .. bk, D.BLESS[bk], m, best, true, nil, unseen) end
+      end
+    end
+    if not given then
+      local any, lowest = false, nil
+      for _, bk in ipairs(As.BLESS_KEYS) do
+        local e = D.BLESS[bk]
+        if S.On(e, names, ids) then any = true end
+        if e.levels[1] > 0 and (not lowest or e.levels[1] < lowest) then lowest = e.levels[1] end
+      end
+      if not any and lowest then
+        local pick, away
+        for _, m in ipairs(A.Roster.members) do
+          if m.class == "PALADIN" and not A.Comm.Running(m.guid) and m.level >= lowest then
+            local can, unseen = canGive(m)
+            if can and (not pick or m.guid < pick.guid) then pick = m elseif unseen then away = m end
+          end
+        end
+        -- (its art: your first wish their level has learned (Kings at 20, trained in Forever), else Might, the first a
+        -- paladin learns)
+        local who = pick or away
+        local wish = D.BLESS.might
+        for _, w in ipairs(who and As.Wishes(me) or {}) do
+          local e = D.BLESS[w]
+          if e and e.levels[1] <= who.level then wish = e break end
+        end
+        if pick then consider("bless", wish, pick, nil, false, true)
+        elseif away then consider("bless", wish, away, nil, false, true, true) end
+      end
+    end
+    for k in pairs(fromSince) do if not fromSeen[k] then fromSince[k], fromAsked[k] = nil, nil end end
+    -- (missing before a lower rank, then the order looked at)
+    table.sort(fromList, function(a, b)
+      if (a.low == true) ~= (b.low == true) then return not a.low end
+      return a.i < b.i
+    end)
+    for i = 1, math.min(#fromList, FROM_MAX) do
+      local x = fromList[i]
+      local rec = add()
+      rec.key = "from:" .. x.key
+      rec.tex, rec.lit = L.SpellIcon(x.entry.ranks[1], x.entry.icon), false
+      rec.word, rec.class = x.m.name, x.m.class
+      rec.name = x.any and "Blessing" or L.SpellName(x.entry.ranks[1], x.entry.name)
+      rec.never, rec.neverName = "from:" .. x.key, rec.name
+      rec.entry, rec.best, rec.shared, rec.any, rec.low, rec.onId = x.entry, x.best, x.shared, x.any, x.low, x.onId
+      rec.giverName = x.m.name
+      -- (its wait ended by a ready check: shown through Not now on yours, the rest of yours kept quiet)
+      rec.loud = fromAsked[x.key] or nil
+    end
+    if nextAt or sight or #fromList > 0 then fromWake(math.min(nextAt or math.huge, ctx.t + FROM_LOOK), ctx.t) end
+  end,
+  -- (yours or the bar switched off: the waits and a ready check let go, as when away; back on, 30 s again)
+  off = function() fromWipe(); fromReady = false end,
+  tip = function(tt, rec)
+    local INK = L.C.INK
+    tt:AddLine(fromText(rec), INK[1], INK[2], INK[3], true)
+  end,
+})
+
+----------------------------------------------------------------------------
+-- the group's part: the buffs you owe, read out of a fight from each member's auras
+----------------------------------------------------------------------------
 -- a member's state for a duty: has (the buff on them, anyone's) and left (its seconds, when it ends), dead, offline,
--- out of sight, out of range. Into st when given (a kept table), else a new one
+-- out of sight, out of range; weak: on them at less power than spellId, the rank you would cast on them (low, its spell
+-- id in onId). Into st when given (a kept table), else a new one
 local function state(d, m, spellId, st)
   st = st or {}
-  st.unknown, st.has, st.left, st.far = nil, false, nil, false
+  st.unknown, st.has, st.left, st.far, st.weak, st.onId = nil, false, nil, false, false, nil
   st.off = not A.Yes(UnitIsConnected, m.unit)
   st.dead = A.Yes(UnitIsDeadOrGhost, m.unit)
   st.seen = type(UnitIsVisible) ~= "function" or A.Yes(UnitIsVisible, m.unit)
@@ -352,46 +612,63 @@ local function state(d, m, spellId, st)
   if hidden then st.unknown = true return st end
   local on = S.On(d.entry, names, ids)
   st.has = on ~= nil
+  -- (by the aura's spell id: one the client hid is never low; a Prayer or a Greater as strong as your rank is fine)
+  st.weak = on ~= nil and S.Low(d.entry, on.id, m.level, spellId) or false
+  st.onId = st.weak and on.id or nil
   st.left = on and on.exp and on.exp - A.Now() or nil
   st.far = spellId and S.InRange(spellId, m.unit) == false or false
   return st
 end
 Bf.State = state
--- the group version to cast for a target's level: the highest rank you know that the level takes and whose own reagent
--- you carry (Prayer of Fortitude 1 a Holy Candle, 2 a Sacred Candle); its id and reagent, else nil
-local function groupRank(entry, level)
-  local g = entry.group
+-- the group version and the one to cast it on, for those missing it (Greater: the class of pick, the next one, when its
+-- every member takes this from you; Prayer, Brilliance or Gift: pick's subgroup, a party all of it). The highest rank
+-- you know whose own reagent you carry (Prayer of Fortitude 1 a Holy Candle, 2 a Sacred Candle) that three or more of
+-- them take at full power, each at their own level: a rank that lands on them (no more than ten levels under it) and
+-- never weaker than the single rank they would get (Prayer 1 under a 60's Fortitude 6 would land as a lower rank, and
+-- be cast again). On the first of those three in range; nil when no rank serves three
+local function groupFor(d, pick, missing)
+  local e, m = d.entry, pick.m
+  local g = e.group
   if not g then return nil end
+  if d.bless and not (A.Settings().greater ~= false and d.greater[m.class or ""]) then return nil end
+  local raid = A.Roster.InRaid()
   for i = #g, 1, -1 do
     local id = g[i]
-    local lv = entry.groupLevels and entry.groupLevels[i] or 0
-    local rg = entry.groupReagents and entry.groupReagents[i] or entry.reagent
-    if lv <= (level or 60) + 10 and S.Knows(id) then
-      if rg and rg ~= 0 and S.Count(rg) > 0 then return id, rg end
+    local lv = e.groupLevels and e.groupLevels[i] or 0
+    local rg = e.groupReagents and e.groupReagents[i] or e.reagent
+    if S.Knows(id) and rg and rg ~= 0 and S.Count(rg) > 0 then
+      local n, at = 0, nil
+      for _, x in ipairs(missing) do
+        local covered
+        if d.bless then covered = x.m.class == m.class else covered = not raid or x.m.sub == m.sub end
+        local level = x.m.level or 60
+        if covered and lv <= level + 10 and not S.Low(e, id, level, x.id) then
+          n = n + 1
+          if not at and not x.far then at = x end
+        end
+      end
+      if n >= 3 and at then return id, at end
     end
   end
   return nil
 end
-Bf.GroupRank = groupRank
-local function groupCount(d, m, list)
-  local n = 0
-  for _, x in ipairs(list) do
-    if (A.Roster.InRaid() and x.m.sub == m.sub) or not A.Roster.InRaid() then n = n + 1 end
-  end
-  return n
-end
--- the flyout's order: missing in range, then far, then dead or offline, then those who have it (one about to end counts
--- as missing)
-local function flyRank(x) if x.dead or x.off then return 3 elseif x.has and not x.low then return 4 elseif x.far then return 2 end return 1 end
+Bf.GroupFor = groupFor
+-- the flyout's order: missing in range, then far, then dead or offline, then those who have it (one about to end, or
+-- at a lower rank than you give, counts as missing)
+local function flyRank(x) if x.dead or x.off then return 3 elseif x.has and not x.low and not x.weak then return 4 elseif x.far then return 2 end return 1 end
 local function flyOrder(a, b)
   local ra, rb = flyRank(a), flyRank(b)
   if ra ~= rb then return ra < rb end
   return (a.name or "") < (b.name or "")
 end
--- who to buff first: no buff before a buff about to end (the sooner first), then the duty's own order
+-- two sentences of a tooltip, the first nil for none
+local function join(a, b) return a and (a .. " " .. b) or b end
+-- who to buff first: no buff, then a lower rank (as the buffs from others list theirs), then a buff about to end (the
+-- sooner first), then the duty's own order
 local function missOrder(a, b)
   if (a.left == nil) ~= (b.left == nil) then return a.left == nil end
   if a.left and b.left and a.left ~= b.left then return a.left < b.left end
+  if (a.weak == true) ~= (b.weak == true) then return not a.weak end
   return a.i < b.i
 end
 -- (who walks into range or whose buff crosses its last minutes: a look at the group's part every 3 s while you owe
@@ -424,23 +701,27 @@ B.Add({ key = "duty", part = "group", order = 200, groups = { "group", "mine" },
         -- (a buff under five minutes from its end counts as missing, ten at a ready check, a quarter of it at most:
         -- Thorns' ten minutes waits for its last 2:30)
         local limit = math.min(ctx.pull and 600 or 300, (d.entry.dur or 3600) / 4)
-        local nLow, soonest = 0, nil
+        local nLow, nWeak, soonest = 0, 0, nil
         for i, m in ipairs(d.targets) do
           local id = S.Best(d.entry, m.level)
           if id then
             local st = state(d, m, id, stScratch)
-            local low = st.has and st.left ~= nil and st.left < limit or false
+            -- (a lower rank than you give counts as missing, its row "Low rank": its end coming no longer matters)
+            local weak = st.weak
+            local low = not weak and st.has and st.left ~= nil and st.left < limit or false
             local row = flyPool[#fly + 1]
             if not row then row = {}; flyPool[#fly + 1] = row end
             row.unit, row.guid, row.name, row.class, row.spell, row.tex = m.unit, m.guid, m.me and "You" or m.name, m.class, id, nil
             row.has, row.dead, row.off, row.far, row.glow = st.has, st.dead, st.off, st.far or not st.seen, A.Hands and A.Hands.Glowing(m.guid) or nil
-            row.low, row.left = low, low and st.left or nil
+            row.low, row.left, row.weak = low, low and st.left or nil, weak
             fly[#fly + 1] = row
-            if (low or not st.has) and not (st.dead or st.off or st.unknown or not st.seen) then
+            if (low or weak or not st.has) and not (st.dead or st.off or st.unknown or not st.seen) then
               local x = missing.pool[#missing + 1]
               if not x then x = {}; missing.pool[#missing + 1] = x end
               x.m, x.id, x.far, x.left, x.i = m, id, st.far, low and st.left or nil, i
+              x.weak, x.have = weak, st.onId
               missing[#missing + 1] = x
+              if weak then nWeak = nWeak + 1 end
               if low then
                 nLow = nLow + 1
                 if not soonest or st.left < soonest then soonest = st.left end
@@ -465,6 +746,9 @@ B.Add({ key = "duty", part = "group", order = 200, groups = { "group", "mine" },
         end
         if #missing > 0 then
           local pick = next or missing[1]
+          -- (the group version for three or more it gives full power: cast on one of them, named in pick's place)
+          local gid, at = groupFor(d, pick, missing)
+          if at then pick = at end
           local m = pick.m
           local rec = add()
           rec.key = "duty:" .. d.key
@@ -479,20 +763,7 @@ B.Add({ key = "duty", part = "group", order = 200, groups = { "group", "mine" },
           if rec.far then rec.lit, rec.word, rec.status, rec.timed = false, "Far", "warn", nil end
           rec.flyout = fly
           rec.name = L.SpellName(d.entry.ranks[1], d.entry.name)
-          -- (the group version: Greater for a class whose every member takes this from you, Prayer, Brilliance or Gift
-          -- for three or more of a subgroup, the reagent of the rank cast carried)
-          local gid = groupRank(d.entry, m.level)
-          local useGroup = false
           if gid then
-            if d.bless then
-              local n = 0
-              for _, x in ipairs(missing) do if x.m.class == m.class then n = n + 1 end end
-              useGroup = A.Settings().greater ~= false and d.greater[m.class or ""] and n >= 3
-            else
-              useGroup = groupCount(d, m, missing) >= 3
-            end
-          end
-          if useGroup then
             B.Click(rec, "spell", gid, m.unit)
             rec.name = L.SpellName(gid, d.entry.groupName or rec.name)
             rec.clickWord = "cast " .. rec.name .. " on " .. (m.me and "yourself" or m.name)
@@ -500,12 +771,19 @@ B.Add({ key = "duty", part = "group", order = 200, groups = { "group", "mine" },
             B.Click(rec, "spell", pick.id, m.unit)
             rec.clickWord = "buff " .. (m.me and "yourself" or m.name)
           end
-          local nMiss = #missing - nLow
-          local why = nMiss == 1 and "1 member is missing it." or (nMiss .. " members are missing it.")
+          local nMiss = #missing - nLow - nWeak
+          local why
+          -- (the one named has a lower rank: theirs and the one you give, "Rank 4 on them; you give rank 6.")
+          if pick.weak then
+            local r, isGroup = S.RankOf(d.entry, pick.have)
+            local theirs = isGroup and (L.SpellName(pick.have, d.entry.groupName) .. " rank " .. r) or ("Rank " .. r)
+            why = theirs .. " on " .. (m.me and "you" or "them") .. "; you give rank " .. S.RankOf(d.entry, pick.id) .. "."
+          end
+          if nMiss > 0 then why = join(why, nMiss == 1 and "1 member is missing it." or (nMiss .. " members are missing it.")) end
+          if nWeak > (pick.weak and 1 or 0) then why = join(why, nWeak == 1 and "1 member has a lower rank." or (nWeak .. " members have a lower rank.")) end
           if nLow > 0 then
             local ends = nLow == 1 and "1 member has it ending within " or (nLow .. " members have it ending within ")
-            ends = ends .. (limit % 60 == 0 and (math.floor(limit / 60) .. " minutes.") or (countdown(limit) .. "."))
-            why = nMiss > 0 and (why .. " " .. ends) or ends
+            why = join(why, ends .. (limit % 60 == 0 and (math.floor(limit / 60) .. " minutes.") or (countdown(limit) .. ".")))
           end
           if d.bless then why = why .. " Cute Auras shares the blessings out among the group's paladins." end
           if rec.far then why = why .. " None of them is in range." ; rec.clickWord = nil end
@@ -928,6 +1206,9 @@ function Bf:Init()
     A.On(ev, function() Bf.Stale(nil) end)
   end
   A.OnUnit("UNIT_SPELLCAST_SUCCEEDED", { "player" }, onCast)
+  -- (a fight starts the buffs from others' waits again: 30 s out of it; a ready check ends them)
+  A.On("PLAYER_REGEN_DISABLED", function() fromWipe(); fromReady = false end)
+  A.On("READY_CHECK", function() fromReady = true; B.Dirty("from") end)
   A.OnUnit("UNIT_INVENTORY_CHANGED", { "player" }, function() watchWeapons(); B.Dirty("mine") end)
   A.Camp.Watch(function() watchWeapons() end)
 end

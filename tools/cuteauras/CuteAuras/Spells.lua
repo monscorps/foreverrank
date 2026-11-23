@@ -36,6 +36,63 @@ function S.RankKnown(entry)
   return 0
 end
 
+-- a rank's power: its aura's main amount (Data.lua's power and groupPower: Fortitude's Stamina, Might's attack power), a
+-- single rank's or a group rank's; nil when the data has none for it (Kings, Earth Shield, an id not of this entry)
+function S.Power(entry, id)
+  if not (entry and id) then return nil end
+  for i, x in ipairs(entry.ranks or {}) do if x == id then return entry.power and entry.power[i] or nil end end
+  for i, x in ipairs(entry.group or {}) do if x == id then return entry.groupPower and entry.groupPower[i] or nil end end
+  return nil
+end
+-- an aura of the entry's kind (its spell id) is low: under the power of the rank you would cast on that target (S.Best
+-- at their level; best, that rank, when the caller has it already). A power not known, either side, is never low: a
+-- Prayer or a Greater as strong as your rank is fine
+function S.Low(entry, id, targetLevel, best)
+  local have = S.Power(entry, id)
+  if not have then return false end
+  best = best or S.Best(entry, targetLevel)
+  local give = best and S.Power(entry, best)
+  return give ~= nil and have < give
+end
+-- a rank's number as the game counts it (Rank 4), and true for a rank of the group version; nil for neither. Its place
+-- in its list, a level counted once: a shield's proc spell shares its rank's name and level (Lightning Shield 324, 26364)
+local function numberIn(ids, levels, id)
+  local n, last = 0, nil
+  for i, x in ipairs(ids or {}) do
+    local lv = levels and levels[i]
+    if lv == nil or lv ~= last then n = n + 1 end
+    last = lv
+    if x == id then return n end
+  end
+  return nil
+end
+function S.RankOf(entry, id)
+  local n = numberIn(entry.ranks, entry.levels, id)
+  if n then return n, false end
+  n = numberIn(entry.group, entry.groupLevels, id)
+  if n then return n, true end
+  return nil
+end
+-- your highest rank of a spell by its name, the one the game casts by that name (C_Spell.GetSpellIDForSpellIdentifier
+-- looks the name up in your spellbook), when you know it; nil else
+function S.ByName(name)
+  local f = C_Spell and C_Spell.GetSpellIDForSpellIdentifier
+  if type(name) ~= "string" or type(f) ~= "function" then return nil end
+  local id = plain(call(f, name))
+  if type(id) == "number" and S.Knows(id) then return id end
+  return nil
+end
+-- one rank under another by the levels the game says they are learned at (C_Spell.GetSpellLevelLearned): a level not
+-- told (none, or 0: an elixir's aura, a rune's) is never lower, nor higher (and a lower rank need not be in Forever's
+-- spellbook: never asked whether you know it)
+function S.Lower(id, than)
+  if type(id) ~= "number" or type(than) ~= "number" or id == than then return false end
+  local f = C_Spell and C_Spell.GetSpellLevelLearned
+  if type(f) ~= "function" then return false end
+  local a, b = plain(call(f, id)), plain(call(f, than))
+  return type(a) == "number" and a > 0 and type(b) == "number" and b > 0 and a < b
+end
+
 -- a unit's helpful auras into kept tables: names[name] and ids[spellId] = { n = stacks, exp = expiry (GetTime), icon,
 -- mine = cast by you }; the third answer true when the client hid an aura (secret): what is missing can't be told then
 function S.ReadAuras(unit, names, ids, pool)

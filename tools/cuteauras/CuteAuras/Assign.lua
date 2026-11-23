@@ -12,8 +12,11 @@
 --                 paladins who know the same, the k-th gives the k-th wish). Then a class over two buckets (warriors
 --                 with a tank) is lined up so each paladin gives the whole class one blessing, a Greater one's chance.
 --                 A blessing set by hand in the grid wins over the choice
+--   who gives you  every buffer's share, not only yours (As.GiverOf, As.BlesserOf): the bar's reminder of a buff
+--                 someone else gives you (Buffs.lua) names that buffer, on every client the same, no message sent
 local _, A = ...
-local As = A.Part("Assign", { duties = {}, owe = {}, bless = {}, buckets = {}, overrides = {}, gen = 0 })
+local As = A.Part("Assign", { duties = {}, owe = {}, bless = {}, buckets = {}, overrides = {}, gen = 0, giver = {}, shared = {},
+  blessFrom = {} })
 local S, D = A.Spells, A.Data
 
 -- the buffs castable on others, by key (any class's)
@@ -64,6 +67,8 @@ local function compute()
   local raid = A.Roster.InRaid()
   local me = A.MyGUID()
   local duties, owe, bless = {}, {}, {}
+  -- (every buffer's share: giver[key][target GUID] = the buffer's GUID; shared[key]: a buffer running Cute Auras gives it)
+  local giver, shared = {}, {}
   local known = {}
   for _, m in ipairs(members) do known[m.guid] = knownOf(m) end
 
@@ -100,6 +105,9 @@ local function compute()
       for _, m in ipairs(buffers) do best = math.max(best, known[m.guid][key]) end
       for i = #buffers, 1, -1 do if known[buffers[i].guid][key] < best then table.remove(buffers, i) end end
       table.sort(buffers, byGUID)
+      shared[key] = true
+      local gives = {}
+      giver[key] = gives
       if e.single then
         -- (one target a buffer: the tanks in GUID order, the k-th to the k-th buffer)
         local tanks = {}
@@ -107,12 +115,14 @@ local function compute()
         table.sort(tanks, byGUID)
         for i, m in ipairs(tanks) do
           local b = buffers[i]
+          if b then gives[m.guid] = b.guid end
           if b and b.guid == me then duty(key, e).targets[#duty(key, e).targets + 1] = m; owes(m, e, key) end
         end
       else
         for _, m in ipairs(members) do
           if wants(e, m) then
             local b = raid and buffers[((m.sub - 1) % #buffers) + 1] or buffers[1]
+            gives[m.guid] = b.guid
             if b.guid == me then
               local d = duty(key, e)
               d.targets[#d.targets + 1] = m
@@ -209,6 +219,15 @@ local function compute()
       end
     end
   end
+  -- who gives each bucket each blessing (the first paladin in the paladins' order, should two give the same)
+  local blessFrom = {}
+  for _, pal in ipairs(paladins) do
+    for bk, key in pairs(bless[pal.guid]) do
+      local t = blessFrom[bk]
+      if not t then t = {}; blessFrom[bk] = t end
+      if not t[key] then t[key] = pal.guid end
+    end
+  end
   -- your blessings as duties, one a blessing; Greater for a class whose every bucket takes the same from you
   local mine = me and bless[me]
   if mine then
@@ -233,6 +252,7 @@ local function compute()
     return a.key < b.key
   end)
   As.duties, As.owe, As.bless, As.buckets, As.bucketList, As.paladins = duties, owe, bless, buckets, bucketList, paladins
+  As.giver, As.shared, As.blessFrom = giver, shared, blessFrom
   As.gen = As.gen + 1
 end
 As.Compute = compute
@@ -241,6 +261,12 @@ As.Compute = compute
 function As.Owed(guid) return As.owe[guid] end
 -- the blessing a paladin gives a bucket
 function As.BlessingOf(palGUID, bucketKey) return As.bless[palGUID] and As.bless[palGUID][bucketKey] end
+-- who the share-out gives a member's buff to, any buffer's: that buffer's GUID, else nil (nobody, or they don't want it)
+function As.GiverOf(key, guid) local g = As.giver[key]; return g and g[guid] or nil end
+-- a buffer running Cute Auras gives this buff: the share-out has it, whoever it goes to
+function As.Shared(key) return As.shared[key] == true end
+-- the paladin who gives a bucket a blessing, else nil
+function As.BlesserOf(bucketKey, blessKey) local t = As.blessFrom[bucketKey]; return t and t[blessKey] or nil end
 
 ----------------------------------------------------------------------------
 -- blessings set by hand: the paladin for their own, the group's leader or an assist for anyone's. Kept until you leave

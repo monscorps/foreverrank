@@ -83,13 +83,31 @@ the reagent. Hovering opens the flyout: one secure button per member it covers, 
 
 ## Assignment
 
-- Buffers are members who run Cute Auras and announced the buff. Members without it are left alone.
-- Single buffs (Fortitude, Spirit, Intellect, Mark, Thorns, Earth Shield): in a raid, subgroup s goes to buffer
-  ((s - 1) mod n) + 1 in GUID order; in a party, the first buffer does all.
+- Buffers are members who run Cute Auras and announced the buff. Members without it are left alone. A buffer who
+  turned the buff off (the bar or its group part off, Nothing in this instance, the icon on Never) announces nothing
+  for it, so the share-out gives it to another.
+- Single buffs (Fortitude, Spirit, Intellect, Mark, Thorns, Earth Shield): only the buffers with the highest announced
+  rank are kept; in a raid, subgroup s goes to buffer ((s - 1) mod n) + 1 in GUID order; in a party, the first buffer
+  does all.
 - Blessings: buckets are class and role. Each bucket has an ordered wish list (tank: Kings, Might; melee: Might, Kings;
-  hunter: Kings, Wisdom; caster and healer: Wisdom, Kings; rogues and warriors never Wisdom). Paladins sort by level,
-  then GUID; the paladin in place k gives each bucket its k-th wish they know, else the best one left. Overrides from
-  the grid (the paladin for themselves, the leader or an assist for anyone) win.
+  hunter: Kings, Wisdom; caster and healer: Wisdom, Kings; never Wisdom without a mana bar). Paladins sort by level,
+  then GUID; each wish in order goes to the free paladin who knows it and knows the fewest of the wishes still open
+  (a tie: the first in that order), so one who alone knows a blessing keeps it. A class split over two roles lines its
+  buckets up where the paladins give both the same set, so Greater blessings fit the whole class. Overrides from the
+  grid (the paladin for themselves, the leader or an assist for anyone) win; a clear is kept, stamped; equal stamps go
+  to the higher setter GUID. Your own overrides and the peers' hellos are saved at logout and read back within the
+  hour into the same group (most of its members in both).
+- Your role and Swap for me are each character's, never the account's.
+- Lower ranks: a buff on a member at less power (Data.lua's power per rank) than the rank you would cast on them counts
+  as missing ("Low rank" in the list, after those with none); your own buff of a kind, or a habit's own spell, at a
+  lower rank than you know asks for an Upgrade (its own Never, by the spell's name; Never on the Buff hides both).
+- The group version (Prayer, Brilliance, Gift, Greater) is cast only at a rank that three or more of those missing it
+  take at full power, each at their own level (it lands on them and is not weaker than their single rank), on one of
+  them in range; else the single rank.
+- From others: a buff you lack, or carry at a lower rank, that the share-out gives you (or the strongest member of the
+  giving class not running Cute Auras, by level: Divine Spirit and Kings are trained in Forever, not talents) shows
+  greyed in your part after the consumables, naming the giver, after 30 s out of a fight while the giver is online,
+  alive and in sight (at once at a ready check, even with your part on Not now); 3 at most; no click.
 
 ## In a fight
 

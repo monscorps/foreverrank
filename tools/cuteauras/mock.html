@@ -25,9 +25,12 @@
   .ic .cat { position: absolute; left: 0; top: 34px; width: 32px; height: 2px; }
   .ic .w { position: absolute; left: -3px; top: 38px; width: 38px; text-align: center; font-size: 11px; white-space: nowrap; }
   .ic .n { position: absolute; right: 1px; top: 19px; font-size: 10px; color: var(--white); }
+  .ic.off img { filter: grayscale(1) brightness(.62); }
+  /* a word wider than its icon (Upgrade): its column widens to 44, the icon in its middle, as Bar.lua column() */
+  .ic.wide { margin: 0 3px; } .ic.wide .w { left: -6px; width: 44px; }
   .camp .cat { background: var(--quest); } .mine .cat { background: var(--white); } .grp .cat { background: var(--group); } .gear .cat { background: var(--pink); }
-  /* the flyout over Kings */
-  .fly { position: absolute; left: 395px; top: 258px; width: 150px; background: rgba(18,18,18,.92); padding: 2px 0; }
+  /* the flyout over Might (166 wide, centred on its icon) */
+  .fly { position: absolute; left: 469px; top: 258px; width: 166px; background: rgba(18,18,18,.92); padding: 2px 0; }
   .row { display: flex; align-items: center; height: 22px; padding: 0 4px; font-size: 11px; }
   .row img { width: 16px; height: 16px; margin-right: 6px; }
   .row .nm { flex: 1; } .row .st { font-size: 10px; }
@@ -65,16 +68,16 @@
 <body>
 <div class="scene">
   <div class="alerts">
-    <div class="card" style="--c: var(--group)"><div class="icon"><img src="https://wow.zamimg.com/images/wow/icons/large/spell_holy_wordfortitude.jpg"></div>
-      <div class="tx"><div class="ti t" style="color:#3fc7eb">Back up: Anna</div><div class="sub t">Power Word: Fortitude. Click to buff them.</div></div></div>
+    <div class="card" style="--c: var(--group)"><div class="icon"><img src="https://wow.zamimg.com/images/wow/icons/large/spell_holy_sealofwisdom.jpg"></div>
+      <div class="tx"><div class="ti t" style="color:#3fc7eb">Anna is up again</div><div class="sub t">Blessing of Wisdom. Click to buff them.</div></div></div>
     <div class="card" style="--c: var(--pink)"><div class="icon"><img src="https://wow.zamimg.com/images/wow/icons/large/spell_holy_sealofprotection.jpg"><div class="sweep" style="--a: 140deg"></div><div class="big t">6</div></div>
-      <div class="tx"><div class="ti t" style="color:#c69b6d">Blessing of Protection: Bram</div><div class="sub t">Kings goes back on as it ends.</div></div></div>
+      <div class="tx"><div class="ti t" style="color:#c69b6d">Bram: Protection</div><div class="sub t">Then Might goes back on.</div></div></div>
     <div class="card" style="--c: var(--quest)"><div class="icon"><img src="https://wow.zamimg.com/images/wow/icons/large/spell_magic_magearmor.jpg"></div>
-      <div class="tx"><div class="ti t" style="color:#fff468">Kings back on Kit</div><div class="sub t">Your Blessing of Freedom took it off. Click to bless them.</div></div></div>
+      <div class="tx"><div class="ti t" style="color:#fff468">Kit: Kings</div><div class="sub t">Your Freedom took it off. Click: bless them again.</div></div></div>
   </div>
 
   <div class="win">
-    <div class="hd">Cute Auras<small>0.1</small></div>
+    <div class="hd">Cute Auras<small>0.2</small></div>
     <div class="tabs"><span>Settings</span><span class="on">Blessings</span><span>Biome gear</span></div>
     <div class="grid">
       <div class="gh"><span>Class, role</span><span style="color:#f48cba">You</span><span style="color:#f48cba">Lumen</span></div>
@@ -88,17 +91,17 @@
 
   <div class="tip">
     <div><b>Frozen Heart of the Mountain</b></div>
-    <div class="t" style="text-shadow:none">Snowy here: it works here, Plain Charm doesn't.</div>
-    <div class="d">Biomes: Snowy</div>
+    <div style="color:var(--ink)"><span style="color:#bdebff">Snowy</span> here: it works here, Plain Charm doesn't.</div>
+    <div class="d">Biomes: <span style="color:#bdebff">Snowy</span></div>
     <div style="color:var(--ink)">Click: swap it in for Plain Charm.</div>
-    <div class="d">Right-click: not now, never, show it in Solo, PvP, 5-man or Raid.</div>
+    <div class="d">Right-click: not now, never, settings.</div>
   </div>
 
   <div class="fly">
-    <div class="row t"><img src="https://wow.zamimg.com/images/wow/icons/large/spell_magic_magearmor.jpg"><span class="nm" style="color:#c69b6d">Bram</span><span class="st" style="color:var(--good)">on</span></div>
-    <div class="row t glow"><img src="https://wow.zamimg.com/images/wow/icons/large/spell_magic_magearmor.jpg"><span class="nm" style="color:#fff468">Kit</span><span class="st" style="color:var(--quest)">missing</span></div>
-    <div class="row t"><img src="https://wow.zamimg.com/images/wow/icons/large/spell_magic_magearmor.jpg"><span class="nm" style="color:#fff468">Sly</span><span class="st" style="color:var(--warn)">far</span></div>
-    <div class="row t"><img src="https://wow.zamimg.com/images/wow/icons/large/spell_magic_magearmor.jpg"><span class="nm" style="color:#aad372">Wren</span><span class="st" style="color:var(--bad)">dead</span></div>
+    <div class="row t"><img src="https://wow.zamimg.com/images/wow/icons/large/spell_holy_fistofjustice.jpg"><span class="nm" style="color:#c69b6d">Bram</span><span class="st" style="color:var(--good)">on</span></div>
+    <div class="row t"><img src="https://wow.zamimg.com/images/wow/icons/large/spell_holy_fistofjustice.jpg"><span class="nm" style="color:#fff468">Sly</span><span class="st" style="color:var(--quest)">missing</span></div>
+    <div class="row t"><img src="https://wow.zamimg.com/images/wow/icons/large/spell_holy_fistofjustice.jpg"><span class="nm" style="color:#fff468">Kit</span><span class="st" style="color:var(--warn)">Low rank</span></div>
+    <div class="row t"><img src="https://wow.zamimg.com/images/wow/icons/large/spell_holy_fistofjustice.jpg"><span class="nm" style="color:#c69b6d">Dax</span><span class="st" style="color:var(--bad)">dead</span></div>
   </div>
 
   <div class="bar">
@@ -108,14 +111,15 @@
       <div class="ic"><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_food_14.jpg"><div class="n t">4</div><div class="cat"></div><div class="w t">Eat</div></div>
     </div>
     <div class="part mine">
-      <div class="ic"><img src="https://wow.zamimg.com/images/wow/icons/large/spell_holy_innerfire.jpg"><div class="cat"></div><div class="w t">Buff</div></div>
+      <div class="ic wide"><img src="https://wow.zamimg.com/images/wow/icons/large/spell_holy_devotionaura.jpg"><div class="cat"></div><div class="w t">Upgrade</div></div>
+      <div class="ic off"><img src="https://wow.zamimg.com/images/wow/icons/large/spell_holy_wordfortitude.jpg"><div class="cat"></div><div class="w t" style="color:#ffffff">Ivo</div></div>
     </div>
     <div class="part gear">
       <div class="ic"><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_gem_sapphire_02.jpg"><div class="cat"></div><div class="w t">Swap</div></div>
     </div>
     <div class="part grp">
       <div class="ic"><img src="https://wow.zamimg.com/images/wow/icons/large/spell_magic_magearmor.jpg"><div class="n t">2</div><div class="cat"></div><div class="w t" style="color:#fff468">Kit</div></div>
-      <div class="ic"><img src="https://wow.zamimg.com/images/wow/icons/large/spell_holy_fistofjustice.jpg"><div class="n t">3</div><div class="cat"></div><div class="w t" style="color:#fff468">Sly</div></div>
+      <div class="ic"><img src="https://wow.zamimg.com/images/wow/icons/large/spell_holy_fistofjustice.jpg"><div class="n t">2</div><div class="cat"></div><div class="w t" style="color:#fff468">Sly</div></div>
       <div class="ic"><img src="https://wow.zamimg.com/images/wow/icons/large/spell_holy_sealofwisdom.jpg"><div class="cat"></div><div class="w t" style="color:#3fc7eb">Anna</div></div>
     </div>
   </div>

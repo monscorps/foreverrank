@@ -2,7 +2,7 @@
 -- The bar: one row of icons in three parts, left to right: camp (gold), yours (white), the group's (teal); Before the
 -- pull joins yours on a ready check. Built from QuestBank's Remind.lua (the hud round): every icon is a provider's
 -- record, { key, part, order, groups, read = function(add, ctx) }, read out of a fight on its groups' events, one
--- refresh a frame for a burst.
+-- refresh a frame for a burst (off = function(), when its part is switched off instead; quiet = true, see Not now).
 -- A left-click acts through the game's secure button (type1: an unmodified left click alone); a waiting icon's click
 -- shows its why. Right-click: Not now (the part, ten minutes), Never: <it> (undone in Settings), Settings.
 -- In a fight: camp and yours hide (the game's state driver), the group's part stays as it was, clickable, its flyout
@@ -34,6 +34,7 @@ function B.Add(p)
   if B.byKey[p.key] then return B.byKey[p.key] end
   p.recs, p.n, p.order = {}, 0, p.order or 1000
   p.safeRead = A.Safe(p.read, "bar: " .. p.key)
+  if type(p.off) == "function" then p.safeOff = A.Safe(p.off, "bar: " .. p.key .. " off") end
   B.byKey[p.key] = p
   B.list[#B.list + 1] = p
   table.sort(B.list, function(a, b) return a.order < b.order end)
@@ -305,8 +306,14 @@ local function partQuiet(rec)
   local untilT = partSnooze[rec.part]
   if not untilT then return false end
   if A.Now() >= untilT then partSnooze[rec.part] = nil return false end
-  -- (something new on a quiet part brings it back)
-  if not (snoozedKeys[rec.part] or {})[rec.never or rec.key] then partSnooze[rec.part] = nil return false end
+  -- (something new on a quiet part brings it back; a provider's own quiet = true never does, its record stays quiet
+  -- with the part: a buff someone else gives, its wait over after you said Not now. Unless the record is loud: that
+  -- buff at a ready check shows alone, the part still quiet)
+  if not (snoozedKeys[rec.part] or {})[rec.never or rec.key] then
+    if rec.p and rec.p.quiet then return not rec.loud end
+    partSnooze[rec.part] = nil
+    return false
+  end
   return true
 end
 function B.Never(key) return A.Settings().never[key] ~= nil end
@@ -405,15 +412,17 @@ local function header()
   wrapper = CreateFrame("Frame", "CuteAurasBarWrap", UIParent, "SecureHandlerBaseTemplate")
   return wrapper
 end
-local ROW, COLW, PER_COL = 22, 150, 10
+-- (a row: the icon, the name (twelve letters, the game's most) and its state, "Low rank" the longest, side by side:
+-- 4 + 16 + 6, the name's 92, the state's 44, 4; the two boxes never overlap)
+local ROW, COLW, PER_COL = 22, 166, 10
 local function flyoutOf(b)
   local f = flyouts[b]
   if f then return f end
   f = CreateFrame("Frame", b:GetName() .. "Fly", b, "SecureHandlerBaseTemplate")
   f:SetFrameStrata("DIALOG")
-  f:SetSize(150, ROW)
+  f:SetSize(COLW, ROW)
   f:SetPoint("BOTTOM", b, "TOP", 0, 6)
-  -- (a raid's list is four columns, 600 wide, centred on its icon: kept on the screen, as in a fight the bar can't be
+  -- (a raid's list is four columns, 664 wide, centred on its icon: kept on the screen, as in a fight the bar can't be
   -- moved to reach names past its edge)
   f:SetClampedToScreen(true)
   f.bg = L.Fill(f, "BACKGROUND", C.PANEL, 0.92)
@@ -435,18 +444,19 @@ local function flyRow(f, i)
   local r = f.rows[i]
   if r then return r end
   r = CreateFrame("Button", f:GetName() .. "R" .. i, f, "SecureActionButtonTemplate")
-  r:SetSize(150, ROW)
+  r:SetSize(COLW, ROW)
   r:RegisterForClicks("AnyUp", "AnyDown")
   r.hi = r:CreateTexture(nil, "HIGHLIGHT"); r.hi:SetAllPoints(); r.hi:SetColorTexture(1, 1, 1, 0.1)
   r.glow = r:CreateTexture(nil, "BACKGROUND"); r.glow:SetAllPoints(); r.glow:SetColorTexture(C.QUEST[1], C.QUEST[2], C.QUEST[3], 0.22); r.glow:Hide()
   r.icon = r:CreateTexture(nil, "ARTWORK"); r.icon:SetSize(16, 16); r.icon:SetPoint("LEFT", 4, 0); r.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
   r.name = L.Text(r, 11, C.INK, 92, "LEFT"); r.name:SetPoint("LEFT", r.icon, "RIGHT", 6, 0)
-  r.state = L.Text(r, 10, C.DIM, 40, "RIGHT"); r.state:SetPoint("RIGHT", -4, 0)
+  r.state = L.Text(r, 10, C.DIM, 44, "RIGHT"); r.state:SetPoint("RIGHT", -4, 0)
   r:HookScript("OnClick", function() A.After(0.6, function() B.Dirty("group") end, "bar: flyout click") end)
   f.rows[i] = r
   return r
 end
--- the flyout's rows from a record's list: { unit, name, class, spell, has, far, dead, glow } each
+-- the flyout's rows from a record's list: { unit, name, class, spell, has, far, dead, glow, low (ending), weak (a lower
+-- rank) } each
 local function layFlyout(b, rec)
   local list = rec.flyout
   if not list or #list == 0 then
@@ -482,12 +492,14 @@ local function layFlyout(b, rec)
     attr(r, "spell", e.spell)
     attr(r, "unit", e.unit)
     L.Art(r.icon, e.tex or rec.tex)
-    r.icon:SetDesaturated(e.has == true and not e.low)
+    r.icon:SetDesaturated(e.has == true and not e.low and not e.weak)
     r.name:SetText(e.name or "?")
     r.name:SetTextColor(L.ClassColor(e.class))
     local st, col = "", C.DIM
     if e.dead then st, col = "dead", C.BAD elseif e.off then st, col = "offline", C.DIM
     elseif e.far then st, col = "far", C.WARN
+    -- (on, at a lower rank than you give: a click gives yours)
+    elseif e.weak then st, col = "Low rank", C.WARN
     -- (on, about to end: its time left)
     elseif e.low and e.left then st, col = string.format("%d:%02d", math.floor(e.left / 60), math.floor(e.left % 60)), C.WARN
     elseif e.has then st, col = "on", C.GOOD else st, col = "missing", C.QUEST end
@@ -602,6 +614,9 @@ local function readAll()
         reading = p
         p.safeRead(add, ctx)
         reading = nil
+      -- (its part off: what the provider keeps between reads let go, so the part back on starts fresh)
+      elseif p.safeOff then
+        p.safeOff()
       end
     end
   end
@@ -630,7 +645,8 @@ local function collect()
 end
 local usedBuf = {}
 -- an icon's column: SIZE + GAP; a group icon's as wide as its word (a member's name), up to WORD_MAX, the icon in its
--- middle and the word that wide, so a name reads whole and never runs under the next icon's
+-- middle and the word that wide, so a name reads whole and never runs under the next icon's; one of yours whose word
+-- needs more (Upgrade) the same
 -- (the column fits the longest name in the icon's own list, not the name it shows now: the next name shown after a
 -- click is another length, and a column following it would shift every icon after it; widths kept by name)
 local nameW, nameN, meter = {}, 0, nil
@@ -645,10 +661,15 @@ local function widthOf(text)
   return w
 end
 local function column(b, which, rec)
-  if which ~= "group" or not b.word then return SIZE + GAP end
+  if not b.word then return SIZE + GAP end
   local widest = L.Width(b.word)
-  for _, e in ipairs(rec and rec.flyout or {}) do
-    if type(e.name) == "string" then widest = math.max(widest, widthOf(e.name)) end
+  if which == "group" then
+    for _, e in ipairs(rec and rec.flyout or {}) do
+      if type(e.name) == "string" then widest = math.max(widest, widthOf(e.name)) end
+    end
+  elseif widest <= SIZE + GAP then
+    if b.word:GetWidth() ~= SIZE + GAP then b.word:SetWidth(SIZE + GAP) end
+    return SIZE + GAP
   end
   -- (an even width: the icon sits on whole pixels in the middle)
   local col = math.max(SIZE + GAP, math.min(WORD_MAX, math.ceil((widest + 4) / 2) * 2))
@@ -686,11 +707,12 @@ local function layout()
     for _, rec in ipairs(shown[part]) do ownList[#ownList + 1] = rec end
   end
   local nOwn, nGrp = #ownList, #shown.group
-  local wOwn = nOwn > 0 and (nOwn * SIZE + (nOwn - 1) * GAP) or 0
   local gap = (nOwn > 0 and nGrp > 0) and PART_GAP or 0
-  own:ClearAllPoints(); own:SetPoint("TOPLEFT", bar, "TOPLEFT", PADX, -PADT); own:SetSize(math.max(1, wOwn), ROW_H)
-  layPart(own, ownList, "own", 0)
-  -- (the group's width once its icons are laid: their columns follow their words)
+  -- (each part's width once its icons are laid: their columns follow their words)
+  own:ClearAllPoints(); own:SetPoint("TOPLEFT", bar, "TOPLEFT", PADX, -PADT)
+  local xOwn = layPart(own, ownList, "own", 0)
+  local wOwn = nOwn > 0 and (xOwn - GAP) or 0
+  own:SetSize(math.max(1, wOwn), ROW_H)
   grp:ClearAllPoints(); grp:SetPoint("TOPLEFT", bar, "TOPLEFT", PADX + wOwn + gap, -PADT)
   local xEnd = layPart(grp, shown.group, "group", 0)
   local wGrp = nGrp > 0 and (xEnd - GAP) or 0

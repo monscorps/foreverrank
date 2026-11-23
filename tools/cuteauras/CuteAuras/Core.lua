@@ -4,7 +4,7 @@
 -- This file: the namespace, the saved settings (CuteAurasDB), events, the guards for the client's secret values, the
 -- work kept for after a fight, and the slash commands. Each other file adds one part (see the toc's order).
 local ADDON, A = ...
-A.version = "0.1.1"
+A.version = "0.2.0"
 A.NAME = "Cute Auras"
 A.ADDON = ADDON
 CuteAuras = A -- (for /dump and for QuestBank's and Cute's step-aside, which ask C_AddOns first)
@@ -108,6 +108,7 @@ end
 A.DEFAULTS = {
   on = true,                -- the bar
   camp = true, mine = true, group = true, pull = true, -- its parts, and Before the pull on a ready check
+  others = true,            -- in yours: a buff a member gives that you lack, their name under it
   instance = "buffs",       -- in dungeons and raids: "buffs" (no camp), "all", "none"
   fight = "group",          -- in a fight: the group's icons stay ("group") or the whole bar hides ("hide")
   scale = 1,                -- the bar's size (0.5 to 2)

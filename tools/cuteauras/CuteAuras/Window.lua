@@ -1,7 +1,7 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- The window (/cauras): three tabs in Cute's look.
---   Settings     the bar, the alerts, the group, the camp, the minimap button; Move and Test (the window steps aside
---                while they show)
+--   Settings     the bar (a part's own boxes indented under it), the alerts, the group, the minimap button; Move and
+--                Test (the window steps aside while they show)
 --   Blessings    the grid: each class and role in the group down the side (tanks first; a raid's rows closer, the
 --                rest a mouse wheel away), each paladin running Cute Auras across the top (closer for more), the
 --                blessing each gives; a click on your own column (any column for the leader or an assist) steps to
@@ -127,13 +127,24 @@ local function settingsPage(p)
   local function bar() A.Bar.Dirty("all") end
   local function flag(key, after) return function() return s()[key] ~= false end, function(v) s()[key] = v; if after then after() end; bar() end end
   local x1, x2 = 0, 312
+  -- (a part's own boxes sit under it, indented, greyed while that part is off: the camp's two, the buffs others give
+  -- you, which show in yours)
+  local IN = 16
   head(p, x1, 0, "The bar")
   -- (what you give the group follows the bar: off, its group part off or Nothing in dungeons and raids, a new hello)
   local function gives() A.Comm.GivesChanged() end
   -- (a box others' words follow: the page read again)
   local function resync() if p.Sync then p:Sync() end end
   local g, st = flag("on", function() gives(); resync() end); check(p, x1, -22, "Show the bar", g, st)
-  g, st = flag("camp"); check(p, x1, -44, "Camp, food and sleeping bag", g, st)
+  local featCheck, bpCheck, othersCheck
+  local function partDeps()
+    local now = s()
+    local campA, mineA = now.camp ~= false and 1 or 0.45, now.mine ~= false and 1 or 0.45
+    featCheck:SetAlpha(campA); bpCheck:SetAlpha(campA); othersCheck:SetAlpha(mineA)
+  end
+  g, st = flag("camp", partDeps); check(p, x1, -44, "Camp, food and sleeping bag", g, st)
+  g, st = flag("features"); featCheck = check(p, x1 + IN, -66, "Camp items at the fire near you", g, st)
+  g, st = flag("blueprints"); bpCheck = check(p, x1 + IN, -88, "Blueprints you can use", g, st, "Only for your professions, level, class and race.")
   -- (the consumables show in your buffs and before the pull: their row greyed only while both are off; Before the
   -- pull shows only consumables, so it is greyed and says so while they are Off)
   local consumeRow, pullCheck
@@ -146,21 +157,20 @@ local function settingsPage(p)
       pullCheck.label:SetText(off and "Before the pull: consumables Off" or "Before the pull (ready check)")
     end
   end
-  g, st = flag("mine", consumeDep); check(p, x1, -66, "Your buffs and weapon", g, st)
-  g, st = flag("group", function() gives(); resync() end); check(p, x1, -88, "Buffs you give the group", g, st)
-  g, st = flag("pull", consumeDep); pullCheck = check(p, x1, -110, "Before the pull (ready check)", g, st)
-  choice(p, x1, -136, "In dungeons and raids", { { "buffs", "Buffs only" }, { "all", "Everything" }, { "none", "Nothing" } },
+  g, st = flag("mine", function() consumeDep(); partDeps() end); check(p, x1, -122, "Your buffs and weapon", g, st)
+  g, st = flag("others"); othersCheck = check(p, x1 + IN, -144, "Buffs others give you", g, st)
+  partDeps()
+  g, st = flag("group", function() gives(); resync() end); check(p, x1, -166, "Buffs you give the group", g, st)
+  g, st = flag("pull", consumeDep); pullCheck = check(p, x1, -188, "Before the pull (ready check)", g, st)
+  choice(p, x1, -214, "In dungeons and raids", { { "buffs", "Buffs only" }, { "all", "Everything" }, { "none", "Nothing" } },
     function() return s().instance end, function(v) s().instance = v; bar(); gives() end)
-  choice(p, x1, -178, "In a fight", { { "group", "Keep the group's" }, { "hide", "Hide the bar" } },
+  choice(p, x1, -256, "In a fight", { { "group", "Keep the group's" }, { "hide", "Hide the bar" } },
     function() return s().fight end, function(v) s().fight = v; A.Bar.FightDriver(); resync() end)
-  choice(p, x1, -220, "Size", { { 0.75, "75%" }, { 1, "100%" }, { 1.25, "125%" }, { 1.5, "150%" } },
+  choice(p, x1, -298, "Size", { { 0.75, "75%" }, { 1, "100%" }, { 1.25, "125%" }, { 1.5, "150%" } },
     function() return s().scale end, function(v) s().scale = v; A.OutOfFight("bar: place", A.Bar.Place) end)
-  consumeRow = choice(p, x1, -262, "Potions, elixirs, flasks and Well Fed", { { "always", "Always" }, { "instance", "Instances" }, { "pull", "Ready check" }, { "off", "Off" } },
+  consumeRow = choice(p, x1, -340, "Potions, elixirs, flasks and Well Fed", { { "always", "Always" }, { "instance", "Instances" }, { "pull", "Ready check" }, { "off", "Off" } },
     function() return s().consume end, function(v) s().consume = v; consumeDep(); bar() end)
   consumeDep()
-  head(p, x1, -312, "Camp")
-  g, st = flag("features"); check(p, x1, -334, "Camp items at the fire near you", g, st)
-  g, st = flag("blueprints"); check(p, x1, -356, "Blueprints you can use", g, st, "Only for your professions, level, class and race.")
 
   head(p, x2, 0, "Alerts")
   -- (the rebuff card is an alert, so it waits for Alerts on screen: its tick greyed then; the Hands keep the bar's glow)
@@ -204,11 +214,11 @@ local function settingsPage(p)
   g, st = flag("minimap", function() A.Minimap.Update() end); check(p, x2, -418, "Button on the minimap", g, st)
   -- (the Nevers: how many of the 32 the bar keeps, and all shown again)
   p.nevers = L.Label(p, 11, C.DIM)
-  p.nevers:SetPoint("TOPLEFT", p, "TOPLEFT", x1, -400)
-  p.show = button(p, x1, -418, "Show them all", function() for k in pairs(A.Settings().never) do A.Settings().never[k] = nil end; A.Bar.Dirty("all"); gives(); Wn.Refresh() end, 120)
+  p.nevers:SetPoint("TOPLEFT", p, "TOPLEFT", x1, -390)
+  p.show = button(p, x1, -408, "Show them all", function() for k in pairs(A.Settings().never) do A.Settings().never[k] = nil end; A.Bar.Dirty("all"); gives(); Wn.Refresh() end, 120)
   function p:Sync()
     for _, w in ipairs(self.widgets or {}) do w:Sync() end
-    consumeDep(); deps()
+    consumeDep(); deps(); partDeps()
     self.moveBtn.text:SetText(Wn.Moving() and "Done" or "Move")
     local n, most = A.Bar.NeverCount(), A.Bar.NEVER_MAX
     self.nevers:SetText(n == 0 and "Nothing hidden for good." or (n .. " of " .. most .. " hidden for good (right-click, Never)."))
