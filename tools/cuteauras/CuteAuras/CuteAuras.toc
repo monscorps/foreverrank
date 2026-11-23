@@ -1,0 +1,25 @@
+## Interface: 16001
+## Title: |cffff9ad5Cute Auras|r
+## Notes: Camp, buffs, blessings and biome gear on one bar; alerts for what to put back. /cauras
+## Author: Mikal
+## Version: 0.1.0
+## X-License: GPL-3.0-or-later
+## IconTexture: Interface\AddOns\CuteAuras\art\logo.png
+## AddonCompartmentFunc: CuteAuras_OnCompartment
+## SavedVariables: CuteAurasDB
+
+Core.lua
+Data.lua
+Look.lua
+Spells.lua
+Roster.lua
+Comm.lua
+Assign.lua
+Bar.lua
+Camp.lua
+Buffs.lua
+Gear.lua
+Alerts.lua
+Rebuff.lua
+Hands.lua
+Window.lua

@@ -22952,7 +22952,7 @@ do
     env.C_Item.GetItemInfo = function(id)
       local it = c.items[id]
       if not it then return baseInfo(id) end
-      return it.name or ("Item " .. id), "|cffffffff|Hitem:" .. id .. "::::::::20:::::::|h[Item " .. id .. "]|h|r", 1, it.ilvl or 10, 1, "Consumable", "Food", 20, "", it.icon or 134400, it.price or 0
+      return it.name or ("Item " .. id), "|cffffffff|Hitem:" .. id .. "::::::::20:::::::|h[Item " .. id .. "]|h|r", 1, it.ilvl or 10, it.minLevel or 1, "Consumable", "Food", 20, "", it.icon or 134400, it.price or 0
     end
     env.C_Item.IsUsableItem = function(id) local it = c.items[id]; return it and it.usable or false end
     -- a temporary enchant on a hand (C_Item.GetWeaponEnchantInfo(Enum.WeaponSlot), a list): c.enchant[16 or 17]
@@ -23809,6 +23809,47 @@ do
     assert(use:GetAttribute("item") == "item:9001", "Never on the clam: the blueprint")
     R.SetNever("use:9002", nil, false); tick(c, 0)
     assert(use:GetAttribute("item") == "item:9002", "shown again")
+    -- (6.4.9, the owner: never an item outside your level, class, race or skill) a red requirement line, a required
+    -- level above yours: left out, a level up asks again
+    items[9005] = { class = 9, sub = 0, usable = true, name = "Blueprint: Master Forge" }
+    items[9006] = { class = 9, sub = 0, usable = true, name = "Plans: Thorium Belt", minLevel = 40 }
+    items[9007] = { class = 15, sub = 0, name = "Mage-only Satchel" }
+    tips[5] = { { leftText = "Blueprint: Master Forge" }, { leftText = "Use: Craft a Master Forge.", type = 38 }, { leftText = "Requires Blacksmithing (300)", leftColor = { r = 1, g = 0.125, b = 0.125 } } }
+    tips[6] = { { leftText = "Plans: Thorium Belt" }, { leftText = "Use: Teaches you how to make a Thorium Belt.", type = 38 } }
+    tips[7] = { { leftText = "Mage-only Satchel" }, { leftText = "Classes: Mage", leftColor = { r = 1, g = 0.125, b = 0.125 } }, { leftText = "<Right Click to Open>" } }
+    local o = c.o
+    o.bagSlots[#o.bagSlots + 1] = { 9005, 1 }; o.bagSlots[#o.bagSlots + 1] = { 9006, 1 }; o.bagSlots[#o.bagSlots + 1] = { 9007, 1 }
+    R.ForgetUse(); R.Refresh()
+    for _, id in ipairs({ 9005, 9006, 9007 }) do assert(R.UseKind(id) == false, "never offered: " .. id .. " is " .. tostring(R.UseKind(id))) end
+    assert(use.count:GetText() == "3" or use.count:GetText() == "2", "the three others only: " .. tostring(use.count:GetText()))
+    lines = {}; use.__scripts.OnEnter(use)
+    local tip2 = table.concat(lines, "\n")
+    assert(not tip2:find("Master Forge", 1, true) and not tip2:find("Thorium", 1, true) and not tip2:find("Satchel", 1, true), "none in the tooltip:\n" .. tip2)
+  end }
+
+  -- 15b. (6.4.9) Cute Auras loaded: the camp, your buffs, your party's and Before the pull step aside here, their rows'
+  -- notes say so; upkeep stays
+  CASES[#CASES + 1] = { "Cute Auras loaded: camp and buff rows step aside, upkeep stays", function()
+    local items = { [9002] = { class = 15, sub = 0, name = "Small Barnacled Clam" } }
+    local c = hud("Aside", "MAGE", "Mage", 8, { [1459] = true, [168] = true }, { level = 20, items = items, bags = { { 9002, 2 } } })
+    local env, R = c.env, c.QB.Remind
+    env.C_TooltipInfo.GetBagItem = function(bag, slot) return { lines = { { leftText = "Small Barnacled Clam" }, { leftText = "<Right Click to Open>" } } } end
+    R.ForgetUse(); R.Refresh()
+    assert(#R.Shown("buffs") > 0, "alone: QuestBank's buffs show")
+    -- (the answer is asked once a session, after the login: a client with Cute Auras loaded)
+    local c2 = hud("Aside2", "MAGE", "Mage", 8, { [1459] = true, [168] = true }, { level = 20, items = items, bags = { { 9002, 2 } } })
+    c2.addons = { CuteAuras = { loaded = true } }
+    c2.env.C_TooltipInfo.GetBagItem = env.C_TooltipInfo.GetBagItem
+    local R2 = c2.QB.Remind
+    assert(R2.AurasElsewhere(true) == true, "Cute Auras loaded")
+    R2.ForgetUse(); R2.Refresh()
+    assert(#R2.Shown("buffs") == 0 and #R2.Shown("party") == 0 and #R2.Shown("pull") == 0, "no buffs here")
+    local use = false
+    for _, rec in ipairs(R2.Shown("reminders")) do if rec.key == "use" then use = true end; assert(rec.p.row ~= "camp" or rec.key == "bagchain", "no camp icon: " .. rec.key) end
+    assert(use, "upkeep's Use stays")
+    local notes = {}
+    for _, row in ipairs(R2.ROWS) do if row.key == "camp" or row.key == "buffs" or row.key == "party" then notes[#notes + 1] = row.note end end
+    assert(#notes == 3 and notes[1] == "Cute Auras shows these.", "the rows' notes say so")
   end }
 
   -- 16. Not now and Never: a right-click on any icon of Buffs and Reminders and on the line; Not now hides the piece,

@@ -274,11 +274,29 @@ R.ctx = ctx
 -- the first time is looked at once for Use (R.UseKind, its tooltip read once: 200 kept)
 local bags, bagsStale, bagSoon = {}, true, false
 local useKind, useN = {}, 0
+-- (6.4.9) a tooltip line the game paints red is a requirement you don't meet ("Requires Level 30", "Classes: Mage",
+-- "Races: ...", "Requires Alchemy (140)"): such an item is never offered. The owner, 2026-11-23: "It tells me to use
+-- items outside my level or not for my class or race, that can't happen"
+local function red(c)
+  if type(c) ~= "table" then return false end
+  local r, g, b = plain(c.r), plain(c.g), plain(c.b)
+  return type(r) == "number" and type(g) == "number" and type(b) == "number" and r > 0.9 and g < 0.2 and b < 0.2
+end
+R.IsRed = red
 local function classify(bag, slot, id)
   if useKind[id] ~= nil then return end
-  if useN >= 200 then for k in pairs(useKind) do useKind[k] = nil end; useN = 0 end
-  useN = useN + 1
   local kind = false
+  -- (its required level above yours: nothing, whatever its tooltip says. The client's cache not loaded yet: no answer
+  -- kept, the item asked again at the next look, nothing offered meanwhile)
+  local getInfo = C_Item and C_Item.GetItemInfo or GetItemInfo
+  if type(getInfo) == "function" then
+    local okI, name, _, _, _, minLevel = pcall(getInfo, id)
+    if not okI or plain(name) == nil then return end
+    minLevel = plain(minLevel)
+    if useN >= 200 then for k in pairs(useKind) do useKind[k] = nil end; useN = 0 end
+    useN = useN + 1
+    if type(minLevel) == "number" and minLevel > (QB.state and QB.state.level or 1) then useKind[id] = false; return end
+  end
   local CC = C_Container
   if CC and type(CC.GetContainerItemQuestInfo) == "function" then
     -- (a quest starter: the client's own word on the item in that slot, ContainerDocumentation.lua's ItemQuestInfo)
@@ -287,7 +305,7 @@ local function classify(bag, slot, id)
     if type(qid) == "number" and qid > 0 then kind = "quest:" .. qid end
   end
   local TI = C_TooltipInfo
-  if not kind and TI and type(TI.GetBagItem) == "function" then
+  if TI and type(TI.GetBagItem) == "function" then
     local ok, data = pcall(TI.GetBagItem, bag, slot)
     local lines = ok and type(data) == "table" and data.lines or nil
     local LT = Enum and Enum.TooltipDataLineType or {}
@@ -296,10 +314,12 @@ local function classify(bag, slot, id)
     for _, l in ipairs(type(lines) == "table" and lines or {}) do
       local t, ty = plain(l.leftText), plain(l.type)
       if ty ~= nil and ty == LT.ErrorLine then err = true; R.Diag("errorLine", true) end
+      if red(l.leftColor) or red(l.rightColor) then err = true end
       if ty ~= nil and ty == LT.ItemSpellTriggerLearn then learn = true end
       if t == OPEN then open = true end
     end
     if err then kind = false
+    elseif kind then -- (a quest starter stays one)
     elseif open then kind = "open"
     elseif learn and C_Item and type(C_Item.IsUsableItem) == "function" and yes(C_Item.IsUsableItem, id) then kind = "learn" end
   end
@@ -894,10 +914,24 @@ local clock -- (the 1 s clock's frame)
 local needClock = false
 local fade = 1
 
+-- (6.4.9) Cute Auras loaded (its own addon on the Cute page): it shows the camp, your buffs, your party's and Before the
+-- pull, so those rows step aside here, their notes saying so in both Settings; the sleeping bag's quest line stays
+local AURAS_ROWS = { buffs = true, party = true, camp = true }
+local elsewhere
+function R.AurasElsewhere(fresh)
+  if elsewhere == nil or fresh then
+    local CA = C_AddOns
+    local f = CA and CA.IsAddOnLoaded or IsAddOnLoaded
+    elsewhere = yes(f, "CuteAuras")
+    if elsewhere then for _, row in ipairs(R.ROWS) do if AURAS_ROWS[row.key] then row.note = "Cute Auras shows these." end end end
+  end
+  return elsewhere
+end
 local function offRow(p)
   local row = p.row
   if not row then return false end
   if set[row] == false then return true end
+  if AURAS_ROWS[row] and p.key ~= "bagchain" and R.AurasElsewhere() then return true end
   return false
 end
 -- whether a record may show: its row on, not Never, not snoozed by itself
@@ -1808,7 +1842,7 @@ R.EVENTS = {
   camp = { "PLAYER_STARTED_MOVING", "PLAYER_STOPPED_MOVING", "PLAYER_UPDATE_RESTING", "PLAYER_MOUNT_DISPLAY_CHANGED",
            "PLAYER_SOFT_INTERACT_CHANGED", "BAG_UPDATE_DELAYED" },
   upkeep = { "UPDATE_INVENTORY_ALERTS", "BAG_UPDATE_DELAYED", "BAG_UPDATE_COOLDOWN", "MERCHANT_SHOW", "MERCHANT_CLOSED",
-             "PLAYER_UPDATE_RESTING", "BAG_OVERFLOW_WITH_FULL_INVENTORY" },
+             "PLAYER_UPDATE_RESTING", "BAG_OVERFLOW_WITH_FULL_INVENTORY", "SKILL_LINES_CHANGED" },
   class = { "PLAYER_TALENT_UPDATE", "TRAIT_CONFIG_UPDATED", "PLAYER_LEVEL_UP", "PLAYER_LEVEL_CHANGED", "SPELLS_CHANGED",
             "LEARNED_SPELL_IN_SKILL_LINE", "TRAINER_SHOW", "TRAINER_CLOSED", "ZONE_CHANGED", "ZONE_CHANGED_INDOORS",
             "ZONE_CHANGED_NEW_AREA", "TAXI_NODE_STATUS_CHANGED", "UI_INFO_MESSAGE", "PLAYER_STOPPED_MOVING" },
@@ -1874,7 +1908,7 @@ function R.OnEvent(event, a1, a2, ...)
       return
     end
     bagSoon, bagsStale = false, true
-  elseif event == "LEARNED_SPELL_IN_SKILL_LINE" then R.ForgetUse()
+  elseif event == "LEARNED_SPELL_IN_SKILL_LINE" or event == "PLAYER_LEVEL_UP" or event == "SKILL_LINES_CHANGED" then R.ForgetUse()
   elseif event == "MERCHANT_SHOW" then merchantOpen = true; R.NoteMerchant()
   elseif event == "MERCHANT_CLOSED" then merchantOpen = false
   elseif event == "BAG_OVERFLOW_WITH_FULL_INVENTORY" then overflowAt = now()

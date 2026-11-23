@@ -537,6 +537,13 @@ def survey_selftest_input():
 if SELFTEST_SURVEY:
     DISC = dict(DISC)
     DISC["sv"], DISC["sv_no"] = survey_selftest_input()
+    # (the real uploads' own reward reads of the fixture's quests are set aside: the test is the survey's, and a player's
+    # quest window that read one of them, as quest 10's did in the 2026-11-17 pull, would otherwise win over it)
+    _q = dict(DISC.get("q") or {})
+    for _k in DISC["sv"]:
+        if isinstance(_q.get(_k), dict) and "rw" in _q[_k]:
+            _q[_k] = {kk: vv for kk, vv in _q[_k].items() if kk != "rw"}
+    DISC["q"] = _q
 SURVEY_PICK = {int(k): survey_pick(a) for k, a in (DISC.get("sv") or {}).items() if str(k).isdigit() and isinstance(a, dict)}
 # the game said nothing about these, three times, to anyone (a quest another upload read, its title at least, was answered)
 SURVEY_NO = {int(k) for k in (DISC.get("sv_no") or {}) if str(k).isdigit()} - {q for q, p in SURVEY_PICK.items() if p["t"] or p["c"] is not None}

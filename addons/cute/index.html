@@ -94,6 +94,11 @@ body.cu-page { margin: 0; background: var(--cu-black); color: var(--cu-ink); fon
 @media (min-width: 1240px) { .cu-winbar button.cu-real { display: none; } }
 @media (max-width: 480px) { .cu-winbar { gap: .4rem; } .cu-winbar button { padding: .45rem .6rem; font-size: .9rem; } }
 
+/* Cute Auras: its own section, its picture as the windows' are framed, its download the page's button */
+.cu-ca-shot { margin: 1.2rem 0 0; min-width: 0; }
+.cu-ca-shot figcaption { margin: .8rem 0 0; color: var(--cu-dim); font-size: .95rem; line-height: 1.5; max-width: 66ch; }
+.cu-ca-cta { margin: 1.4rem 0 1.2rem; }
+
 /* install, what is new, who sees what */
 .cu-steps { margin: 0; padding-left: 1.3rem; color: var(--cu-dim); line-height: 1.6; max-width: 66ch; }
 .cu-steps li + li { margin-top: .5rem; }
@@ -171,8 +176,9 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     <h1>The guild's own addon.</h1>
     <p>For Forever's November release: the guild on <b>J</b>, your quests and route on <b>L</b>, Cute's map on <b>M</b>.</p>
     <div class="cu-cta">
-      <a class="cu-dl" href="Cute.zip">Download Cute <small><span id="cu-ver"><!--@v-->0.9.9<!--/@v--></span>, <!--@kb-->1706<!--/@kb--> KB</small></a>
-      <a class="cu-dl cu-dl2" href="Cute-Uploader.zip">Cute with the uploader <small>Windows, <!--@kbu-->1748<!--/@kbu--> KB</small></a>
+      <a class="cu-dl" href="Cute.zip">Download Cute <small><span id="cu-ver"><!--@v-->0.9.10<!--/@v--></span>, <!--@kb-->1707<!--/@kb--> KB</small></a>
+      <a class="cu-dl cu-dl2" href="#auras">Cute Auras <small>its own addon: buffs, camp, blessings</small></a>
+      <a class="cu-dl cu-dl2" href="Cute-Uploader.zip">Cute with the uploader <small>Windows, <!--@kbu-->1749<!--/@kbu--> KB</small></a>
       <span class="cu-note">Free, GPL, no accounts. Cute alone sends nothing to any server: your guild sees what its officers allow, your group your level, XP and quests (Settings, Data you share) and, after a run, your run report (Runs); the uploader sends foreverrank.com what you find in the world, never a name.</span>
     </div>
   </div>
@@ -224,11 +230,12 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   <div class="cu-wrap">
     <h2>What's new</h2>
     <ul class="cu-log">
-      <li><b>0.9.9</b>Settings &gt; Map has the quest icons' size: Half size, Three quarters or the Game's size; the pins are drawn again as you pick.</li>
+      <li><b>0.9.10</b>Use never offers an item above your level or outside your class, race or skill; with Cute Auras loaded, its camp and buff reminders take over.</li>
     </ul>
     <details class="cu-fold">
       <summary>Earlier versions</summary>
       <ul class="cu-log">
+      <li><b>0.9.9</b>Settings &gt; Map has the quest icons' size: Half size, Three quarters or the Game's size; the pins are drawn again as you pick.</li>
       <li><b>0.9.8</b>/cute diag shows the addons' memory; /qb memory counts your saved notes by kind; walked trails get their own box in Data you share.</li>
       <li><b>0.9.7</b>The game's quest tracker stays beside the step frame; quests named in chat are links; dungeon entrances read from the game.</li>
       <li><b>0.9.6</b>Quest data from levels 32 to 44: 175 more quests, 88 more NPCs, the reward lists of 1,366 more quests and objective spots on 96 more, read from players' games.</li>
@@ -256,12 +263,42 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   </div>
 </section>
 
+<section class="cu-sec" id="auras" aria-labelledby="cu-auras-h">
+  <div class="cu-wrap">
+    <h2 id="cu-auras-h">Cute Auras</h2>
+    <p class="cu-line">Its own addon: the camp, your buffs, the group's buffs and blessings and your biome gear on one bar, and alerts for what to put back after a death or a Hand. Works alone, or beside Cute and QuestBank, whose camp and buff reminders step aside for it.</p>
+    <figure class="cu-ca-shot">
+      <div class="cu-frame"><a href="img/auras.webp"><img src="img/auras.webp" width="980" height="470" alt="Cute Auras in play: the bar with Sit, Place and Eat for the camp, Inner Fire, a biome trinket to swap and three blessings owed to the group, the Kings list open over it with each member on, missing, far or dead; alert cards for a member back up after a death, a Blessing of Protection counting down and Kings to put back; the blessings grid of two paladins; a swap's tooltip" loading="lazy"></a></div>
+      <figcaption>One bar: gold for the camp, white for yours, pink for biome gear, teal for what you owe the group. The cards above it work in a fight too.</figcaption>
+    </figure>
+    <div class="cu-cta cu-ca-cta">
+      <a class="cu-dl" href="CuteAuras.zip">Download Cute Auras <small><!--@cav-->0.1.0<!--/@cav-->, <!--@cakb-->218<!--/@cakb--> KB</small></a>
+    </div>
+    <ol class="cu-steps">
+      <li>Unzip <a href="CuteAuras.zip">CuteAuras.zip</a> into <code>Interface\AddOns</code>, so the game finds <code>Interface\AddOns\CuteAuras\CuteAuras.toc</code>.</li>
+      <li>Log in. <code>/cauras</code> opens its window: Settings, the blessings grid and your biome gear. <code>/cauras test</code> shows the alerts, <code>/cauras move</code> places them and the bar.</li>
+      <li>Group with others who run it: each buff is shared out to one buffer, so only the one who owes it is told.</li>
+    </ol>
+    <details class="cu-fold">
+      <summary>What it does</summary>
+      <ul class="cu-log">
+        <li><b>Camp</b>Sit by a fire, place the camp items you carry, eat, sleep; blueprints only when your level, class, race and skill allow them.</li>
+        <li><b>Buffs</b>Arcane Intellect and Wisdom only for mana users, Might for melee, Thorns for the tank, by each member's talents.</li>
+        <li><b>Consumables</b>Well Fed and the potions, elixirs, flasks and scrolls you keep up, learned as you use them: missing or about to end, in dungeons and raids or wherever you choose.</li>
+        <li><b>Blessings</b>The paladins share Kings, Might and Wisdom out by class and role; the grid changes them by hand.</li>
+        <li><b>In a fight</b>A member back up after a death gets a card for the one buffer who owes them; Protection, Freedom and Sacrifice count down, then the blessing they took off.</li>
+        <li><b>Biome gear</b>Pieces stronger in Snowy, Haunted, Desert and the other biomes: swap in where they work, back when you leave, each shown in Solo, PvP, 5-man or Raid as you choose.</li>
+      </ul>
+    </details>
+  </div>
+</section>
+
 <section class="cu-sec" id="rules">
   <div class="cu-wrap">
     <h2>Who sees what</h2>
     <p class="cu-line">Officers choose for each stat whether everyone or only you and the officers see it, and save that to Guild Info; your own row is always complete.</p>
     <details class="cu-fold">
-      <summary>The <!--@n-->109<!--/@n--> stats of <!--@v-->0.9.9<!--/@v-->: <!--@n:leveling-->42<!--/@n:leveling--> for the race, <!--@n:prog-->39<!--/@n:prog--> for prog, <!--@n:funny-->18<!--/@n:funny--> for the Hall of Shame, <!--@n:officer-->10<!--/@n:officer--> for the officers</summary>
+      <summary>The <!--@n-->109<!--/@n--> stats of <!--@v-->0.9.10<!--/@v-->: <!--@n:leveling-->42<!--/@n:leveling--> for the race, <!--@n:prog-->39<!--/@n:prog--> for prog, <!--@n:funny-->18<!--/@n:funny--> for the Hall of Shame, <!--@n:officer-->10<!--/@n:officer--> for the officers</summary>
       <div class="cu-bar">
         <div class="cu-cats" role="radiogroup" aria-label="Category" id="cu-cats"></div>
         <input type="search" class="cu-q" id="cu-q" placeholder="Search stats" aria-label="Search stats">

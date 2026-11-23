@@ -38,6 +38,10 @@ PAGE_DIR = os.path.join(ROOT, "addons", "cute")
 PAGE = os.path.join(PAGE_DIR, "index.html")
 ZIP = os.path.join(PAGE_DIR, "Cute.zip")
 UPZIP = os.path.join(PAGE_DIR, "Cute-Uploader.zip")  # Cute's second download (tools/build_uploader.py --cute)
+# Cute Auras, its own addon on Cute's page (tools/cuteauras): packed beside Cute.zip, its version and size stamped
+AURAS_ROOT = os.path.join(ROOT, "tools", "cuteauras")
+AURAS = os.path.join(AURAS_ROOT, "CuteAuras")
+AURAS_ZIP = os.path.join(PAGE_DIR, "CuteAuras.zip")
 STATS = os.path.join(PAGE_DIR, "stats.js")
 CHANGES = os.path.join(ADDON, "Changes.lua")
 SITE_CSS = os.path.join(ROOT, "forever.css")
@@ -217,6 +221,23 @@ def build_zip():
     if r.returncode != 0:
         sys.exit("tools/build_uploader.py --cute failed:\n" + r.stdout + r.stderr)
     ok("Cute-Uploader.zip built, %d bytes (Cute, Cute_Quest and the uploader)" % os.path.getsize(UPZIP))
+    if os.path.isdir(AURAS):
+        if os.path.exists(AURAS_ZIP):
+            os.remove(AURAS_ZIP)
+        subprocess.run(["zip", "-rq", AURAS_ZIP, "CuteAuras", "-x", "*.DS_Store"], cwd=AURAS_ROOT, check=True)
+        ok("CuteAuras.zip built, %d bytes" % os.path.getsize(AURAS_ZIP))
+
+
+def auras_version():
+    """Cute Auras' version: its toc's, which its Core.lua's A.version must equal"""
+    toc = re.search(r"^## Version:\s*(\S+)", open(os.path.join(AURAS, "CuteAuras.toc"), encoding="utf-8").read(), re.M)
+    core = re.search(r'^A\.version = "([^"]+)"', open(os.path.join(AURAS, "Core.lua"), encoding="utf-8").read(), re.M)
+    if not (toc and core):
+        problem("Cute Auras: no version in CuteAuras.toc or Core.lua")
+        return "?"
+    if toc.group(1) != core.group(1):
+        problem("Cute Auras: CuteAuras.toc says %s, Core.lua %s" % (toc.group(1), core.group(1)))
+    return toc.group(1)
 
 
 def zip_stale(zpath, root=HERE, tops=("Cute", "Cute_Quest")):
@@ -884,6 +905,9 @@ def main():
     counts = build_stats()
     html = open(PAGE, encoding="utf-8").read()
     values = {"v": version, "kb": str(kb)}
+    if os.path.isfile(AURAS_ZIP):
+        values["cav"] = auras_version()
+        values["cakb"] = str(int(round(os.path.getsize(AURAS_ZIP) / 1024.0)))
     if os.path.isfile(UPZIP):
         values["kbu"] = str(int(round(os.path.getsize(UPZIP) / 1024.0)))
     values.update({k: str(v) for k, v in counts.items()})
@@ -898,6 +922,14 @@ def main():
     site_rules = rules_of(open(SITE_CSS, encoding="utf-8").read())
     check_links(html)
     check_zips()
+    if os.path.isfile(AURAS_ZIP):
+        stale = zip_stale(AURAS_ZIP, AURAS_ROOT, ("CuteAuras",))
+        if not stale:
+            ok("CuteAuras.zip holds the tree's CuteAuras")
+        elif "--no-zip" in sys.argv:
+            print("  warn CuteAuras.zip differs from the tree (%s): a build without --no-zip packs it" % ", ".join(stale[:4]))
+        else:
+            problem("CuteAuras.zip differs from the tree in %s" % ", ".join(stale[:4]))
     check_uploader_note(html)
     check_online(html)
     check_classes(html, page_rules, site_rules)
