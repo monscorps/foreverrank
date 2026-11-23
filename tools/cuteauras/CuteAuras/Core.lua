@@ -4,7 +4,7 @@
 -- This file: the namespace, the saved settings (CuteAurasDB), events, the guards for the client's secret values, the
 -- work kept for after a fight, and the slash commands. Each other file adds one part (see the toc's order).
 local ADDON, A = ...
-A.version = "0.1.0"
+A.version = "0.1.1"
 A.NAME = "Cute Auras"
 A.ADDON = ADDON
 CuteAuras = A -- (for /dump and for QuestBank's and Cute's step-aside, which ask C_AddOns first)

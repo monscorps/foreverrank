@@ -296,6 +296,12 @@ B.Add({ key = "duty", part = "group", order = 200, groups = { "group", "mine" },
         end
         -- (in a group a paladin's blessings stay on the bar with none missing, dimmed: their list opens in a fight, where a
         -- Hand's restore is a click on its row)
+        table.sort(fly, function(a, b)
+          local function rank(x) if x.dead or x.off then return 3 elseif x.has then return 4 elseif x.far then return 2 end return 1 end
+          local ra, rb = rank(a), rank(b)
+          if ra ~= rb then return ra < rb end
+          return (a.name or "") < (b.name or "")
+        end)
         if #missing == 0 and d.bless and ctx.group and #fly > 0 then
           local rec = add()
           rec.key = "duty:" .. d.key
@@ -315,6 +321,8 @@ B.Add({ key = "duty", part = "group", order = 200, groups = { "group", "mine" },
           rec.count = #missing
           rec.word, rec.class = m.me and "You" or m.name, m.class
           rec.far = next == nil
+          -- (nobody missing it in range: the icon waits, greyed, and a click casts nothing)
+          if rec.far then rec.lit, rec.word, rec.status = false, "Far", "warn" end
           rec.flyout = fly
           rec.name = L.SpellName(d.entry.ranks[1], d.entry.name)
           -- (the group version: Greater for a class whose every member takes this from you, Prayer, Brilliance or Gift
@@ -340,6 +348,7 @@ B.Add({ key = "duty", part = "group", order = 200, groups = { "group", "mine" },
           end
           local why = #missing == 1 and "1 member is missing it." or (#missing .. " members are missing it.")
           if d.bless then why = why .. " Cute Auras shares the blessings out among the group's paladins." end
+          if rec.far then why = why .. " None of them is in range." ; rec.clickWord = nil end
           rec.why = why
         end
       end
@@ -541,7 +550,48 @@ B.Add({ key = "consume", part = "mine", order = 120, groups = { "mine" }, timed 
   end,
 })
 
--- Before the pull: food, and every potion, elixir, flask or scroll you carry whose buff you lack (one of each group)
+-- Before the pull: food, and every potion, elixir, flask or scroll you carry whose buff you lack (one of each group) and
+-- that fits your role: what its buff raises, by the words of its spell's text (C_Spell.GetSpellDescription, the item's
+-- tooltip else): a caster or healer never asked for Strength or Agility, a melee never for Intellect or spell damage.
+-- One that names none of them (Stamina, armor, resistances, health) fits everyone; your habits are yours whatever
+-- they raise
+local WANTS = {
+  caster = { intellect = true, spirit = true, spell = true, mana = true, healing = true },
+  healer = { intellect = true, spirit = true, spell = true, mana = true, healing = true },
+  melee = { strength = true, agility = true, ["attack power"] = true, critical = true },
+  ranged = { agility = true, ["attack power"] = true, critical = true, ranged = true },
+  tank = { strength = true, agility = true, defense = true, armor = true, stamina = true, ["attack power"] = true },
+}
+local STATS = { "intellect", "spirit", "spell", "mana", "healing", "strength", "agility", "attack power", "critical", "ranged", "defense" }
+local fits = {} -- [item id .. role] = true or false
+local function textOf(id)
+  local sp = itemAura(id)
+  local get = C_Spell and C_Spell.GetSpellDescription
+  local t = sp and type(get) == "function" and plain(call(get, sp)) or nil
+  if type(t) == "string" and t ~= "" then return t:lower() end
+  local TI = C_TooltipInfo
+  local data = TI and type(TI.GetItemByID) == "function" and call(TI.GetItemByID, id) or nil
+  local out = {}
+  for _, l in ipairs(type(data) == "table" and type(data.lines) == "table" and data.lines or {}) do
+    local x = plain(l.leftText)
+    if type(x) == "string" then out[#out + 1] = x end
+  end
+  return #out > 1 and table.concat(out, " "):lower() or nil
+end
+function Bf.Fits(id, role)
+  local key = id .. (role or "")
+  if fits[key] ~= nil then return fits[key] end
+  local t = textOf(id)
+  if not t then return true end -- (not loaded: asked, not kept)
+  local want = WANTS[role or ""] or WANTS.melee
+  local named, wanted = false, false
+  for _, w in ipairs(STATS) do
+    if t:find(w, 1, true) then named = true; if want[w] then wanted = true end end
+  end
+  local v = (not named) or wanted
+  fits[key] = v
+  return v
+end
 local flaskBuf = {}
 B.Add({ key = "pull", part = "pull", order = 300, groups = { "mine", "pull" },
   read = function(add, ctx)
@@ -559,9 +609,13 @@ B.Add({ key = "pull", part = "pull", order = 300, groups = { "mine", "pull" },
       end
     end
     for i = #flaskBuf, 1, -1 do flaskBuf[i] = nil end
+    local role = A.Roster.MyRole()
+    local h = habitsDB()
     for id in pairs(B.Bags()) do
       local k = kindOf(id)
-      if k and k ~= "Use" and itemAura(id) then flaskBuf[#flaskBuf + 1] = id end
+      if k and k ~= "Use" and itemAura(id) and ((type(h[id]) == "table" and (h[id].hits or 0) >= 2) or Bf.Fits(id, role)) then
+        flaskBuf[#flaskBuf + 1] = id
+      end
     end
     table.sort(flaskBuf)
     for k in pairs(groupSeen) do groupSeen[k] = nil end
@@ -609,6 +663,9 @@ function Bf:Init()
     acc = 0
     if #A.Assign.duties > 0 and not A.Fighting() then B.Dirty("group") end
   end)
+  for _, ev in ipairs({ "ACTIVE_TALENT_GROUP_CHANGED", "ACTIVE_COMBAT_CONFIG_CHANGED", "TRAIT_CONFIG_UPDATED" }) do
+    A.On(ev, function() for k in pairs(fits) do fits[k] = nil end end)
+  end
   A.OnUnit("UNIT_SPELLCAST_SUCCEEDED", { "player" }, onCast)
   A.OnUnit("UNIT_INVENTORY_CHANGED", { "player" }, function() watchWeapons(); B.Dirty("mine") end)
   A.Camp.Watch(function() watchWeapons() end)

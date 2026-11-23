@@ -204,7 +204,8 @@ function Cm:Init()
     inGroup = now
     A.After(1, Cm.Prune, "comm: prune")
   end)
-  for _, ev in ipairs({ "SPELLS_CHANGED", "PLAYER_LEVEL_UP", "TRAIT_CONFIG_UPDATED", "PLAYER_TALENT_UPDATE", "PLAYER_ROLES_ASSIGNED" }) do
+  for _, ev in ipairs({ "SPELLS_CHANGED", "PLAYER_LEVEL_UP", "TRAIT_CONFIG_UPDATED", "PLAYER_TALENT_UPDATE", "PLAYER_ROLES_ASSIGNED",
+                        "ACTIVE_TALENT_GROUP_CHANGED", "ACTIVE_COMBAT_CONFIG_CHANGED", "ACTIVE_PLAYER_SPECIALIZATION_CHANGED" }) do
     A.On(ev, function() if A.Roster.InGroup() then Cm.HelloSoon(4) end end)
   end
   -- (a chat restriction lifted: what waits goes)

@@ -57,9 +57,15 @@ local function specOf(configID, treeID)
 end
 R.SpecOf = specOf
 function R.MySpec()
-  local CT, T = C_ClassTalents, C_Traits
+  local CT, T, SI = C_ClassTalents, C_Traits, C_SpecializationInfo
   if not (CT and T) then return nil end
-  local cfg = plain(call(CT.GetActiveConfigID))
+  -- (dual spec: the talents of the spec group you are in, as the game's talent frame reads them; else the active one)
+  local cfg
+  if SI and type(SI.GetActiveSpecGroup) == "function" and type(SI.GetCombatConfigIDForSpecGroup) == "function" then
+    local g = plain(call(SI.GetActiveSpecGroup))
+    if type(g) == "number" then cfg = plain(call(SI.GetCombatConfigIDForSpecGroup, g)) end
+  end
+  cfg = cfg or plain(call(CT.GetActiveConfigID))
   if type(cfg) ~= "number" then return nil end
   local info = call(T.GetConfigInfo, cfg)
   local tree = type(info) == "table" and type(info.treeIDs) == "table" and plain(info.treeIDs[1]) or nil
@@ -207,4 +213,8 @@ function R:Init()
   A.On("PLAYER_LEVEL_UP", R.Changed)
   A.On("TRAIT_CONFIG_UPDATED", R.Changed)
   A.On("PLAYER_TALENT_UPDATE", R.Changed)
+  -- (a dual spec switch: your role and spec again, and your hello says so)
+  for _, ev in ipairs({ "ACTIVE_TALENT_GROUP_CHANGED", "ACTIVE_COMBAT_CONFIG_CHANGED", "ACTIVE_PLAYER_SPECIALIZATION_CHANGED" }) do
+    A.On(ev, function() R.Changed(); if A.Bar then A.Bar.Dirty("all") end end)
+  end
 end

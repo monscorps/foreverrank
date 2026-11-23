@@ -245,13 +245,21 @@ B.SetClick = setClick
 local function tipLine(s, col, wrap) GameTooltip:AddLine(s, col[1], col[2], col[3], wrap) end
 function B.Tip(owner, rec)
   if not rec or not GameTooltip then return end
-  GameTooltip:SetOwner(owner, "ANCHOR_TOP")
+  -- (a group icon's list opens above it: the tooltip goes beside the list, never over it)
+  local f = flyouts[owner]
+  if rec.flyout and f and f:IsShown() then
+    GameTooltip:SetOwner(owner, "ANCHOR_NONE")
+    GameTooltip:ClearAllPoints()
+    GameTooltip:SetPoint("BOTTOMLEFT", f, "BOTTOMRIGHT", 8, 0)
+  else
+    GameTooltip:SetOwner(owner, "ANCHOR_TOP")
+  end
   GameTooltip:SetText(rec.name or "", C.WHITE[1], C.WHITE[2], C.WHITE[3])
   if rec.why then tipLine(rec.why, C.INK, true) end
   if rec.p and rec.p.tip then rec.p.tip(GameTooltip, rec) end
   if rec.far then tipLine("Out of range.", C.WARN, true) end
   if rec.clickWord then tipLine("Click: " .. rec.clickWord .. ".", C.INK, true) end
-  if rec.flyout then tipLine("Hover for the list; click a name there to buff them.", C.DIM, true) end
+  if rec.flyout then tipLine("Click a name in the list to buff them.", C.DIM, true) end
   tipLine("Right-click: not now, never, settings.", C.DIM, true)
   GameTooltip:Show()
 end
@@ -363,7 +371,7 @@ local function header()
   wrapper = CreateFrame("Frame", "CuteAurasBarWrap", UIParent, "SecureHandlerBaseTemplate")
   return wrapper
 end
-local ROW = 22
+local ROW, COLW, PER_COL = 22, 150, 10
 local function flyoutOf(b)
   local f = flyouts[b]
   if f then return f end
@@ -413,12 +421,16 @@ local function layFlyout(b, rec)
   local f = flyoutOf(b)
   attr(b, "hasfly", true)
   local n = math.min(#list, 40)
-  f:SetSize(150, n * ROW + 4)
+  -- (ten rows a column, the columns side by side: a raid's list stays a short box over the icon)
+  local cols = math.ceil(n / PER_COL)
+  local rows = math.min(n, PER_COL)
+  f:SetSize(cols * COLW, rows * ROW + 4)
   for i = 1, n do
     local e = list[i]
     local r = flyRow(f, i)
     r:ClearAllPoints()
-    r:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -2 - (i - 1) * ROW)
+    r:SetPoint("TOPLEFT", f, "TOPLEFT", math.floor((i - 1) / PER_COL) * COLW, -2 - ((i - 1) % PER_COL) * ROW)
+    r:SetAlpha((e.far or e.dead or e.off) and 0.5 or 1)
     attr(r, "type1", e.spell and "spell" or nil)
     attr(r, "spell", e.spell)
     attr(r, "unit", e.unit)

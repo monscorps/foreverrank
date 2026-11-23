@@ -120,13 +120,25 @@ function S.OnInFight(unit, entry)
 end
 
 -- in range of a spell: true, false, or nil when the client can't tell (C_Spell.IsSpellInRange)
+-- (a lower rank the spellbook doesn't list answers nil by its id: asked again by the spell's name; still nothing, out of
+-- a fight, the follow distance, 28 yards, a little inside a buff's 30)
 function S.InRange(id, unit)
   local f = C_Spell and C_Spell.IsSpellInRange or IsSpellInRange
-  if type(f) ~= "function" then return nil end
-  local ok, v = pcall(f, id, unit)
-  v = ok and plain(v) or nil
-  if v == 1 then return true elseif v == 0 then return false end
-  if type(v) == "boolean" then return v end
+  if type(f) == "function" then
+    for pass = 1, 2 do
+      local what = pass == 1 and id or L.SpellName(id, nil)
+      if what then
+        local ok, v = pcall(f, what, unit)
+        if ok then v = plain(v) else v = nil end -- (never "ok and plain(v) or nil": that turns the game's false into nil)
+        if v == 1 or v == true then return true elseif v == 0 or v == false then return false end
+      end
+    end
+  end
+  if not A.Fighting() and type(CheckInteractDistance) == "function" then
+    local ok, v = pcall(CheckInteractDistance, unit, 4)
+    if ok then v = plain(v) else v = nil end
+    if v ~= nil then return v and true or false end
+  end
   return nil
 end
 

@@ -277,7 +277,8 @@ local function newClient(o)
     if w then c.runSnippet(w.header, w.pre, "self", f) end
     if f.__scripts.OnEnter then f.__scripts.OnEnter(f) end
   end
-  env.GameTooltip = { SetOwner = function(self, o) self.owner = o; self.lines = {} end, SetText = function(self, t) self.lines = { t } end,
+  env.GameTooltip = { SetOwner = function(self, o, anchor) self.owner = o; self.anchor = anchor; self.point = nil; self.lines = {} end,
+    ClearAllPoints = function(self) self.point = nil end, SetPoint = function(self, ...) self.point = { ... } end, SetText = function(self, t) self.lines = { t } end,
     AddLine = function(self, t) self.lines = self.lines or {}; self.lines[#self.lines + 1] = t end, Show = function() end, Hide = function(self) self.owner = nil end,
     GetOwner = function(self) return self.owner end }
   env.MenuUtil = { CreateContextMenu = function(owner, gen)
@@ -349,7 +350,7 @@ local function newClient(o)
   env.C_SpellBook = { IsSpellKnown = function(id) return c.known[id] == true end }
   env.C_Spell = { GetSpellName = function(id) return SPELL_NAMES[id] end, GetSpellTexture = function(id) return 100000 + (id % 1000) end,
     GetSpellDescription = function(id) return SPELL_DESC[id] or "" end,
-    IsSpellInRange = function(id, u) local x = U(u); if not x then return nil end return x.far and false or true end,
+    IsSpellInRange = function(id, u) local x = U(u); if not x then return nil end if x.far then return false end return true end,
     GetSpellCooldown = function() return { startTime = 0, duration = 0 } end }
   -- items and bags
   local function item(id) return c.items[id] or {} end
@@ -381,6 +382,8 @@ local function newClient(o)
   env.GetProfessionInfo = function(i) local p = c.profs[i]; if not p then return nil end return p[1], 0, p[2], 300 end
   -- talents: c.spec = skill line with the points
   env.C_ClassTalents = { GetActiveConfigID = function() return c.o.spec and 77 or nil end, GetTraitTreeForSpec = function() return 9 end }
+  -- (dual spec: the spec group you are in, its combat config; c.o.spec is the talents of the active one)
+  env.C_SpecializationInfo = { GetActiveSpecGroup = function() return c.specGroup or 1 end, GetCombatConfigIDForSpecGroup = function(g) return c.o.spec and (76 + g) or nil end }
   env.C_Traits = { GetConfigInfo = function() return { treeIDs = { 9 } } end,
     GetGroupDisplayInfoByTreeID = function() return { { groupID = 1, skillLineID = c.o.spec or 0 }, { groupID = 2, skillLineID = 1 } } end,
     GetGroupCurrencyInfo = function() return { { traitNodeGroupID = 1, currencyInfos = { { spent = 31 } } }, { traitNodeGroupID = 2, currencyInfos = { { spent = 5 } } } } end }
@@ -504,6 +507,9 @@ do
   for _, e in pairs(D.HANDS) do for _, id in ipairs(e.ranks) do SPELL_NAMES[id] = e.name end end
   SPELL_NAMES[1283391], SPELL_NAMES[1229741], SPELL_NAMES[1229739] = "Campfire Nearby", "Camp Benefits", "Welcoming Campfire"
   SPELL_DESC[1306908] = "Movement speed increased by 3% in Snowy areas."
+  SPELL_DESC[17538] = "Increases Agility by 25 and chance to get a critical strike by 2% for 1 hour."
+  SPELL_DESC[11396] = "Increases Intellect by 25 for 1 hour."
+  SPELL_DESC[3593] = "Increases the player's maximum health by 120 for 1 hour."
   HARNESS_DATA = D
 end
 local D = HARNESS_DATA
@@ -957,18 +963,23 @@ test("a raid of forty: five paladins, four priests; every client agrees, a refre
     for _, d in ipairs(c.A.Assign.duties) do if d.key == "fort" then assert(#d.targets == 10, "ten each: " .. #d.targets) end end
   end
   local c = cs[1]
-  for _ = 1, 20 do c.A.Bar.Refresh() end -- (the pools filled once)
-  collectgarbage("collect")
-  local before = collectgarbage("count")
+  for _ = 1, 100 do c.A.Bar.Refresh() end -- (the pools filled, every lazy table made once)
+  -- (a leak grows with every refresh: two batches of a hundred, the second must not grow as the first did)
+  local function batch()
+    collectgarbage("collect"); collectgarbage("collect")
+    local before = collectgarbage("count")
+    for _ = 1, 100 do c.A.Bar.Refresh() end
+    collectgarbage("collect"); collectgarbage("collect")
+    return collectgarbage("count") - before
+  end
   local t0 = os.clock()
   local timers0 = #c.timers
-  for _ = 1, 50 do c.A.Bar.Refresh() end
-  local per = (os.clock() - t0) / 50 * 1000
-  print("    timers queued by 50 refreshes: " .. (#c.timers - timers0))
-  collectgarbage("collect")
-  local after = collectgarbage("count")
-  print(string.format("    raid of 40: a full refresh %.2f ms in the mock, memory %+.0f KB after 50", per, after - before))
-  assert(after - before < 40, "memory grows with refreshes: " .. (after - before) .. " KB")
+  local g1 = batch()
+  local per = (os.clock() - t0) / 100 * 1000
+  local g2 = batch()
+  print("    timers queued by 100 refreshes: " .. (#c.timers - timers0))
+  print(string.format("    raid of 40: a full refresh %.2f ms in the mock, memory %+.0f KB then %+.0f KB a hundred refreshes", per, g1, g2))
+  assert(g1 < 60 and g2 < 60, "memory grows with refreshes: " .. g1 .. " and " .. g2 .. " KB")
   for _, x in ipairs(cs) do noErrors(x, "raid") end
 end)
 
@@ -1065,6 +1076,67 @@ test("a late joiner hears the group and the group hears it; a blessing set by ha
   assert(fortOf(c3) == 4 and fortOf(c2) == 0, "one priest gives Fortitude: " .. fortOf(c3) .. " and " .. fortOf(c2))
   assert(c3.A.Assign.BlessingOf(P1.guid, "WARRIOR:melee") == "kings", "the hand-set blessing reached the joiner")
   for _, c in ipairs({ c1, c2, c3 }) do noErrors(c, "late joiner") end
+end)
+
+test("hover: the tooltip beside the list, never over it; far members grey the icon; a raid's list in columns", function()
+  local g = party5()
+  local c = g.c1
+  tick(c, 2)
+  local b = icon(c, "group", "duty:fort")
+  assert(b, "Fortitude to give")
+  c.hover(b)
+  local fly = c.env[b:GetName() .. "Fly"]
+  local tt = c.env.GameTooltip
+  assert(fly:IsShown() and tt.anchor == "ANCHOR_NONE" and tt.point and tt.point[2] == fly and tt.point[3] == "BOTTOMRIGHT", "the tooltip sits right of the list")
+  -- everyone missing Fortitude is far: the icon waits and casts nothing
+  for _, m in ipairs(g.group) do if not m.me then m.far = true end end
+  g.P1.auras[#g.P1.auras + 1] = { id = 10938, src = "player", exp = c.clock + 3600 }
+  fire(c, "UNIT_AURA", "player"); c.A.Bar.Dirty("group"); tick(c, 2)
+  local rec = find(shown(c, "group"), "duty:fort")
+  assert(rec and rec.lit == false and rec.word == "Far" and b:GetAttribute("type1") == nil, "far: waiting, no cast (" .. tostring(rec and rec.word) .. ")")
+  for _, m in ipairs(g.group) do m.far = nil end
+  -- a raid's Kings list: ten rows a column
+  local list = {}
+  for i = 1, 25 do list[i] = member({ name = "K" .. i, class = i == 1 and "PALADIN" or "WARRIOR", level = 60, guid = string.format("Player-1-K%02d", i), sub = math.floor((i - 1) / 5) + 1 }) end
+  local cp = client({ me = list[1], group = list, raid = true })
+  knowAll(cp, "PALADIN", 60)
+  load(cp); tick(cp, 10)
+  local kb
+  for _, r in ipairs(shown(cp, "group")) do if r.flyout and #r.flyout > 10 then kb = icon(cp, "group", r.key) end end
+  assert(kb, "a blessing for more than ten")
+  local f = cp.env[kb:GetName() .. "Fly"]
+  assert(f.__h <= 10 * 22 + 4 and f.__w >= 300, "columns of ten: " .. f.__w .. " x " .. f.__h)
+  noErrors(c); noErrors(cp)
+end)
+
+test("dual spec: a switch from Retribution to Holy, heard by the group; Before the pull fits the spec", function()
+  local PAL = member({ name = "Duo", class = "PALADIN", level = 60, guid = "Player-1-D1" })
+  local PRI = member({ name = "Pri", class = "PRIEST", level = 60, guid = "Player-1-D2" })
+  local g = { PAL, PRI }
+  local c1 = client({ me = PAL, group = g, spec = 184 })
+  local c2 = client({ me = PRI, group = g, spec = 56 })
+  knowAll(c1, "PALADIN", 60); knowAll(c2, "PRIEST", 60)
+  load(c1); load(c2)
+  tickAll(10)
+  assert(c1.A.Roster.MyRole() == "melee" and c2.A.Comm.peers[PAL.guid].role == "melee", "Retribution: melee")
+  c1.o.spec, c1.specGroup = 594, 2
+  fire(c1, "ACTIVE_TALENT_GROUP_CHANGED")
+  tickAll(8)
+  assert(c1.A.Roster.MyRole() == "healer", "Holy now: healer")
+  assert(c2.A.Comm.peers[PAL.guid].role == "healer", "the priest's client heard the switch")
+  assert(c2.A.Assign.BlessingOf(PAL.guid, "PALADIN:healer") == "wisdom", "a Holy paladin's own blessing: Wisdom")
+  -- Before the pull: an Agility elixir is no healer's, an Intellect one and a health one are
+  c1.items[13452] = { name = "Elixir of the Mongoose", classID = 0, subID = 2, spell = 17538 }
+  c1.items[9179] = { name = "Elixir of Greater Intellect", classID = 0, subID = 2, spell = 11396 }
+  c1.items[3825] = { name = "Elixir of Fortitude", classID = 0, subID = 2, spell = 3593 }
+  c1.bags = { { id = 13452, bag = 0, slot = 1 }, { id = 9179, bag = 0, slot = 2 }, { id = 3825, bag = 0, slot = 3 } }
+  fire(c1, "BAG_UPDATE_DELAYED")
+  fire(c1, "READY_CHECK")
+  tick(c1, 5)
+  local pull = shown(c1, "pull")
+  assert(find(pull, "flask9179") and find(pull, "flask3825"), "Intellect and health for a healer")
+  assert(not find(pull, "flask13452"), "never Agility for a healer")
+  noErrors(c1); noErrors(c2)
 end)
 
 print(string.format("OK (%d scenarios)", passed))
