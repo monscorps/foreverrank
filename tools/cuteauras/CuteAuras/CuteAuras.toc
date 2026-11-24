@@ -2,7 +2,7 @@
 ## Title: |cffff9ad5Cute Auras|r
 ## Notes: Camp, buffs, blessings and biome gear on one bar; alerts for what to put back. /cauras
 ## Author: Mikal
-## Version: 0.2.1
+## Version: 0.2.2
 ## X-License: GPL-3.0-or-later
 ## IconTexture: Interface\AddOns\CuteAuras\art\logo.png
 ## AddonCompartmentFunc: CuteAuras_OnCompartment

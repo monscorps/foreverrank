@@ -716,6 +716,8 @@ function A.Diag()
   A.Say("Biome here: " .. (#hw > 0 and table.concat(hw, ", ") or "none") .. "; biome pieces " .. #A.Gear.Scan() .. "; context " .. A.Gear.Context())
   local kinds, times = A.ErrorCount()
   A.Say(string.format("Comm sent %d, heard %d; bar refreshes %d; errors %d (%d times)", A.Comm.sent, A.Comm.heard, A.Bar.refreshes, kinds, times))
+  -- (after the last fight: the refreshes the client refused while it still restricted, and when one went through)
+  A.Say(A.Bar.LateLine())
 end
 
 function Wn:Init()

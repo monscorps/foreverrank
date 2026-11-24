@@ -237,6 +237,9 @@ local function frames()
   handler:SetAttribute("queue", ",")
   if type(SecureHandlerSetFrameRef) == "function" then SecureHandlerSetFrameRef(handler, "btn", button) end
   if type(SecureHandlerWrapScript) == "function" then SecureHandlerWrapScript(button, "OnClick", handler, PRE, POST) end
+  -- (the member and spell a click casts, noted before it: a name the client hides in the cast's SENT is them, for the
+  -- bar's marks; Roster.MemberFor)
+  button:HookScript("PreClick", A.Roster.NoteClick)
   -- (insecure art follows the secure attributes: the card's words once a pass ("idx", set last), its sound for a new
   -- member; a member back up again starts with none of your spells seen; the overlay's stack moves under it)
   button:HookScript("OnAttributeChanged", function(_, name, value)

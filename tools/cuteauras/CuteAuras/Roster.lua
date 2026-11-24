@@ -189,6 +189,79 @@ end
 function R.Me() return R.byGUID[A.MyGUID() or ""] end
 
 ----------------------------------------------------------------------------
+-- your casts' targets (Hands, and the bar's marks in a fight): UNIT_SPELLCAST_SENT names the target (your own name is
+-- you; a name that is no member's, or none, is no one), a name the client may hide: then the member a left click on a
+-- button of ours casts on (R.NoteClick: the bar's icons and rows, the rebuff and restore cards), else a guess, your
+-- friendly target or mouseover who is a member. Kept by the cast's GUID for its UNIT_SPELLCAST_SUCCEEDED, with how it
+-- was told ("named", "clicked", "guess": the bar's marks never take a guess, Hands does). The last 16 casts: one sent
+-- and never landed is let go with no clean-up of its own
+----------------------------------------------------------------------------
+local LOOK_AT = { "target", "mouseover" }
+-- (a click of ours: the member its unit is now and the spell it casts. Its SENT comes within the click, or, a click the
+-- game queued behind the global cooldown, as that ends: within the spell queue window, 0.1 s more for the frame. The
+-- next SENT takes it, whatever its spell; one past the window, or of another spell, is someone else's cast)
+local click = { guid = nil, spell = nil, at = nil }
+local function queueWindow()
+  local f = C_Spell and C_Spell.GetSpellQueueWindow
+  local ms = type(f) == "function" and plain(call(f)) or nil
+  if type(ms) ~= "number" then ms = 400 end
+  return math.min(math.max(ms, 0), 400) / 1000 + 0.1
+end
+function R.Clicking(unit, spell)
+  local g = type(unit) == "string" and plain(call(UnitGUID, unit)) or nil
+  click.guid, click.spell, click.at = R.byGUID[g or ""] and g or nil, spell, A.Now()
+end
+-- a button of ours about to act (its PreClick, before the secure OnClick): a left click is the one that casts
+R.NoteClick = A.Safe(function(self, button)
+  if button ~= "LeftButton" then return end
+  R.Clicking(self:GetAttribute("unit"), self:GetAttribute("spell"))
+end, "roster: a click's member")
+-- (the spell a click casts, its id or its name, and the spell a SENT tells: one id, or one name (a rank the client
+-- casts for a name, an id it tells for another of the spell's))
+local function sameSpell(noted, sp)
+  if noted == nil or type(sp) ~= "number" then return false end
+  if noted == sp then return true end
+  local name = A.Look.SpellName(sp, nil)
+  if name == nil then return false end
+  if type(noted) == "number" then noted = A.Look.SpellName(noted, nil) end
+  return noted == name
+end
+-- the member a cast of spell sp went to, and how it was told (a name told that is no member's: none, "named")
+function R.MemberFor(targetName, sp)
+  if targetName ~= nil then return R.ByName(targetName), "named" end
+  if click.guid and click.at and A.Now() - click.at <= queueWindow() and sameSpell(click.spell, sp) and R.byGUID[click.guid] then
+    return R.byGUID[click.guid], "clicked"
+  end
+  for _, u in ipairs(LOOK_AT) do
+    local g = plain(call(UnitGUID, u))
+    if g and R.byGUID[g] and A.Yes(UnitIsFriend, "player", u) then return R.byGUID[g], "guess" end
+  end
+  return nil
+end
+local SENT_KEEP = 16
+-- [castGUID] = the member's GUID (false: none told), how it was told; the casts in order
+local sentTo, sentHow, sentRing, sentAt = {}, {}, {}, 0
+local function onSent(_, unit, target, castGUID, spell)
+  if plain(unit) ~= "player" then return end
+  local m, how = R.MemberFor(plain(target), plain(spell))
+  click.at = nil
+  local cg = plain(castGUID)
+  if type(cg) ~= "string" then return end
+  sentAt = sentAt % SENT_KEEP + 1
+  local old = sentRing[sentAt]
+  if old ~= nil then sentTo[old], sentHow[old] = nil, nil end
+  sentRing[sentAt] = cg
+  sentTo[cg], sentHow[cg] = m and m.guid or false, how
+end
+-- the GUID of the member a cast of yours went to (nil: no member, or it can't be told), and how it was told: "named"
+-- (by its name: a member, or no one), "clicked", "guess"; nil, not told (a hidden name, no click of ours, no guess; no
+-- SENT)
+function R.SentTo(castGUID)
+  if castGUID == nil then return nil end
+  return sentTo[castGUID] or nil, sentHow[castGUID]
+end
+
+----------------------------------------------------------------------------
 -- a change to the group: one scan for a burst, then the assignment and the bar
 ----------------------------------------------------------------------------
 local soon = false
@@ -213,6 +286,7 @@ function R:Init()
   A.On("PLAYER_LEVEL_UP", R.Changed)
   A.On("TRAIT_CONFIG_UPDATED", R.Changed)
   A.On("PLAYER_TALENT_UPDATE", R.Changed)
+  A.OnUnit("UNIT_SPELLCAST_SENT", { "player" }, onSent, "roster: a cast sent")
   -- (a dual spec switch: your role and spec again, and your hello says so)
   for _, ev in ipairs({ "ACTIVE_TALENT_GROUP_CHANGED", "ACTIVE_COMBAT_CONFIG_CHANGED", "ACTIVE_PLAYER_SPECIALIZATION_CHANGED" }) do
     A.On(ev, function() R.Changed(); if A.Bar then A.Bar.Dirty("all") end end)

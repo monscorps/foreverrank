@@ -6,7 +6,10 @@
 -- A left-click acts through the game's secure button (type1: an unmodified left click alone); a waiting icon's click
 -- shows its why. Right-click: Not now (the part, ten minutes), Never: <it> (undone in Settings), Settings.
 -- In a fight: camp and yours hide (the game's state driver), the group's part stays as it was, clickable, its flyout
--- opening on hover through a secure wrap. Nothing is read or laid out in a fight; 1 s after it, one fresh look.
+-- opening on hover through a secure wrap. Nothing is read or laid out in a fight; 1 s after it, one fresh look. A look
+-- the client refuses (it still restricts, or keeps auras secret) is tried again as a restriction lifts
+-- (ADDON_RESTRICTION_STATE_CHANGED), else every second. Meanwhile your casts mark what they covered, art only
+-- (B.Repaint, Buffs.lua's marks), until the next look.
 local _, A = ...
 local B = A.Part("Bar", { list = {}, byKey = {}, refreshes = 0, layouts = 0 })
 local L, S = A.Look, A.Spells
@@ -92,16 +95,22 @@ local function instanceKind()
   return plain(kind) == "raid" and "raid" or "party"
 end
 B.InstanceKind = instanceKind
--- the client's restrictions as in a fight (C_RestrictedActions, Combat and Encounter)
+-- the client's restrictions as in a fight (C_RestrictedActions, Combat and Encounter): the first active one's name,
+-- else false
+local RESTRICTIONS = { "Combat", "Encounter" }
 local function restricted()
   local RA, kinds = C_RestrictedActions, Enum and Enum.AddOnRestrictionType
   if not (RA and type(RA.IsAddOnRestrictionActive) == "function" and kinds) then return false end
-  for _, name in ipairs({ "Combat", "Encounter" }) do
-    if kinds[name] ~= nil and A.Yes(RA.IsAddOnRestrictionActive, kinds[name]) then return true end
+  for _, name in ipairs(RESTRICTIONS) do
+    if kinds[name] ~= nil and A.Yes(RA.IsAddOnRestrictionActive, kinds[name]) then return name end
   end
   return false
 end
-function B.Blocked() return A.Fighting() or restricted() or S.AurasSecret() end
+-- why the bar can't read now, out of a fight: a restriction's name or "auras secret"; nil when it can
+local function refusedBy()
+  return restricted() or (S.AurasSecret() and "auras secret") or nil
+end
+function B.Blocked() return A.Fighting() or refusedBy() ~= nil end
 
 -- your bags: { [item id] = { bag, slot } } of bags 0 to NUM_BAG_SLOTS, scanned again after BAG_UPDATE_DELAYED
 local bags, bagsStale = {}, true
@@ -364,6 +373,9 @@ local function menuFor(b)
   end
 end
 B.Menu = menuFor
+-- (the member a click of ours casts on, its unit as it is now, and its spell: a name the client hides in the cast's
+-- SENT is them, Roster.MemberFor)
+local noteClick = A.Roster.NoteClick
 local lastClick = -10
 local function onClick(self, button, down)
   if down then return end
@@ -395,6 +407,7 @@ local function newIcon(name, parent, part)
   end
   b:SetScript("OnEnter", onEnter)
   b:SetScript("OnLeave", onLeave)
+  b:HookScript("PreClick", noteClick)
   b:HookScript("OnClick", A.Safe(onClick, "bar: click"))
   b:HookScript("OnMouseDown", moveStart)
   b:HookScript("OnMouseUp", moveStop)
@@ -451,12 +464,37 @@ local function flyRow(f, i)
   r.icon = r:CreateTexture(nil, "ARTWORK"); r.icon:SetSize(16, 16); r.icon:SetPoint("LEFT", 4, 0); r.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
   r.name = L.Text(r, 11, C.INK, 92, "LEFT"); r.name:SetPoint("LEFT", r.icon, "RIGHT", 6, 0)
   r.state = L.Text(r, 10, C.DIM, 44, "RIGHT"); r.state:SetPoint("RIGHT", -4, 0)
+  r:HookScript("PreClick", noteClick)
   r:HookScript("OnClick", function() A.After(0.6, function() B.Dirty("group") end, "bar: flyout click") end)
   f.rows[i] = r
   return r
 end
 -- the flyout's rows from a record's list: { unit, name, class, spell, has, far, dead, glow, low (ending), weak (a lower
--- rank) } each
+-- rank), mark } each
+-- (a row's art and words, every one set: legal in a fight, where Buffs' marks repaint a row; a mark's "on" never
+-- stays on a row the next layout gives someone else. A marked row, a cast of yours since the read, reads on whatever
+-- was read; its mark let go, the read shows again)
+local function paintRow(r, e, rec)
+  local on = e.mark == true
+  r:SetAlpha((not on and (e.far or e.dead or e.off)) and 0.5 or 1)
+  L.Art(r.icon, e.tex or rec.tex)
+  r.icon:SetDesaturated(on or (e.has == true and not e.low and not e.weak))
+  r.name:SetText(e.name or "?")
+  r.name:SetTextColor(L.ClassColor(e.class))
+  local st, col = "", C.DIM
+  if on then st, col = "on", C.GOOD
+  elseif e.dead then st, col = "dead", C.BAD elseif e.off then st, col = "offline", C.DIM
+  elseif e.far then st, col = "far", C.WARN
+  -- (on, at a lower rank than you give: a click gives yours)
+  elseif e.weak then st, col = "Low rank", C.WARN
+  -- (on, about to end: its time left)
+  elseif e.low and e.left then st, col = string.format("%d:%02d", math.floor(e.left / 60), math.floor(e.left % 60)), C.WARN
+  elseif e.has then st, col = "on", C.GOOD else st, col = "missing", C.QUEST end
+  r.state:SetText(st)
+  r.state:SetTextColor(col[1], col[2], col[3])
+  r.glow:SetShown(e.glow == true)
+  r.member = e.guid
+end
 local function layFlyout(b, rec)
   local list = rec.flyout
   if not list or #list == 0 then
@@ -487,26 +525,10 @@ local function layFlyout(b, rec)
     local r = flyRow(f, i)
     r:ClearAllPoints()
     r:SetPoint("TOPLEFT", f, "TOPLEFT", math.floor((i - 1) / PER_COL) * COLW, -2 - ((i - 1) % PER_COL) * ROW)
-    r:SetAlpha((e.far or e.dead or e.off) and 0.5 or 1)
     attr(r, "type1", e.spell and "spell" or nil)
     attr(r, "spell", e.spell)
     attr(r, "unit", e.unit)
-    L.Art(r.icon, e.tex or rec.tex)
-    r.icon:SetDesaturated(e.has == true and not e.low and not e.weak)
-    r.name:SetText(e.name or "?")
-    r.name:SetTextColor(L.ClassColor(e.class))
-    local st, col = "", C.DIM
-    if e.dead then st, col = "dead", C.BAD elseif e.off then st, col = "offline", C.DIM
-    elseif e.far then st, col = "far", C.WARN
-    -- (on, at a lower rank than you give: a click gives yours)
-    elseif e.weak then st, col = "Low rank", C.WARN
-    -- (on, about to end: its time left)
-    elseif e.low and e.left then st, col = string.format("%d:%02d", math.floor(e.left / 60), math.floor(e.left % 60)), C.WARN
-    elseif e.has then st, col = "on", C.GOOD else st, col = "missing", C.QUEST end
-    r.state:SetText(st)
-    r.state:SetTextColor(col[1], col[2], col[3])
-    r.glow:SetShown(e.glow == true)
-    r.member = e.guid
+    paintRow(r, e, rec)
     if not r:IsShown() then r:Show() end
   end
   for i = n + 1, #f.rows do if f.rows[i]:IsShown() then f.rows[i]:Hide() end end
@@ -528,7 +550,10 @@ function B.RenameRows()
         local ok, _, class = pcall(UnitClass, unit)
         class = ok and plain(class) or nil
         if type(name) ~= "string" then
+          -- (no one: the row claims no member, so no mark or glow of theirs paints it again)
+          r.member = nil
           r.name:SetText("?"); r.name:SetTextColor(C.DIM[1], C.DIM[2], C.DIM[3]); r.state:SetText("")
+          r.glow:Hide()
         else
           r.member = type(guid) == "string" and guid or nil
           r.name:SetText(name)
@@ -561,6 +586,20 @@ function B.GlowMember(guid, on)
       for _, e in ipairs(b.rec.flyout) do if e.guid == guid then e.glow = on end end
     end
     washOf(b)
+  end
+end
+-- one record painted again from its fields, art only (legal in a fight): its icon, and its list's rows that still show
+-- the member they were laid out for (a roster change in a fight renames the others: B.RenameRows). Buffs' marks call
+-- it; the next layout paints every field again from a fresh read
+function B.Repaint(rec)
+  local b = rec and icons[rec.part == "group" and "group" or "own"][rec.key]
+  if not (b and b.rec == rec) then return end
+  L.Paint(b, rec)
+  local f = rec.flyout and flyouts[b]
+  if not f then return end
+  for i, e in ipairs(rec.flyout) do
+    local r = f.rows[i]
+    if r and r:IsShown() and r.member == e.guid then paintRow(r, e, rec) end
   end
 end
 
@@ -746,10 +785,43 @@ local function runClock()
   clock:SetScript("OnUpdate", A.Safe(onClock, "bar: clock"))
 end
 
+-- a look the client refused out of a fight (it still restricts, or keeps auras secret) never given up: tried again as a
+-- restriction lifts (ADDON_RESTRICTION_STATE_CHANGED, B:Init), and every second meanwhile, one timer at a time (none
+-- in a fight: fightOver takes over). For /cauras diag, after the last fight (at, its PLAYER_REGEN_ENABLED): the looks
+-- refused, why (Combat, Encounter, auras secret), and the seconds to the first that went through (took)
+local late = { at = nil, refused = 0, took = nil, why = {}, waiting = false, timer = false, lifted = false }
+B.late = late
+local RETRY = 1
+local function refused(why)
+  late.waiting = true
+  if late.at and not late.took then
+    late.refused = late.refused + 1
+    late.why[why] = true
+  end
+  if late.timer then return end
+  late.timer = true
+  A.After(RETRY, function()
+    late.timer = false
+    if late.waiting and not A.Fighting() then B.Refresh() end
+  end, "bar: refused, again")
+end
+-- its line for /cauras diag
+function B.LateLine()
+  if not late.at then return "After a fight: no fight yet." end
+  local why = {}
+  for _, k in ipairs({ "Combat", "Encounter", "auras secret" }) do if late.why[k] then why[#why + 1] = k end end
+  local n = late.refused == 1 and "1 refresh" or (late.refused .. " refreshes")
+  return "After the last fight: " .. n .. " refused" .. (#why > 0 and (", by " .. table.concat(why, " and ")) or "") .. "; "
+    .. (late.took and string.format("read again %.1f s after it.", late.took) or "still waiting.")
+end
+
 function flushNow()
   if A.Fighting() then after.waiting = true return end
   if after.waiting and after.gen > 0 then return end
-  if restricted() or S.AurasSecret() then after.waiting = true return end
+  local why = refusedBy()
+  if why then after.waiting = true; refused(why) return end
+  late.waiting = false
+  if late.at and not late.took then late.took = A.Now() - late.at end
   set = A.Settings()
   if dirty.group then groupAt = A.Now() end
   B.refreshes = B.refreshes + 1
@@ -774,6 +846,8 @@ function B.Shown(part) return shown[part] end
 -- a fight: the state driver hides yours, the group's stays; after it, 1 s, then a fresh look
 local function fightOver()
   if bar and bar.stopAfter then bar.stopAfter = nil; bar:StopMovingOrSizing(); place() end
+  late.at, late.refused, late.took = A.Now(), 0, nil
+  for k in pairs(late.why) do late.why[k] = nil end
   after.gen = after.gen + 1
   local gen = after.gen
   after.waiting = true
@@ -840,6 +914,20 @@ function B:Init()
   A.On("PLAYER_STOPPED_MOVING", stopped)
   A.On("PLAYER_REGEN_DISABLED", function() after.gen = after.gen + 1; after.waiting = true; pull.untilT = nil end)
   A.On("PLAYER_REGEN_ENABLED", fightOver)
+  -- (a restriction lifted while a look waits: every unit's auras read afresh, the whole bar looked at again. A frame
+  -- on: while the client tells this, it answers every restriction inactive. Several lifted in one frame (a boss's end:
+  -- Encounter, Chat, Combat) are one look, and none once a look went through)
+  A.On("ADDON_RESTRICTION_STATE_CHANGED", function(_, _, state)
+    local states = Enum and Enum.AddOnRestrictionState
+    if plain(state) ~= (states and states.Inactive or 0) or not late.waiting or A.Fighting() then return end
+    if A.Buffs then A.Buffs.Stale(nil) end
+    if late.lifted then return end
+    late.lifted = true
+    A.After(0, function()
+      late.lifted = false
+      if late.waiting and not A.Fighting() then B.Refresh() end
+    end, "bar: a restriction lifted")
+  end)
   A.On("GROUP_ROSTER_UPDATE", function() if A.Fighting() then B.RenameRows() end end, "bar: rows renamed")
   A.On("READY_CHECK", function() B.StartPull(45, 3) end)
   A.On("READY_CHECK_FINISHED", function() B.PullEnd(10) end)

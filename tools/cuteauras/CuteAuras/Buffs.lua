@@ -9,7 +9,8 @@
 --   duty       the group's part: one icon a buff you owe (Assign.lua), its count the members missing it or with it about
 --              to end, its word the next one's name (the shortest time left when it is only ending); a click buffs them
 --              (the group version for three or more of a subgroup or class it gives full power, with that rank's
---              reagent); a hover lists them all, each a click
+--              reagent); a hover lists them all, each a click. A cast of yours while the bar can't read marks what it
+--              covered, art only, until the next read (onBlind)
 --   soulstone  a warlock carrying a soulstone, no healer with one: on the first healer online and in sight (the k-th
 --              warlock the k-th), greyed while out of range
 --   pull       Before the pull: food, the flasks, elixirs and scrolls you carry and lack, your habits
@@ -82,7 +83,7 @@ local function upgradeOf(sp, on)
   for r = #sp.ranks, at + 1, -1 do if S.Knows(sp.ranks[r]) then return sp.ranks[r] end end
   return nil
 end
-B.Add({ key = "self", part = "mine", order = 100, groups = { "mine" },
+local selfP = B.Add({ key = "self", part = "mine", order = 100, groups = { "mine" },
   read = function(add, ctx)
     local names, ids, hidden = A.Camp.Mine()
     if hidden then return end
@@ -221,7 +222,7 @@ local function watchHabits()
 end
 A.Camp.Watch(function() watchHabits() end)
 local askedNow = {}
-B.Add({ key = "habit", part = "mine", order = 105, groups = { "mine" },
+local habitP = B.Add({ key = "habit", part = "mine", order = 105, groups = { "mine" },
   read = function(add, ctx)
     local names, ids, hidden = A.Camp.Mine()
     if hidden then return end
@@ -685,7 +686,10 @@ local function lookSoon()
   end, "buffs: the 3 s look")
 end
 local flyPools, missPools, stScratch = {}, {}, {} -- [duty key] = its flyout's rows, its missing list (kept); a state
-B.Add({ key = "duty", part = "group", order = 200, groups = { "group", "mine" }, timed = "own",
+-- (the bar's refresh count when a cast of yours last marked something: until a read goes through, which reads every
+-- marked record again, a death lets its marks go, onDeath)
+local marking = nil
+local dutyP = B.Add({ key = "duty", part = "group", order = 200, groups = { "group", "mine" }, timed = "own",
   read = function(add, ctx)
     if #A.Assign.duties > 0 then lookSoon() end
     for _, d in ipairs(A.Assign.duties) do
@@ -714,8 +718,11 @@ B.Add({ key = "duty", part = "group", order = 200, groups = { "group", "mine" },
             row.unit, row.guid, row.name, row.class, row.spell, row.tex = m.unit, m.guid, m.me and "You" or m.name, m.class, id, nil
             row.has, row.dead, row.off, row.far, row.glow = st.has, st.dead, st.off, st.far or not st.seen, A.Hands and A.Hands.Glowing(m.guid) or nil
             row.low, row.left, row.weak = low, low and st.left or nil, weak
+            -- (what a cast in a fight needs of this read: their subgroup, counted as missing; a mark of it let go)
+            row.sub, row.miss, row.mark = m.sub, false, nil
             fly[#fly + 1] = row
             if (low or weak or not st.has) and not (st.dead or st.off or st.unknown or not st.seen) then
+              row.miss = true
               local x = missing.pool[#missing + 1]
               if not x then x = {}; missing.pool[#missing + 1] = x end
               x.m, x.id, x.far, x.left, x.i = m, id, st.far, low and st.left or nil, i
@@ -740,7 +747,7 @@ B.Add({ key = "duty", part = "group", order = 200, groups = { "group", "mine" },
           rec.key = "duty:" .. d.key
           rec.never, rec.neverName = "duty:" .. d.key, d.entry.name
           rec.tex, rec.lit, rec.word = L.SpellIcon(d.entry.ranks[1], d.entry.icon), false, "All on"
-          rec.flyout = fly
+          rec.flyout, rec.entry, rec.bless = fly, d.entry, d.bless
           rec.name = L.SpellName(d.entry.ranks[1], d.entry.name)
           rec.why = "Everyone you give it to has it. Hover for the list; click a name to bless them again."
         end
@@ -761,7 +768,8 @@ B.Add({ key = "duty", part = "group", order = 200, groups = { "group", "mine" },
           rec.far = next == nil
           -- (nobody missing it in range: the icon waits, greyed, and a click casts nothing)
           if rec.far then rec.lit, rec.word, rec.status, rec.timed = false, "Far", "warn", nil end
-          rec.flyout = fly
+          -- (the duty's own and the member its click buffs: a cast in a fight marks what it covered, markRec)
+          rec.flyout, rec.entry, rec.bless, rec.pickGUID = fly, d.entry, d.bless, m.guid
           rec.name = L.SpellName(d.entry.ranks[1], d.entry.name)
           if gid then
             B.Click(rec, "spell", gid, m.unit)
@@ -793,6 +801,243 @@ B.Add({ key = "duty", part = "group", order = 200, groups = { "group", "mine" },
     end
   end,
 })
+
+----------------------------------------------------------------------------
+-- your casts while the bar can't read (a fight, or the client still restricting after one): what a cast covered is
+-- marked on the records as last read and painted at once, art only (B.Repaint), until those providers next read, which
+-- is the truth. Only a cast that landed (SUCCEEDED) and whose target was told (SENT: Roster.SentTo), by its name or
+-- a click of ours, never a guess (your target or mouseover: a mouseover macro, a self-cast key, cast elsewhere). A mark
+-- lies over the read, which is kept (fromRead): one let go shows the read again
+--   a duty's spell  one rank marks its target; the group version, in a party everyone you owe it, in a raid the
+--                   target's subgroup, a Greater blessing the target's class: only those still in the group, alive at
+--                   the last read and now, in range then, at a level the rank lands on (ten under it), and never one it
+--                   gives less power than their row's rank (Low rank after the read). Marked rows read "on"; the count,
+--                   those still missing it; the icon waits, "Done", once its click has no one left to give it to
+--   let go          a blessing of yours of another kind, or a Hand, on one you marked (one blessing per paladin per
+--                   target: it takes yours off; a Greater, or one Cute Auras doesn't list, on the target's class; one
+--                   whose target wasn't told, on everyone), and a death (every buff goes; Feign Death is none)
+--   yours           a spell you cast on yourself (one of yours alone, or sent to you): yours of that name waits, "Done"
+--                   (never for a lower rank than its click casts)
+----------------------------------------------------------------------------
+local selfOnly -- [spell id] = true: a rank of a buff of yours alone (an armor, an aura, a shield)
+local function isSelfOnly(id)
+  if not selfOnly then
+    selfOnly = {}
+    for _, list in pairs(D.BUFFS) do
+      for _, e in ipairs(list) do
+        for _, sp in ipairs(e.one or {}) do for _, x in ipairs(sp.ranks) do selfOnly[x] = true end end
+      end
+    end
+  end
+  return selfOnly[id] == true
+end
+local function inList(list, id)
+  for _, x in ipairs(list or {}) do if x == id then return true end end
+  return false
+end
+-- a record's words and look as its read left them: kept the first time a mark changes them, put back every time after
+local SHOWN = { "lit", "far", "word", "class", "status", "timed", "clickWord", "why", "count" }
+local function fromRead(rec)
+  local was = rec.asRead
+  if was then
+    for _, k in ipairs(SHOWN) do rec[k] = was[k] end
+    return
+  end
+  was = {}
+  for _, k in ipairs(SHOWN) do was[k] = rec[k] end
+  rec.asRead = was
+end
+-- (Done, or how far; "in this fight" only while one is on: a cast after it, the client still restricting, was in none)
+local function doneWords(left)
+  return (A.Fighting() and "Done in this fight." or "Done.") .. (left > 0 and " Hover for the others." or "")
+end
+local function soFar(done, left)
+  return (A.Fighting() and "In this fight: " or "So far: ") .. done .. " done, " .. left .. " to go."
+end
+local function waitDone(rec, why)
+  rec.lit, rec.far, rec.word, rec.class, rec.status, rec.timed, rec.clickWord = false, nil, "Done", nil, "good", nil, nil
+  rec.why = why
+end
+-- (a group rank lands on a member no more than ten levels under it, as groupFor counts)
+local function groupLands(entry, sp, level)
+  for i, x in ipairs(entry.group or {}) do
+    if x == sp then return (entry.groupLevels and entry.groupLevels[i] or 0) <= (level or 60) + 10 end
+  end
+  return false
+end
+-- (dead now: a hunter's Feign Death reads dead to the client, and is none)
+local function deadNow(unit) return A.Yes(UnitIsDeadOrGhost, unit) and not A.Yes(UnitIsFeignDeath, unit) end
+-- (a row a group rank cast on t reaches now: in the group still, alive at the last read and now (by their unit now,
+-- not the read's), in range then, in t's party, subgroup (a raid) or class (a Greater), at a level it lands on, at no
+-- less than their row's rank)
+local function reaches(rec, x, sp, t, raid)
+  if x.dead or x.off or x.far then return false end
+  local m = A.Roster.ByGUID(x.guid)
+  if not m or deadNow(m.unit) then return false end
+  if rec.bless then
+    if m.class ~= t.class then return false end
+  elseif raid and m.sub ~= t.sub then return false end
+  return groupLands(rec.entry, sp, m.level) and not S.Low(rec.entry, sp, nil, x.spell)
+end
+-- (the icon's click has no one left: its member marked; the group version, everyone missing it that it reaches)
+local function clickDone(rec)
+  local sp = rec.click and rec.click.spell
+  if not (type(sp) == "number" and inList(rec.entry.group, sp)) then
+    for _, x in ipairs(rec.flyout) do if x.guid == rec.pickGUID then return x.mark == true end end
+    return false
+  end
+  local t = A.Roster.ByGUID(rec.pickGUID)
+  if not t then return false end
+  local raid, any = A.Roster.InRaid(), false
+  for _, x in ipairs(rec.flyout) do
+    if x.miss and reaches(rec, x, sp, t, raid) then
+      if not x.mark then return false end
+      any = true
+    end
+  end
+  return any
+end
+-- a duty's record from its marks, over its read: the count those still missing it, Done once its click has no one left
+-- (a click would only buff them again; the list's rows still reach the others), else how far
+local function markRec(rec)
+  fromRead(rec)
+  local left, done = 0, 0
+  for _, x in ipairs(rec.flyout) do
+    if x.miss then if x.mark then done = done + 1 else left = left + 1 end end
+  end
+  if rec.count then
+    rec.count = left
+    if done > 0 then
+      if clickDone(rec) then waitDone(rec, doneWords(left)) else rec.why = soFar(done, left) end
+    end
+  end
+  -- (the next read that goes through reads every marked record again: their group's bit set)
+  marking = B.refreshes
+  B.Dirty("mine")
+  B.Repaint(rec)
+end
+local function spellNameOf(click)
+  if not (click and click.type == "spell") then return nil end
+  if type(click.spell) == "number" then return L.SpellName(click.spell, nil) end
+  return click.spell
+end
+-- (the rank a click casts: its id, or by name the highest you know)
+local function clickRank(click) return type(click.spell) == "number" and click.spell or S.ByName(click.spell) end
+local OWN = { selfP, habitP } -- (yours a spell you cast can mark: self buffs and their Upgrade, habits and theirs)
+-- (a blessing of yours Cute Auras doesn't list: Forever has none now, gen_data.py stops on one it adds. Told by its
+-- name, which holds what the listed ones' names share in the client's language ("Blessing of"); let go on the target's
+-- whole class, as a Greater's: a mark kept on one it took your blessing off would be a false Done)
+local blessCore -- false: the names share too little to tell one by
+local function coreOf()
+  if blessCore ~= nil then return blessCore end
+  local names = {}
+  for _, list in ipairs({ D.BLESS, D.HANDS }) do
+    for _, e in pairs(list) do
+      local n = L.SpellName(e.ranks[1], nil)
+      if n then names[#names + 1] = n end
+    end
+  end
+  if #names < 3 then return false end
+  table.sort(names, function(a, b) return #a < #b end)
+  local base, best = names[1], ""
+  for i = 1, #base do
+    for j = #base, i + #best, -1 do
+      local sub, all = base:sub(i, j), true
+      for k = 2, #names do if not names[k]:find(sub, 1, true) then all = false break end end
+      if all then best = sub break end
+    end
+  end
+  best = best:match("^%s*(.-)%s*$")
+  blessCore = #best >= 4 and best or false
+  return blessCore
+end
+local function otherBlessing(sp)
+  local core, name = coreOf(), L.SpellName(sp, nil)
+  return core ~= false and name ~= nil and name:find(core, 1, true) ~= nil
+end
+local function onBlind(_, unit, castGUID, spell)
+  if plain(unit) ~= "player" or not B.Blocked() then return end
+  local sp = plain(spell)
+  if type(sp) ~= "number" then return end
+  local to, how = A.Roster.SentTo(plain(castGUID))
+  -- (a guess at a hidden name marks no one: not told)
+  if how == "guess" then to, how = nil, nil end
+  -- yours
+  local name = L.SpellName(sp, nil)
+  if name and (isSelfOnly(sp) or (to ~= nil and to == A.MyGUID())) then
+    for _, p in ipairs(OWN) do
+      for i = 1, p.n do
+        local rec = p.recs[i]
+        if spellNameOf(rec.click) == name and not S.Lower(sp, clickRank(rec.click)) then
+          fromRead(rec)
+          waitDone(rec, doneWords(0))
+          rec.mark = true
+          marking = B.refreshes
+          B.Dirty("mine")
+          B.Repaint(rec)
+        end
+      end
+    end
+  end
+  -- the group's
+  local t = to and A.Roster.ByGUID(to)
+  -- (a blessing or a Hand of yours: any other blessing of yours on them is gone; a Greater's, on their whole class; one
+  -- whose target wasn't told, on anyone's)
+  local H = A.Hands
+  local listed = H and (H.HAND[sp] ~= nil or H.BLESS[sp] ~= nil)
+  local bless = listed or (H ~= nil and otherBlessing(sp))
+  local anyone = how == nil
+  if not (t or (bless and anyone)) then return end
+  local greater = bless and not (listed and (H.HAND[sp] ~= nil or not inList(D.BLESS[H.BLESS[sp]].group, sp)))
+  local raid = A.Roster.InRaid()
+  for i = 1, dutyP.n do
+    local rec = dutyP.recs[i]
+    local e = rec.entry
+    if rec.flyout and e then
+      local group = inList(e.group, sp)
+      local changed = false
+      if group or inList(e.ranks, sp) then
+        if t then
+          for _, x in ipairs(rec.flyout) do
+            local hit
+            if x.guid == to then hit = not group or groupLands(e, sp, t.level)
+            else hit = group and reaches(rec, x, sp, t, raid) end
+            if hit and not x.mark and not S.Low(e, sp, nil, x.spell) then x.mark, changed = true, true end
+          end
+        end
+      elseif rec.bless and bless then
+        for _, x in ipairs(rec.flyout) do
+          if x.mark and (anyone or (t and (x.guid == to or (greater and x.class == t.class)))) then x.mark, changed = nil, true end
+        end
+      end
+      if changed then markRec(rec) end
+    end
+  end
+end
+-- (a death: every buff on them gone, their marks let go. The main frame hears every unit's health: a group member's
+-- alone counts, and none once a read went through since the last mark)
+local function onDeath(_, unit)
+  if marking ~= B.refreshes then return end
+  unit = plain(unit)
+  if type(unit) ~= "string" or not (unit == "player" or unit:find("^party%d+$") or unit:find("^raid%d+$")) then return end
+  if not deadNow(unit) then return end
+  local guid = plain(call(UnitGUID, unit))
+  if type(guid) ~= "string" then return end
+  for i = 1, dutyP.n do
+    local rec, changed = dutyP.recs[i], false
+    if rec.flyout then
+      for _, x in ipairs(rec.flyout) do if x.mark and x.guid == guid then x.mark, changed = nil, true end end
+    end
+    if changed then markRec(rec) end
+  end
+  if guid ~= A.MyGUID() then return end
+  for _, p in ipairs(OWN) do
+    for i = 1, p.n do
+      local rec = p.recs[i]
+      if rec.mark then fromRead(rec); rec.mark = nil; B.Repaint(rec) end
+    end
+  end
+end
 
 -- the warlock's soulstone: one on a healer who has none, the k-th warlock with Cute Auras the k-th healer who can take
 -- it now (online, alive, in sight). A healer offline or out of sight shows no auras: never read as one without a stone,
@@ -1206,6 +1451,8 @@ function Bf:Init()
     A.On(ev, function() Bf.Stale(nil) end)
   end
   A.OnUnit("UNIT_SPELLCAST_SUCCEEDED", { "player" }, onCast)
+  A.OnUnit("UNIT_SPELLCAST_SUCCEEDED", { "player" }, onBlind, "buffs: a cast in a fight")
+  A.On("UNIT_HEALTH", onDeath, "buffs: a death in a fight")
   -- (a fight starts the buffs from others' waits again: 30 s out of it; a ready check ends them)
   A.On("PLAYER_REGEN_DISABLED", function() fromWipe(); fromReady = false end)
   A.On("READY_CHECK", function() fromReady = true; B.Dirty("from") end)

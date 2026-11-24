@@ -1,7 +1,7 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- The look of QuestBank's reminders (pattern D), which Cute Auras keeps: a 32 px game icon, cropped, a 1 px black edge,
 -- the cooldown's sweep, a count at its bottom right; under it a 2 px bar in its part's colour (camp QUEST gold, yours
--- WHITE, the group's GROUP teal) and one word (the verb, the member, the minutes; a status in WARN or BAD).
+-- WHITE, the group's GROUP teal) and one word (the verb, the member, the minutes; a status in WARN, BAD or GOOD).
 local _, A = ...
 local L = {}
 A.Look = L
@@ -141,7 +141,7 @@ function L.Paint(b, rec)
   if b.word then
     local w = rec.word or ""
     if b.word:GetText() ~= w then b.word:SetText(w) end
-    local wc = rec.status == "bad" and C.BAD or rec.status == "warn" and C.WARN or C.INK
+    local wc = rec.status == "bad" and C.BAD or rec.status == "warn" and C.WARN or rec.status == "good" and C.GOOD or C.INK
     if rec.class and rec.status == nil then
       b.word:SetTextColor(L.ClassColor(rec.class))
     else

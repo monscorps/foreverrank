@@ -1,12 +1,13 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- Blessing of Protection, Freedom and Sacrifice. Each is a blessing, and a paladin's blessings are one per target: the
--- Hand takes your long blessing off them. Your cast (UNIT_SPELLCAST_SENT names its target; a hidden name falls back to
--- your target or mouseover) starts the Hand's own clock (its duration, with your talents that lengthen it) and a
--- countdown card on the alerts overlay that only shows it; at its end a restore names the blessing they lost (the one
--- Cute Auras shares out to them, else the last you gave them). In a fight the restore is an art card and their row in
--- the bar's flyout glows (a secure button can't be set there); out of a fight, or once the fight ends, the restore card
--- is the game's secure button set to them: a click blesses them. It goes once they have it again, once any blessing of
--- yours lands on them, or on a right-click. "Alerts on screen" off: no cards, the row's glow alone.
+-- Hand takes your long blessing off them. Your cast (UNIT_SPELLCAST_SENT names its target; a hidden name is the member
+-- a button of ours cast on, else your target or mouseover: Roster.SentTo) starts the Hand's own clock (its duration,
+-- with your talents that lengthen it) and a countdown card on the alerts overlay that only shows it; at its end a
+-- restore names the blessing they lost (the one Cute Auras shares out to them, else the last you gave them). In a fight
+-- the restore is an art card and their row in the bar's flyout glows (a secure button can't be set there); out of a
+-- fight, or once the fight ends, the restore card is the game's secure button set to them: a click blesses them. It
+-- goes once they have it again, once any blessing of yours lands on them, or on a right-click. "Alerts on screen" off:
+-- no cards, the row's glow alone.
 local _, A = ...
 local H = A.Part("Hands", { pending = {}, order = {} })
 local L, S, D = A.Look, A.Spells, A.Data
@@ -21,25 +22,7 @@ for key, e in pairs(D.BLESS) do
 end
 H.HAND, H.BLESS = HAND, BLESS
 local lastBless = {} -- [guid] = the blessing you last gave them (this session)
-local sent = {}      -- [castGUID] = the target's GUID
 local handAt = {}    -- [guid] = the time of your last Hand on them (a newer Hand's clock wins)
-
-local function memberFor(targetName)
-  local m = A.Roster.ByName(targetName)
-  if m then return m end
-  for _, u in ipairs({ "target", "mouseover" }) do
-    local g = plain(call(UnitGUID, u))
-    if g and A.Roster.ByGUID(g) and A.Yes(UnitIsFriend, "player", u) then return A.Roster.ByGUID(g) end
-  end
-  return nil
-end
-local function onSent(_, unit, target, castGUID, spell)
-  if plain(unit) ~= "player" then return end
-  local sp, cg = plain(spell), plain(castGUID)
-  if not (type(sp) == "number" and cg and (HAND[sp] or BLESS[sp])) then return end
-  local m = memberFor(plain(target))
-  if m then sent[cg] = m.guid end
-end
 
 -- the blessing they lose: Cute Auras' share-out, else your last on them
 local function lostBlessing(guid)
@@ -133,6 +116,9 @@ local function frames()
   button.title = L.Text(button, 14, C.WHITE, 190, "LEFT")
   button.text = L.Text(button, 11, C.INK, 190, "LEFT", 2)
   button.hi = button:CreateTexture(nil, "HIGHLIGHT"); button.hi:SetAllPoints(); button.hi:SetColorTexture(1, 1, 1, 0.08)
+  -- (the member and blessing a click casts, noted before it: a name the client hides in the cast's SENT is them;
+  -- Roster.MemberFor)
+  button:HookScript("PreClick", A.Roster.NoteClick)
   -- (a left click blesses them: a look at their auras after; a right click casts nothing (type1 only) and drops it)
   button:HookScript("OnClick", function(self, b)
     if b == "LeftButton" then A.After(0.8, H.Check, "hands: after a click")
@@ -248,8 +234,7 @@ local function onSucceeded(_, unit, castGUID, spell)
   if plain(unit) ~= "player" then return end
   local sp, cg = plain(spell), plain(castGUID)
   if type(sp) ~= "number" then return end
-  local guid = cg and sent[cg]
-  if cg then sent[cg] = nil end
+  local guid = A.Roster.SentTo(cg)
   if BLESS[sp] then
     -- (any blessing of yours on them replaces the one they lost: their restore is done)
     if guid then lastBless[guid] = BLESS[sp]; if H.pending[guid] then H.Done(guid) end end
@@ -296,7 +281,6 @@ end
 
 function H:Init()
   frames()
-  A.OnUnit("UNIT_SPELLCAST_SENT", { "player" }, onSent)
   A.OnUnit("UNIT_SPELLCAST_SUCCEEDED", { "player" }, onSucceeded)
   A.On("PLAYER_REGEN_ENABLED", function() A.After(0.5, function() H.Check(); H.Refresh() end, "hands: after the fight") end)
   for _, ev in ipairs({ "TRAIT_CONFIG_UPDATED", "PLAYER_TALENT_UPDATE", "SPELLS_CHANGED", "ACTIVE_TALENT_GROUP_CHANGED" }) do

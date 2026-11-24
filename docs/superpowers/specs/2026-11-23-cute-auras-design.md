@@ -40,6 +40,10 @@ one group.
 - Auras are secret in a fight (C_Secrets.ShouldAurasBeSecret). C_UnitAuras.GetUnitAuraBySpellID works for a spell
   whose aura is not secret (ShouldSpellAuraBeSecret). Cute Auras asks the client per spell and reads what it may.
 - UnitIsDeadOrGhost, UnitIsConnected and UnitIsVisible are plain in a fight. UnitInRange is secret.
+- Your own casts are plain in a fight: UNIT_SPELLCAST_SENT and UNIT_SPELLCAST_SUCCEEDED are secret only for a unit that
+  is not you or your pet (SecretWhenUnitSpellCastRestricted); SENT's target name may still be hidden.
+- The Combat and Encounter restrictions are not documented to end with PLAYER_REGEN_ENABLED;
+  ADDON_RESTRICTION_STATE_CHANGED fires after one is lifted (C_RestrictedActions).
 - A secure button's attributes cannot be set by an addon in a fight. A secure handler's snippets can, and a state
   driver such as `[@raid5,dead] 1; 0` runs them in a fight. The restricted environment has UnitExists, UnitIsDead,
   PlayerInCombat, SecureCmdOptionParse, frame refs, RunAttribute and RegisterAutoHide. Handles to unprotected frames
@@ -118,6 +122,18 @@ the reagent. Hovering opens the flyout: one secure button per member it covers, 
 - Hands: your cast of Protection, Freedom or Sacrifice (UNIT_SPELLCAST_SENT's target, guarded for secrets) starts a
   countdown alert. At its end comes the restore alert. Out of a fight it is set to that member; in a fight it casts
   on your target or mouseover and says whom to target. The member's row in the blessing flyout glows too.
+- Your casts (the owner, 2026-11-24: "buffed myself during combat icon acted like it still didnt register"): while
+  the bar can't read, a buff of yours that landed marks what it covered, art only: the member's row reads "on", the
+  count drops, and the icon reads "Done" and dims once its click has no one left (your own icons too, after the fight
+  while the client still restricts). Only a cast that landed and whose target was told: SENT's name, or, hidden, a
+  left click on one of Cute Auras' buttons (the bar's icons and rows, the rebuff and restore cards; a click the game
+  queued counts within the spell queue window). Your target or mouseover is never taken for a hidden name (a mouseover
+  macro or a self-cast key casts elsewhere: a false "Done"). A group version marks only those it reaches (party,
+  subgroup or class, in range, alive, at a level it lands on; Feign Death is alive). A Hand or any other blessing of
+  yours (one Cute Auras doesn't list on the target's class; one whose target wasn't told on everyone), or a death, lets
+  a mark go. The next read replaces every mark.
+- After a fight: a look the client refuses is tried again when a restriction lifts, else every second.
+  `/cauras diag` says how many were refused and how long it took.
 
 ## Tests
 

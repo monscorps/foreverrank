@@ -205,7 +205,21 @@ local function newClient(o)
   env.SlashCmdList = {}
   env.DEFAULT_CHAT_FRAME = { AddMessage = function(_, m) c.chat[#c.chat + 1] = m end }
   env.Enum = { TooltipDataLineType = { ErrorLine = 22, ItemSpellTriggerLearn = 15, FlavorText = 37 }, SendAddonMessageResult = { Success = 0, AddOnMessageLockdown = 11 },
-               WeaponSlot = { MainHand = 0, OffHand = 1 }, AddOnRestrictionType = { Combat = 1, Encounter = 2 } }
+               WeaponSlot = { MainHand = 0, OffHand = 1 },
+               -- (RestrictedActionsConstantsDocumentation.lua's)
+               AddOnRestrictionType = { Combat = 0, Encounter = 1, ChallengeMode = 2, PvPMatch = 3, Map = 4, Chat = 5 },
+               AddOnRestrictionState = { Inactive = 0, Activating = 1, Active = 2 } }
+  -- the client's addon restrictions: c.restrict = { [type] = true } while one is active; lifting one tells
+  -- ADDON_RESTRICTION_STATE_CHANGED(type, Inactive) after it is off, every restriction read inactive while it tells
+  env.C_RestrictedActions = {
+    IsAddOnRestrictionActive = function(t) if c.telling or not c.restrict then return false end return c.restrict[t] == true end,
+    GetAddOnRestrictionState = function(t) return c.restrict and c.restrict[t] and 2 or 0 end }
+  function c.lift(t)
+    if c.restrict then c.restrict[t] = nil end
+    c.telling = true
+    FIRE(c, "ADDON_RESTRICTION_STATE_CHANGED", t, 0)
+    c.telling = false
+  end
   env.Constants = { TraitConsts = { INSPECT_TRAIT_CONFIG_ID = -1 } }
   env.SOUNDKIT = { RAID_WARNING = 8959 }
   env.ITEM_SET_BONUS, env.ITEM_SET_BONUS_GRAY = "Set: %s", "(%d) Set: %s"
@@ -372,8 +386,9 @@ local function newClient(o)
       end
     end
   end
-  -- a click as the game does it: a wrap's pre snippet, the button's own and hooked OnClick, the wrap's post snippet
-  -- (both edges of a click, each the button heard (RegisterForClicks), each running a wrap's snippets as the game does)
+  -- a click as the game does it: its PreClick, a wrap's pre snippet, the button's own and hooked OnClick, the wrap's post
+  -- snippet (both edges of a click, each the button heard (RegisterForClicks), each running a wrap's snippets as the game
+  -- does)
   function c.click(f, button)
     button = button or "LeftButton"
     local before = #c.casts
@@ -386,6 +401,7 @@ local function newClient(o)
     end
     for _, down in ipairs({ true, false }) do
       if hears(down) then
+        if f.__scripts.PreClick then f.__scripts.PreClick(f, button, down) end
         local w = f.__wraps and f.__wraps.OnClick
         local msg, go = nil, true
         if w then
@@ -400,14 +416,15 @@ local function newClient(o)
       end
     end
     -- (with c.castEvents: a spell the click cast is heard as the game tells it after the click, SENT with its target's
-    -- name, then SUCCEEDED, unless the game refused it (c.refuse: the global cooldown, a cast going, range))
+    -- name (c.hideNames: hidden, as the client may), then SUCCEEDED, unless the game refused it (c.refuse: the global
+    -- cooldown, a cast going, range))
     if c.castEvents then
       for k = before + 1, #c.casts do
         local cast = c.casts[k]
         if cast.type == "spell" then
           c.castN = (c.castN or 0) + 1
           local cg, who = "cast-auto-" .. c.castN, c.units[cast.unit or "target"]
-          FIRE(c, "UNIT_SPELLCAST_SENT", "player", who and who.name or "", cg, cast.spell)
+          FIRE(c, "UNIT_SPELLCAST_SENT", "player", c.hideNames and secret() or (who and who.name or ""), cg, cast.spell)
           if not c.refuse then FIRE(c, "UNIT_SPELLCAST_SUCCEEDED", "player", cg, cast.spell) end
         end
       end
@@ -442,6 +459,8 @@ local function newClient(o)
   env.UnitClass = function(u) local x = U(u); if not x then return nil end return CLASS_NAME[x.class], x.class, 1 end
   env.UnitLevel = function(u) local x = U(u); return x and x.level or 0 end
   env.UnitIsDeadOrGhost = function(u) local x = U(u); return x and x.dead or false end
+  -- (a hunter's Feign Death: dead to UnitIsDeadOrGhost, as the client reads it, and feigning)
+  env.UnitIsFeignDeath = function(u) local x = U(u); return x and x.feign or false end
   env.UnitIsConnected = function(u) local x = U(u); return x and x.online ~= false end
   env.UnitIsVisible = function(u) local x = U(u); return x and x.visible ~= false end
   env.UnitGroupRolesAssigned = function(u) local x = U(u); return x and x.assigned or "NONE" end
@@ -471,7 +490,9 @@ local function newClient(o)
   env.UnitCastingInfo = function() return c.casting end
   env.UnitChannelInfo = function() return c.channel end
   -- auras
-  env.C_Secrets = { ShouldAurasBeSecret = function() return c.combat end, ShouldSpellAuraBeSecret = function(id) return c.combat and not c.plainAuras[id] end,
+  -- (the auras secret in a fight; c.secretAuras true keeps them so out of one, as the client may for a while after it)
+  local function aurasSecret() return c.combat or c.secretAuras == true end
+  env.C_Secrets = { ShouldAurasBeSecret = aurasSecret, ShouldSpellAuraBeSecret = function(id) return aurasSecret() and not c.plainAuras[id] end,
     ShouldUnitIdentityBeSecret = function() return false end }
   env.C_UnitAuras = {
     GetAuraDataByIndex = function(u, i, filter)
@@ -480,7 +501,7 @@ local function newClient(o)
       local x = U(u)
       local a = x and x.auras and x.auras[i]
       if not a then return nil end
-      if c.combat then return { name = secret(), spellId = secret(), applications = secret(), expirationTime = secret(), sourceUnit = secret(), duration = secret() } end
+      if aurasSecret() then return { name = secret(), spellId = secret(), applications = secret(), expirationTime = secret(), sourceUnit = secret(), duration = secret() } end
       -- (a.secretId: an aura whose spell id the client keeps secret, its name plain)
       return { name = a.name or SPELL_NAMES[a.id] or ("Aura " .. a.id), spellId = a.secretId and secret() or a.id, applications = a.n or 1, expirationTime = a.exp or 0,
                sourceUnit = a.src, duration = a.dur or 0, icon = 1 }
@@ -498,6 +519,8 @@ local function newClient(o)
     GetSpellDescription = function(id) return SPELL_DESC[id] or "" end,
     IsSpellInRange = function(id, u) local x = U(u); if not x then return nil end if x.far then return false end return true end,
     GetSpellCooldown = function() return { startTime = 0, duration = 0 } end,
+    -- (the SpellQueueWindow setting, in milliseconds: 400 by default)
+    GetSpellQueueWindow = function() return c.queueWindow or 400 end,
     -- (a name looked up in your spellbook: the highest rank of it you know, else its first; an id stays itself; nothing
     -- for a spell the client lacks)
     GetSpellIDForSpellIdentifier = function(x)
@@ -1749,6 +1772,9 @@ test("a raid of forty: five paladins, four priests; every client agrees, a refre
     for _, d in ipairs(c.A.Assign.duties) do if d.key == "fort" then assert(#d.targets == 10, "ten each: " .. #d.targets) end end
   end
   local c = cs[1]
+  -- (measured with LuaJIT's compiler off, as the client runs: a trace it compiles mid-batch counts as Lua memory, tens
+  -- of KB at a moment no refresh decides)
+  if jit then jit.off(); jit.flush() end
   for _ = 1, 100 do c.A.Bar.Refresh() end -- (the pools filled, every lazy table made once)
   -- (a leak grows with every refresh: two batches of a hundred, the second must not grow as the first did)
   local function batch()
@@ -1763,6 +1789,7 @@ test("a raid of forty: five paladins, four priests; every client agrees, a refre
   local g1 = batch()
   local per = (os.clock() - t0) / 100 * 1000
   local g2 = batch()
+  if jit then jit.on() end
   print("    timers queued by 100 refreshes: " .. (#c.timers - timers0))
   print(string.format("    raid of 40: a full refresh %.2f ms in the mock, memory %+.0f KB then %+.0f KB a hundred refreshes", per, g1, g2))
   assert(g1 < 60 and g2 < 60, "memory grows with refreshes: " .. g1 .. " and " .. g2 .. " KB")
@@ -4614,6 +4641,901 @@ test("from others: a level 40 takes Fortitude 5 at most (rank 6 lands on 50 and 
   assert(fromKeys(c) == "", "Fortitude 5, the share-out's priest of 60: nothing asked: " .. fromKeys(c))
   assert(rowOf(fly, "Amag").state.__text == "on", "the priest's list: rank 5 on the 40 is on, not Low rank: " .. rowOf(fly, "Amag").state.__text)
   noErrors(c); noErrors(cp)
+end)
+
+----------------------------------------------------------------------------
+-- your casts in a fight (the owner, 2026-11-24: "buffed myself during combat icon acted like it still didnt register
+-- me buffing myself"), and the look after a fight the client still restricts
+----------------------------------------------------------------------------
+-- (a cast as the game tells it: SENT with the target's name, then SUCCEEDED unless it never landed)
+local function castIn(c, target, spell, cg, landed)
+  fire(c, "UNIT_SPELLCAST_SENT", "player", target, cg, spell)
+  if landed ~= false then fire(c, "UNIT_SPELLCAST_SUCCEEDED", "player", cg, spell) end
+end
+local function sameColor(t, col) return t and t[1] == col[1] and t[2] == col[2] and t[3] == col[3] end
+local function chatLine(c, pat) for i = #c.chat, 1, -1 do if c.chat[i]:find(pat) then return c.chat[i] end end end
+
+test("in a fight: Fortitude cast on yourself reads Done, dimmed, your row on; nothing blocked; gone once the fight's look reads it", function()
+  local me = member({ name = "Solo", class = "PRIEST", level = 40 })
+  local c = client({ me = me })
+  knowAll(c, "PRIEST", 40)
+  load(c)
+  tick(c, 2)
+  local rec = find(shown(c, "group"), "duty:fort")
+  assert(rec and rec.lit and rec.word == "You", "Fortitude owed to yourself")
+  local b = icon(c, "group", "duty:fort")
+  local fly = c.env[b:GetName() .. "Fly"]
+  assert(b.word.__text == "You" and b.icon.__desat == false and rowOf(fly, "You").state.__text == "missing", "before: lit, your row missing")
+  fight(c, true)
+  tick(c, 1)
+  -- (its click, as the game tells it: SENT with your own name, SUCCEEDED; the aura lands, hidden in the fight)
+  c.castEvents = true
+  c.casts = {}
+  c.click(b)
+  c.castEvents = nil
+  assert(c.casts[1] and c.casts[1].spell == 2791 and c.casts[1].unit == "player", "the click cast Fortitude 4 on you")
+  table.insert(me.auras, { id = 2791, src = "player", exp = c.clock + 3600, dur = 3600 })
+  fire(c, "UNIT_AURA", "player")
+  tick(c, 1)
+  local C = c.A.Look.C
+  assert(b:IsShown() and b.word.__text == "Done" and sameColor(b.word.__textColor, C.GOOD), "the icon's word: Done: " .. b.word.__text)
+  assert(b.icon.__desat == true and b.icon.__alpha == 0.55, "dimmed as a waiting icon is")
+  FITS(b.word, "Done under the icon")
+  local row = rowOf(fly, "You")
+  assert(row and row.state.__text == "on" and sameColor(row.state.__textColor, C.GOOD) and row.icon.__desat == true, "your row: on, greyed: " .. tostring(row and row.state.__text))
+  local tip = tipOf(c, b)
+  assert(tip[2] == "Done in this fight.", "its tooltip says so: " .. tostring(tip[2]))
+  for _, l in ipairs(tip) do assert(not l:find("^Click: "), "no click line for a buff already given: " .. l) end
+  noErrors(c, "a cast in a fight")
+  fight(c, false)
+  tick(c, 2)
+  assert(not find(shown(c, "group"), "duty:fort") and not b:IsShown(), "after the fight: the aura read, nothing owed")
+  noErrors(c)
+end)
+
+-- a priest of 60 with Sacred Candles and four warriors: one dead, one out of range
+local function prayerParty()
+  local P = member({ name = "Apri", class = "PRIEST", level = 60, guid = "Player-1-F1" })
+  local list = { P }
+  for i, n in ipairs({ "Bwar", "Cdead", "Dfall", "Efar" }) do list[i + 1] = member({ name = n, class = "WARRIOR", level = 60, guid = "Player-1-F" .. (i + 1) }) end
+  list[3].dead = true
+  list[5].far = true
+  local c = client({ me = P, group = list })
+  knowAll(c, "PRIEST", 60)
+  c.items[17029] = { name = "Sacred Candle" }
+  c.bags = { { id = 17029, bag = 0, slot = 1, count = 5 } }
+  load(c)
+  tick(c, 12)
+  local b = icon(c, "group", "duty:fort")
+  assert(b and b:GetAttribute("spell") == 21564 and b.count.__text == "4", "Prayer of Fortitude 2 for the four who can take it, on you: " .. tostring(b and b.count.__text))
+  return c, list, b, c.env[b:GetName() .. "Fly"]
+end
+
+test("in a fight: Prayer of Fortitude on one member marks the party's rows, never the dead, the far or one dead now; the count drops; the read after is the truth", function()
+  local c, list, b, fly = prayerParty()
+  fight(c, true)
+  tick(c, 1)
+  list[4].dead = true -- (Dfall, alive at the last read)
+  castIn(c, "Bwar", 21564, "cast-p1")
+  tick(c, 1)
+  local C = c.A.Look.C
+  for _, n in ipairs({ "You", "Bwar" }) do
+    local r = rowOf(fly, n)
+    assert(r.state.__text == "on" and r.icon.__desat == true and sameColor(r.state.__textColor, C.GOOD), n .. ": on: " .. r.state.__text)
+  end
+  assert(rowOf(fly, "Cdead").state.__text == "dead", "the dead one: dead")
+  assert(rowOf(fly, "Efar").state.__text == "far", "the far one: far")
+  assert(rowOf(fly, "Dfall").state.__text == "missing", "the one dead now: as last read, not on")
+  assert(b.count.__text == "2", "two still miss it: " .. b.count.__text)
+  assert(b.word.__text == "Done" and b.icon.__desat == true, "you, its click's member, marked: Done")
+  assert(tipOf(c, b)[2] == "Done in this fight. Hover for the others.", "the others are in its list")
+  noErrors(c, "Prayer in a fight")
+  -- (the client's truth after it: on you; taken off Bwar meanwhile; Dfall raised)
+  table.insert(list[1].auras, { id = 21564, src = "player", exp = c.clock + 3600, dur = 3600 })
+  list[4].dead = nil
+  fight(c, false)
+  tick(c, 2)
+  local rec = find(shown(c, "group"), "duty:fort")
+  assert(rec and rec.lit and rec.word == "Bwar" and rec.count == 3, "Bwar named again from the read: " .. tostring(rec and rec.word))
+  assert(b.word.__text == "Bwar" and b.icon.__desat == false and b.icon.__alpha == 1 and b.count.__text == "3", "the icon painted from the read, no mark left")
+  local r = rowOf(fly, "Bwar")
+  assert(r.state.__text == "missing" and r.icon.__desat == false and sameColor(r.state.__textColor, C.QUEST), "Bwar's row from the read: " .. r.state.__text)
+  assert(rowOf(fly, "You").state.__text == "on", "yours on")
+  noErrors(c)
+end)
+
+test("in a fight, no mark: a cast sent and never landed, a target that can't be told, no SENT, a lower rank, a spell not the duty's, a hidden name guessed from your target", function()
+  local c, list, b, fly = prayerParty()
+  fight(c, true)
+  tick(c, 1)
+  local function unchanged(what)
+    assert(b.word.__text == "You" and b.icon.__desat == false and b.count.__text == "4", what .. ": the icon as it was: " .. b.word.__text .. " " .. b.count.__text)
+    for _, n in ipairs({ "You", "Bwar" }) do assert(rowOf(fly, n).state.__text == "missing", what .. ": " .. n .. " still missing") end
+  end
+  castIn(c, "Bwar", 21564, "cast-n1", false)
+  tick(c, 1); unchanged("sent, never landed")
+  -- (the name hidden, no target or mouseover that is a member)
+  castIn(c, secret(), 21564, "cast-n2")
+  tick(c, 1); unchanged("a hidden name")
+  fire(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "cast-n3", 21564)
+  tick(c, 1); unchanged("no SENT")
+  -- (a lower rank than the row's: Fortitude 1 on Bwar, Low rank once read; Inner Fire 1 under the 6 its icon casts)
+  castIn(c, "Bwar", 1243, "cast-n7")
+  castIn(c, "", 588, "cast-n8")
+  tick(c, 1); unchanged("a lower rank")
+  local inner = icon(c, "own", "self:innerfire")
+  assert(inner and inner.word.__text == "Buff", "Inner Fire 1: yours still asks for rank 6")
+  -- (Divine Spirit and Inner Fire on yourself: not Fortitude's; Divine Spirit's own icon is Done, and yours of Inner Fire)
+  castIn(c, "Apri", 27841, "cast-n4")
+  castIn(c, "", 10952, "cast-n5")
+  tick(c, 1); unchanged("other spells")
+  assert(icon(c, "group", "duty:spirit").word.__text == "Done", "Divine Spirit's own icon marked")
+  assert(inner.word.__text == "Done" and inner.icon.__desat == true, "Inner Fire 6: yours Done (hidden in the fight)")
+  -- (the name hidden, your target a member: a guess (a mouseover macro or a self-cast key casts elsewhere), no mark)
+  c.units.target = list[2]
+  castIn(c, secret(), 10938, "cast-n6")
+  tick(c, 1); unchanged("a hidden name, your target a member")
+  -- (Fortitude 6 told on Bwar: Bwar's row on, the icon still yours)
+  castIn(c, "Bwar", 10938, "cast-n9")
+  tick(c, 1)
+  assert(rowOf(fly, "Bwar").state.__text == "on" and rowOf(fly, "You").state.__text == "missing", "one rank: its target alone")
+  assert(b.word.__text == "You" and b.icon.__desat == false and b.count.__text == "3", "the icon still buffs you, three to go: " .. b.count.__text)
+  assert(tipOf(c, b)[2] == "In this fight: 1 done, 3 to go.", "said so: " .. tostring(tipOf(c, b)[2]))
+  noErrors(c)
+end)
+
+test("in a fight: a raid's Prayer marks the target's subgroup alone; a Greater blessing the target's class alone", function()
+  -- (a raid of ten, one priest giving all of it: Prayer of Fortitude on R7 of subgroup two)
+  local list = {}
+  for i = 1, 10 do list[i] = member({ name = "R" .. i, class = i == 1 and "PRIEST" or "WARRIOR", level = 60, guid = string.format("Player-1-%02d", i), sub = i <= 5 and 1 or 2 }) end
+  local c = client({ me = list[1], group = list, raid = true })
+  knowAll(c, "PRIEST", 60)
+  c.items[17029] = { name = "Sacred Candle" }
+  c.bags = { { id = 17029, bag = 0, slot = 1, count = 5 } }
+  load(c)
+  tick(c, 12)
+  local b = icon(c, "group", "duty:fort")
+  assert(b and b.count.__text == "10" and b.word.__text == "You", "all ten owed, Prayer on you first")
+  local fly = c.env[b:GetName() .. "Fly"]
+  fight(c, true)
+  tick(c, 1)
+  castIn(c, "R7", 21564, "cast-r1")
+  tick(c, 1)
+  for i = 2, 10 do
+    local want = i >= 6 and "on" or "missing"
+    assert(rowOf(fly, "R" .. i).state.__text == want, "R" .. i .. ": " .. want .. ": " .. rowOf(fly, "R" .. i).state.__text)
+  end
+  assert(b.word.__text == "You" and b.icon.__desat == false and b.count.__text == "5", "your subgroup still to do: " .. b.count.__text)
+  noErrors(c, "a raid's Prayer")
+  -- (a paladin of a party owing Might to a rogue and three warriors, the rogue first: Greater Might cast on a warrior)
+  WORLD = {}
+  local PAL = member({ name = "Apal", class = "PALADIN", level = 60, guid = "Player-1-G1" })
+  local party = { PAL }
+  for i, n in ipairs({ "Bwar", "Cwar", "Dwar" }) do party[i + 1] = member({ name = n, class = "WARRIOR", level = 60, guid = "Player-1-G" .. (i + 1) }) end
+  party[5] = member({ name = "Erog", class = "ROGUE", level = 60, guid = "Player-1-G5" })
+  c = client({ me = PAL, group = party, spec = 594 })
+  knowAll(c, "PALADIN", 60)
+  c.known[25916] = true
+  c.items[21177] = { name = "Symbol of Kings" }
+  c.bags = { { id = 21177, bag = 0, slot = 1, count = 20 } }
+  load(c)
+  tick(c, 12)
+  b = icon(c, "group", "duty:bless:might")
+  assert(b and b.word.__text == "Erog" and b.count.__text == "4", "Might owed to four, the rogue first: " .. tostring(b and b.word.__text))
+  fly = c.env[b:GetName() .. "Fly"]
+  fight(c, true)
+  tick(c, 1)
+  castIn(c, "Cwar", 25916, "cast-g1")
+  tick(c, 1)
+  for _, n in ipairs({ "Bwar", "Cwar", "Dwar" }) do assert(rowOf(fly, n).state.__text == "on", n .. ": on") end
+  assert(rowOf(fly, "Erog").state.__text == "missing", "the rogue: not a warrior")
+  assert(b.word.__text == "Erog" and b.icon.__desat == false and b.count.__text == "", "the rogue still to do, one left (no badge for one)")
+  assert(tipOf(c, b)[2] == "In this fight: 3 done, 1 to go.", "said so: " .. tostring(tipOf(c, b)[2]))
+  noErrors(c)
+end)
+
+-- a priest of 40 owing herself Fortitude, Inner Fire to put up: in a fight Fortitude lands from another priest and
+-- she casts Inner Fire; the fight ends with the client still restricting, or keeping auras secret, for 3 s
+local function lateFight(how)
+  local me = member({ name = "Late", class = "PRIEST", level = 40 })
+  local c = client({ me = me })
+  knowAll(c, "PRIEST", 40)
+  load(c)
+  tick(c, 2)
+  assert(find(shown(c, "group"), "duty:fort") and find(shown(c, "mine"), "self:innerfire"), "Fortitude owed, Inner Fire asked")
+  fight(c, true)
+  tick(c, 1)
+  table.insert(me.auras, { id = 2791, exp = c.clock + 3600, dur = 3600 })
+  table.insert(me.auras, { id = 1006, src = "player", exp = c.clock + 600, dur = 600 })
+  castIn(c, "", 1006, "cast-l1")
+  fire(c, "UNIT_AURA", "player")
+  tick(c, 1)
+  if how == "restrict" then c.restrict = { [c.env.Enum.AddOnRestrictionType.Combat] = true } else c.secretAuras = true end
+  fight(c, false)
+  return c
+end
+local function stale(c)
+  local mine = icon(c, "own", "self:innerfire")
+  return find(shown(c, "group"), "duty:fort") ~= nil and icon(c, "group", "duty:fort"):IsShown() and mine:IsShown() and mine.word.__text == "Done"
+end
+
+test("after a fight the client still restricts for 3 s: the bar looks again as the restriction lifts, and without its event within a second", function()
+  -- the Combat restriction, lifted with ADDON_RESTRICTION_STATE_CHANGED
+  local c = lateFight("restrict")
+  tick(c, 3.5)
+  assert(c.env.CuteAurasBarOwn:IsShown(), "yours shows again out of the fight")
+  local mine = icon(c, "own", "self:innerfire")
+  assert(stale(c) and mine.icon.__desat == true and mine.icon.__alpha == 0.55, "refused: Fortitude still asked, your Inner Fire Done, dimmed")
+  c.lift(c.env.Enum.AddOnRestrictionType.Combat)
+  tick(c, 0.2)
+  assert(not find(shown(c, "group"), "duty:fort") and not find(shown(c, "mine"), "self:innerfire"), "the restriction lifted: looked again at once")
+  assert(not icon(c, "group", "duty:fort"):IsShown() and not mine:IsShown(), "both gone")
+  noErrors(c, "lifted")
+  -- auras kept secret, lifted with no event: the next second's try
+  WORLD = {}
+  c = lateFight("secret")
+  tick(c, 3.5)
+  assert(stale(c), "auras secret: refused")
+  c.secretAuras = nil
+  tick(c, 0.2)
+  assert(stale(c), "no event: not yet")
+  tick(c, 0.6)
+  assert(not find(shown(c, "group"), "duty:fort") and not find(shown(c, "mine"), "self:innerfire"), "the second's try went through")
+  noErrors(c)
+end)
+
+test("/cauras diag: the look after the last fight, refused how often, why, and when it went through", function()
+  local me = member({ name = "Diag", class = "PRIEST", level = 40 })
+  local c = client({ me = me })
+  knowAll(c, "PRIEST", 40)
+  load(c)
+  tick(c, 2)
+  c.env.SlashCmdList.CUTEAURAS("diag")
+  assert(chatLine(c, "After a fight: no fight yet%.$"), "before any fight")
+  fight(c, true); tick(c, 1)
+  c.restrict = { [c.env.Enum.AddOnRestrictionType.Encounter] = true }
+  fight(c, false)
+  tick(c, 2.5)
+  c.env.SlashCmdList.CUTEAURAS("diag")
+  -- (refused: the look 1 s after the fight and each second's try, and any other refresh asked meanwhile)
+  local line = chatLine(c, "After the last fight")
+  local n = tonumber(line and line:match("After the last fight: (%d+) refreshes refused, by Encounter; still waiting%.$"))
+  assert(n and n >= 2, "still waiting: " .. tostring(line))
+  c.restrict = nil
+  c.secretAuras = true
+  tick(c, 1)
+  c.secretAuras = nil
+  c.lift(c.env.Enum.AddOnRestrictionType.Encounter)
+  tick(c, 0.2)
+  c.env.SlashCmdList.CUTEAURAS("diag")
+  line = chatLine(c, "After the last fight")
+  local m = tonumber(line and line:match("After the last fight: (%d+) refreshes refused, by Encounter and auras secret; read again 3%.%d s after it%.$"))
+  assert(m and m > n, "read again: " .. tostring(line))
+  noErrors(c)
+end)
+
+----------------------------------------------------------------------------
+-- the marks, reviewed: only what a cast reaches, let go when it is taken off, the member a cast went to told exactly
+----------------------------------------------------------------------------
+local function namedRows(fly, name)
+  local n = 0
+  for _, r in ipairs(fly.rows) do if r:IsShown() and r.name.__text == name then n = n + 1 end end
+  return n
+end
+local function marksOf(c, key)
+  local rec, t = find(shown(c, "group"), key), {}
+  for _, x in ipairs(rec and rec.flyout or {}) do if x.mark then t[#t + 1] = x.name end end
+  table.sort(t)
+  return table.concat(t, ","), rec
+end
+-- a priest of 60 with Sacred Candles and four warriors, all alive and in range
+local function prayerFive()
+  local P = member({ name = "Apri", class = "PRIEST", level = 60, guid = "Player-1-V1" })
+  local list = { P }
+  for i, n in ipairs({ "Bwar", "Cwar", "Dwar", "Ewar" }) do list[i + 1] = member({ name = n, class = "WARRIOR", level = 60, guid = "Player-1-V" .. (i + 1) }) end
+  local c = client({ me = P, group = list })
+  knowAll(c, "PRIEST", 60)
+  c.items[17029] = { name = "Sacred Candle" }
+  c.bags = { { id = 17029, bag = 0, slot = 1, count = 5 } }
+  load(c)
+  tick(c, 12)
+  local b = icon(c, "group", "duty:fort")
+  assert(b and b:GetAttribute("spell") == 21564 and b.count.__text == "5", "Prayer of Fortitude 2 for all five")
+  return c, list, b, c.env[b:GetName() .. "Fly"]
+end
+
+test("in a fight: a member leaves; the row left on no one stays '?', never painted back to its old member by a mark", function()
+  local c, list, b, fly = prayerFive()
+  fight(c, true)
+  tick(c, 1)
+  -- (Bwar leaves: the party's tokens shift, party4 now no one; its row was Ewar's)
+  table.remove(list, 2)
+  seat(c)
+  fire(c, "GROUP_ROSTER_UPDATE")
+  tick(c, 1)
+  local nobody
+  for _, r in ipairs(fly.rows) do if r:IsShown() and r:GetAttribute("unit") == "party4" then nobody = r end end
+  assert(nobody and nobody.name.__text == "?" and nobody.state.__text == "", "party4's row: no one")
+  assert(namedRows(fly, "Ewar") == 1, "Ewar once, on the row that now reaches him")
+  castIn(c, "Apri", 21564, "cast-v1")
+  tick(c, 1)
+  assert(marksOf(c, "duty:fort") == "Cwar,Dwar,Ewar,You", "the four still here marked: " .. marksOf(c, "duty:fort"))
+  assert(nobody.name.__text == "?" and nobody.state.__text == "" and not nobody.glow:IsShown(), "party4's row still no one: " .. nobody.name.__text .. " " .. nobody.state.__text)
+  assert(namedRows(fly, "Ewar") == 1, "Ewar still once: " .. namedRows(fly, "Ewar"))
+  assert(rowOf(fly, "You").state.__text == "on", "your row, still yours: on")
+  noErrors(c)
+end)
+
+test("in a fight: a group rank marks no one it can't land on: Prayer of Fortitude 2 leaves a level 45 missing, Prayer 1 reaches him", function()
+  local P = member({ name = "Apri", class = "PRIEST", level = 60, guid = "Player-1-Q1" })
+  local list = { P }
+  for i, lv in ipairs({ 45, 60, 60, 60 }) do list[i + 1] = member({ name = "Low" .. i, class = "WARRIOR", level = lv, guid = "Player-1-Q" .. (i + 1) }) end
+  list[2].name = "Young"
+  local c = client({ me = P, group = list })
+  knowAll(c, "PRIEST", 60)
+  c.items[17028], c.items[17029] = { name = "Holy Candle" }, { name = "Sacred Candle" }
+  c.bags = { { id = 17028, bag = 0, slot = 1, count = 20 }, { id = 17029, bag = 0, slot = 2, count = 20 } }
+  P.auras = { { id = 10938, src = "player", exp = c.clock + 3000, dur = 3600 } }
+  load(c)
+  tick(c, 12)
+  local b = icon(c, "group", "duty:fort")
+  assert(b and b:GetAttribute("spell") == 21564 and b.count.__text == "4" and b.word.__text ~= "Young", "Prayer 2 on a 60, four missing it")
+  local fly = c.env[b:GetName() .. "Fly"]
+  fight(c, true)
+  tick(c, 1)
+  c.castEvents = true
+  c.casts = {}
+  c.click(b)
+  c.castEvents = nil
+  assert(c.casts[1] and c.casts[1].spell == 21564, "the click cast Prayer 2")
+  tick(c, 1)
+  assert(rowOf(fly, "Young").state.__text == "missing", "the 45: Prayer 2 never lands on him: " .. rowOf(fly, "Young").state.__text)
+  for i = 2, 4 do assert(rowOf(fly, "Low" .. i).state.__text == "on", "Low" .. i .. ": on") end
+  assert(b.word.__text == "Done" and b.count.__text == "", "the three it reaches done, the 45 left (no badge for one)")
+  assert(tipOf(c, b)[2] == "Done in this fight. Hover for the others.", "the 45 is in its list: " .. tostring(tipOf(c, b)[2]))
+  -- (Prayer 2 cast on him: it lands on the others, never on him)
+  castIn(c, "Young", 21564, "cast-q2")
+  tick(c, 1)
+  assert(rowOf(fly, "Young").state.__text == "missing", "Prayer 2 on the 45 himself: still missing")
+  -- (Prayer 1, learned at 48: it lands on a 45, at Fortitude 5's power, his best)
+  castIn(c, "Young", 21562, "cast-q3")
+  tick(c, 1)
+  assert(rowOf(fly, "Young").state.__text == "on" and b.word.__text == "Done", "Prayer 1 reaches him")
+  noErrors(c)
+end)
+
+test("in a fight: a mark let go: a Hand or another blessing of yours on them, a Greater of another kind on their class, a death; row and icon as last read", function()
+  local PAL = member({ name = "Apal", class = "PALADIN", level = 60, guid = "Player-1-H1" })
+  local party = { PAL }
+  for i, n in ipairs({ "Bwar", "Cwar" }) do party[i + 1] = member({ name = n, class = "WARRIOR", level = 60, guid = "Player-1-H" .. (i + 1) }) end
+  party[4] = member({ name = "Erog", class = "ROGUE", level = 60, guid = "Player-1-H4" })
+  local c = client({ me = PAL, group = party, spec = 594 })
+  knowAll(c, "PALADIN", 60)
+  c.known[25898] = true
+  c.items[21177] = { name = "Symbol of Kings" }
+  c.bags = { { id = 21177, bag = 0, slot = 1, count = 20 } }
+  load(c)
+  tick(c, 12)
+  local b = icon(c, "group", "duty:bless:might")
+  assert(b and b.count.__text == "3", "Might owed to three: " .. tostring(b and b.count.__text))
+  local fly = c.env[b:GetName() .. "Fly"]
+  local pick, why, clickLine = b.word.__text, tipOf(c, b)[2], nil
+  for _, l in ipairs(tipOf(c, b)) do if l:find("^Click: ") then clickLine = l end end
+  assert(clickLine, "a click line as read")
+  local C = c.A.Look.C
+  local function asRead(what)
+    assert(b.word.__text == pick and b.icon.__desat == false and b.count.__text == "3", what .. ": the icon as read: " .. b.word.__text .. " " .. b.count.__text)
+    local tip = tipOf(c, b)
+    assert(tip[2] == why, what .. ": its words as read: " .. tostring(tip[2]))
+    local has = false
+    for _, l in ipairs(tip) do if l == clickLine then has = true end end
+    assert(has, what .. ": its click line back")
+    for _, n in ipairs({ "Bwar", "Cwar", "Erog" }) do
+      local r = rowOf(fly, n)
+      assert(r.state.__text == "missing" and r.icon.__desat == false and sameColor(r.state.__textColor, C.QUEST), what .. ": " .. n .. " missing: " .. r.state.__text)
+    end
+  end
+  fight(c, true)
+  tick(c, 1)
+  -- (Might on the one its click blesses: Done; then Blessing of Protection on them takes it off)
+  castIn(c, pick, 25291, "cast-h1")
+  tick(c, 1)
+  assert(b.word.__text == "Done" and rowOf(fly, pick).state.__text == "on", "Might on " .. pick .. ": Done")
+  castIn(c, pick, 10278, "cast-h2")
+  tick(c, 1)
+  asRead("a Hand on them")
+  -- (Might on each warrior; Kings on Cwar takes his off; Greater Kings on Cwar every warrior's, Bwar's too)
+  castIn(c, "Bwar", 25291, "cast-h3")
+  castIn(c, "Cwar", 25291, "cast-h4")
+  tick(c, 1)
+  assert(rowOf(fly, "Bwar").state.__text == "on" and rowOf(fly, "Cwar").state.__text == "on", "both warriors on")
+  castIn(c, "Cwar", 20217, "cast-h5")
+  tick(c, 1)
+  assert(rowOf(fly, "Cwar").state.__text == "missing" and rowOf(fly, "Bwar").state.__text == "on", "Kings on Cwar: his Might gone, Bwar's kept")
+  castIn(c, "Cwar", 25898, "cast-h6")
+  tick(c, 1)
+  asRead("Greater Kings on the warriors")
+  -- (Might on Erog, then he dies: every buff gone)
+  castIn(c, "Erog", 25291, "cast-h7")
+  tick(c, 1)
+  assert(rowOf(fly, "Erog").state.__text == "on", "Erog on")
+  party[4].dead = true
+  fire(c, "UNIT_HEALTH", "party3")
+  tick(c, 1)
+  asRead("a death")
+  noErrors(c, "let go")
+  -- (yours: Inner Fire Done in a fight, then you die)
+  WORLD = {}
+  local me = member({ name = "Solo", class = "PRIEST", level = 40 })
+  c = client({ me = me })
+  knowAll(c, "PRIEST", 40)
+  load(c)
+  tick(c, 2)
+  local inner = icon(c, "own", "self:innerfire")
+  assert(inner.word.__text == "Buff", "Inner Fire asked")
+  fight(c, true)
+  tick(c, 1)
+  castIn(c, "", 1006, "cast-h8")
+  tick(c, 1)
+  assert(inner.word.__text == "Done" and inner.icon.__desat == true, "Inner Fire Done")
+  me.dead = true
+  fire(c, "UNIT_HEALTH", "player")
+  tick(c, 1)
+  assert(inner.word.__text == "Buff" and inner.icon.__desat == false and inner.icon.__alpha == 1, "you died: asked again: " .. inner.word.__text)
+  noErrors(c)
+end)
+
+test("in a fight: a name told that is no member's is no one, not your target or mouseover; a hidden name from the bar's own click is the member it clicked; from elsewhere, no one", function()
+  local P = member({ name = "Apri", class = "PRIEST", level = 60, guid = "Player-1-W1" })
+  local list = { P }
+  for i, n in ipairs({ "Bwar", "Cwar", "Dwar" }) do list[i + 1] = member({ name = n, class = "WARRIOR", level = 60, guid = "Player-1-W" .. (i + 1) }) end
+  local c = client({ me = P, group = list })
+  knowAll(c, "PRIEST", 60)
+  load(c)
+  tick(c, 12)
+  local b = icon(c, "group", "duty:fort")
+  local fly = c.env[b:GetName() .. "Fly"]
+  assert(b.word.__text == "You" and b.count.__text == "4", "Fortitude owed to four, you first")
+  fight(c, true)
+  tick(c, 1)
+  -- (a hunter's pet buffed, your target; your mouse resting on Bwar, then on you)
+  c.units.target = member({ name = "Wolf", class = "HUNTER", level = 60, guid = "Pet-0-1" })
+  c.units.mouseover = list[2]
+  castIn(c, "Wolf", 10938, "cast-w1")
+  tick(c, 1)
+  assert(marksOf(c, "duty:fort") == "" and rowOf(fly, "Bwar").state.__text == "missing" and b.count.__text == "4", "the pet: no one marked: " .. marksOf(c, "duty:fort"))
+  c.units.mouseover = P
+  castIn(c, "Wolf", 10938, "cast-w2")
+  tick(c, 1)
+  assert(marksOf(c, "duty:fort") == "" and b.word.__text == "You", "the mouse on you: still no one")
+  -- (the bar's own row for Bwar clicked, Cwar your target, the name hidden: Bwar, as the click cast on him)
+  c.units.target, c.units.mouseover = list[3], nil
+  c.castEvents, c.hideNames = true, true
+  c.casts = {}
+  c.click(rowOf(fly, "Bwar"))
+  c.castEvents, c.hideNames = nil, nil
+  assert(c.casts[1] and c.casts[1].unit == "party1", "the row cast on Bwar")
+  tick(c, 1)
+  assert(marksOf(c, "duty:fort") == "Bwar" and rowOf(fly, "Cwar").state.__text == "missing", "Bwar marked, not your target: " .. marksOf(c, "duty:fort"))
+  -- (the icon itself, its click on you: you)
+  c.castEvents, c.hideNames = true, true
+  c.click(b)
+  c.castEvents, c.hideNames = nil, nil
+  assert(c.casts[2] and c.casts[2].unit == "player", "the icon cast on you")
+  tick(c, 1)
+  assert(marksOf(c, "duty:fort") == "Bwar,You" and b.word.__text == "Done", "you marked, not your target: " .. marksOf(c, "duty:fort"))
+  -- (a hidden name from elsewhere, after: Cwar your target, a guess, marks no one)
+  castIn(c, secret(), 10938, "cast-w3")
+  tick(c, 1)
+  assert(marksOf(c, "duty:fort") == "Bwar,You", "no mark from your target for a hidden name: " .. marksOf(c, "duty:fort"))
+  noErrors(c)
+end)
+
+test("in a fight: the icon's click is Prayer; a single Fortitude on its member alone leaves it lit, Done once everyone it reaches has it", function()
+  local c, list, b, fly = prayerParty()
+  local clickLine
+  for _, l in ipairs(tipOf(c, b)) do if l:find("^Click: ") then clickLine = l end end
+  fight(c, true)
+  tick(c, 1)
+  c.castEvents = true
+  c.casts = {}
+  c.click(rowOf(fly, "You"))
+  c.castEvents = nil
+  assert(c.casts[1] and c.casts[1].spell == 10938 and c.casts[1].unit == "player", "your row cast Fortitude 6 on you")
+  tick(c, 1)
+  assert(rowOf(fly, "You").state.__text == "on" and rowOf(fly, "Bwar").state.__text == "missing", "you on, Bwar still missing")
+  assert(b.word.__text == "You" and b.icon.__desat == false and b.count.__text == "3", "its Prayer still reaches the others: lit, three to go: " .. b.word.__text)
+  local tip = tipOf(c, b)
+  assert(tip[2] == "In this fight: 1 done, 3 to go.", "said so: " .. tostring(tip[2]))
+  local has = false
+  for _, l in ipairs(tip) do if l == clickLine then has = true end end
+  assert(has, "its click line kept: " .. tostring(clickLine))
+  -- (Bwar and Dfall too: everyone the Prayer reaches has it; Efar, out of range, left in its list)
+  castIn(c, "Bwar", 10938, "cast-s1")
+  tick(c, 1)
+  assert(b.word.__text == "You", "Dfall still to do")
+  castIn(c, "Dfall", 10938, "cast-s2")
+  tick(c, 1)
+  assert(b.word.__text == "Done" and b.icon.__desat == true and b.count.__text == "", "Done: " .. b.word.__text)
+  assert(tipOf(c, b)[2] == "Done in this fight. Hover for the others.", "Efar in its list")
+  noErrors(c)
+end)
+
+test("in a fight: a member who left gets no mark from a Prayer; one dead now is read by their unit now, not the read's", function()
+  local c, list, b, fly = prayerFive()
+  fight(c, true)
+  tick(c, 1)
+  -- (Bwar leaves: Cwar on party1, Dwar on party2, Ewar on party3; then Dwar dies)
+  table.remove(list, 2)
+  seat(c)
+  fire(c, "GROUP_ROSTER_UPDATE")
+  tick(c, 1)
+  list[3].dead = true
+  castIn(c, "Apri", 21564, "cast-l1")
+  tick(c, 1)
+  local marks, rec = marksOf(c, "duty:fort")
+  assert(marks == "Cwar,Ewar,You", "the living still here: " .. marks)
+  assert(rec.count == 2 and b.count.__text == "2", "Bwar and Dwar still to go: " .. tostring(rec.count))
+  assert(b.word.__text == "Done", "everyone the Prayer reaches has it")
+  -- (the rows the shift renamed keep their blank state: none reads on but yours)
+  for _, r in ipairs(fly.rows) do
+    if r:IsShown() and r.name.__text ~= "You" then assert(r.state.__text == "", r.name.__text .. ": " .. r.state.__text) end
+  end
+  noErrors(c)
+end)
+
+test("after a fight, the client still restricting: a cast reads Done, not Done in this fight; so far, not in this fight", function()
+  local me = member({ name = "Late", class = "PRIEST", level = 40 })
+  local c = client({ me = me })
+  knowAll(c, "PRIEST", 40)
+  load(c)
+  tick(c, 2)
+  fight(c, true)
+  tick(c, 1)
+  c.restrict = { [c.env.Enum.AddOnRestrictionType.Combat] = true }
+  fight(c, false)
+  tick(c, 2)
+  assert(not c.A.Fighting() and c.A.Bar.Blocked(), "out of the fight, the bar still can't read")
+  local mine = icon(c, "own", "self:innerfire")
+  castIn(c, "", 1006, "cast-d1")
+  tick(c, 0.5)
+  assert(mine.word.__text == "Done" and tipOf(c, mine)[2] == "Done.", "Inner Fire: " .. tostring(tipOf(c, mine)[2]))
+  local b = icon(c, "group", "duty:fort")
+  castIn(c, "Late", 2791, "cast-d2")
+  tick(c, 0.5)
+  assert(b.word.__text == "Done" and tipOf(c, b)[2] == "Done.", "Fortitude: " .. tostring(tipOf(c, b)[2]))
+  noErrors(c, "solo")
+  WORLD = {}
+  local fly
+  c, _, b, fly = prayerParty()
+  fight(c, true)
+  tick(c, 1)
+  c.restrict = { [c.env.Enum.AddOnRestrictionType.Combat] = true }
+  fight(c, false)
+  tick(c, 2)
+  castIn(c, "Bwar", 10938, "cast-d3")
+  tick(c, 0.5)
+  assert(rowOf(fly, "Bwar").state.__text == "on" and tipOf(c, b)[2] == "So far: 1 done, 3 to go.", "the party: " .. tostring(tipOf(c, b)[2]))
+  noErrors(c)
+end)
+
+test("out of a fight, auras secret: a cast's mark goes with the first read that goes through, whatever asked for it", function()
+  local me = member({ name = "Hush", class = "PRIEST", level = 40 })
+  local c = client({ me = me })
+  knowAll(c, "PRIEST", 40)
+  load(c)
+  tick(c, 2)
+  local inner = icon(c, "own", "self:innerfire")
+  assert(inner:IsShown() and inner.word.__text == "Buff", "Inner Fire asked")
+  -- (the client keeps auras secret out of a fight: the bar can't read; Inner Fire cast, its aura not told yet)
+  c.secretAuras = true
+  castIn(c, "", 1006, "cast-x1")
+  tick(c, 0.3)
+  assert(inner.word.__text == "Done", "marked Done")
+  -- (secret no more; the first refresh that goes through is the camp's, for a bag's cooldown)
+  c.secretAuras = nil
+  fire(c, "BAG_UPDATE_COOLDOWN")
+  tick(c, 0.2)
+  assert(inner.word.__text == "Buff" and inner.icon.__desat == false, "read again: no aura on you, asked again: " .. inner.word.__text)
+  noErrors(c)
+end)
+
+----------------------------------------------------------------------------
+-- the marks, reviewed again: told only by a name or a click of ours (a queued click too, the rebuff and restore
+-- cards'), let go by any blessing of yours, Feign Death no death; a death's watch and a lifted restriction kept cheap
+----------------------------------------------------------------------------
+-- a priest of 60 with Fortitude (and Divine Spirit) herself, Fortitude missing on a tank, a rogue, a warrior and a mage
+local function fortFour()
+  local P = member({ name = "Apri", class = "PRIEST", level = 60, guid = "Player-1-K1" })
+  local T = member({ name = "Btank", class = "WARRIOR", level = 60, guid = "Player-1-K2", assigned = "TANK" })
+  local R = member({ name = "Crog", class = "ROGUE", level = 60, guid = "Player-1-K3" })
+  local W = member({ name = "Dwar", class = "WARRIOR", level = 60, guid = "Player-1-K4" })
+  local M = member({ name = "Emag", class = "MAGE", level = 60, guid = "Player-1-K5" })
+  local c = client({ me = P, group = { P, T, R, W, M } })
+  P.auras = { { id = 10938, src = "player", exp = c.clock + 3500, dur = 3600 }, { id = 27841, src = "player", exp = c.clock + 3500, dur = 3600 } }
+  knowAll(c, "PRIEST", 60)
+  load(c)
+  tick(c, 12)
+  local b = icon(c, "group", "duty:fort")
+  assert(b and b.count.__text == "4" and b.word.__text ~= "You", "Fortitude 6 owed to the four: " .. tostring(b and b.count.__text))
+  local g = { P = P, T = T, R = R, W = W, M = M }
+  local pick
+  for _, m in pairs(g) do if m.name == b.word.__text then pick = m end end
+  return c, g, b, c.env[b:GetName() .. "Fly"], pick
+end
+
+test("in a fight: a hidden name not from a click of ours is a guess and marks no one: your target, your mouseover, yourself; never a false Done", function()
+  local c, g, b, fly, pick = fortFour()
+  local other = pick == g.R and g.W or g.R
+  fight(c, true)
+  tick(c, 1)
+  -- (the pick your target, a /cast [@mouseover,help] Fortitude on another: it lands on them, the name hidden)
+  c.units.target, c.units.mouseover = pick, other
+  castIn(c, secret(), 10938, "cast-g1")
+  tick(c, 1)
+  assert(marksOf(c, "duty:fort") == "", "your target not marked: " .. marksOf(c, "duty:fort"))
+  assert(b.word.__text == pick.name and b.count.__text == "4" and rowOf(fly, pick.name).state.__text == "missing", "no Done: " .. b.word.__text)
+  assert(rowOf(fly, other.name).state.__text == "missing", "the one it landed on: as read")
+  -- (an enemy your target, the mouse on a member's frame: the self-cast key lands on you)
+  c.units.target = member({ name = "Ogre", class = "WARRIOR", level = 60, guid = "Creature-0-99" })
+  local friend = c.env.UnitIsFriend
+  c.env.UnitIsFriend = function(_, u) return u ~= "target" end
+  castIn(c, secret(), 10938, "cast-g2")
+  c.env.UnitIsFriend = friend
+  tick(c, 1)
+  assert(marksOf(c, "duty:fort") == "", "your mouseover not marked: " .. marksOf(c, "duty:fort"))
+  noErrors(c, "a guess")
+  -- (yourself your target, Dampen Magic, a habit of yours, cast by a mouseover macro on Bob: yours not Done)
+  WORLD = {}
+  local me = member({ name = "Damp", class = "MAGE", level = 60, guid = "Player-1-M1" })
+  local bob = member({ name = "Bob", class = "WARRIOR", level = 60, guid = "Player-1-M2" })
+  c = client({ me = me, group = { me, bob } })
+  SPELL_NAMES[604], SPELL_NAMES[8450] = "Dampen Magic", "Dampen Magic"
+  c.known[604], c.known[8450] = true, true
+  load(c)
+  tick(c, 1)
+  local function on(id) me.auras[#me.auras + 1] = { id = id, src = "player", exp = c.clock + 600, dur = 600 }; fire(c, "UNIT_AURA", "player"); tick(c, 2) end
+  local function off(id) for i = #me.auras, 1, -1 do if me.auras[i].id == id then table.remove(me.auras, i) end end; fire(c, "UNIT_AURA", "player"); tick(c, 2) end
+  on(8450); off(8450); on(8450); off(8450); on(8450); off(8450)
+  local hb = icon(c, "own", "habit:Dampen Magic")
+  assert(hb and hb:IsShown() and hb.word.__text == "Buff", "Dampen Magic asked: " .. tostring(hb and hb.word.__text))
+  fight(c, true)
+  tick(c, 1)
+  c.units.target, c.units.mouseover = me, bob
+  castIn(c, secret(), 8450, "cast-g3")
+  tick(c, 1)
+  assert(hb.word.__text == "Buff", "a cast on Bob: yours still asked: " .. hb.word.__text)
+  -- (told on you: Done)
+  castIn(c, "Damp", 8450, "cast-g4")
+  tick(c, 1)
+  assert(hb.word.__text == "Done", "on you: Done: " .. hb.word.__text)
+  noErrors(c)
+end)
+
+test("in a fight: a click the game queued behind the global cooldown is told by its SENT a moment on; past the spell queue window, after another SENT or of another spell, no one", function()
+  local c, g, b, fly = fortFour()
+  local spirit = icon(c, "group", "duty:spirit")
+  local sfly = spirit and c.env[spirit:GetName() .. "Fly"]
+  assert(sfly and rowOf(sfly, "Emag") and rowOf(sfly, "Emag").state.__text == "missing", "Divine Spirit owed to the mage")
+  fight(c, true)
+  tick(c, 1)
+  c.units.target = g.T -- (a friendly member: a guess would name the tank)
+  -- (Crog's row clicked, its cast queued: SENT 0.3 s on, the name hidden)
+  c.casts = {}
+  c.click(rowOf(fly, "Crog"))
+  assert(c.casts[1] and c.casts[1].spell == 10938 and c.units[c.casts[1].unit] == g.R, "the row casts Fortitude 6 on Crog")
+  tick(c, 0.3)
+  castIn(c, secret(), 10938, "cast-q1")
+  tick(c, 0.5)
+  assert(marksOf(c, "duty:fort") == "Crog", "queued: Crog: " .. marksOf(c, "duty:fort"))
+  -- (Dwar's row clicked, refused: a SENT 0.6 s on is another cast's; a smaller window, 0.2 s on)
+  c.click(rowOf(fly, "Dwar"))
+  tick(c, 0.6)
+  castIn(c, secret(), 10938, "cast-q2")
+  tick(c, 0.5)
+  assert(marksOf(c, "duty:fort") == "Crog", "past the window: " .. marksOf(c, "duty:fort"))
+  c.queueWindow = 50
+  c.click(rowOf(fly, "Dwar"))
+  tick(c, 0.2)
+  castIn(c, secret(), 10938, "cast-q3")
+  c.queueWindow = nil
+  tick(c, 0.5)
+  assert(marksOf(c, "duty:fort") == "Crog", "past a 50 ms window: " .. marksOf(c, "duty:fort"))
+  -- (Dwar's row clicked, another SENT first: the click is that one's)
+  c.click(rowOf(fly, "Dwar"))
+  castIn(c, secret(), 6346, "cast-q4") -- (Fear Ward, no duty of hers)
+  castIn(c, secret(), 10938, "cast-q5")
+  tick(c, 0.5)
+  assert(marksOf(c, "duty:fort") == "Crog", "another SENT first: " .. marksOf(c, "duty:fort"))
+  -- (Dwar's row right-clicked: it casts nothing, so it tells nothing)
+  c.click(rowOf(fly, "Dwar"), "RightButton")
+  castIn(c, secret(), 10938, "cast-q7")
+  tick(c, 0.5)
+  assert(marksOf(c, "duty:fort") == "Crog", "a right-click: " .. marksOf(c, "duty:fort"))
+  -- (Emag's Fortitude row clicked, Divine Spirit sent: not the row's spell, Emag's Divine Spirit as read)
+  c.click(rowOf(fly, "Emag"))
+  castIn(c, secret(), 27841, "cast-q6")
+  tick(c, 0.5)
+  assert(rowOf(sfly, "Emag").state.__text == "missing" and marksOf(c, "duty:spirit") == "", "another spell: no one: " .. marksOf(c, "duty:spirit"))
+  noErrors(c)
+end)
+
+test("in a fight: the rebuff card's click is told with the name hidden: the member it cast on, not your target; the restore card's after a fight the client restricts", function()
+  local c, g, b, fly, pick = fortFour()
+  local other = pick == g.R and g.W or g.R
+  local rb = c.env.CuteAurasRebuff
+  fight(c, true)
+  tick(c, 1)
+  other.dead = true; tick(c, 1); other.dead = false; tick(c, 1)
+  assert(rb:IsShown() and c.units[rb:GetAttribute("unit")] == other, "the rebuff card for " .. other.name)
+  c.units.target = pick
+  c.castEvents, c.hideNames = true, true
+  c.casts = {}
+  c.click(rb)
+  c.castEvents, c.hideNames = nil, nil
+  assert(c.casts[1] and c.units[c.casts[1].unit] == other, "the card cast on " .. other.name)
+  tick(c, 1)
+  assert(marksOf(c, "duty:fort") == other.name, "the card's member marked, not your target: " .. marksOf(c, "duty:fort"))
+  assert(b.word.__text == pick.name and rowOf(fly, pick.name).state.__text == "missing", "no Done for your target: " .. b.word.__text)
+  noErrors(c, "rebuff")
+  -- (a paladin's Blessing of Protection on the rogue in a fight; after it the client still restricts: the restore
+  -- card's click, the name hidden, marks the rogue's Might)
+  WORLD = {}
+  local p5 = party5()
+  c = p5.c3
+  fight(c, true)
+  fire(c, "UNIT_SPELLCAST_SENT", "player", "Drog", "cast-r1", 10278)
+  fire(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "cast-r1", 10278)
+  tick(c, 11)
+  c.restrict = { [c.env.Enum.AddOnRestrictionType.Combat] = true }
+  fight(c, false)
+  tick(c, 2)
+  local restore = c.env.CuteAurasRestore
+  assert(restore:IsShown() and c.units[restore:GetAttribute("unit")] == p5.ROG, "the restore card for the rogue")
+  assert(c.A.Bar.Blocked() and marksOf(c, "duty:bless:might") == "", "the bar can't read; no mark yet")
+  c.units.target = p5.WAR
+  c.castEvents, c.hideNames = true, true
+  c.casts = {}
+  c.click(restore)
+  c.castEvents, c.hideNames = nil, nil
+  assert(c.casts[1] and c.units[c.casts[1].unit] == p5.ROG, "the card blessed the rogue")
+  tick(c, 0.5)
+  assert(marksOf(c, "duty:bless:might") == "Drog", "the rogue marked: " .. marksOf(c, "duty:bless:might"))
+  noErrors(c)
+end)
+
+test("in a fight: any blessing of yours lets a mark go: one Cute Auras doesn't list (Salvation, should Forever add it) on the target's class; one whose target wasn't told, everyone's", function()
+  local PAL = member({ name = "Apal", class = "PALADIN", level = 60, guid = "Player-1-J1" })
+  local party = { PAL }
+  for i, n in ipairs({ "Bwar", "Cwar" }) do party[i + 1] = member({ name = n, class = "WARRIOR", level = 60, guid = "Player-1-J" .. (i + 1) }) end
+  party[4] = member({ name = "Erog", class = "ROGUE", level = 60, guid = "Player-1-J4" })
+  local c = client({ me = PAL, group = party, spec = 594 })
+  knowAll(c, "PALADIN", 60)
+  SPELL_NAMES[1038] = "Blessing of Salvation"
+  c.known[1038] = true
+  load(c)
+  tick(c, 12)
+  local b = icon(c, "group", "duty:bless:might")
+  assert(b and b.count.__text == "3", "Might owed to three")
+  fight(c, true)
+  tick(c, 1)
+  castIn(c, "Bwar", 25291, "cast-b1"); castIn(c, "Cwar", 25291, "cast-b2"); castIn(c, "Erog", 25291, "cast-b3")
+  tick(c, 1)
+  assert(marksOf(c, "duty:bless:might") == "Bwar,Cwar,Erog" and b.word.__text == "Done", "Might on all three: Done")
+  castIn(c, "Bwar", 1038, "cast-b4")
+  tick(c, 1)
+  assert(marksOf(c, "duty:bless:might") == "Erog", "Salvation on Bwar: the warriors' let go (as a Greater's, it can't be told): " .. marksOf(c, "duty:bless:might"))
+  assert(b.word.__text == "Done" and b.count.__text == "2", "Erog, its click's, still on; the warriors two to go: " .. b.word.__text .. " " .. b.count.__text)
+  -- (Kings, its name hidden, no click of ours: it may have landed on Erog)
+  castIn(c, secret(), 20217, "cast-b5")
+  tick(c, 1)
+  assert(marksOf(c, "duty:bless:might") == "", "a blessing on someone not told: every mark let go: " .. marksOf(c, "duty:bless:might"))
+  assert(b.word.__text == "Erog" and b.count.__text == "3", "the icon as read: " .. b.word.__text)
+  -- (Might on Erog again, then Salvation on a pet, told by its name: no member, nothing let go)
+  castIn(c, "Erog", 25291, "cast-b6")
+  castIn(c, "Wolf", 1038, "cast-b7")
+  tick(c, 1)
+  assert(marksOf(c, "duty:bless:might") == "Erog", "a blessing on a pet: kept: " .. marksOf(c, "duty:bless:might"))
+  noErrors(c)
+end)
+
+test("in a fight: Feign Death is no death: a Prayer reaches a feigning hunter and their mark stays; a real death lets it go", function()
+  local P = member({ name = "Apri", class = "PRIEST", level = 60, guid = "Player-1-L1" })
+  local Hn = member({ name = "Bhun", class = "HUNTER", level = 60, guid = "Player-1-L2" })
+  local W = member({ name = "Cwar", class = "WARRIOR", level = 60, guid = "Player-1-L3" })
+  local c = client({ me = P, group = { P, Hn, W } })
+  knowAll(c, "PRIEST", 60)
+  c.items[17029] = { name = "Sacred Candle" }
+  c.bags = { { id = 17029, bag = 0, slot = 1, count = 5 } }
+  load(c)
+  tick(c, 12)
+  local b = icon(c, "group", "duty:fort")
+  local fly = c.env[b:GetName() .. "Fly"]
+  fight(c, true)
+  tick(c, 1)
+  Hn.dead, Hn.feign = true, true
+  castIn(c, "Apri", 21564, "cast-f1")
+  tick(c, 1)
+  assert(rowOf(fly, "Bhun").state.__text == "on", "the feigning hunter reached: " .. rowOf(fly, "Bhun").state.__text)
+  fire(c, "UNIT_HEALTH", tokenOf(c, Hn))
+  tick(c, 1)
+  assert(rowOf(fly, "Bhun").state.__text == "on", "feigning: still on: " .. rowOf(fly, "Bhun").state.__text)
+  Hn.feign = false
+  fire(c, "UNIT_HEALTH", tokenOf(c, Hn))
+  tick(c, 1)
+  assert(rowOf(fly, "Bhun").state.__text == "missing", "dead: let go: " .. rowOf(fly, "Bhun").state.__text)
+  noErrors(c)
+end)
+
+test("a death's watch costs nothing past a group member's health, and nothing once a read went through since the last mark (the group's part off too)", function()
+  local me = member({ name = "Solo", class = "PRIEST", level = 40 })
+  local c = client({ me = me })
+  knowAll(c, "PRIEST", 40)
+  load(c)
+  tick(c, 2)
+  c.A.Settings().group = false
+  c.A.Bar.Refresh()
+  tick(c, 1)
+  local inner = icon(c, "own", "self:innerfire")
+  fight(c, true)
+  tick(c, 1)
+  castIn(c, "", 1006, "cast-z1")
+  tick(c, 1)
+  assert(inner.word.__text == "Done", "Inner Fire marked")
+  local real, n = c.env.UnitIsDeadOrGhost, 0
+  c.env.UnitIsDeadOrGhost = function(u) n = n + 1; return real(u) end
+  c.units.nameplate1 = member({ name = "Boar", class = "WARRIOR", level = 30, guid = "Creature-0-1", dead = true })
+  c.units.boss1 = c.units.nameplate1
+  for _ = 1, 50 do fire(c, "UNIT_HEALTH", "nameplate1"); fire(c, "UNIT_HEALTH", "boss1") end
+  assert(n == 0, "in the fight, a mob's health: no look: " .. n)
+  fire(c, "UNIT_HEALTH", "player")
+  assert(n == 1, "yours: looked at: " .. n)
+  fight(c, false)
+  tick(c, 3)
+  assert(inner.word.__text == "Buff", "the fight's read: asked again")
+  n = 0
+  for _ = 1, 50 do fire(c, "UNIT_HEALTH", "player") end
+  c.env.UnitIsDeadOrGhost = real
+  assert(n == 0, "after the read, the group's part off: no look: " .. n)
+  noErrors(c)
+end)
+
+test("after a fight, restrictions lifting in one frame (a boss's end: Combat, Encounter, Chat) are one look", function()
+  local c = lateFight("restrict")
+  local E = c.env.Enum.AddOnRestrictionType
+  c.restrict[E.Encounter] = true
+  tick(c, 3.5)
+  assert(c.A.Bar.late.waiting and stale(c), "a look waits")
+  local before = c.A.Bar.refreshes
+  c.lift(E.Combat); c.lift(E.Encounter); c.lift(E.Chat)
+  tick(c, 0.1)
+  assert(c.A.Bar.refreshes - before == 1, "one look: " .. (c.A.Bar.refreshes - before))
+  assert(not stale(c) and not c.A.Bar.late.waiting, "looked again")
+  -- (two lifted, Encounter still on: one look refused, still waiting; Encounter lifted: the look)
+  WORLD = {}
+  c = lateFight("restrict")
+  c.restrict[E.Encounter] = true
+  tick(c, 3.5)
+  local refused = c.A.Bar.late.refused
+  c.lift(E.Combat); c.lift(E.Chat)
+  tick(c, 0.1)
+  assert(c.A.Bar.late.waiting and stale(c), "Encounter still on: waiting")
+  assert(c.A.Bar.late.refused - refused == 1, "one look refused: " .. (c.A.Bar.late.refused - refused))
+  before = c.A.Bar.refreshes
+  c.lift(E.Encounter)
+  tick(c, 0.1)
+  assert(c.A.Bar.refreshes - before == 1 and not stale(c), "Encounter lifted: one look")
+  noErrors(c, "one lifted, then the other")
+  -- (a look that went through before the frame's: none more)
+  WORLD = {}
+  c = lateFight("restrict")
+  tick(c, 3.5)
+  c.lift(E.Combat)
+  before = c.A.Bar.refreshes
+  c.A.Bar.Refresh()
+  tick(c, 0.1)
+  assert(c.A.Bar.refreshes - before == 1 and not stale(c), "looked once: " .. (c.A.Bar.refreshes - before))
+  noErrors(c)
 end)
 
 print(string.format("OK (%d scenarios)", passed))
