@@ -1,7 +1,8 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- The minimap button (the owner, 2026-11-23): the round one every addon has, as Cute's (Cute/UI.lua): the emblem cut
 -- round on the minimap's dark disc under the tracking ring, dragged around the minimap's edge (its angle kept,
--- settings.minimapPos). A click: the window. A right-click: a menu to its tabs, the test alerts and Move. Settings'
+-- settings.minimapPos). The emblem is Cute's girl on a rose aura, not Cute's teal (the owner, 2026-11-24: the two
+-- buttons sit side by side; tools/cuteauras/make_logo.py makes it from Cute's). A click: the window. A right-click: a menu to its tabs, the test alerts and Move. Settings'
 -- "Button on the minimap" (under Minimap) or /cauras minimap shows or hides it.
 local _, A = ...
 local Mm = A.Part("Minimap", {})

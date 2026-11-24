@@ -22,6 +22,7 @@ size), then check the page:
   - no version number, TODO or placeholder outside the markers and the changelog labels; no middle dots or arrows in
     the body text
   - the changelog's newest entry is the toc's version
+  - Cute Auras' versions agree (toc and Core.lua) and its emblem is not Cute's
   - the windows' pictures: one each for J, L and M, small, sized as their files, with alt text
   - the page's greys pass 4.5:1 on every surface they sit on
   - the Download button is black text on a white button through the whole cascade (forever.css included), at rest
@@ -237,6 +238,14 @@ def auras_version():
         return "?"
     if toc.group(1) != core.group(1):
         problem("Cute Auras: CuteAuras.toc says %s, Core.lua %s" % (toc.group(1), core.group(1)))
+    # its emblem is its own (the owner, 2026-11-24): the two minimap buttons sit side by side
+    mine, cutes = os.path.join(AURAS, "art", "logo.png"), os.path.join(ADDON, "art", "logo.png")
+    if not os.path.exists(mine):
+        problem("Cute Auras: no art/logo.png")
+    elif os.path.exists(cutes) and open(mine, "rb").read() == open(cutes, "rb").read():
+        problem("Cute Auras: art/logo.png is Cute's emblem; tools/cuteauras/make_logo.py makes its own")
+    else:
+        ok("Cute Auras' emblem is its own, not Cute's")
     return toc.group(1)
 
 
