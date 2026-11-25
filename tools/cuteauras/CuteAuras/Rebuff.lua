@@ -165,6 +165,11 @@ local function paint()
   b.title:SetText(title)
   if m and m.class then b.title:SetTextColor(L.ClassColor(m.class)) else b.title:SetTextColor(C.WHITE[1], C.WHITE[2], C.WHITE[3]) end
   b.text:SetText(text)
+  -- (the icon look's name under it: art, so set in a fight too; its title and line are the tooltip's. Its slot in the
+  -- click row is as wide as its name: a new member while it stays shown (a right-click's next, no OnShow) lays the
+  -- row out again, out of a fight only, where the secure button may move)
+  A.Alerts.Name(b, name, m and m.class or nil)
+  A.OutOfFight("rebuff: its name's slot", A.Alerts.Layout)
   -- (a new member on the card, or one back up again: the pulse, the count, the sound; your own clicks never)
   local key = i .. ":" .. tostring(handler:GetAttribute("rev" .. i) or 0)
   if Rb.painted ~= key then
@@ -174,17 +179,24 @@ local function paint()
     if A.Alerts then A.Alerts.Sound() end
   end
 end
+-- its look for Show as: an icon (the buff's art, the teal bar, the member's name under it) or a card; out of a fight
+-- only
 local function shape()
   if not button or A.Fighting() then return end
-  A.Alerts.ShapeCard(button, A.Alerts.IconSize())
+  local Al = A.Alerts
+  if Al.Icons() then Al.ShapeIcon(button) else Al.ShapeCard(button, Al.IconSize()) end
+  Al.Edge(button.edge, button.icon, false)
+  Al.Layout()
 end
 Rb.Restyle = function() A.OutOfFight("rebuff: size", shape) end
--- out of a fight: the card at the overlay's top, or under Hands' restore card while that one shows
-function Rb.StackUnder(card)
+-- its place, out of a fight only (the overlay's Layout says where): x in the click row at the overlay's top, or a card
+-- hung under Hands' restore card (under)
+function Rb.Stack(x, under)
   if not button or A.Fighting() then return end
   button:ClearAllPoints()
-  if card then button:SetPoint("TOP", card, "BOTTOM", 0, -A.Alerts.GAP)
-  else button:SetPoint("TOP", A.Alerts.Anchor(), "TOP", 0, 0) end
+  if under then button:SetPoint("TOP", under, "BOTTOM", 0, -A.Alerts.GAP)
+  else button:SetPoint("TOP", A.Alerts.Anchor(), "TOP", x or 0, 0) end
+  Rb.under = under
 end
 
 -- your casts: a spell of the card's member sent (its target's name, where plain, theirs) and landed
@@ -225,8 +237,13 @@ local function frames()
   button.side = button:CreateTexture(nil, "BORDER")
   button.side:SetPoint("TOPLEFT"); button.side:SetPoint("BOTTOMLEFT"); button.side:SetWidth(3)
   button.side:SetColorTexture(C.GROUP[1], C.GROUP[2], C.GROUP[3], 1)
+  -- (the icon look's parts: the black edge, the teal bar and the name under it, art on this button)
+  button.edge = button:CreateTexture(nil, "BACKGROUND")
   button.icon = button:CreateTexture(nil, "ARTWORK")
   button.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+  button.bar = button:CreateTexture(nil, "ARTWORK")
+  button.bar:SetColorTexture(C.GROUP[1], C.GROUP[2], C.GROUP[3], 1)
+  button.name = L.Text(button, 10, C.WHITE, 76)
   button.title = L.Text(button, 14, C.WHITE, 190, "LEFT")
   button.text = L.Text(button, 11, C.INK, 190, "LEFT", 2)
   button.hi = button:CreateTexture(nil, "HIGHLIGHT"); button.hi:SetAllPoints(); button.hi:SetColorTexture(1, 1, 1, 0.08)
@@ -336,10 +353,18 @@ local function update()
           local id = S.Best(o.entry, m.level)
           if id then ids[#ids + 1] = tostring(id) end
         end
-        -- (the name as the game's header reads it: a member from another realm with it)
-        local n, realm = call(UnitName, m.unit)
-        n, realm = plain(n), plain(realm)
-        if type(n) == "string" and type(realm) == "string" and realm ~= "" then n = n .. "-" .. realm end
+        -- (the name as the game's header reads it, SecureGroupHeaders.lua's GetGroupRosterInfo: a raid's from the raid
+        -- roster (Forever's surname in it); a party's UnitName's two answers joined with "-", the second Forever's
+        -- surname or a realm)
+        local n
+        if m.unit:find("^raid") and type(GetRaidRosterInfo) == "function" then
+          n = plain(call(GetRaidRosterInfo, m.index))
+        else
+          local realm
+          n, realm = call(UnitName, m.unit)
+          n, realm = plain(n), plain(realm)
+          if type(n) == "string" and type(realm) == "string" and realm ~= "" then n = n .. "-" .. realm end
+        end
         if #ids > 0 then list[#list + 1] = { unit = m.unit, spells = table.concat(ids, ","), name = type(n) == "string" and n or nil } end
       end
     end

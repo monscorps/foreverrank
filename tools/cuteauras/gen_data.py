@@ -156,8 +156,10 @@ for key, name, greater in BLESS:
         if rgs[-1]: s["reagent"] = rgs[-1]
     addPower(s, key)
     bless[key] = s
-# every blessing the paladin's lines hold is listed here, long (BLESS) or short (HANDS): Forever has no Salvation, Light
-# or Sanctuary. Buffs.lua's "no blessing on you at all" counts BLESS alone, so one the client adds stops the run
+# every blessing the paladin's lines hold is listed here, long (BLESS) or short (HANDS).
+# Forever has no Salvation, Light or Sanctuary: client 70862 removed 1038, 19977-19979, 25890, 25895 (SpellName.csv);
+# Sanctuary was never in 1.60. codex/spellbook.json's rows are the beta's.
+# Buffs.lua's "no blessing on you at all" counts BLESS alone, so one the client adds stops the run
 listed = {n for _, n, _ in BLESS} | {g for _, _, g in BLESS} | {n for _, n in HANDS}
 extra = sorted({NAMES[s] for ln in LINES["PALADIN"] for s in SLA[ln]
                 if s in MISC and re.match(r"(Greater )?Blessing of ", NAMES.get(s, "")) and NAMES[s] not in listed})
@@ -241,6 +243,7 @@ def foodWords(g):
         if text in rest: out.append(w); rest = rest.replace(text, "")
     if not out: sys.exit("D.FOOD: no words for the text %r (add it to FOOD_WORDS or FOOD_NONE)" % g)
     return " ".join(out)
+FOODS = set()  # (the Well Fed foods' item ids: the camp and the Well Fed row cover them, never D.CONSUME's "other")
 for want in ("D.CAMP = ", "D.FOOD = "):
     row = next((l for l in qbdata if l.startswith(want)), None)
     if not row: sys.exit("QuestBank's Data.lua has no " + want.strip())
@@ -251,6 +254,7 @@ for want in ("D.CAMP = ", "D.FOOD = "):
         for iid, body in re.findall(r"\[(\d+)\]=\{([^{}]*)\}", row):
             cs = ITEMCLS.get(int(iid))
             if cs and cs[0] != 0: continue
+            FOODS.add(int(iid))
             g = re.search(r'g="([^"]*)"', body)
             ws = foodWords(g.group(1)) if g else None
             kept.append("[%s]={%s%s}" % (iid, body, "" if ws is None else ',w="%s"' % ws))
@@ -298,13 +302,21 @@ stones = sorted(int(it["id"]) for it in ITEMS if re.match(r"^(Minor |Lesser |Gre
 lines.append("-- the soulstones a warlock makes and uses on a friendly target")
 lines.append("D.SOULSTONE = " + lua(stones))
 # the consumables' buffs: what each potion, elixir, flask, scroll (Item class 0, subclass 1 to 4) or juju-like item (class
-# 12) raises, from its use spell's aura effects (SpellEffect) when the aura lasts a minute or more (SpellMisc's duration).
+# 12; class 0 subclass 0, 5 or 8, a Well Fed food aside: Spirit of Zanza, Rumsey Rum Black Label) raises, from its use
+# spell's aura effects (SpellEffect) when the aura lasts a minute or more (SpellMisc's duration).
 # Before the pull fits them to your role by these words, the same in every client language. Each word:
 #   str agi sta int spi all (a stat; all of them), ap rap (attack power, ranged), phys spell (physical or spell damage),
+#   fire frost shadow nature arcane holy (one school's spell damage alone: Elixir of Shadow Power stacks with Greater
+#   Arcane Elixir, as in Classic, so the kin by first word (Consume.lua) keeps them apart),
 #   dmg (all damage), heal, crit, haste, hit, exp (expertise), mp5 mana (mana regained, more mana), hp (more or regained
 #   health), armor, res (a resistance), absorb, def (defense, dodge, parry)
 # An empty string: the client knows it, and it leaves no lasting stat buff (a healing potion, Water Breathing)
 STAT_OF = {0: "str", 1: "agi", 2: "sta", 3: "int", 4: "spi", -1: "all"}
+SCHOOL_OF = {2: "holy", 4: "fire", 8: "nature", 16: "frost", 32: "shadow", 64: "arcane"}
+def spellWord(mask):
+    m = mask & 126
+    if not m: return None
+    return SCHOOL_OF.get(m, "spell")
 def consumeWords(sid):
     m = MISC.get(sid)
     if not m or dur(sid) < 60: return []
@@ -317,7 +329,7 @@ def consumeWords(sid):
         if aura in (29, 80): w = STAT_OF.get(misc)                     # a stat, flat or a percent
         elif aura == 99: w = "ap"
         elif aura == 124: w = "rap"
-        elif aura == 13: w = "phys" if misc == 1 else ("spell" if misc & 126 else None)
+        elif aura == 13: w = "phys" if misc == 1 else spellWord(misc)
         elif aura == 79: w = "dmg"
         elif aura in (135, 136): w = "heal"
         elif aura in (52, 57, 290): w = "crit"
@@ -339,9 +351,52 @@ for r in rd("ItemXItemEffect.csv"):
     if not cs or not sid: continue
     ws = consumeWords(sid)
     if cs[0] == 0 and 1 <= cs[1] <= 4: consume[sid] = " ".join(ws)
-    elif cs[0] == 12 and ws: consume[sid] = " ".join(ws)
+    elif (cs[0] == 12 or (cs[0] == 0 and cs[1] in (0, 5, 8) and int(r["ItemID"]) not in FOODS)) and ws: consume[sid] = " ".join(ws)
 lines.append("-- the consumables' buffs by their use spell: what each raises (words, see gen_data.py), \"\" for none lasting a minute")
 lines.append("D.CONSUME = " + lua(dict(sorted(consume.items()))))
+# the weapon's: an item's use spell that puts a temporary enchant on a weapon (SpellEffect Effect 54, an oil or a stone;
+# 360, a poison): Dense Sharpening Stone 16138, Brilliant Wizard Oil 25122, Deadly Poison 2823. Only one the main hand
+# can take (SpellEquippedItems): a weapon (class 2) of a kind other than a fishing pole (subclass 20 alone: the lures,
+# Shiny Bauble 8087, Nightcrawlers 8088, Camper's Lure 1331725), or, with no subclass named, one of the main hand's
+# inventory types (13 one-hand, 17 two-hand, 21 main hand; not a shield coating, 14 alone). Forever's "Soul of ..."
+# shoulder enchants (class 4, 1219740 on) are armor's, never a weapon's
+FISHING_POLE = 1 << 20
+MAIN_HAND_TYPES = (1 << 13) | (1 << 17) | (1 << 21)
+EQUIPPED = collections.defaultdict(list)
+for r in rd("SpellEquippedItems.csv"):
+    EQUIPPED[int(r["SpellID"])].append((int(r["EquippedItemClass"]), int(r["EquippedItemInvTypes"] or 0), int(r["EquippedItemSubclass"] or 0)))
+def mainHand(sid):
+    for cls, inv, sub in EQUIPPED.get(sid, []):
+        if cls != 2: continue
+        if sub:
+            if sub & ~FISHING_POLE: return True
+        elif inv & MAIN_HAND_TYPES: return True
+    return False
+# Each one's value: the weapon kinds it goes on, a mask of weapon subclasses (Dense Sharpening Stone 16138: axes,
+# polearms, swords, daggers; Dense Weightstone 16622: maces, staves, fist weapons), or true for any weapon (an oil,
+# named by inventory types alone)
+def weaponKinds(sid):
+    mask = 0
+    for cls, inv, sub in EQUIPPED.get(sid, []):
+        if cls != 2: continue
+        if not sub: return True
+        mask |= sub & ~FISHING_POLE
+    return mask or True
+IMBUE_EFFECTS = ("54", "360")
+imbue = {}
+for r in rd("ItemXItemEffect.csv"):
+    sid = USE.get(r["ItemEffectID"])
+    if sid and any(e["Effect"] in IMBUE_EFFECTS for e in EFFECT.get(sid, {}).values()) and mainHand(int(sid)): imbue[sid] = weaponKinds(int(sid))
+for sid in (16138, 25122, 25123, 2823):
+    if sid not in imbue: sys.exit("D.IMBUE: %d has no weapon enchant effect (54 or 360) for a main hand (build %s)" % (sid, BUILD))
+for sid in (8087, 8088, 1331725, 1219740, 463868):
+    if sid in imbue: sys.exit("D.IMBUE: %d goes on no main hand (a lure, an armor's or a shield's), yet is in it (build %s)" % (sid, BUILD))
+for sid, want in ((16138, 33219), (16622, 9264), (25122, True)):
+    if imbue.get(sid) != want: sys.exit("D.IMBUE: %d goes on %r, not %r (build %s)" % (sid, imbue.get(sid), want, BUILD))
+lines.append("-- the weapon's: item use spells that put a temporary enchant on a weapon (an oil, a stone, a poison): the weapon")
+lines.append("-- subclasses it goes on as a mask (bit n: subclass n; Dense Sharpening Stone's 33219: axes, polearms, swords,")
+lines.append("-- daggers), true for any")
+lines.append("D.IMBUE = " + lua(dict(sorted(imbue.items()))))
 # Forever's biomes (build 71037 onward): an effect gated by an area group (SpellCastingRequirements.RequiredAreasID), its
 # words "in Snowy areas", "in Forest and Grassland areas". Each biome: its area group's areas (their names are asked of the
 # client at login, so any language matches the zone text), the spells gated by it or naming it, and the items known to
@@ -445,4 +500,4 @@ print("biomes", [(b["key"], len(b.get("areas", []))) for b in biomes], "spells",
 lines.append("return D")
 open(OUT, "w", encoding="utf-8").write("\n".join(lines) + "\n")
 print("wrote", OUT, "classes", len(out), "blueprints", len(blueprint), "cookfire", len(cookfire), "soulstones", stones,
-      "consumables", len(consume), "with a buff", sum(1 for v in consume.values() if v))
+      "consumables", len(consume), "with a buff", sum(1 for v in consume.values() if v), "imbues", len(imbue))

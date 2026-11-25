@@ -13,7 +13,8 @@
 --   fire       standing still 20 s out of town, no fire near: Light (a kit you may use now) or Make (wood, flint,
 --              recipe); else Buy (a cook who has lit a kit and lacks wood or flint: the nearest seller within 10 min, on
 --              the game's map pin; in town too within 2 min) or Cook (not a cook, level 5: kits are a cook's, once)
---   eat        not Well Fed, out of towns and instances: the cheapest food you carry and may eat that gives it
+--   eat        not Well Fed, out of towns and instances: the cheapest food you carry and may eat that gives it (with
+--              the consumables on, only while the Consumables tab asks for Well Fed in the open world)
 --   sleep      the Cozy Sleeping Bag held, Well-Rested under 3 stacks, its cooldown up, out of town, still 20 s
 local _, A = ...
 local Camp = A.Part("Camp", {})
@@ -86,7 +87,7 @@ function Camp.Mine()
     readAt = B.refreshes
     local _, _, h = S.ReadAuras("player", myNames, myIds, myPool)
     hidden = h
-    for _, fn in ipairs(watchers) do fn(myNames, myIds) end
+    for _, fn in ipairs(watchers) do fn(myNames, myIds, hidden) end
   end
   return myNames, myIds, hidden
 end
@@ -665,10 +666,16 @@ B.Add({ key = "fire", part = "camp", order = 30, groups = { "camp" },
 })
 
 local lastMeal
-B.Add({ key = "eat", part = "camp", order = 40, groups = { "camp" },
+-- (read again as Before the pull starts and ends: at a ready check its own Eat, your role's best food, is the one)
+B.Add({ key = "eat", part = "camp", order = 40, groups = { "camp", "pull" },
   read = function(add, ctx)
     local names, ids = Camp.Mine()
     if fed(names, ids) or not outside(ctx) then lastMeal = nil return end
+    -- (the consumables on, Well Fed off for the open world in their tab: no Eat; consumables off, this follows Camp)
+    local Cn = A.Consume
+    if Cn and Cn.On() and not Cn.Asks("fed", "solo") then return end
+    -- (a ready check out in the world: Before the pull asks for food itself, so one Eat shows, not two)
+    if ctx.pull and Cn and Cn.On() and A.Settings().pull ~= false and not B.Never("pullfood") and Camp.BestFood(true) then return end
     local id = Camp.BestFood(false)
     if not id and lastMeal and mealOn(lastMeal, names, ids) then id = lastMeal end
     if not id then return end
@@ -678,6 +685,8 @@ B.Add({ key = "eat", part = "camp", order = 40, groups = { "camp" },
     rec.lit, rec.word, rec.count = true, "Eat", S.Count(id)
     B.Click(rec, "item", id)
     rec.name = e and e.n or L.ItemName(id, "Food")
+    -- (its Never is Well Fed's, every food and place: the menu says so)
+    rec.never, rec.neverName = "eat", "Well Fed"
     rec.why = Camp.FoodText(e and e.g or "Well Fed") .. ": Well Fed adds XP on Forever."
     rec.clickWord = "eat it"
   end,

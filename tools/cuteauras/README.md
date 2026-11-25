@@ -13,5 +13,6 @@ QuestBank's Camp.lua and Remind.lua. Design: docs/superpowers/specs/2026-11-23-c
 
 The version lives in CuteAuras.toc and Core.lua's A.version (build.py checks they agree).
 
-In the game: `/cauras` (the window: Settings, Blessings, Biome gear), `/cauras test`, `/cauras move`, `/cauras diag`,
-`/cauras errors`. QuestBank 6.4.9 and Cute 0.9.10 step their camp and buff reminders aside while it is loaded.
+In the game: `/cauras` (the window: Settings, Consumables, Blessings, Biome gear), `/cauras consumables`, `/cauras test`,
+`/cauras move`, `/cauras diag`, `/cauras errors`. QuestBank 6.4.9 and Cute 0.9.10 step their camp and buff reminders
+aside while it is loaded.

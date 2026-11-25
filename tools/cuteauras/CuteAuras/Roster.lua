@@ -4,9 +4,10 @@
 -- (UnitGroupRolesAssigned: a role check, the raid's main tank), then the class's. Only what every client sees the same,
 -- so every client shares the buffs out the same (an inspect would differ by range and timing). Forever has one
 -- ChrSpecialization row a class: the spec is the talent tree's point group with the most spent (C_Traits, its skill
--- line), read on your own client and announced.
+-- line), read on your own client and announced. Names: UnitName gives the first name and, second, the surname
+-- (Camelot's NameUtil.lua); a chat sender carries both, and perhaps a realm (R.SenderMember).
 local _, A = ...
-local R = A.Part("Roster", { members = {}, byGUID = {}, byUnit = {}, gen = 0 })
+local R = A.Part("Roster", { members = {}, byGUID = {}, byUnit = {}, gen = 0, unsure = 0 })
 local plain, call = A.Plain, A.Call
 
 -- the talent trees' skill lines (SkillLine.csv, category 7) and the role each says
@@ -87,17 +88,19 @@ end
 local DPS = { WARRIOR = "melee", ROGUE = "melee", HUNTER = "ranged", MAGE = "caster", WARLOCK = "caster", PRIEST = "caster",
   PALADIN = "melee", SHAMAN = "caster", DRUID = "caster" }
 
--- your own role: this character's choice in Settings, else your talents, else the group's word, else your class's
+-- your own role: this character's choice in Settings, else your talents, else the group's word, else your class's.
+-- Its spec, and where it came from: "choice", "group" (a tank or healer mark, or a damage mark), "talents", "class"
+-- (only the class's guess: a paladin reads as a healer; the consumables let such a guess hide nothing)
 function R.MyRole()
   local s = A.Char().role
-  if s and s ~= "auto" then return s, nil end
+  if s and s ~= "auto" then return s, nil, "choice" end
   local spec = R.MySpec()
   local assigned = roleAssigned("player")
-  if assigned == "tank" or assigned == "healer" then return assigned, spec end
-  if spec and R.SPEC_ROLE[spec] then return R.SPEC_ROLE[spec], spec end
+  if assigned == "tank" or assigned == "healer" then return assigned, spec, "group" end
+  if spec and R.SPEC_ROLE[spec] then return R.SPEC_ROLE[spec], spec, "talents" end
   local class = classOf("player")
-  if assigned == "dps" then return DPS[class or ""] or "melee", spec end
-  return R.CLASS_ROLE[class or ""] or "melee", spec
+  if assigned == "dps" then return DPS[class or ""] or "melee", spec, "group" end
+  return R.CLASS_ROLE[class or ""] or "melee", spec, "class"
 end
 
 ----------------------------------------------------------------------------
@@ -152,8 +155,10 @@ function R.Scan()
       for k in pairs(m) do m[k] = nil end
       m.unit, m.guid, m.index = unit, guid, i
       m.me = guid == me
-      local name = plain(call(UnitName, unit))
+      local okName, name, surname = pcall(UnitName, unit)
+      name, surname = okName and plain(name) or nil, okName and plain(surname) or nil
       m.name = type(name) == "string" and name or "?"
+      m.surname = type(surname) == "string" and surname ~= "" and surname or nil
       m.class = classOf(unit)
       m.level = plain(call(UnitLevel, unit)) or 1
       if type(m.level) ~= "number" or m.level < 1 then m.level = 60 end -- (a ?? level: as high as the game goes)
@@ -184,9 +189,54 @@ function R.ByName(name)
   if type(name) ~= "string" then return nil end
   local short = name:match("^([^%-]+)") or name
   for _, m in ipairs(R.members) do if m.name == short or m.name == name then return m end end
+  -- (a name with a surname, "Ysolde Ashbrook": the one member it can be, as a chat sender is read)
+  if short:find(" ", 1, true) or short:find("_", 1, true) then return R.SenderMember(name) end
   return nil
 end
 function R.Me() return R.byGUID[A.MyGUID() or ""] end
+-- the member a chat sender names. Forever writes the surname after the first name ("Ysolde Ashbrook"), perhaps a realm
+-- after a dash, and PallyPower a "_" for the space; UnitName gives the first name alone. The members of that first name:
+-- one, that one; more, the one whose second UnitName answer is the sender's second word (a surname, or perhaps a realm:
+-- the second word only breaks a tie, so a member from another realm still resolves); still not one, nobody, and
+-- R.unsure counts it. A member whose name is the whole of it (both words) is that member
+function R.SenderMember(sender)
+  if type(sender) ~= "string" or sender == "" then return nil end
+  local s = (sender:gsub("_", " "))
+  s = s:match("^([^%-]+)") or s
+  s = s:gsub("^%s+", ""):gsub("%s+$", "")
+  local first, second = s:match("^(%S+)%s*(%S*)")
+  if not first then return nil end
+  local hit, n
+  n = 0
+  for _, m in ipairs(R.members) do
+    if second ~= "" and m.name == s then return m end
+    if m.name == first then n = n + 1; hit = m end
+  end
+  if n <= 1 then return hit end
+  hit, n = nil, 0
+  for _, m in ipairs(R.members) do
+    if m.name == first and second ~= "" and m.surname == second then n = n + 1; hit = m end
+  end
+  if n == 1 then return hit end
+  R.unsure = R.unsure + 1
+  return nil
+end
+-- /cauras diag's line on the forms the client gives (words, never a name): our sender (the echo of our hello) and
+-- UnitName("player")
+function R.NamesLine()
+  local s = R.mySender
+  local sender = "not heard yet"
+  if type(s) == "string" then
+    local name, realm = s:match("^([^%-]+)%-?(.*)$")
+    local words = select(2, (name or s):gsub("%S+", ""))
+    sender = (words == 1 and "one word" or words == 2 and "two words" or (words .. " words")) .. (realm ~= "" and " and realm" or "")
+  end
+  local ok, first, second = pcall(UnitName, "player")
+  first, second = ok and plain(first) or nil, ok and plain(second) or nil
+  local words = type(first) == "string" and select(2, first:gsub("%S+", "")) or 0
+  return "Names: sender " .. sender .. "; UnitName " .. (words == 1 and "one word" or (words .. " words")) .. ", surname "
+    .. ((type(second) == "string" and second ~= "") and "yes" or "no")
+end
 
 ----------------------------------------------------------------------------
 -- your casts' targets (Hands, and the bar's marks in a fight): UNIT_SPELLCAST_SENT names the target (your own name is
@@ -265,6 +315,7 @@ end
 -- a change to the group: one scan for a burst, then the assignment and the bar
 ----------------------------------------------------------------------------
 local soon = false
+local myRoleWas -- (your role and where it came from at the last change: your consumables fit by it, Consume.lua)
 function R.Changed()
   if soon then return end
   soon = true
@@ -273,7 +324,16 @@ function R.Changed()
     local gen = R.gen
     R.Scan()
     if R.gen ~= gen and A.Assign then A.Assign.Changed() end
-    if A.Bar then A.Bar.Dirty("group") end
+    -- (the units moved under a Hand's restore: its click icon set to the member's unit now)
+    if A.Hands then A.Hands.Rostered() end
+    local role, _, from = R.MyRole()
+    local now = tostring(role) .. ":" .. tostring(from)
+    if A.Bar then
+      A.Bar.Dirty("group")
+      -- (your role from Settings, the group's mark or your talents: your own part read again at once)
+      if now ~= myRoleWas then A.Bar.Dirty("mine") end
+    end
+    myRoleWas = now
   end, "roster")
 end
 

@@ -4,7 +4,8 @@
 --   habit      the long buffs you recast on yourself, by the spell's name (any rank; learned: two recasts within 2
 --              minutes of it running out; forgotten once asked for twice ten minutes and not cast), 8 at most; never
 --              Righteous Fury
---   weapon     your weapon's poison, oil, stone or imbue, by habit per weapon item (QuestBank's, ported)
+--   weapon     your weapon's poison, oil, stone or imbue: a bare main hand, the oil or stone the Consumables tab asks
+--              for here (Consume.lua), else by habit per weapon item (QuestBank's, ported)
 --   from       a buff a member gives that you lack or carry at a lower rank: greyed, the giver's name, no click
 --   duty       the group's part: one icon a buff you owe (Assign.lua), its count the members missing it or with it about
 --              to end, its word the next one's name (the shortest time left when it is only ending); a click buffs them
@@ -13,7 +14,7 @@
 --              covered, art only, until the next read (onBlind)
 --   soulstone  a warlock carrying a soulstone, no healer with one: on the first healer online and in sight (the k-th
 --              warlock the k-th), greyed while out of range
---   pull       Before the pull: food, the flasks, elixirs and scrolls you carry and lack, your habits
+-- (consumables and Before the pull: Consume.lua; this file keeps what both read: an item's use spell, the role fit)
 local _, A = ...
 local Bf = A.Part("Buffs", {})
 local B, S, L, D = A.Bar, A.Spells, A.Look, A.Data
@@ -37,6 +38,7 @@ local function wakeFor(at, t)
 end
 -- a reminder on the bar this long, the habit not kept up: one miss
 local ASK_FOR = 600
+Bf.WakeFor = wakeFor
 -- room for one more learned entry in a kept list: under its cap, or the oldest one used only once let go (so one-offs
 -- never fill the list and stop the learning)
 local function roomFor(db, cap)
@@ -53,6 +55,7 @@ local function roomFor(db, cap)
   db[old] = nil
   return true
 end
+Bf.RoomFor = roomFor
 local function stamp() return type(time) == "function" and time() or 0 end
 
 ----------------------------------------------------------------------------
@@ -102,7 +105,8 @@ local selfP = B.Add({ key = "self", part = "mine", order = 100, groups = { "mine
             rec.tex, rec.lit = L.SpellIcon(up, sp.icon), true
             B.Click(rec, "spell", up, "player")
             rec.never, rec.neverName = "up:" .. sp.name, "Upgrade " .. sp.name
-            rec.name, rec.word, rec.clickWord = L.SpellName(up, sp.name), "Upgrade", "cast it"
+            -- (its word Buff, in amber: Upgrade is wider than a word's 32 px; the why says which rank)
+            rec.name, rec.word, rec.status, rec.clickWord = L.SpellName(up, sp.name), "Buff", "warn", "cast it"
             rec.why = "Rank " .. S.RankOf(sp, on.id) .. " on you; you know rank " .. S.RankOf(sp, up) .. "."
           end
         else
@@ -232,9 +236,9 @@ local habitP = B.Add({ key = "habit", part = "mine", order = 105, groups = { "mi
     for name, e in pairs(h) do
       local id = type(e) == "table" and e.id or nil
       local on = type(id) == "number" and (names[name] or ids[id]) or nil
-      -- (yours on you at a lower rank than you know: Upgrade, by the name, which the game casts at its highest rank. The
-      -- habit's own rank alone, the one last seen on you (e.id): an elixir's or a piece of gear's aura of the same name,
-      -- Water Breathing, is no rank of it)
+      -- (yours on you at a lower rank than you know: its Upgrade (the word Buff, in amber), by the name, which the game
+      -- casts at its highest rank. The habit's own rank alone, the one last seen on you (e.id): an elixir's or a piece
+      -- of gear's aura of the same name, Water Breathing, is no rank of it)
       -- (its own Never, as yours: "Never: Upgrade Dampen Magic" keeps the Buff when it is gone)
       local own = type(id) == "number" and ids[id] or nil
       local best = own and own.mine and (e.hits or 0) >= 2 and n < HABIT_MAX and not B.Never("buff:" .. name) and S.ByName(name) or nil
@@ -245,7 +249,8 @@ local habitP = B.Add({ key = "habit", part = "mine", order = 105, groups = { "mi
         rec.tex, rec.lit = L.SpellIcon(best, 134400), true
         B.Click(rec, "spell", name, "player")
         rec.never, rec.neverName = "up:" .. name, "Upgrade " .. name
-        rec.name, rec.word, rec.why, rec.clickWord = name, "Upgrade", "On you at a lower rank than you know.", "cast it"
+        rec.name, rec.word, rec.status = name, "Buff", "warn"
+        rec.why, rec.clickWord = "On you at a lower rank than you know.", "cast it"
       elseif type(id) == "number" and (e.hits or 0) >= 2 and not on and S.Knows(id) and n < HABIT_MAX then
         -- (asked for ten minutes out of town and not cast: a miss; two, forgotten. In town the clock waits)
         local at = habitAsked[name]
@@ -276,6 +281,7 @@ local habitP = B.Add({ key = "habit", part = "mine", order = 105, groups = { "mi
 -- your weapon, by habit per weapon item
 ----------------------------------------------------------------------------
 local lastUse = { at = 0 }
+Bf.LastUse = lastUse
 local HANDS = { 16, 17 }
 local enchanted = {}
 local function weaponDB()
@@ -298,23 +304,28 @@ local function tempEnchant(slot)
   end
   return nil
 end
+Bf.TempEnchant = tempEnchant
 local function weaponIn(slot)
   local id = plain(call(GetInventoryItemID, "player", slot))
   return type(id) == "number" and id or nil
 end
+-- an item's use spell, kept: false only once the client has the item's data and still names none (a server-sent item
+-- read before its data came is asked for and read again at the next look, never kept as none)
 local itemAuraOf = {}
+Bf.itemAuraOf = itemAuraOf
 local function itemAura(id)
   local v = itemAuraOf[id]
   if v ~= nil then return v or nil end
-  v = false
-  if C_Item and type(C_Item.GetItemSpell) == "function" then
-    local ok, _, sp = pcall(C_Item.GetItemSpell, id)
-    sp = ok and plain(sp) or nil
-    if type(sp) == "number" then v = sp end
-  end
-  itemAuraOf[id] = v
-  return v or nil
+  if not (C_Item and type(C_Item.GetItemSpell) == "function") then return nil end
+  local ok, _, sp = pcall(C_Item.GetItemSpell, id)
+  sp = ok and plain(sp) or nil
+  if type(sp) == "number" then itemAuraOf[id] = sp return sp end
+  local cached = type(C_Item.IsItemDataCachedByID) ~= "function" or A.Yes(C_Item.IsItemDataCachedByID, id)
+  if cached then itemAuraOf[id] = false
+  elseif type(C_Item.RequestLoadItemDataByID) == "function" then pcall(C_Item.RequestLoadItemDataByID, id) end
+  return nil
 end
+Bf.ItemAura = itemAura
 local function watchWeapons()
   local db = weaponDB()
   for _, slot in ipairs(HANDS) do
@@ -331,6 +342,17 @@ local function watchWeapons()
     enchanted[slot] = on and true or false
   end
 end
+-- (the main hand bare: first an oil or stone you carry that the Consumables tab asks for here, one icon a slot; as the
+-- tab's other items, only with consumables on and out of a city or inn. The per-weapon habit after it as in 0.2.2,
+-- never for an oil the tab said no to: its own Never (both hands), its main hand box for here unticked. One the tab
+-- has no say on keeps its habit)
+local function saidNo(item, ctx, slot)
+  local Cn = A.Consume
+  if not Cn then return false end
+  if B.Never(Cn.NeverKey(item)) then return true end
+  local own = slot == 16 and Cn.Settings().items[item]
+  return type(own) == "table" and own[ctx.where or Cn.Where()] == false
+end
 B.Add({ key = "weapon", part = "mine", order = 110, groups = { "mine" },
   read = function(add, ctx)
     local db = weaponDB()
@@ -338,8 +360,24 @@ B.Add({ key = "weapon", part = "mine", order = 110, groups = { "mine" },
     for _, slot in ipairs(HANDS) do
       local w = weaponIn(slot)
       local e = w and db[w]
-      if type(e) == "table" and (e.hits or 0) >= 2 and tempEnchant(slot) == false
-        and ((e.item and bags[e.item]) or (e.spell and S.Knows(e.spell))) then
+      local Cn = A.Consume
+      -- (of two asked here alike, the one this weapon usually has: its habit's)
+      local pick = slot == 16 and w and tempEnchant(slot) == false and Cn and Cn.On() and not ctx.town
+        and Cn.WeaponFor(ctx.where or Cn.Where(), type(e) == "table" and e.item or nil, Cn.MainHandKind())
+      if pick then
+        local rec = add()
+        rec.key = "weapon" .. slot
+        -- (the tab's choice: that oil's own Never, as its row's Never chip, and the consumables' menu and tab)
+        rec.item = pick
+        rec.never, rec.neverName = Cn.NeverKey(pick), L.ItemName(pick, "this one")
+        rec.menu, rec.window = Cn.Menu, Cn.TAB
+        rec.tex = L.ItemIcon(pick, 134400)
+        B.Click(rec, "item", pick, nil, slot)
+        rec.lit, rec.word = true, "Apply"
+        rec.name = "Your weapon"
+        rec.why, rec.clickWord = "Nothing on it: you chose this for here.", "put it on"
+      elseif type(e) == "table" and (e.hits or 0) >= 2 and tempEnchant(slot) == false
+        and ((e.item and bags[e.item] and not saidNo(e.item, ctx, slot)) or (e.spell and S.Knows(e.spell))) then
         local rec = add()
         rec.key = "weapon" .. slot
         rec.never, rec.neverName = "weapon", "your weapon"
@@ -440,18 +478,20 @@ local function fromWipe()
   for k in pairs(fromAsked) do fromAsked[k] = nil end
 end
 -- its tooltip's line: "Missing. Bprie gives it (shared out by Cute Auras)." (no time: the wait starts again after each
--- fight and while the giver is away, so it is never how long the buff has been gone)
+-- fight and while the giver is away, so it is never how long the buff has been gone); a blessing a PallyPower paladin
+-- gives you as set there: "(set in PallyPower)"
 local function fromText(rec)
   local who, e = rec.giverName or "?", rec.entry
+  local how = rec.pp and " (set in PallyPower)." or " (shared out by Cute Auras)."
   if rec.low then
     local r, isGroup = S.RankOf(e, rec.onId)
     local theirs = isGroup and (L.SpellName(rec.onId, e.groupName) .. " rank " .. r) or ("Rank " .. tostring(r))
     return theirs .. " on you; " .. who .. (rec.shared and " gives rank " or " can give rank ") .. tostring(S.RankOf(e, rec.best))
-      .. (rec.shared and " (shared out by Cute Auras)." or ".")
+      .. (rec.shared and how or ".")
   end
   local miss = rec.any and "No blessing on you." or "Missing."
   if rec.any then return miss .. " " .. who .. " can give one." end
-  return miss .. " " .. who .. (rec.shared and " gives it (shared out by Cute Auras)." or " can give it.")
+  return miss .. " " .. who .. (rec.shared and (" gives it" .. how) or " can give it.")
 end
 Bf.FromText = fromText
 -- (quiet: one whose wait ends after Not now on yours stays quiet with it, never bringing back what you put off)
@@ -471,7 +511,7 @@ B.Add({ key = "from", part = "mine", order = 125, groups = { "mine", "group", "f
     local nextAt, sight = nil, false
     -- (missing or at less power than best, the rank the giver casts on you: on the list once its wait is over; its giver
     -- out of sight (unseen): no wait, the 5 s look kept going)
-    local function consider(key, entry, m, best, shared, any, unseen)
+    local function consider(key, entry, m, best, shared, any, unseen, pp)
       if B.Never("from:" .. key) then return end
       local on = not any and S.On(entry, names, ids) or nil
       local low = on ~= nil and S.Low(entry, on.id, me.level, best)
@@ -487,7 +527,7 @@ B.Add({ key = "from", part = "mine", order = 125, groups = { "mine", "group", "f
       end
       local x = fromPool[#fromList + 1]
       if not x then x = {}; fromPool[#fromList + 1] = x end
-      x.key, x.entry, x.m, x.best, x.shared, x.any, x.i = key, entry, m, best, shared, any, #fromList + 1
+      x.key, x.entry, x.m, x.best, x.shared, x.any, x.i, x.pp = key, entry, m, best, shared, any, #fromList + 1, pp or nil
       x.low, x.onId = low or nil, low and on.id or nil
       fromList[#fromList + 1] = x
     end
@@ -526,10 +566,11 @@ B.Add({ key = "from", part = "mine", order = 125, groups = { "mine", "group", "f
         end
       end
     end
-    -- the blessings: the share-out's for your class and role, else one from a paladin not running Cute Auras
-    local bucket, given = As.Bucket(me), false
+    -- the blessings: the share-out's for your class and role (a PallyPower paladin's cell for you first), else one from
+    -- a paladin not running Cute Auras
+    local given = false
     for _, bk in ipairs(As.BLESS_KEYS) do
-      local pg = As.BlesserOf(bucket, bk)
+      local pg, src = As.BlesserFor(me, bk)
       if pg then
         given = true
         local m = A.Roster.ByGUID(pg)
@@ -537,7 +578,7 @@ B.Add({ key = "from", part = "mine", order = 125, groups = { "mine", "group", "f
         if m and (bk ~= "wisdom" or me.mana) then can, unseen = canGive(m) end
         local k = (can or unseen) and As.KnownOf(m)
         local best = k and (k[bk] or 0) > 0 and rankFor(D.BLESS[bk], k[bk], nil, me.level) or nil
-        if best then consider("bless:" .. bk, D.BLESS[bk], m, best, true, nil, unseen) end
+        if best then consider("bless:" .. bk, D.BLESS[bk], m, best, true, nil, unseen, src == "pp") end
       end
     end
     if not given then
@@ -582,6 +623,7 @@ B.Add({ key = "from", part = "mine", order = 125, groups = { "mine", "group", "f
       rec.name = x.any and "Blessing" or L.SpellName(x.entry.ranks[1], x.entry.name)
       rec.never, rec.neverName = "from:" .. x.key, rec.name
       rec.entry, rec.best, rec.shared, rec.any, rec.low, rec.onId = x.entry, x.best, x.shared, x.any, x.low, x.onId
+      rec.pp = x.pp
       rec.giverName = x.m.name
       -- (its wait ended by a ready check: shown through Not now on yours, the rest of yours kept quiet)
       rec.loud = fromAsked[x.key] or nil
@@ -685,6 +727,109 @@ local function lookSoon()
     lookSoon()
   end, "buffs: the 3 s look")
 end
+-- the kind of a blessing of yours on a member (its auras as read): any rank, a Greater one too, by id or by name, and
+-- its aura's record; nil for none (a Hand is no blessing here)
+local BLESS_ORDER = { "kings", "might", "wisdom" }
+local blessNames -- [key] = { its name, its Greater's name } in the client's language, read once
+local function readBlessNames()
+  if blessNames then return blessNames end
+  blessNames = {}
+  for _, key in ipairs(BLESS_ORDER) do
+    local e = D.BLESS[key]
+    blessNames[key] = { L.SpellName(e.ranks[1], e.name), e.group and L.SpellName(e.group[1], e.groupName) or nil }
+  end
+  return blessNames
+end
+function Bf.MyBlessingOn(names, ids)
+  readBlessNames()
+  for _, key in ipairs(BLESS_ORDER) do
+    local e = D.BLESS[key]
+    for _, id in ipairs(e.ranks) do local r = ids[id]; if r and r.mine then return key, r end end
+    for _, id in ipairs(e.group or {}) do local r = ids[id]; if r and r.mine then return key, r end end
+    for _, n in ipairs(blessNames[key]) do
+      local r = names[n]
+      if r and r.mine then return key, r end
+    end
+  end
+  return nil
+end
+-- /cauras diag's line on your target (kinds and whose, never a name): each blessing on them as the client lists it,
+-- yours or another's, a Greater one so named; hidden when an aura's name, id or caster came secret. Read straight from
+-- the client, not the kept read, which keeps one record a spell: two paladins' Might on one target show here as two
+function Bf.TargetBlessLine()
+  if not A.Yes(UnitExists, "target") then return "Target's blessings: no target" end
+  local bn = readBlessNames()
+  local get = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
+  local out, hidden = {}, false
+  for i = 1, 60 do
+    if not get then break end
+    local ok, a = pcall(get, "target", i, "HELPFUL")
+    if not ok or type(a) ~= "table" then break end
+    local n, id, src = plain(a.name), plain(a.spellId), plain(a.sourceUnit)
+    if (n == nil and a.name ~= nil) or (id == nil and a.spellId ~= nil) or (src == nil and a.sourceUnit ~= nil) then hidden = true end
+    local kind, greater
+    for _, key in ipairs(BLESS_ORDER) do
+      local e = D.BLESS[key]
+      for _, r in ipairs(e.ranks) do if id == r then kind = key end end
+      for _, r in ipairs(e.group or {}) do if id == r then kind, greater = key, true end end
+      if not kind and type(n) == "string" then
+        if n == bn[key][1] then kind = key elseif n == bn[key][2] then kind, greater = key, true end
+      end
+      if kind then break end
+    end
+    if kind then out[#out + 1] = (greater and "greater " or "") .. kind .. (src == "player" and " yours" or " theirs") end
+  end
+  return "Target's blessings: " .. (#out > 0 and table.concat(out, ", ") or "none") .. "; hidden " .. (hidden and "yes" or "no")
+end
+-- a paladin's read of the group out of a fight: each member's blessing of yours noted for the Hand restore (Hands.saw,
+-- when it was put on them; none of yours, when the read was), and each bucket you give whose every member in sight (one
+-- at least) carries yours of one other kind, cast since your cell there last changed, teaches your cell that kind
+-- (As.Teach): one cast before a grid click, or before a member moved bucket, never undoes it. Not while PallyPower runs
+-- here: it sets your column
+local function teachRead()
+  local As = A.Assign
+  local me = A.MyGUID()
+  local mine = me and As.bless and As.bless[me]
+  if not mine or A.Fighting() then return end
+  local H = A.Hands
+  local t = A.Now()
+  local here = A.PallySync and A.PallySync.Here()
+  local since = As.cellSince or {}
+  local teach = {}
+  for _, b in ipairs(As.bucketList or {}) do
+    local kind, n, mixed = nil, 0, false
+    for _, m in ipairs(b) do
+      -- (a member who just left moves the unit tokens at once, the roster is read 0.3 s on and the share-out 0.2 s
+      -- after: a token no longer that member's is someone else's auras, never read as theirs; a record the roster
+      -- filled again with another member is no longer this bucket's. Either way the bucket teaches nothing this read)
+      local same = plain(call(UnitGUID, m.unit)) == m.guid
+      if not same or As.Bucket(m) ~= b.key then mixed = true end
+      if same and A.Yes(UnitIsConnected, m.unit) and not A.Yes(UnitIsDeadOrGhost, m.unit)
+        and (type(UnitIsVisible) ~= "function" or A.Yes(UnitIsVisible, m.unit)) then
+        local names, ids, hidden = auras(m.unit)
+        if hidden then mixed = true
+        else
+          local k, r = Bf.MyBlessingOn(names, ids)
+          -- (when it was put on: its end less its length; a blessing whose end can't be read, now)
+          local put = k and r.exp and (r.exp - (D.BLESS[k].dur or 3600)) or nil
+          if H and H.saw then
+            -- (none of yours on them now: noted too, so an older read or cast never names a blessing gone since)
+            local e = H.saw[m.guid]
+            if k then H.saw[m.guid] = { key = k, at = put or t }
+            elseif e and e.key == nil then e.at = t
+            else H.saw[m.guid] = { at = t } end
+          end
+          if not k or (kind and k ~= kind) or not put or put <= (since[b.key] or t) then mixed = true end
+          kind = kind or k
+          n = n + 1
+        end
+      end
+    end
+    if mine[b.key] and not here and not mixed and n > 0 and kind and kind ~= mine[b.key] then teach[#teach + 1] = { b.key, kind } end
+  end
+  for _, x in ipairs(teach) do As.Teach(x[1], x[2]) end
+end
+Bf.TeachRead = teachRead
 local flyPools, missPools, stScratch = {}, {}, {} -- [duty key] = its flyout's rows, its missing list (kept); a state
 -- (the bar's refresh count when a cast of yours last marked something: until a read goes through, which reads every
 -- marked record again, a death lets its marks go, onDeath)
@@ -716,7 +861,7 @@ local dutyP = B.Add({ key = "duty", part = "group", order = 200, groups = { "gro
             local row = flyPool[#fly + 1]
             if not row then row = {}; flyPool[#fly + 1] = row end
             row.unit, row.guid, row.name, row.class, row.spell, row.tex = m.unit, m.guid, m.me and "You" or m.name, m.class, id, nil
-            row.has, row.dead, row.off, row.far, row.glow = st.has, st.dead, st.off, st.far or not st.seen, A.Hands and A.Hands.Glowing(m.guid) or nil
+            row.has, row.dead, row.off, row.far, row.glow = st.has, st.dead, st.off, st.far or not st.seen, A.Hands ~= nil and A.Hands.Glowing(m.guid, d.key)
             row.low, row.left, row.weak = low, low and st.left or nil, weak
             -- (what a cast in a fight needs of this read: their subgroup, counted as missing; a mark of it let go)
             row.sub, row.miss, row.mark = m.sub, false, nil
@@ -799,6 +944,8 @@ local dutyP = B.Add({ key = "duty", part = "group", order = 200, groups = { "gro
         end
       end
     end
+    -- (a paladin's: what its own casts put on the group, read out of a fight)
+    if not A.Fighting() then teachRead() end
   end,
 })
 
@@ -1097,195 +1244,21 @@ B.Add({ key = "soulstone", part = "group", order = 210, groups = { "group" },
 })
 
 ----------------------------------------------------------------------------
--- consumables (the owner, 2026-11-23: "don't forget the Well Fed and potion buffs"). A consumable whose use puts a
--- buff on you for a minute or more (an elixir, a flask, a potion, a scroll, a juju: its C_Item.GetItemSpell aura) is
--- learned as you use it, and kept up by habit once used twice; asked for three times ten minutes and not used, it is
--- forgotten (30 kept, this character's; one used once makes room when the list is full). Two that take each other's
--- place (B's aura came in the second A's went, as you used B) are one group: the one used last is asked for. Where
--- Settings says (dungeons and raids by default, everywhere, the ready check only, off), out of a fight: a habit missing
--- from you that you carry ("Use"), one under a minute from its end (its countdown); Well Fed inside dungeons and raids
--- (the camp's Eat has the open world) and, anywhere out of town, under two minutes left. Before the pull asks for
--- your habits and the elixirs, flasks and scrolls you carry that fit your role
+-- consumables: what a buff raises fits your role (Consume.lua asks; Camp.lua fits a food's Well Fed by the same words).
+-- What a buff raises comes from the client's tables (D.CONSUME, the same in every language); a server-sent one they
+-- lack, from the words of its spell's text. A caster or healer is never asked for Strength or Agility, a melee never for
+-- Intellect or spell damage; Stamina, health, armor, a resistance or an absorb alone fits everyone
 ----------------------------------------------------------------------------
-local KINDS = { [1] = "Drink", [2] = "Drink", [3] = "Drink", [4] = "Read", [8] = "Use", [0] = "Use" } -- (potion, elixir, flask, scroll, other)
--- an item's kind (the bar's word) and its subclass: class 0 (consumable) by subclass; class 12 (a juju and the like)
--- only when the client's tables say its use leaves a lasting stat buff (D.CONSUME), never a quest's disguise
-local function kindOf(id)
-  local ok, _, _, _, _, _, classID, subID = pcall(C_Item.GetItemInfoInstant, id)
-  if not ok then return nil end
-  classID, subID = plain(classID), plain(subID)
-  if classID == 0 then return KINDS[subID or -1], subID end
-  if classID == 12 then
-    local sp = itemAura(id)
-    local w = sp and D.CONSUME and D.CONSUME[sp]
-    if type(w) == "string" and w ~= "" then return "Use", nil end
-  end
-  return nil
-end
-Bf.KindOf = kindOf
-local function habitsDB()
-  local c = A.Char()
-  if type(c.consume) ~= "table" then c.consume = {} end
-  return c.consume
-end
-local function pairsDB()
-  local a = A.Acct()
-  if type(a.pairs) ~= "table" then a.pairs = {} end
-  return a.pairs
-end
-local function groupOf(id)
-  local p, g, n = pairsDB(), id, 0
-  while p[g] and p[g] < g and n < 64 do g = p[g]; n = n + 1 end
-  return g
-end
-Bf.GroupOf = groupOf
-local function learnPair(a, b)
-  local p = pairsDB()
-  local n = 0
-  for _ in pairs(p) do n = n + 1 end
-  if n >= 64 then return end
-  local ga, gb = groupOf(a), groupOf(b)
-  if ga == gb then return end
-  p[math.max(ga, gb)] = math.min(ga, gb)
-end
--- a consumable's aura on you: by its spell, else its name in your language
-local function auraOn(id, names, ids)
-  local sp = itemAura(id)
-  if not sp then return nil end
-  return ids[sp] or names[L.SpellName(sp, "") or ""]
-end
-Bf.AuraOn = auraOn
-local pending = {}  -- [item id] = when you used it (its aura not seen yet)
-local onSince = {}  -- [item id] = its aura on at the last look
-local asked = {}    -- [item id] = since when the bar asks for it (this session)
-local function watchConsumables(names, ids)
-  local t = A.Now()
-  local h = habitsDB()
-  local came, went
-  -- (a use whose aura came, a minute or more long: one more hit)
-  for id, at in pairs(pending) do
-    local a = auraOn(id, names, ids)
-    if a then
-      pending[id] = nil
-      asked[id] = nil
-      if not a.exp or a.exp - t >= 50 then
-        local e = h[id]
-        if type(e) ~= "table" then
-          e = nil
-          if roomFor(h, 30) then e = { hits = 0, miss = 0 }; h[id] = e end
-        end
-        if e then e.hits, e.miss, e.spell, e.at = (e.hits or 0) + 1, 0, itemAura(id), stamp() end
-      end
-    elseif t - at > 6 then pending[id] = nil end
-  end
-  for id, e in pairs(h) do
-    if type(e) ~= "table" then h[id] = nil
-    else
-      local on = auraOn(id, names, ids) ~= nil
-      if on and not onSince[id] then onSince[id] = t; came = id end
-      if not on and onSince[id] then onSince[id] = nil; went = id end
-    end
-  end
-  if came and went and came ~= went and t - lastUse.at <= 1.5 and lastUse.item == came then learnPair(came, went) end
-end
-A.Camp.Watch(watchConsumables)
-local function consumeHere(ctx)
-  local mode = A.Settings().consume or "instance"
-  if mode == "off" or ctx.town then return false end
-  return mode == "always" or (mode == "instance" and ctx.inst ~= nil)
-end
-local function wipe(t) for k in pairs(t) do t[k] = nil end end
-local groupSeen, askedHere = {}, {}
-B.Add({ key = "consume", part = "mine", order = 120, groups = { "mine" }, timed = true,
-  read = function(add, ctx)
-    -- (at a ready check Before the pull asks instead, and the reminders' clocks wait)
-    if ctx.pull then return end
-    if A.Settings().consume == "off" or ctx.town then wipe(asked) return end
-    local Camp = A.Camp
-    local names, ids, hidden = Camp.Mine()
-    if hidden then return end
-    -- Well Fed: missing inside a dungeon or raid, or about to end anywhere out of town
-    local fedRec = Camp.FedRec(names, ids)
-    if type(fedRec) == "table" and fedRec.exp then wakeFor(fedRec.exp - 120, ctx.t) end
-    local food = Camp.BestFood(ctx.inst ~= nil)
-    if food and not B.Never("eat") then
-      local left = type(fedRec) == "table" and fedRec.exp and fedRec.exp - ctx.t or nil
-      if (not fedRec and ctx.inst and consumeHere(ctx)) or (left and left > 0 and left < 120) then
-        local rec = add()
-        rec.key = "food"
-        rec.tex, rec.lit, rec.count = L.ItemIcon(food, 133945), true, S.Count(food)
-        rec.word = left and countdown(left) or "Eat"
-        if left then rec.status, rec.timed = "warn", true end
-        B.Click(rec, "item", food)
-        rec.never, rec.neverName = "eat", "Eat"
-        rec.name = L.ItemName(food, "Food")
-        rec.why = left and "Well Fed ends soon: eat again to keep it." or "Not Well Fed."
-        rec.clickWord = "eat it"
-      end
-    end
-    if not consumeHere(ctx) then wipe(asked) return end
-    wipe(groupSeen); wipe(askedHere)
-    local bags = B.Bags()
-    local h = habitsDB()
-    -- (a group with one of its auras on asks nothing more than that one's countdown)
-    for id in pairs(h) do if auraOn(id, names, ids) then groupSeen[groupOf(id)] = id end end
-    local n = 0
-    for id, e in pairs(h) do
-      if type(e) == "table" and (e.hits or 0) >= 2 and bags[id] and n < 3 then
-        local g = groupOf(id)
-        local a = auraOn(id, names, ids)
-        local left = a and a.exp and a.exp - ctx.t or nil
-        if a and a.exp then wakeFor(a.exp - 60, ctx.t) end
-        local show = (not a and not groupSeen[g]) or (left and left > 0 and left < 60)
-        if show and not B.Never("consume:" .. g) then
-          -- (asked for ten minutes and not used: a miss; three, forgotten)
-          if not a then
-            local at = asked[id]
-            if not at then at = ctx.t
-            elseif ctx.t - at >= ASK_FOR then e.miss = (e.miss or 0) + 1; at = ctx.t end
-            asked[id], askedHere[id] = at, true
-            wakeFor(at + ASK_FOR, ctx.t)
-            if (e.miss or 0) >= 3 then h[id], asked[id], show = nil, nil, false end
-          end
-        end
-        if show and not B.Never("consume:" .. g) then
-          n = n + 1
-          if not a then groupSeen[g] = id end
-          local rec = add()
-          rec.key = "consume" .. id
-          rec.tex, rec.lit, rec.count = L.ItemIcon(id, 134400), true, S.Count(id)
-          rec.word = left and countdown(left) or (kindOf(id) or "Use")
-          if left then rec.status, rec.timed = "warn", true end
-          -- (on you: a juju takes a target, and you are it)
-          B.Click(rec, "item", id, "player")
-          rec.never, rec.neverName = "consume:" .. g, L.ItemName(id, "this one")
-          rec.name = L.ItemName(id, "A consumable")
-          rec.why = left and "Its buff ends soon." or "You keep this one up."
-          rec.clickWord = "use it"
-        end
-      end
-    end
-    for id in pairs(asked) do if not askedHere[id] then asked[id] = nil end end
-  end,
-})
-
--- Before the pull: food, your habits (any kind: a potion, Spirit of Zanza, a juju) and every elixir, flask or scroll you
--- carry whose buff you lack (one of each group) and that fits your role. What a buff raises comes from the client's
--- tables (D.CONSUME, the same in every language); a server-sent one they lack, from the words of its spell's text. A
--- caster or healer is never asked for Strength or Agility, a melee never for Intellect or spell damage; Stamina, health,
--- armor, a resistance or an absorb alone fits everyone; a potion that only heals or a utility elixir (Water Breathing)
--- is never asked unless it is your habit. A buff with under three minutes left is asked again, its countdown. Flasks
--- first, then elixirs, then scrolls: four at most
 local function set(s) local t = {}; for w in s:gmatch("%a+") do t[w] = true end; return t end
 local ROLE_WANTS = {
   melee = set("str agi ap phys dmg crit haste hit exp"),
   ranged = set("agi rap phys dmg crit haste hit"),
   tank = set("str agi ap phys dmg crit haste hit exp def"),
-  caster = set("int spi spell dmg crit haste hit mp5 mana"),
+  caster = set("int spi spell fire frost shadow nature arcane holy dmg crit haste hit mp5 mana"),
   healer = set("int spi heal crit haste mp5 mana"),
 }
 -- (a main stat decides; crit, haste, hit or all damage only when there is none: the Mongoose's crit is no healer's)
-local PRIMARY = set("str agi int spi ap rap phys spell heal mp5 mana def exp")
+local PRIMARY = set("str agi int spi ap rap phys spell fire frost shadow nature arcane holy heal mp5 mana def exp")
 local NEUTRAL = set("sta all hp armor res absorb")
 local function fitsWords(words, role)
   local want = ROLE_WANTS[role or ""] or ROLE_WANTS.melee
@@ -1311,6 +1284,15 @@ local WANTS = {
 }
 local STATS = { "intellect", "spirit", "spell", "mana", "healing", "strength", "agility", "attack power", "critical", "ranged", "defense" }
 local fits = {} -- [item id .. role] = true or false
+-- (the spell's text, else the item's tooltip once it has its Use: line; nil until then: the spell's data not loaded
+-- yet, its text comes with SPELL_TEXT_UPDATE)
+local function useLine(l, x)
+  local types = Enum and Enum.TooltipDataLineType
+  local useType = types and types.ItemSpellTriggerOnUse
+  if useType ~= nil and plain(l.type) == useType then return true end
+  local word = type(ITEM_SPELL_TRIGGER_ONUSE) == "string" and ITEM_SPELL_TRIGGER_ONUSE or "Use:"
+  return x:sub(1, #word) == word or x:sub(1, 4) == "Use:"
+end
 local function textOf(id)
   local sp = itemAura(id)
   local get = C_Spell and C_Spell.GetSpellDescription
@@ -1318,13 +1300,17 @@ local function textOf(id)
   if type(t) == "string" and t ~= "" then return t:lower() end
   local TI = C_TooltipInfo
   local data = TI and type(TI.GetItemByID) == "function" and call(TI.GetItemByID, id) or nil
-  local out = {}
+  local out, use = {}, false
   for _, l in ipairs(type(data) == "table" and type(data.lines) == "table" and data.lines or {}) do
-    local x = plain(l.leftText)
-    if type(x) == "string" then out[#out + 1] = x end
+    local x = type(l) == "table" and plain(l.leftText) or nil
+    if type(x) == "string" then
+      out[#out + 1] = x
+      if useLine(l, x) then use = true end
+    end
   end
-  return #out > 1 and table.concat(out, " "):lower() or nil
+  return use and table.concat(out, " "):lower() or nil
 end
+Bf.TextOf = textOf
 function Bf.Fits(id, role)
   local key = id .. (role or "")
   if fits[key] ~= nil then return fits[key] end
@@ -1345,95 +1331,16 @@ function Bf.Fits(id, role)
   fits[key] = v
   return v
 end
-local PULL_SOON = 180
-local PULL_SUB = { [3] = 1, [2] = 2, [4] = 3 } -- (flask, elixir, scroll: the order on the bar; anything else after)
-local flaskBuf, subOf, soonLeft = {}, {}, {}
-local function pullOrder(a, b)
-  local ra, rb = PULL_SUB[subOf[a] or -1] or 4, PULL_SUB[subOf[b] or -1] or 4
-  if ra ~= rb then return ra < rb end
-  return a < b
-end
-B.Add({ key = "pull", part = "pull", order = 300, groups = { "mine", "pull" }, timed = true,
-  read = function(add, ctx)
-    -- (Settings' consumables Off is off here too)
-    if not ctx.pull or A.Settings().consume == "off" then return end
-    local Camp = A.Camp
-    local names, ids, hidden = Camp.Mine()
-    if hidden then return end
-    -- food: not Well Fed, or under three minutes left
-    local fr = Camp.FedRec(names, ids)
-    local fedLeft = type(fr) == "table" and fr.exp and fr.exp - ctx.t or nil
-    if fedLeft then wakeFor(fr.exp - PULL_SOON, ctx.t) end
-    if not fr or (fedLeft and fedLeft > 0 and fedLeft < PULL_SOON) then
-      local id = Camp.BestFood(true)
-      if id then
-        local rec = add()
-        rec.key = "pullfood"
-        rec.tex, rec.lit, rec.count, rec.word = L.ItemIcon(id, 133945), true, S.Count(id), "Eat"
-        if fedLeft then rec.word, rec.status, rec.timed = countdown(fedLeft), "warn", true end
-        B.Click(rec, "item", id)
-        rec.never, rec.neverName, rec.name, rec.clickWord = "pullfood", "Food before the pull", L.ItemName(id, "Well Fed"), "eat it"
-      end
-    end
-    wipe(flaskBuf); wipe(subOf); wipe(groupSeen); wipe(soonLeft)
-    local role = A.Roster.MyRole()
-    local h = habitsDB()
-    for id in pairs(B.Bags()) do
-      local k, sub = kindOf(id)
-      local habit = type(h[id]) == "table" and (h[id].hits or 0) >= 2
-      if k and itemAura(id) and (habit or (PULL_SUB[sub or -1] and Bf.Fits(id, role))) then
-        flaskBuf[#flaskBuf + 1] = id
-        subOf[id] = sub
-      end
-    end
-    table.sort(flaskBuf, pullOrder)
-    -- (a group is covered by any of its auras on you, from a bottle carried or one learned (your last one used up), with
-    -- three minutes or more left; under that, its countdown)
-    local function cover(id)
-      local a = auraOn(id, names, ids)
-      if not a then return end
-      local g = groupOf(id)
-      local left = a.exp and a.exp - ctx.t or nil
-      if not left or left >= PULL_SOON then groupSeen[g] = true
-      else
-        wakeFor(a.exp, ctx.t)
-        if not soonLeft[g] or left < soonLeft[g] then soonLeft[g] = left end
-      end
-      if left and left >= PULL_SOON then wakeFor(a.exp - PULL_SOON, ctx.t) end
-    end
-    for id in pairs(h) do cover(id) end
-    for _, id in ipairs(flaskBuf) do cover(id) end
-    local shownN = 0
-    for _, id in ipairs(flaskBuf) do
-      local g = groupOf(id)
-      if not groupSeen[g] and shownN < 4 then
-        groupSeen[g] = true
-        shownN = shownN + 1
-        local rec = add()
-        rec.key = "flask" .. id
-        rec.tex, rec.lit, rec.count, rec.word = L.ItemIcon(id, 134400), true, S.Count(id), kindOf(id)
-        local left = soonLeft[g]
-        if left then rec.word, rec.status, rec.timed = countdown(math.max(0, left)), "warn", true end
-        B.Click(rec, "item", id, "player")
-        rec.never = "flask:" .. g
-        rec.name = L.ItemName(id, "Elixir")
-        rec.neverName, rec.clickWord = rec.name, "use it"
-        if left then rec.why = "Its buff ends soon." end
-      end
-    end
-  end,
-})
-
 local function onCast(_, unit, _, spell)
   if plain(unit) ~= "player" then return end
   local sp = plain(spell)
   if type(sp) ~= "number" then return end
   lastUse.at, lastUse.spell, lastUse.item = A.Now(), sp, nil
-  if A.Fighting() then return end
+  -- (a use in a fight counts too: Consume.lua's learning waits for the first read that can see your auras)
   for id in pairs(B.Bags()) do
     if itemAura(id) == sp then
       lastUse.item = id
-      if kindOf(id) then pending[id] = A.Now(); A.After(1, function() B.Dirty("mine") end, "consumables: a use") end
+      if A.Consume then A.Consume.OnUse(id) end
       break
     end
   end

@@ -5,7 +5,7 @@
 --   in       a piece in your bags that works here, for a slot whose piece does not: swap it in
 --   back     you left the biome: the piece you wore before it, back on
 --   ready    your biome piece here is on cooldown, another for here is ready in your bags: swap to it
--- We don't know which sets people want, so each piece has its own "Show it in: Solo, PvP, 5-man, Raid" and Never (the
+-- We don't know which sets people want, so each piece has its own "Show it in: World, PvP, 5-man, Raid" and Never (the
 -- bar's Never, one key a piece, "gear:<id>"), on the icon's right-click and in the window's Biome gear tab. Swapping is
 -- out of a fight only (the game's rule for armor and trinkets); "Swap for me" does it without a click, and leaves alone
 -- a slot you changed by hand until the biomes where you stand change.
@@ -21,7 +21,7 @@ local B, S, L, D = A.Bar, A.Spells, A.Look, A.Data
 local C = L.C
 local plain, call = A.Plain, A.Call
 
-G.CONTEXTS = { { "solo", "Solo content" }, { "pvp", "PvP content" }, { "dungeon", "5-man content" }, { "raid", "Raiding content" } }
+G.CONTEXTS = { { "solo", "World" }, { "pvp", "PvP" }, { "dungeon", "5-man" }, { "raid", "Raid" } }
 local BIOME = {}
 for _, b in ipairs(D.BIOMES) do BIOME[b.key] = b end
 G.BIOME = BIOME

@@ -2,6 +2,9 @@
 -- The look of QuestBank's reminders (pattern D), which Cute Auras keeps: a 32 px game icon, cropped, a 1 px black edge,
 -- the cooldown's sweep, a count at its bottom right; under it a 2 px bar in its part's colour (camp QUEST gold, yours
 -- WHITE, the group's GROUP teal) and one word (the verb, the member, the minutes; a status in WARN, BAD or GOOD).
+-- One fixed grid on the bar: every icon takes COL (36 px: the icon and a GAP of 4); its word is at most ROOM (32) wide,
+-- so neighbouring words keep 4 px apart. A verb is chosen to fit (Eat, Drink, Buff); any other word, a member's name,
+-- is cut to fit (L.Fit)
 local _, A = ...
 local L = {}
 A.Look = L
@@ -14,8 +17,9 @@ L.C = {
 }
 local C = L.C
 L.BAR = { camp = C.QUEST, mine = C.WHITE, group = C.GROUP, pull = C.GROUP, gear = C.PINK }
-L.SIZE, L.GAP = 32, 6
+L.SIZE, L.GAP = 32, 4
 L.COL = L.SIZE + L.GAP
+L.ROOM = L.COL - 4
 L.FLAT = "Interface\\Buttons\\WHITE8x8"
 
 local FONT
@@ -69,6 +73,34 @@ function L.Width(fs)
   if type(get) ~= "function" then return 0 end
   local w = A.Plain(A.Call(get, fs))
   return type(w) == "number" and w or 0
+end
+-- a word cut to fit room at fs's font: while it is wider and more than one character is left, its last character
+-- dropped (a whole UTF-8 one, never a byte of it); no dots. Kept by text, room and font size (300 at most, then let go
+-- at once); where the client can't measure (0), whole and not kept. fs's text is left to the caller
+local ONE_CHAR, LAST_CHAR = "^[%z\1-\127\192-\255][\128-\191]*$", "[%z\1-\127\192-\255][\128-\191]*$"
+local fitKept, fitN = {}, 0
+function L.Fit(fs, text, room)
+  if type(text) ~= "string" or text == "" or type(room) ~= "number" then return text end
+  local _, size = A.Call(fs.GetFont, fs)
+  size = A.Plain(size)
+  local key = (type(size) == "number" and size or 0) .. ":" .. room .. ":" .. text
+  local kept = fitKept[key]
+  if kept then return kept end
+  local s = text
+  fs:SetText(s)
+  local w = L.Width(fs)
+  if w <= 0 then return text end
+  while w > room and #s > 1 and not s:find(ONE_CHAR) do
+    local shorter = s:gsub(LAST_CHAR, "")
+    -- (a stray byte no character starts: that byte alone)
+    if #shorter >= #s then shorter = s:sub(1, -2) end
+    s = shorter
+    fs:SetText(s)
+    w = L.Width(fs)
+  end
+  if fitN >= 300 then for k in pairs(fitKept) do fitKept[k] = nil end; fitN = 0 end
+  fitKept[key], fitN = s, fitN + 1
+  return s
 end
 function L.Fill(parent, layer, col, alpha)
   local t = parent:CreateTexture(nil, layer or "BACKGROUND")
@@ -125,6 +157,8 @@ function L.Art(t, tex)
 end
 
 -- one icon's look from its record: its art, lit or waiting, out of range, the count, the sweep, the part's bar, the word
+-- (cut to fit ROOM: a verb fits, so only a name is ever cut; the whole word kept in b.caWord, and rec.word stays whole
+-- for the tooltip and the list)
 function L.Paint(b, rec)
   L.Art(b.icon, rec.tex)
   local waiting = not rec.lit
@@ -140,7 +174,9 @@ function L.Paint(b, rec)
   if col then b.bar:SetColorTexture(col[1], col[2], col[3], 1); b.bar:Show() else b.bar:Hide() end
   if b.word then
     local w = rec.word or ""
-    if b.word:GetText() ~= w then b.word:SetText(w) end
+    local fit = L.Fit(b.word, w, L.ROOM)
+    b.caWord = w
+    if b.word:GetText() ~= fit then b.word:SetText(fit) end
     local wc = rec.status == "bad" and C.BAD or rec.status == "warn" and C.WARN or rec.status == "good" and C.GOOD or C.INK
     if rec.class and rec.status == nil then
       b.word:SetTextColor(L.ClassColor(rec.class))

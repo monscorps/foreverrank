@@ -4,7 +4,7 @@
 -- This file: the namespace, the saved settings (CuteAurasDB), events, the guards for the client's secret values, the
 -- work kept for after a fight, and the slash commands. Each other file adds one part (see the toc's order).
 local ADDON, A = ...
-A.version = "0.2.2"
+A.version = "0.2.3"
 A.NAME = "Cute Auras"
 A.ADDON = ADDON
 CuteAuras = A -- (for /dump and for QuestBank's and Cute's step-aside, which ask C_AddOns first)
@@ -113,7 +113,7 @@ A.DEFAULTS = {
   fight = "group",          -- in a fight: the group's icons stay ("group") or the whole bar hides ("hide")
   scale = 1,                -- the bar's size (0.5 to 2)
   alerts = true,            -- the alerts overlay
-  alertSize = "normal",     -- small, normal, big
+  alertLook = "icons",      -- Show as: "icons", or cards "small", "normal", "big"
   alertScale = 1,
   rebuff = true,            -- buff again after a resurrection in a fight
   hands = true,             -- Blessing of Protection, Freedom and Sacrifice: countdown and restore
@@ -123,16 +123,80 @@ A.DEFAULTS = {
   blueprints = true,        -- blueprints you can use, at a fire
   features = true,          -- camp items you can place at the fire near you
   minimap = true,           -- the minimap button
-  consume = "instance",     -- potions, elixirs, flasks, scrolls you keep up, and Well Fed: "always" (out of town),
-                            -- "instance" (dungeons and raids), "pull" (the ready check only), "off"
+  -- (the consumables' own: settings.consumables, Consume.lua's Cn.Settings, never a default here: copyDefaults would
+  -- give every save one shared table)
 }
 local function copyDefaults(t, d)
   for k, v in pairs(d) do if t[k] == nil then t[k] = v end end
+end
+-- 0.2.2's one consumables setting (settings.consume: "instance", the default every save holds, "always", "pull",
+-- "off") as 0.2.3's choices, once: what it asked stays asked. Instances: the kinds' defaults, habits in every instance;
+-- Always: habits in the open world too (no kind turned on there); Ready check: every kind off but Well Fed in the open
+-- world (the camp's Eat), habits only before the pull; Off: off. Its two Never keys a group (Buffs.lua 0.2.2:
+-- "consume:<g>" outside a ready check, "flask:<g>" at one, g the group's root) become one a member: "consume:<m>",
+-- which hides it everywhere, and "pull:<m>", which hides it before the pull and keeps 0.2.3's fit and kind defaults
+-- from asking it out of a fight (0.2.2 asked it there only as a habit, which still asks: Consume.lua's AsksIn). The
+-- list's 32 kept: past it, g's alone
+local CONSUME_KINDS = { "fed", "flask", "elixir", "potion", "scroll", "other", "weapon" }
+local CONSUME_PLACES = { "solo", "pvp", "dungeon", "raid" }
+local NEVER_MAX = 32 -- (Bar.lua's B.NEVER_MAX)
+local function consumeFrom022(s)
+  local old = s.consume
+  s.consume = nil
+  if type(s.consumables) ~= "table" then
+    local t = { on = old ~= "off", habits = (old == "always" and "world") or (old == "pull" and "pull") or "inst" }
+    if old == "pull" then
+      t.kinds = {}
+      for _, k in ipairs(CONSUME_KINDS) do
+        local row = {}
+        for _, w in ipairs(CONSUME_PLACES) do row[w] = k == "fed" and w == "solo" end
+        t.kinds[k] = row
+      end
+    end
+    s.consumables = t
+  end
+  if type(s.never) ~= "table" then return end
+  local never = s.never
+  local acct = type(CuteAurasDB.acct) == "table" and CuteAurasDB.acct or {}
+  local p = type(acct.pairs) == "table" and acct.pairs or {}
+  local function root(id)
+    local g, n = id, 0
+    while type(p[g]) == "number" and p[g] < g and n < 64 do g = p[g]; n = n + 1 end
+    return g
+  end
+  local found = {}
+  for k, v in pairs(never) do
+    local kind, g
+    if type(k) == "string" then kind, g = k:match("^(%a+):(%d+)$") end
+    if (kind == "flask" or kind == "consume") and g then found[#found + 1] = { key = k, to = kind == "flask" and "pull:" or "consume:", g = tonumber(g), name = v } end
+  end
+  table.sort(found, function(a, b) return a.key < b.key end)
+  for _, f in ipairs(found) do
+    never[f.key] = nil
+    never[f.to .. f.g] = f.name
+    local r = root(f.g)
+    local members = {}
+    if r ~= f.g then members[1] = r end
+    for m in pairs(p) do if type(m) == "number" and m ~= f.g and root(m) == r then members[#members + 1] = m end end
+    table.sort(members)
+    for _, m in ipairs(members) do
+      local n = 0
+      for _ in pairs(never) do n = n + 1 end
+      if n >= NEVER_MAX then break end
+      if never[f.to .. m] == nil then never[f.to .. m] = f.name end
+    end
+  end
 end
 function A.Settings()
   CuteAurasDB = type(CuteAurasDB) == "table" and CuteAurasDB or {}
   local s = CuteAurasDB.settings
   if type(s) ~= "table" then s = {}; CuteAurasDB.settings = s end
+  if s.consume ~= nil then consumeFrom022(s) end
+  -- (Card size became Show as: a chosen Small or Big keeps its cards; Normal was every save's copied default, so Icons,
+  -- said once in chat at the next login)
+  if s.alertLook == nil and (s.alertSize == "small" or s.alertSize == "big") then s.alertLook = s.alertSize end
+  if s.alertLook == nil and s.alertSize == "normal" then s.alertLookNote = true end
+  s.alertSize = nil
   copyDefaults(s, A.DEFAULTS)
   if type(s.never) ~= "table" then s.never = {} end
   if type(s.opt) ~= "table" then s.opt = {} end
@@ -234,8 +298,13 @@ function A.Part(name, part)
   return part
 end
 A.On("PLAYER_LOGIN", function()
-  A.Settings()
+  local s = A.Settings()
   keepErrors()
+  -- (the save whose cards became icons: told once, this login)
+  if s.alertLookNote then
+    s.alertLookNote = nil
+    A.Say("Alerts now show as icons. Settings, Show as, brings the cards back.")
+  end
   for _, p in ipairs(A.parts) do
     if p.Init then A.Safe(function() p:Init() end, p.name .. ": start")() end
   end
@@ -251,6 +320,7 @@ function A.Say(msg)
 end
 
 -- /cauras (and /cuteauras): the window; move: the pieces' handles; test: sample alerts; grid: the blessings;
+-- consumables: what is asked where;
 -- minimap: the minimap button shown or hidden; diag: what the client answers; errors: the last errors (errors clear:
 -- forget them)
 SLASH_CUTEAURAS1, SLASH_CUTEAURAS2 = "/cauras", "/cuteauras"
@@ -259,6 +329,7 @@ SlashCmdList.CUTEAURAS = A.Safe(function(msg)
   if msg == "move" then if A.Settings_ then A.Settings_.Move(true) end
   elseif msg == "test" then if A.Alerts then A.Alerts.Test() end
   elseif msg == "grid" or msg == "blessings" then if A.Window then A.Window.Open("blessings") end
+  elseif msg == "consumables" or msg == "consume" then if A.Window then A.Window.Open("consume") end
   elseif msg == "diag" then if A.Diag then A.Diag() end
   elseif msg == "errors" then
     if #A.errors == 0 then A.Say("No errors.") end

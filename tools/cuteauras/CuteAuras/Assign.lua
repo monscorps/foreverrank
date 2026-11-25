@@ -11,7 +11,10 @@
 --                 that bucket who knows it and knows the fewest of the wishes left (the first in order on a tie: with
 --                 paladins who know the same, the k-th gives the k-th wish). Then a class over two buckets (warriors
 --                 with a tank) is lined up so each paladin gives the whole class one blessing, a Greater one's chance.
---                 A blessing set by hand in the grid wins over the choice
+--                 A blessing set by hand in the grid wins over the choice. A paladin heard on PallyPower (PallySync.lua)
+--                 has a column too: its PallyPower cells come first and are never moved; one running PallyPower alone
+--                 gets no wish and no duty, nor does one running both whose Cute Auras gives no blessing; one running
+--                 both fills what PallyPower left empty
 --   who gives you  every buffer's share, not only yours (As.GiverOf, As.BlesserOf): the bar's reminder of a buff
 --                 someone else gives you (Buffs.lua) names that buffer, on every client the same, no message sent
 local _, A = ...
@@ -50,13 +53,35 @@ function As.Wishes(m)
 end
 function As.Bucket(m) return (m.class or "?") .. ":" .. (m.role or "melee") end
 
--- what a member gives: their announced buffs (yours read now)
-local function knownOf(m)
+-- what a member's Cute Auras gives: their hello's buffs (yours read now), else nil
+local function helloOf(m)
   if m.me then return A.Comm.ParseKnown(A.Comm.Known()) end
   local p = A.Comm.peers[m.guid]
   return p and p.known or nil
 end
+local function hasBless(k) return k ~= nil and ((k.kings or 0) + (k.might or 0) + (k.wisdom or 0)) > 0 end
+-- what a member gives: their announced buffs; a paladin heard on PallyPower, the blessing ranks its SELF says too (one
+-- running both whose Cute Auras gives no blessing, or puts one on Never, still casts PallyPower's); on PallyPower
+-- alone, those alone
+local function withPP(k, m)
+  local Ps = A.PallySync
+  local pk = Ps and Ps.pals[m.guid] and Ps.Known(m.guid) or nil
+  if not pk then return k end
+  if not k then return pk end
+  local out = {}
+  for key, r in pairs(k) do out[key] = r end
+  for key, r in pairs(pk) do if (out[key] or 0) < r then out[key] = r end end
+  return out
+end
+local function knownOf(m) return withPP(helloOf(m), m) end
 As.KnownOf = knownOf
+-- (what its own Cute Auras gives: a cell Cute Auras fills, or one set by hand, takes only these)
+As.HelloOf = helloOf
+-- (the ranks a paladin's PallyPower cells count: its SELF's, else what it announced)
+local function cellKnown(m)
+  local Ps = A.PallySync
+  return (Ps and Ps.pals[m.guid] and Ps.Known(m.guid)) or knownOf(m)
+end
 local function byGUID(a, b) return a.guid < b.guid end
 
 ----------------------------------------------------------------------------
@@ -69,8 +94,11 @@ local function compute()
   local duties, owe, bless = {}, {}, {}
   -- (every buffer's share: giver[key][target GUID] = the buffer's GUID; shared[key]: a buffer running Cute Auras gives it)
   local giver, shared = {}, {}
-  local known = {}
-  for _, m in ipairs(members) do known[m.guid] = knownOf(m) end
+  local known, hello = {}, {}
+  for _, m in ipairs(members) do
+    local h = helloOf(m)
+    hello[m.guid], known[m.guid] = h, withPP(h, m)
+  end
 
   -- single buffs
   local order = {}
@@ -135,11 +163,16 @@ local function compute()
   end
 
   -- blessings
+  local Ps = A.PallySync
   local paladins = {}
+  -- (ppOnly [GUID] = true: PallyPower alone, or running both with Cute Auras' own blessings off; no wish, no duty, no
+  -- cell set by hand, its cells PallyPower's alone)
+  local ppOnly = {}
   for _, m in ipairs(members) do
     local k = known[m.guid]
-    if m.class == "PALADIN" and k and ((k.kings or 0) + (k.might or 0) + (k.wisdom or 0)) > 0 and m.online ~= false then
+    if m.class == "PALADIN" and hasBless(k) and m.online ~= false then
       paladins[#paladins + 1] = m
+      if Ps and Ps.pals[m.guid] and not hasBless(hello[m.guid]) then ppOnly[m.guid] = true end
     end
   end
   table.sort(paladins, function(a, b) if a.level ~= b.level then return a.level > b.level end return a.guid < b.guid end)
@@ -153,15 +186,28 @@ local function compute()
   table.sort(bucketList, function(a, b) return a.key < b.key end)
   for _, pal in ipairs(paladins) do bless[pal.guid] = {} end
   local fixedIn = {} -- [bucket key] = { [paladin GUID] = true }: the blessings set by hand there, never moved below
+  local ppCell = {}  -- [paladin GUID] = { [bucket key] = true }: set in PallyPower
   for _, b in ipairs(bucketList) do
     local given = {}
     local fixed = {}
     fixedIn[b.key] = fixed
+    -- PallyPower's cells first: a member's own cell when the bucket's every member has the same, else the class's; one
+    -- that paladin knows
+    for _, pal in ipairs(paladins) do
+      local key = Ps and Ps.pals[pal.guid] and Ps.Cell(pal.guid, b) or nil
+      local k = key and cellKnown(pal)
+      if key and k and (k[key] or 0) > 0 then
+        fixed[pal.guid] = true
+        bless[pal.guid][b.key] = key; given[key] = true
+        ppCell[pal.guid] = ppCell[pal.guid] or {}
+        ppCell[pal.guid][b.key] = true
+      end
+    end
     for _, pal in ipairs(paladins) do
       local ov = As.overrides[pal.guid] and As.overrides[pal.guid][b.key]
-      local k = known[pal.guid]
+      local k = hello[pal.guid]
       -- (a clear, or a blessing that paladin doesn't give: Cute Auras' choice for them instead, never a blank)
-      if ov and not ov.clear and ov.key and k and (k[ov.key] or 0) > 0 then
+      if not fixed[pal.guid] and not ppOnly[pal.guid] and ov and not ov.clear and ov.key and k and (k[ov.key] or 0) > 0 then
         fixed[pal.guid] = true
         bless[pal.guid][b.key] = ov.key; given[ov.key] = true
       end
@@ -173,8 +219,9 @@ local function compute()
       if not given[x] then
         local pick, pickN
         for _, pal in ipairs(paladins) do
-          local k = known[pal.guid]
-          if not bless[pal.guid][b.key] and (k[x] or 0) > 0 then
+          -- (the wishes go by what its own Cute Auras gives: a blessing on Never there is none)
+          local k = hello[pal.guid] or {}
+          if not ppOnly[pal.guid] and not bless[pal.guid][b.key] and (k[x] or 0) > 0 then
             local n = 0
             for j = wi, #b.wishes do
               local y = b.wishes[j]
@@ -207,14 +254,14 @@ local function compute()
       local fixed = fixedIn[b.key]
       local here, there = {}, {}
       for _, pal in ipairs(paladins) do
-        if not fixed[pal.guid] then
+        if not fixed[pal.guid] and not ppOnly[pal.guid] then
           here[#here + 1] = bless[pal.guid][b.key]
           there[#there + 1] = bless[pal.guid][r.key]
         end
       end
       if #here > 0 and setOf(here) == setOf(there) then
         for _, pal in ipairs(paladins) do
-          if not fixed[pal.guid] then bless[pal.guid][b.key] = bless[pal.guid][r.key] end
+          if not fixed[pal.guid] and not ppOnly[pal.guid] then bless[pal.guid][b.key] = bless[pal.guid][r.key] end
         end
       end
     end
@@ -228,8 +275,9 @@ local function compute()
       if not t[key] then t[key] = pal.guid end
     end
   end
-  -- your blessings as duties, one a blessing; Greater for a class whose every bucket takes the same from you
-  local mine = me and bless[me]
+  -- your blessings as duties, one a blessing; Greater for a class whose every bucket takes the same from you (none
+  -- while your own Cute Auras gives no blessing: your PallyPower casts that column)
+  local mine = me and not ppOnly[me] and bless[me]
   if mine then
     local classKey = {}
     for _, b in ipairs(bucketList) do
@@ -251,8 +299,13 @@ local function compute()
     if a.bless ~= b.bless then return a.bless end
     return a.key < b.key
   end)
+  -- (since when each of your cells is what it is now: a blessing of yours put on before that teaches nothing, Teach)
+  local was, t = (me and As.bless[me]) or {}, A.Now()
+  local since = {}
+  for bk, key in pairs(mine or {}) do since[bk] = (was[bk] == key and As.cellSince and As.cellSince[bk]) or t end
+  As.cellSince = since
   As.duties, As.owe, As.bless, As.buckets, As.bucketList, As.paladins = duties, owe, bless, buckets, bucketList, paladins
-  As.giver, As.shared, As.blessFrom = giver, shared, blessFrom
+  As.giver, As.shared, As.blessFrom, As.ppCell, As.ppOnly = giver, shared, blessFrom, ppCell, ppOnly
   As.gen = As.gen + 1
 end
 As.Compute = compute
@@ -267,6 +320,40 @@ function As.GiverOf(key, guid) local g = As.giver[key]; return g and g[guid] or 
 function As.Shared(key) return As.shared[key] == true end
 -- the paladin who gives a bucket a blessing, else nil
 function As.BlesserOf(bucketKey, blessKey) local t = As.blessFrom[bucketKey]; return t and t[blessKey] or nil end
+-- where a paladin's cell comes from: "pp" (set in PallyPower: a PallyPower cell of theirs there, or every cell of a
+-- paladin on PallyPower alone), else "cute"
+function As.Source(palGUID, bucketKey)
+  if As.ppOnly and As.ppOnly[palGUID] then return "pp" end
+  if bucketKey and As.ppCell and As.ppCell[palGUID] and As.ppCell[palGUID][bucketKey] then return "pp" end
+  return "cute"
+end
+-- the paladin who gives one member a blessing, and where it was set ("pp", "cute"): a PallyPower paladin's own cell for
+-- that member first (another blessing there: that paladin gives them that one instead), then the bucket's
+function As.BlesserFor(m, blessKey)
+  local Ps = A.PallySync
+  local bk = As.Bucket(m)
+  if Ps then
+    for _, pal in ipairs(As.paladins or {}) do
+      if Ps.pals[pal.guid] and Ps.MemberCell(pal.guid, m.guid) == blessKey then
+        local k = cellKnown(pal)
+        if k and (k[blessKey] or 0) > 0 then return pal.guid, "pp" end
+      end
+    end
+  end
+  local function other(pg)
+    local c = Ps and Ps.pals[pg] and Ps.MemberCell(pg, m.guid)
+    return c ~= nil and c ~= blessKey
+  end
+  local g = As.BlesserOf(bk, blessKey)
+  if g and other(g) then
+    g = nil
+    for _, pal in ipairs(As.paladins or {}) do
+      if As.bless[pal.guid] and As.bless[pal.guid][bk] == blessKey and not other(pal.guid) then g = pal.guid break end
+    end
+  end
+  if not g then return nil end
+  return g, As.Source(g, bk)
+end
 
 ----------------------------------------------------------------------------
 -- blessings set by hand: the paladin for their own, the group's leader or an assist for anyone's. Kept until you leave
@@ -280,7 +367,8 @@ local function mayChange(fromGUID, palGUID)
   return A.Yes(UnitIsGroupLeader, m.unit) or A.Yes(UnitIsGroupAssistant, m.unit)
 end
 As.MayChange = mayChange
-function As.SetOverride(pal, bucket, key, stamp, from)
+-- (pp: a PallyPower leader set it for that paladin, who took it as its own: PallySync.lua)
+function As.SetOverride(pal, bucket, key, stamp, from, pp)
   if not mayChange(from, pal) then return false end
   stamp = stamp or 0
   As.overrides[pal] = As.overrides[pal] or {}
@@ -289,25 +377,28 @@ function As.SetOverride(pal, bucket, key, stamp, from)
   if was and (was.stamp > stamp or (was.stamp == stamp and (was.from or "") > (from or ""))) then return false end
   -- (a clear is kept, stamped, so an older blessing still waiting out a lockdown can't win after it; compute() and the
   -- grid read it as Cute Auras' choice)
-  As.overrides[pal][bucket] = { key = key, stamp = stamp, from = from, clear = key == nil }
+  As.overrides[pal][bucket] = { key = key, stamp = stamp, from = from, clear = key == nil, pp = pp and true or nil }
   As.Changed()
   return true
+end
+local function o1(me, pal, bucket, ov)
+  return string.format("O1|%s|%s|%s|%s|%d", me, pal, bucket, ov.key or "-", ov.stamp or 0) .. (ov.pp and "|pp" or "")
 end
 -- the blessings you set by hand, sent again with their stamps (a member heard for the first time, a reload's Q1)
 function As.Resend()
   local me = A.MyGUID()
   for pal, list in pairs(As.overrides) do
     for bucket, ov in pairs(list) do
-      if ov.from == me then A.Comm.Send(string.format("O1|%s|%s|%s|%s|%d", me, pal, bucket, ov.key or "-", ov.stamp or 0)) end
+      if ov.from == me then A.Comm.Send(o1(me, pal, bucket, ov)) end
     end
   end
 end
--- the ones you set, for the saved variables: { { pal, bucket, key or "-", stamp }, ... }
+-- the ones you set, for the saved variables: { { pal, bucket, key or "-", stamp, "pp" or nil }, ... }
 function As.Mine()
   local me, out = A.MyGUID(), {}
   for pal, list in pairs(As.overrides) do
     for bucket, ov in pairs(list) do
-      if ov.from == me then out[#out + 1] = { pal, bucket, ov.key or "-", ov.stamp or 0 } end
+      if ov.from == me then out[#out + 1] = { pal, bucket, ov.key or "-", ov.stamp or 0, ov.pp and "pp" or nil } end
     end
   end
   return out
@@ -318,7 +409,7 @@ function As.Restore(list)
   local me = A.MyGUID()
   for _, o in ipairs(list) do
     if type(o) == "table" and type(o[1]) == "string" and type(o[2]) == "string" and A.Roster.ByGUID(o[1]) then
-      As.SetOverride(o[1], o[2], o[3] ~= "-" and o[3] or nil, tonumber(o[4]) or 0, me)
+      As.SetOverride(o[1], o[2], o[3] ~= "-" and o[3] or nil, tonumber(o[4]) or 0, me, o[5] == "pp")
     end
   end
   As.Resend()
@@ -328,13 +419,33 @@ function As.Forget()
   for k in pairs(As.overrides) do As.overrides[k] = nil end
   As.Changed()
 end
--- from the grid: key nil puts the bucket back to Cute Auras' choice
-function As.Set(pal, bucket, key)
+-- from the grid: key nil puts the bucket back to Cute Auras' choice. pp: a PallyPower leader's choice for your column,
+-- sent as your own (O1's field 7)
+function As.Set(pal, bucket, key, pp)
   local me = A.MyGUID()
   local stamp = (GetServerTime and A.Plain(A.Call(GetServerTime))) or (time and time()) or 0
-  if not As.SetOverride(pal, bucket, key, stamp, me) then return false end
-  A.Comm.Send(string.format("O1|%s|%s|%s|%s|%d", me, pal, bucket, key or "-", stamp))
+  if not As.SetOverride(pal, bucket, key, stamp, me, pp) then return false end
+  A.Comm.Send(o1(me, pal, bucket, As.overrides[pal][bucket]))
   return true
+end
+-- your own casts set your column (out of a fight, PallyPower not here; Buffs.lua reads them): every member of a bucket
+-- you give, in sight, carrying a blessing of yours of one kind that is not your cell, none of the other paladins giving
+-- them that kind, and your cell Cute Auras' choice or one you set (never the leader's, an O1 of theirs or pp): that
+-- kind, set by hand and sent
+function As.Teach(bucket, key)
+  local me = A.MyGUID()
+  local mine = me and As.bless[me]
+  if not (mine and mine[bucket]) or mine[bucket] == key or A.Fighting() then return false end
+  if As.Source(me, bucket) == "pp" then return false end
+  for _, pal in ipairs(As.paladins or {}) do
+    if pal.guid ~= me and As.bless[pal.guid] and As.bless[pal.guid][bucket] == key then return false end
+  end
+  local ov = As.overrides[me] and As.overrides[me][bucket]
+  if ov and (ov.from ~= me or ov.pp) then return false end
+  local m = A.Roster.Me()
+  local k = m and knownOf(m)
+  if not (k and (k[key] or 0) > 0) then return false end
+  return As.Set(me, bucket, key)
 end
 
 ----------------------------------------------------------------------------
@@ -350,6 +461,8 @@ function As.Changed()
     if A.Bar then A.Bar.Dirty("group") end
     if A.Rebuff then A.Rebuff.Update() end
     if A.Window and A.Window.Refresh then A.Window.Refresh() end
+    -- (our SELF to PallyPower users, when it changed)
+    if A.PallySync then A.PallySync.Changed() end
   end, "assign")
 end
 
